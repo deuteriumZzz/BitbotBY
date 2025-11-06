@@ -1,8 +1,8 @@
 import asyncio
-import websockets
-import json
 import logging
 import time
+import aiohttp
+import json
 from news_analyzer import analyze_news_sentiment
 from rl_env import TradingEnv
 from stable_baselines3 import PPO
@@ -10,44 +10,57 @@ import ccxt.async_support as ccxt
 import redis.asyncio as redis
 import numpy as np
 
-# Логирование для отладки
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Глобальные переменные (загружаем заранее для скорости)
-model = PPO.load("models/ppo_trading_model.zip")  # Загрузи обученную модель
+# Глобальные переменные
+model = PPO.load("models/ppo_trading_model.zip")
 env = TradingEnv()
-r = redis.Redis(host='localhost', port=6379, decode_responses=True)  # Redis для кэша
+r = redis.Redis(host='localhost', port=6379, decode_responses=True)
+NEWS_API_KEY = 'YOUR_NEWSAPI_KEY'  # Получи на newsapi.org
+NEWS_URL = 'https://newsapi.org/v2/everything?q=bitcoin+trading&apiKey={}&pageSize=5'  # Пример запроса
+
+async def fetch_news_async():
+    """Асинхронно получает свежие новости из API."""
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.get(NEWS_URL.format(NEWS_API_KEY)) as response:
+                data = await response.json()
+                articles = data.get('articles', [])
+                return [{'title': art['title'], 'description': art['description'], 'id': art['url']} for art in articles]
+        except Exception as e:
+            logger.error(f"News fetch error: {e}")
+            return []
 
 async def predict_price_async(obs):
-    """Асинхронное предсказание действия RL (модель на CPU/GPU)."""
+    """Асинхронное предсказание RL."""
     start = time.perf_counter()
     action, _ = model.predict(obs)
     logger.info(f"Prediction time: {time.perf_counter() - start:.4f}s")
     return int(action)
 
 async def execute_trade_async(action, symbol='BTC/USDT'):
-    """Асинхронное выполнение трейда с лимитами."""
+    """Асинхронное выполнение трейда (без изменений)."""
     bybit = ccxt.bybit({
-        'apiKey': 'YOUR_API_KEY',  # Замени на свои ключи
+        'apiKey': 'YOUR_API_KEY',
         'secret': 'YOUR_SECRET',
-        'test': True,  # Тестовый режим
+        'test': True,
         'enableRateLimit': True,
     })
     
     try:
         balance = await bybit.fetch_balance()
         free_usdt = balance['USDT']['free']
-        max_loss = free_usdt * 0.1  # Лимит: не терять >10% баланса
+        max_loss = free_usdt * 0.1
         
-        if action == 1 and free_usdt > 100:  # Buy (если достаточно средств)
-            volume = min(free_usdt * 0.05, 0.01)  # Малый объём для теста
+        if action == 1 and free_usdt > 100:
+            volume = min(free_usdt * 0.05, 0.01)
             ticker = await bybit.fetch_ticker(symbol)
             price = ticker['last']
             order = await bybit.create_limit_buy_order(symbol, volume, price)
             logger.info(f"Buy order placed: {order}")
             return order
-        elif action == 2:  # Sell (продаём весь BTC)
+        elif action == 2:
             balance_btc = balance['BTC']['free']
             if balance_btc > 0.0001:
                 order = await bybit.create_market_sell_order(symbol, balance_btc)
@@ -59,56 +72,62 @@ async def execute_trade_async(action, symbol='BTC/USDT'):
         await bybit.close()
     return None
 
-async def news_handler(websocket, path):
-    """Обработчик WebSocket для новостей."""
-    await websocket.send("Connected to trading bot")
+async def main_loop():
+    """Основной асинхронный цикл: получает новости, анализирует, предсказывает, трейдит."""
+    obs = env.reset()
     last_sentiment = 0.0
-    obs = env.reset()  # Начальное состояние RL
+    step_count = 0
     
     while True:
         try:
             start_cycle = time.perf_counter()
-            data = await websocket.recv()
-            news_data = json.loads(data)
-            text = news_data.get('news_text', '')
             
-            # Анализ новости (~10ms)
-            sentiment = analyze_news_sentiment(text)
+            # Получаем новости асинхронно
+            news_list = await fetch_news_async()
+            if not news_list:
+                await asyncio.sleep(10)  # Ждём 10 сек перед следующим запросом
+                continue
             
-            # Кэшируем в Redis
-            await r.setex(f"sentiment:{news_data.get('id', 'latest')}", 3600, sentiment)
+            # Анализируем каждую новость и усредняем настроение
+            sentiments = []
+            for news in news_list:
+                text = f"{news['title']} {news['description']}"
+                sentiment = analyze_news_sentiment(text)
+                sentiments.append(sentiment)
+                # Кэшируем в Redis
+                await r.setex(f"sentiment:{news['id']}", 3600, sentiment)
             
-            # Триггер на значимое изменение (>0.2) для минимизации задержек
-            if abs(sentiment - last_sentiment) > 0.2:
-                # Обновляем obs асинхронно
-                obs = await env.update_obs_async()
+            avg_sentiment = np.mean(sentiments) if sentiments else 0.0
+            
+            # Триггер на значимое изменение
+            if abs(avg_sentiment - last_sentiment) > 0.2:
+                # Обновляем obs с учётом настроения
+                obs = await env.update_obs_async(avg_sentiment)
                 
-                # Параллельные задачи: предсказание и трейдинг
+                # Параллельные задачи
                 predict_task = asyncio.create_task(predict_price_async(obs))
                 action = await predict_task
                 trade_task = asyncio.create_task(execute_trade_async(action))
-                await trade_task  # Ждём завершения
+                await trade_task
                 
-                # Отправляем ответ клиенту
-                response = {"sentiment": sentiment, "action": action, "cycle_time": time.perf_counter() - start_cycle}
-                await websocket.send(json.dumps(response))
+                # Онлайн-обучение (опционально, для тестов; комментируй в проде)
+                # model.learn(total_timesteps=1)  # Обновляем модель на 1 шаг (рискованно!)
+                step_count += 1
+                if step_count % 1000 == 0:
+                    model.save("models/ppo_trading_model_updated.zip")  # Сохраняем обновления
             
-            last_sentiment = sentiment
+            last_sentiment = avg_sentiment
+            logger.info(f"Cycle time: {time.perf_counter() - start_cycle:.4f}s, Sentiment: {avg_sentiment:.2f}")
+            
+            await asyncio.sleep(10)  # Пауза между циклами
         except Exception as e:
-            logger.error(f"WebSocket error: {e}")
-            break
+            logger.error(f"Main loop error: {e}")
+            await asyncio.sleep(10)
 
 async def main():
-    """Основной асинхронный цикл."""
-    # WebSocket сервер для новостей (порт 8765)
-    server = await websockets.serve(news_handler, "localhost", 8765)
-    logger.info("Trading bot running on ws://localhost:8765")
-    
-    # Параллельно запускаем backtest в фоне (если нужно)
-    backtest_task = asyncio.create_task(run_backtest_async())
-    
-    # Держим сервер запущенным
-    await server.wait_closed()
+    """Запуск основного цикла."""
+    logger.info("Trading bot with API integration running...")
+    await main_loop()
 
 if __name__ == "__main__":
     asyncio.run(main())
