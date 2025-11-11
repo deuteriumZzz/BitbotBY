@@ -9,5 +9,4 @@ venv/
 *.log
 models/
 .env
-.env.example
 data/historical_btc.csv  # Если не хотите коммитить данные
