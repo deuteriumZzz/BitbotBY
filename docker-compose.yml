@@ -1,0 +1,21 @@
+version: '3.8'
+services:
+  app:
+    build: .
+    env_file:
+      - .env
+    depends_on:
+      - redis
+    networks:
+      - trading_net
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - trading_net
+
+networks:
+  trading_net:
+    driver: bridge
