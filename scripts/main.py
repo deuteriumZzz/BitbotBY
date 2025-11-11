@@ -3,8 +3,9 @@ import logging
 import time
 import aiohttp
 import json
-from news_analyzer import analyze_news_sentiment
-from rl_env import TradingEnv
+import os
+from src.news_analyzer import analyze_news_sentiment
+from src.rl_env import TradingEnv
 from stable_baselines3 import PPO
 import ccxt.async_support as ccxt
 import redis.asyncio as redis
@@ -16,8 +17,8 @@ logger = logging.getLogger(__name__)
 # Глобальные переменные
 model = PPO.load("models/ppo_trading_model.zip")
 env = TradingEnv()
-r = redis.Redis(host='localhost', port=6379, decode_responses=True)
-NEWS_API_KEY = 'YOUR_NEWSAPI_KEY'  # Получи на newsapi.org
+r = redis.Redis(host=os.getenv('REDIS_HOST', 'localhost'), port=int(os.getenv('REDIS_PORT', 6379)), decode_responses=True)
+NEWS_API_KEY = os.getenv('NEWS_API_KEY', 'YOUR_NEWSAPI_KEY')  # Из .env
 NEWS_URL = 'https://newsapi.org/v2/everything?q=bitcoin+trading&apiKey={}&pageSize=5'  # Пример запроса
 
 async def fetch_news_async():
@@ -40,11 +41,11 @@ async def predict_price_async(obs):
     return int(action)
 
 async def execute_trade_async(action, symbol='BTC/USDT'):
-    """Асинхронное выполнение трейда (без изменений)."""
+    """Асинхронное выполнение трейда."""
     bybit = ccxt.bybit({
-        'apiKey': 'YOUR_API_KEY',
-        'secret': 'YOUR_SECRET',
-        'test': True,
+        'apiKey': os.getenv('BYBIT_API_KEY', 'YOUR_API_KEY'),
+        'secret': os.getenv('BYBIT_API_SECRET', 'YOUR_SECRET'),
+        'test': True,  # Тестовый режим
         'enableRateLimit': True,
     })
     
@@ -102,7 +103,7 @@ async def main_loop():
             # Триггер на значимое изменение
             if abs(avg_sentiment - last_sentiment) > 0.2:
                 # Обновляем obs с учётом настроения
-                obs = await env.update_obs_async(avg_sentiment)
+                obs = await env.update_obs_live_async(avg_sentiment)
                 
                 # Параллельные задачи
                 predict_task = asyncio.create_task(predict_price_async(obs))

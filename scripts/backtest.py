@@ -1,14 +1,14 @@
 import backtrader as bt
-import asyncio
 import pandas as pd
-from rl_env import TradingEnv
+from src.rl_env import TradingEnv
 from stable_baselines3 import PPO
+import numpy as np
 
-async def run_backtest_async():
-    """Асинхронный backtesting с backtrader и RL-моделью."""
+def run_backtest():
+    """Backtesting с backtrader и RL-моделью."""
     cerebro = bt.Cerebro()
     
-    # Загружаем исторические данные (пример; используй свои CSV)
+    # Загружаем исторические данные
     data = bt.feeds.PandasData(dataname=pd.read_csv('data/historical_btc.csv', index_col='timestamp', parse_dates=True))
     cerebro.adddata(data)
     
@@ -19,7 +19,7 @@ async def run_backtest_async():
             self.env = TradingEnv()
         
         def next(self):
-            obs = np.array([self.data.rsi[0] / 100.0, self.data.macd[0] / 10.0])  # Индикаторы
+            obs = np.array([self.data.rsi[0] / 100.0, self.data.macd[0] / 10.0, 0.0])  # Индикаторы + sentiment (0 для backtest)
             action, _ = self.model.predict(obs)
             
             if action == 1 and not self.position:  # Buy
@@ -33,3 +33,6 @@ async def run_backtest_async():
     
     results = cerebro.run()
     print(f"Backtest returns: {results[0].analyzers.returns.get_analysis()}")
+
+if __name__ == "__main__":
+    run_backtest()

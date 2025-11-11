@@ -3,7 +3,8 @@ from gym import spaces
 import numpy as np
 import pandas as pd
 import pandas_ta as ta
-import ccxt  # Используем синхронную версию для совместимости с Gym
+import ccxt
+import asyncio
 
 class TradingEnv(gym.Env):
     """RL-среда для трейдинга (совместима с stable-baselines3). 

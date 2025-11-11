@@ -1,5 +1,5 @@
 from stable_baselines3 import PPO
-from rl_env import TradingEnv
+from src.rl_env import TradingEnv
 
 env = TradingEnv()
 model = PPO("MlpPolicy", env, verbose=1)
