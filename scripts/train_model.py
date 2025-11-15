@@ -1,4 +1,5 @@
 from stable_baselines3 import PPO
+
 from src.rl_env import TradingEnv
 
 env = TradingEnv()
