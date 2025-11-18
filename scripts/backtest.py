@@ -2,19 +2,14 @@ import backtrader as bt
 import numpy as np
 import pandas as pd
 from stable_baselines3 import PPO
-
 from src.rl_env import TradingEnv
-
 import os
-import pandas as pd
+import sys
 
 csv_path = "data/historical_btc.csv"
 if not os.path.exists(csv_path):
     print(f"Error: {csv_path} not found. Run the bot first to generate data.")
     sys.exit(1)
-    
-    
-data = pd.read_csv(csv_path)
 
 def run_backtest():
     """Backtesting с backtrader и RL-моделью."""
@@ -32,12 +27,24 @@ def run_backtest():
     class RLStrategy(bt.Strategy):
         def __init__(self):
             self.model = PPO.load("models/ppo_trading_model.zip")
-            self.env = TradingEnv()
+            self.env = TradingEnv()  # Создаем среду, но в backtest она может не использоваться
+
+            # Добавляем индикаторы
+            self.rsi = bt.indicators.RSI(self.data.close, period=14)
+            self.macd = bt.indicators.MACD(self.data.close)
+            # MACD имеет несколько компонентов: macd.macd, macd.signal, macd.hist
+            # Используем основную линию MACD
 
         def next(self):
-            obs = np.array(
-                [self.data.rsi[0] / 100.0, self.data.macd[0] / 10.0, 0.0]
-            )  # Индикаторы + sentiment (0 для backtest)
+            # Ждем, пока индикаторы будут готовы (RSI и MACD требуют достаточных данных)
+            if not self.rsi or not self.macd.macd:
+                return
+            
+            obs = np.array([
+                self.rsi[0] / 100.0,  # Нормализуем RSI (0-100) к 0-1
+                self.macd.macd[0] / 10.0,  # Нормализуем MACD (предполагаем деление на 10 для масштаба)
+                0.0  # Sentiment (0 для backtest)
+            ])
             action, _ = self.model.predict(obs)
 
             if action == 1 and not self.position:  # Buy
@@ -50,7 +57,8 @@ def run_backtest():
     cerebro.addanalyzer(bt.analyzers.Returns, _name="returns")
 
     results = cerebro.run()
-    print(f"Backtest returns: {results[0].analyzers.returns.get_analysis()}")
+    returns_analysis = results[0].analyzers.returns.get_analysis()
+    print(f"Backtest returns: {returns_analysis}")
 
 
 if __name__ == "__main__":
