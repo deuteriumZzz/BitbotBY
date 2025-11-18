@@ -5,6 +5,16 @@ from stable_baselines3 import PPO
 
 from src.rl_env import TradingEnv
 
+import os
+import pandas as pd
+
+csv_path = "data/historical_btc.csv"
+if not os.path.exists(csv_path):
+    print(f"Error: {csv_path} not found. Run the bot first to generate data.")
+    sys.exit(1)
+    
+    
+data = pd.read_csv(csv_path)
 
 def run_backtest():
     """Backtesting с backtrader и RL-моделью."""
