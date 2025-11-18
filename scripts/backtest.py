@@ -1,15 +1,18 @@
+import os
+import sys
+
 import backtrader as bt
 import numpy as np
 import pandas as pd
 from stable_baselines3 import PPO
+
 from src.rl_env import TradingEnv
-import os
-import sys
 
 csv_path = "data/historical_btc.csv"
 if not os.path.exists(csv_path):
     print(f"Error: {csv_path} not found. Run the bot first to generate data.")
     sys.exit(1)
+
 
 def run_backtest():
     """Backtesting с backtrader и RL-моделью."""
@@ -27,7 +30,9 @@ def run_backtest():
     class RLStrategy(bt.Strategy):
         def __init__(self):
             self.model = PPO.load("models/ppo_trading_model.zip")
-            self.env = TradingEnv()  # Создаем среду, но в backtest она может не использоваться
+            self.env = (
+                TradingEnv()
+            )  # Создаем среду, но в backtest она может не использоваться
 
             # Добавляем индикаторы
             self.rsi = bt.indicators.RSI(self.data.close, period=14)
@@ -39,12 +44,15 @@ def run_backtest():
             # Ждем, пока индикаторы будут готовы (RSI и MACD требуют достаточных данных)
             if not self.rsi or not self.macd.macd:
                 return
-            
-            obs = np.array([
-                self.rsi[0] / 100.0,  # Нормализуем RSI (0-100) к 0-1
-                self.macd.macd[0] / 10.0,  # Нормализуем MACD (предполагаем деление на 10 для масштаба)
-                0.0  # Sentiment (0 для backtest)
-            ])
+
+            obs = np.array(
+                [
+                    self.rsi[0] / 100.0,  # Нормализуем RSI (0-100) к 0-1
+                    self.macd.macd[0]
+                    / 10.0,  # Нормализуем MACD (предполагаем деление на 10 для масштаба)
+                    0.0,  # Sentiment (0 для backtest)
+                ]
+            )
             action, _ = self.model.predict(obs)
 
             if action == 1 and not self.position:  # Buy

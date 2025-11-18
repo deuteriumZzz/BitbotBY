@@ -1,10 +1,12 @@
+import asyncio
+
+import ccxt
 import gym
-from gym import spaces
 import numpy as np
 import pandas as pd
 import pandas_ta as ta
-import ccxt
-import asyncio
+from gym import spaces
+
 
 class TradingEnv(gym.Env):
     def __init__(self, strategy=None):
@@ -20,7 +22,9 @@ class TradingEnv(gym.Env):
         self.indicators = {}
 
         # Наблюдение: rsi, macd, ema, bb_upper, bb_lower, volume_ratio, sentiment
-        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(7,), dtype=np.float32)
+        self.observation_space = spaces.Box(
+            low=-np.inf, high=np.inf, shape=(7,), dtype=np.float32
+        )
         self.action_space = spaces.Discrete(3)  # 0: hold, 1: buy, 2: sell
 
         self.initial_balance = 10000.0
@@ -32,26 +36,35 @@ class TradingEnv(gym.Env):
         self.take_profit = self.strategy.get("take_profit_pct", 0.1)
 
     def _compute_indicators(self, df):
-        self.indicators['rsi'] = ta.rsi(df['close'], length=14)
-        macd = ta.macd(df['close'])
-        self.indicators['macd'] = macd['MACD_12_26_9'] if macd is not None else pd.Series([0]*len(df))
-        self.indicators['ema'] = ta.ema(df['close'], length=20)
-        bb = ta.bbands(df['close'], length=20)
-        self.indicators['bb_upper'] = bb['BBU_20_2.0'] if bb is not None else pd.Series([0]*len(df))
-        self.indicators['bb_lower'] = bb['BBL_20_2.0'] if bb is not None else pd.Series([0]*len(df))
-        self.indicators['volume_ratio'] = df['volume'] / df['volume'].rolling(20).mean()
+        self.indicators["rsi"] = ta.rsi(df["close"], length=14)
+        macd = ta.macd(df["close"])
+        self.indicators["macd"] = (
+            macd["MACD_12_26_9"] if macd is not None else pd.Series([0] * len(df))
+        )
+        self.indicators["ema"] = ta.ema(df["close"], length=20)
+        bb = ta.bbands(df["close"], length=20)
+        self.indicators["bb_upper"] = (
+            bb["BBU_20_2.0"] if bb is not None else pd.Series([0] * len(df))
+        )
+        self.indicators["bb_lower"] = (
+            bb["BBL_20_2.0"] if bb is not None else pd.Series([0] * len(df))
+        )
+        self.indicators["volume_ratio"] = df["volume"] / df["volume"].rolling(20).mean()
 
     def _get_obs(self, sentiment=0.0):
         if self.current_step >= len(self.data):
             return np.zeros(7, dtype=np.float32)
         obs = [
-            self.indicators['rsi'].iloc[self.current_step] / 100.0,
-            self.indicators['macd'].iloc[self.current_step] / 10.0,
-            self.indicators['ema'].iloc[self.current_step] / self.data['close'].iloc[self.current_step],
-            self.indicators['bb_upper'].iloc[self.current_step] / self.data['close'].iloc[self.current_step],
-            self.indicators['bb_lower'].iloc[self.current_step] / self.data['close'].iloc[self.current_step],
-            self.indicators['volume_ratio'].iloc[self.current_step],
-            sentiment
+            self.indicators["rsi"].iloc[self.current_step] / 100.0,
+            self.indicators["macd"].iloc[self.current_step] / 10.0,
+            self.indicators["ema"].iloc[self.current_step]
+            / self.data["close"].iloc[self.current_step],
+            self.indicators["bb_upper"].iloc[self.current_step]
+            / self.data["close"].iloc[self.current_step],
+            self.indicators["bb_lower"].iloc[self.current_step]
+            / self.data["close"].iloc[self.current_step],
+            self.indicators["volume_ratio"].iloc[self.current_step],
+            sentiment,
         ]
         return np.array(obs, dtype=np.float32)
 
@@ -64,7 +77,9 @@ class TradingEnv(gym.Env):
             self.balance = 0.0
         elif action == 2 and self.position > 0:  # Sell
             sell_value = self.position * current_price
-            profit = (sell_value - (self.entry_price * self.position)) / self.initial_balance
+            profit = (
+                sell_value - (self.entry_price * self.position)
+            ) / self.initial_balance
             reward = profit * 100
             self.balance = sell_value
             self.position = 0
@@ -83,8 +98,12 @@ class TradingEnv(gym.Env):
         return reward
 
     def reset(self):
-        ohlcv = self.bybit.fetch_ohlcv(self.symbol, self.strategy.get("timeframe", "1m"), limit=self.max_steps)
-        self.data = pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
+        ohlcv = self.bybit.fetch_ohlcv(
+            self.symbol, self.strategy.get("timeframe", "1m"), limit=self.max_steps
+        )
+        self.data = pd.DataFrame(
+            ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"]
+        )
         self._compute_indicators(self.data)
         self.balance = self.initial_balance
         self.position = 0
@@ -96,18 +115,30 @@ class TradingEnv(gym.Env):
     def step(self, action):
         if self.current_step >= len(self.data) - 1:
             return self._get_obs(), 0.0, True, False, {}
-        current_price = self.data['close'].iloc[self.current_step]
+        current_price = self.data["close"].iloc[self.current_step]
         reward = self._calculate_reward(action, current_price)
         self.current_step += 1
         done = self.current_step >= len(self.data) - 1
         obs = self._get_obs()
-        return obs, reward, done, False, {"balance": self.balance, "position": self.position}
+        return (
+            obs,
+            reward,
+            done,
+            False,
+            {"balance": self.balance, "position": self.position},
+        )
 
     async def update_obs_live_async(self, sentiment=0.0, strategy=None):
-        bybit_async = ccxt.bybit({"enableRateLimit": True, "asyncio_loop": asyncio.get_event_loop()})
+        bybit_async = ccxt.bybit(
+            {"enableRateLimit": True, "asyncio_loop": asyncio.get_event_loop()}
+        )
         try:
-            ohlcv = await bybit_async.fetch_ohlcv(self.symbol, strategy.get("timeframe", "1m"), limit=100)
-            df = pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
+            ohlcv = await bybit_async.fetch_ohlcv(
+                self.symbol, strategy.get("timeframe", "1m"), limit=100
+            )
+            df = pd.DataFrame(
+                ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"]
+            )
             self._compute_indicators(df)
             obs = self._get_obs(sentiment)
             return obs
@@ -115,8 +146,14 @@ class TradingEnv(gym.Env):
             await bybit_async.close()
 
     def render(self, mode="human"):
-        current_price = self.data['close'].iloc[self.current_step] if self.current_step < len(self.data) else 0
-        print(f"Step: {self.current_step}, Price: {current_price:.2f}, Balance: {self.balance:.2f}, Position: {self.position:.6f}")
+        current_price = (
+            self.data["close"].iloc[self.current_step]
+            if self.current_step < len(self.data)
+            else 0
+        )
+        print(
+            f"Step: {self.current_step}, Price: {current_price:.2f}, Balance: {self.balance:.2f}, Position: {self.position:.6f}"
+        )
 
     def close(self):
         self.bybit.close()

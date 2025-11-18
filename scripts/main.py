@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import os
-import sys
 import time
 from argparse import ArgumentParser
 
@@ -30,6 +29,7 @@ NEWS_API_KEY = os.getenv("NEWS_API_KEY", "YOUR_NEWSAPI_KEY")
 NEWS_URL = "https://newsapi.org/v2/everything?q=bitcoin+trading&apiKey={}&pageSize=5"
 CSV_PATH = "data/historical_btc.csv"
 
+
 # Функция для создания/обновления CSV
 def update_historical_csv(order, symbol="BTC/USDT"):
     if order is None:
@@ -44,7 +44,9 @@ def update_historical_csv(order, symbol="BTC/USDT"):
             return
 
         # Преобразуем в DataFrame
-        df_new = pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
+        df_new = pd.DataFrame(
+            ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"]
+        )
         df_new["timestamp"] = pd.to_datetime(df_new["timestamp"], unit="ms")
 
         # Проверяем, существует ли файл
@@ -55,11 +57,16 @@ def update_historical_csv(order, symbol="BTC/USDT"):
             # Аппендим новые данные (без дубликатов по timestamp)
             df_existing = pd.read_csv(CSV_PATH)
             df_existing["timestamp"] = pd.to_datetime(df_existing["timestamp"])
-            df_combined = pd.concat([df_existing, df_new]).drop_duplicates(subset="timestamp").sort_values("timestamp")
+            df_combined = (
+                pd.concat([df_existing, df_new])
+                .drop_duplicates(subset="timestamp")
+                .sort_values("timestamp")
+            )
             df_combined.to_csv(CSV_PATH, index=False)
             logger.info(f"Updated {CSV_PATH} with new data after trade")
     except Exception as e:
         logger.error(f"Error updating CSV: {e}")
+
 
 async def fetch_news_async():
     async with aiohttp.ClientSession() as session:
@@ -79,11 +86,13 @@ async def fetch_news_async():
             logger.error(f"News fetch error: {e}")
             return []
 
+
 async def predict_price_async(obs, strategy):
     start = time.perf_counter()
     action, _ = model.predict(obs)
     logger.info(f"Prediction time: {time.perf_counter() - start:.4f}s")
     return int(action)
+
 
 async def execute_trade_async(action, symbol="BTC/USDT", strategy=None):
     bybit = ccxt.bybit(
@@ -105,7 +114,10 @@ async def execute_trade_async(action, symbol="BTC/USDT", strategy=None):
 
         order = None
         if action == 1 and free_usdt > 100:  # Buy
-            volume = min(free_usdt * strategy.get("buy_pct", 0.05), strategy.get("max_volume", 0.01))
+            volume = min(
+                free_usdt * strategy.get("buy_pct", 0.05),
+                strategy.get("max_volume", 0.01),
+            )
             order = await bybit.create_limit_buy_order(symbol, volume, price)
             logger.info(f"Buy order placed: {order}")
         elif action == 2:
@@ -122,6 +134,7 @@ async def execute_trade_async(action, symbol="BTC/USDT", strategy=None):
     finally:
         await bybit.close()
     return order
+
 
 async def main_loop(strategy_name):
     strategy = get_strategy(strategy_name)
@@ -152,7 +165,9 @@ async def main_loop(strategy_name):
             obs = await env.update_obs_live_async(avg_sentiment, strategy)
 
             # Проверяем триггер (изменение цены/настроения)
-            if abs(avg_sentiment - last_sentiment) > strategy.get("sentiment_threshold", 0.2):
+            if abs(avg_sentiment - last_sentiment) > strategy.get(
+                "sentiment_threshold", 0.2
+            ):
                 action = await predict_price_async(obs, strategy)
                 await execute_trade_async(action, strategy=strategy)
 
@@ -169,12 +184,15 @@ async def main_loop(strategy_name):
 
             last_sentiment = avg_sentiment
             step_count += 1
-            logger.info(f"Cycle time: {time.perf_counter() - start_cycle:.4f}s, Sentiment: {avg_sentiment:.2f}")
+            logger.info(
+                f"Cycle time: {time.perf_counter() - start_cycle:.4f}s, Sentiment: {avg_sentiment:.2f}"
+            )
 
             await asyncio.sleep(strategy.get("cycle_pause", 10))
         except Exception as e:
             logger.error(f"Main loop error: {e}")
             await asyncio.sleep(10)
+
 
 async def main(strategy_name):
     global model, env
@@ -191,9 +209,15 @@ async def main(strategy_name):
     logger.info(f"Trading bot with {strategy_name} strategy running...")
     await main_loop(strategy_name)
 
+
 if __name__ == "__main__":
     parser = ArgumentParser()
-    parser.add_argument("--strategy", default="scalping", choices=["scalping", "pipsing", "intraday"], help="Choose trading strategy")
+    parser.add_argument(
+        "--strategy",
+        default="scalping",
+        choices=["scalping", "pipsing", "intraday"],
+        help="Choose trading strategy",
+    )
     args = parser.parse_args()
     asyncio.run(main(args.strategy))
 
@@ -205,12 +229,12 @@ def auto_select_strategy():
         df = pd.read_csv(CSV_PATH).tail(100)  # Последние 100 баров
         if len(df) < 50:
             return "intraday"  # По умолчанию, если мало данных
-        
+
         # Волатильность: std отклонение цены
         volatility = df["close"].pct_change().std()
         # Тренд: разница EMA
         ema_diff = df["ema"].diff().mean()
-        
+
         if volatility > 0.02:  # Высокая волатильность -> scalping
             return "scalping"
         elif abs(ema_diff) > 0.001:  # Сильный тренд -> intraday
@@ -218,6 +242,7 @@ def auto_select_strategy():
         else:  # Средняя -> pipsing
             return "pipsing"
     return "intraday"  # Fallback
+
 
 async def main(strategy_name=None):
     global model, env
@@ -238,8 +263,13 @@ async def main(strategy_name=None):
     logger.info(f"Trading bot with {strategy_name} strategy running...")
     await main_loop(strategy_name)
 
+
 if __name__ == "__main__":
     parser = ArgumentParser()
-    parser.add_argument("--strategy", choices=["scalping", "pipsing", "intraday"], help="Override auto-selection")
+    parser.add_argument(
+        "--strategy",
+        choices=["scalping", "pipsing", "intraday"],
+        help="Override auto-selection",
+    )
     args = parser.parse_args()
     asyncio.run(main(args.strategy))
