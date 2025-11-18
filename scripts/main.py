@@ -196,3 +196,50 @@ if __name__ == "__main__":
     parser.add_argument("--strategy", default="scalping", choices=["scalping", "pipsing", "intraday"], help="Choose trading strategy")
     args = parser.parse_args()
     asyncio.run(main(args.strategy))
+
+
+def auto_select_strategy():
+    """Выбирает стратегию на основе волатильности и тренда."""
+    # Загружаем последние данные
+    if os.path.exists(CSV_PATH):
+        df = pd.read_csv(CSV_PATH).tail(100)  # Последние 100 баров
+        if len(df) < 50:
+            return "intraday"  # По умолчанию, если мало данных
+        
+        # Волатильность: std отклонение цены
+        volatility = df["close"].pct_change().std()
+        # Тренд: разница EMA
+        ema_diff = df["ema"].diff().mean()
+        
+        if volatility > 0.02:  # Высокая волатильность -> scalping
+            return "scalping"
+        elif abs(ema_diff) > 0.001:  # Сильный тренд -> intraday
+            return "intraday"
+        else:  # Средняя -> pipsing
+            return "pipsing"
+    return "intraday"  # Fallback
+
+async def main(strategy_name=None):
+    global model, env
+    if not strategy_name:
+        strategy_name = auto_select_strategy()
+        print(f"Auto-selected strategy: {strategy_name}")
+    strategy = get_strategy(strategy_name)
+    env = TradingEnv(strategy=strategy)
+    model_path = f"models/ppo_{strategy_name}.zip"
+    if os.path.exists(model_path):
+        model = PPO.load(model_path)
+    else:
+        # Если модель не найдена, обучаем (хотя run_bot.py должен это обработать)
+        model = PPO("MlpPolicy", env, verbose=1)
+        model.learn(total_timesteps=strategy.get("initial_train_steps", 10000))
+        model.save(model_path)
+
+    logger.info(f"Trading bot with {strategy_name} strategy running...")
+    await main_loop(strategy_name)
+
+if __name__ == "__main__":
+    parser = ArgumentParser()
+    parser.add_argument("--strategy", choices=["scalping", "pipsing", "intraday"], help="Override auto-selection")
+    args = parser.parse_args()
+    asyncio.run(main(args.strategy))
