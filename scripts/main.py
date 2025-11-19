@@ -8,6 +8,7 @@ import aiohttp
 import ccxt.async_support as ccxt
 import numpy as np
 import pandas as pd
+import redis
 from stable_baselines3 import PPO
 
 from src.news_analyzer import analyze_news_sentiment
@@ -28,7 +29,6 @@ r = redis.Redis(
 NEWS_API_KEY = os.getenv("NEWS_API_KEY", "YOUR_NEWSAPI_KEY")
 NEWS_URL = "https://newsapi.org/v2/everything?q=bitcoin+trading&apiKey={}&pageSize=5"
 CSV_PATH = "data/historical_btc.csv"
-
 
 # Функция для создания/обновления CSV
 def update_historical_csv(order, symbol="BTC/USDT"):
@@ -67,7 +67,6 @@ def update_historical_csv(order, symbol="BTC/USDT"):
     except Exception as e:
         logger.error(f"Error updating CSV: {e}")
 
-
 async def fetch_news_async():
     async with aiohttp.ClientSession() as session:
         try:
@@ -86,13 +85,11 @@ async def fetch_news_async():
             logger.error(f"News fetch error: {e}")
             return []
 
-
 async def predict_price_async(obs, strategy):
     start = time.perf_counter()
     action, _ = model.predict(obs)
     logger.info(f"Prediction time: {time.perf_counter() - start:.4f}s")
     return int(action)
-
 
 async def execute_trade_async(action, symbol="BTC/USDT", strategy=None):
     bybit = ccxt.bybit(
@@ -135,10 +132,9 @@ async def execute_trade_async(action, symbol="BTC/USDT", strategy=None):
         await bybit.close()
     return order
 
-
 async def main_loop(strategy_name):
     strategy = get_strategy(strategy_name)
-    obs = env.reset()
+    obs, info = env.reset()  # Обновлено для Gymnasium: распаковка (obs, info)
     last_sentiment = 0.0
     step_count = 0
     training_data = []  # Для онлайн-обучения
@@ -193,7 +189,6 @@ async def main_loop(strategy_name):
             logger.error(f"Main loop error: {e}")
             await asyncio.sleep(10)
 
-
 async def main(strategy_name):
     global model, env
     strategy = get_strategy(strategy_name)
@@ -209,7 +204,6 @@ async def main(strategy_name):
     logger.info(f"Trading bot with {strategy_name} strategy running...")
     await main_loop(strategy_name)
 
-
 if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument(
@@ -220,7 +214,6 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     asyncio.run(main(args.strategy))
-
 
 def auto_select_strategy():
     """Выбирает стратегию на основе волатильности и тренда."""
@@ -243,7 +236,6 @@ def auto_select_strategy():
             return "pipsing"
     return "intraday"  # Fallback
 
-
 async def main(strategy_name=None):
     global model, env
     if not strategy_name:
@@ -262,7 +254,6 @@ async def main(strategy_name=None):
 
     logger.info(f"Trading bot with {strategy_name} strategy running...")
     await main_loop(strategy_name)
-
 
 if __name__ == "__main__":
     parser = ArgumentParser()

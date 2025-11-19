@@ -1,11 +1,12 @@
-gym>=0.26.0
+gymnasium>=0.29.0
 stable-baselines3>=1.6.0
 pandas>=1.5.0
 pandas-ta>=0.3.14b0
 ccxt>=4.0.0
+shimmy>=2.0
 vaderSentiment>=3.3.2
 backtrader>=1.9.76.123
 aiohttp>=3.8.0
 redis>=4.3.0
 numpy>=1.21.0
-asyncio-mqtt>=0.11.1  # Если нужно для MQTT, но не используется
+torch>=1.12.0
