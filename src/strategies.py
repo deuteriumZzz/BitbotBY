@@ -1,43 +1,30 @@
-def get_strategy(name):
-    strategies = {
-        "scalping": {
-            "timeframe": "1m",
-            "max_steps": 500,
-            "sentiment_threshold": 0.1,
-            "buy_pct": 0.02,
-            "max_volume": 0.005,
-            "max_loss_pct": 0.05,
-            "stop_loss_pct": 0.02,
-            "take_profit_pct": 0.05,
-            "cycle_pause": 5,
-            "train_batch": 50,
-            "initial_train_steps": 50000
-        },
-        "pipsing": {
-            "timeframe": "5m",
-            "max_steps": 1000,
-            "sentiment_threshold": 0.15,
-            "buy_pct": 0.05,
-            "max_volume": 0.01,
-            "max_loss_pct": 0.1,
-            "stop_loss_pct": 0.03,
-            "take_profit_pct": 0.08,
-            "cycle_pause": 10,
-            "train_batch": 100,
-            "initial_train_steps": 100000
-        },
-        "intraday": {
-            "timeframe": "1h",
-            "max_steps": 2000,
-            "sentiment_threshold": 0.2,
-            "buy_pct": 0.1,
-            "max_volume": 0.02,
-            "max_loss_pct": 0.15,
-            "stop_loss_pct": 0.05,
-            "take_profit_pct": 0.15,
-            "cycle_pause": 60,
-            "train_batch": 200,
-            "initial_train_steps": 200000
-        }
+strategies = {
+    'ppo': {
+        'learning_rate': 0.0003,
+        'n_steps': 2048,
+        'batch_size': 64,
+        'n_epochs': 10,
+        'gamma': 0.99,
+        'gae_lambda': 0.95,
+        'clip_range': 0.2,
+        'normalize_advantage': True,
+        'ent_coef': 0.0,
+        'vf_coef': 0.5,
+        'max_grad_norm': 0.5,
+        'use_sde': False,
+        'sde_sample_freq': -1,
+        'target_kl': None,
+        'stats_window_size': 100,
+        'tensorboard_log': None,
+        'policy_kwargs': None,
+        'verbose': 1,
+        'seed': None,
+        'device': 'auto',
+        '_init_setup_model': True,
+    },
+    'scalping': {
+        'learning_rate': 0.001,
+        'n_steps': 1024,
+        # Аналогично, но с другими параметрами
     }
-    return strategies.get(name, strategies["scalping"])
+}

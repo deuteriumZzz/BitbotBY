@@ -8,6 +8,11 @@ services:
       - redis
     networks:
       - trading_net
+    volumes:  # Добавлено
+      - ./src:/app/src
+      - ./scripts:/app/scripts
+      - ./requirements.txt:/app/requirements.txt  # Если нужно, для зависимостей
+      # Добавьте другие папки, если скрипты или конфиги в них
 
   redis:
     image: redis:alpine

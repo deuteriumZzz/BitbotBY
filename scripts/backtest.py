@@ -1,73 +1,49 @@
-import os
-import sys
-
-import backtrader as bt
-import numpy as np
 import pandas as pd
+import numpy as np
 from stable_baselines3 import PPO
-
 from src.rl_env import TradingEnv
+from src.data_loader import DataLoader
+from src.strategies import strategies
+import logging
+from dotenv import load_dotenv
 
-csv_path = "data/historical_btc.csv"
-if not os.path.exists(csv_path):
-    print(f"Error: {csv_path} not found. Run the bot first to generate data.")
-    sys.exit(1)
+load_dotenv()
+logging.basicConfig(level=logging.INFO)
 
+def main(strategy='ppo'):
+    try:
+        # Загрузка данных
+        loader = DataLoader()
+        data = loader.load_historical_data('BTC/USDT', '1h', limit=1000)
+        if data.empty:
+            raise ValueError("No data loaded")
 
-def run_backtest():
-    """Backtesting с backtrader и RL-моделью."""
-    cerebro = bt.Cerebro()
+        # Параметры стратегии
+        params = strategies.get(strategy, strategies['ppo'])
 
-    # Загружаем исторические данные
-    data = bt.feeds.PandasData(
-        dataname=pd.read_csv(
-            "data/historical_btc.csv", index_col="timestamp", parse_dates=True
-        )
-    )
-    cerebro.adddata(data)
+        # Создание среды
+        env = TradingEnv(data, strategy=strategy, **params)
 
-    # Стратегия с RL
-    class RLStrategy(bt.Strategy):
-        def __init__(self):
-            self.model = PPO.load("models/ppo_trading_model.zip")
-            self.env = (
-                TradingEnv()
-            )  # Создаем среду, но в backtest она может не использоваться
+        # Загрузка модели
+        model_path = f"models/ppo_{strategy}.zip"
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"Model not found: {model_path}")
+        model = PPO.load(model_path)
 
-            # Добавляем индикаторы
-            self.rsi = bt.indicators.RSI(self.data.close, period=14)
-            self.macd = bt.indicators.MACD(self.data.close)
-            # MACD имеет несколько компонентов: macd.macd, macd.signal, macd.hist
-            # Используем основную линию MACD
+        # Бэктестинг
+        obs, _ = env.reset()
+        total_reward = 0
+        for _ in range(len(data) - 1):
+            action, _ = model.predict(obs)
+            obs, reward, done, _, _ = env.step(action)
+            total_reward += reward
+            if done:
+                break
 
-        def next(self):
-            # Ждем, пока индикаторы будут готовы (RSI и MACD требуют достаточных данных)
-            if not self.rsi or not self.macd.macd:
-                return
-
-            obs = np.array(
-                [
-                    self.rsi[0] / 100.0,  # Нормализуем RSI (0-100) к 0-1
-                    self.macd.macd[0]
-                    / 10.0,  # Нормализуем MACD (предполагаем деление на 10 для масштаба)
-                    0.0,  # Sentiment (0 для backtest)
-                ]
-            )
-            action, _ = self.model.predict(obs)
-
-            if action == 1 and not self.position:  # Buy
-                self.buy()
-            elif action == 2 and self.position:  # Sell
-                self.sell()
-
-    cerebro.addstrategy(RLStrategy)
-    cerebro.broker.setcash(10000.0)
-    cerebro.addanalyzer(bt.analyzers.Returns, _name="returns")
-
-    results = cerebro.run()
-    returns_analysis = results[0].analyzers.returns.get_analysis()
-    print(f"Backtest returns: {returns_analysis}")
-
+        logging.info(f"Backtest total reward: {total_reward}")
+        env.render()  # Показать итоги
+    except Exception as e:
+        logging.error(f"Error in backtest: {e}")
 
 if __name__ == "__main__":
-    run_backtest()
+    main()

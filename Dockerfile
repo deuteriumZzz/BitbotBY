@@ -13,4 +13,4 @@ COPY scripts/ ./scripts/
 COPY data/ ./data/
 COPY models/ ./models/
 
-CMD ["python", "scripts/main.py"]
+CMD ["python", "run_bot.py"]
