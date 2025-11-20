@@ -4,8 +4,8 @@ gymnasium==0.29.1
 pandas-ta==0.4.71b0
 vaderSentiment==3.3.2
 ccxt==4.3.47
-numpy==1.26.4
-pandas==2.2.2
+numpy>=2.2.6
+pandas>=2.3.2  # Обновлено с 2.2.2
 asyncio
 python-dotenv==1.0.0
 logging
