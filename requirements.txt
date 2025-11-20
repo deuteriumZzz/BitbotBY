@@ -11,3 +11,4 @@ python-dotenv==1.0.0
 logging
 pytest==8.2.0
 newsapi-python==0.2.7
+redis==5.0.1

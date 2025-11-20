@@ -1,11 +1,22 @@
 version: '3.8'
-
 services:
-  bitbotby:
-    build: .
-    env_file:
-      - .env
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
     volumes:
-      - ./models:/app/models  # Монтируем директорию моделей
-    command: python run_bot.py --strategy ppo
-    restart: unless-stopped
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
+  bot:
+    build: .
+    depends_on:
+      - redis
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - .:/app
+    command: python scripts/main.py
+
+volumes:
+  redis_data:

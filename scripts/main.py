@@ -8,13 +8,18 @@ from src.bybit_api import BybitAPI
 from src.strategies import strategies
 import logging
 from dotenv import load_dotenv
+import redis
+import os
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
 
 async def main(strategy='ppo'):
     try:
-        # Загрузка данных (инициализация)
+        # Подключение к Redis
+        r = redis.from_url(os.getenv('REDIS_URL', 'redis://localhost:6379/0'))
+
+        # Загрузка данных
         api = BybitAPI()
         data = await api.fetch_historical_data_async('BTC/USDT', '1h', limit=100)
 
@@ -25,7 +30,7 @@ async def main(strategy='ppo'):
         env = TradingEnv(data, strategy=strategy, **params)
 
         # Анализатор новостей
-        news_analyzer = NewsAnalyzer()
+        news_analyzer = NewsAnalyzer(r)  # Передаём Redis
 
         # Загрузка модели
         model_path = f"models/ppo_{strategy}.zip"
@@ -36,16 +41,19 @@ async def main(strategy='ppo'):
         # Live-торговля
         obs, _ = env.reset()
         while True:
-            # Обновление данных и obs
-            sentiment = await news_analyzer.analyze_news_async()  # Убрал placeholder — теперь реальный запрос
+            # Обновление данных и obs с кэшированием
+            sentiment = await news_analyzer.analyze_news_async()
             obs = await env.update_obs_live_async(sentiment, strategy)
+
+            # Сохраняем последний сентимент в Redis для отладки
+            r.setex('last_sentiment', 300, str(sentiment))  # TTL 5 мин
 
             # Предсказание и шаг
             action, _ = model.predict(obs)
             obs, reward, done, _, _ = env.step(action)
 
             logging.info(f"Action: {action}, Reward: {reward}, Sentiment: {sentiment}")
-            await asyncio.sleep(60)  # Каждую минуту
+            await asyncio.sleep(60)
     except Exception as e:
         logging.error(f"Error in live trading: {e}")
 
