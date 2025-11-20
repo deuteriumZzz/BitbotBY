@@ -37,14 +37,14 @@ async def main(strategy='ppo'):
         obs, _ = env.reset()
         while True:
             # Обновление данных и obs
-            sentiment = await news_analyzer.analyze_news_async(['crypto news placeholder'])  # Замените на реальный источник
+            sentiment = await news_analyzer.analyze_news_async()  # Убрал placeholder — теперь реальный запрос
             obs = await env.update_obs_live_async(sentiment, strategy)
 
             # Предсказание и шаг
             action, _ = model.predict(obs)
             obs, reward, done, _, _ = env.step(action)
 
-            logging.info(f"Action: {action}, Reward: {reward}")
+            logging.info(f"Action: {action}, Reward: {reward}, Sentiment: {sentiment}")
             await asyncio.sleep(60)  # Каждую минуту
     except Exception as e:
         logging.error(f"Error in live trading: {e}")

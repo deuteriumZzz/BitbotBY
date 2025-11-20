@@ -9,4 +9,5 @@ pandas==2.2.2
 asyncio
 python-dotenv==1.0.0
 logging
-pytest==8.2.0  # Для тестов
+pytest==8.2.0
+newsapi-python==0.2.7
