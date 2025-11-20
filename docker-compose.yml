@@ -1,26 +1,11 @@
 version: '3.8'
+
 services:
-  app:
+  bitbotby:
     build: .
     env_file:
       - .env
-    depends_on:
-      - redis
-    networks:
-      - trading_net
-    volumes:  # Добавлено
-      - ./src:/app/src
-      - ./scripts:/app/scripts
-      - ./requirements.txt:/app/requirements.txt  # Если нужно, для зависимостей
-      # Добавьте другие папки, если скрипты или конфиги в них
-
-  redis:
-    image: redis:alpine
-    ports:
-      - "6379:6379"
-    networks:
-      - trading_net
-
-networks:
-  trading_net:
-    driver: bridge
+    volumes:
+      - ./models:/app/models  # Монтируем директорию моделей
+    command: python run_bot.py --strategy ppo
+    restart: unless-stopped
