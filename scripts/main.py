@@ -1,30 +1,31 @@
 import asyncio
-import pandas as pd
-import numpy as np
-from stable_baselines3 import PPO
-from src.rl_env import TradingEnv
-from src.news_analyzer import NewsAnalyzer
-from src.bybit_api import BybitAPI
-from src.strategies import strategies
 import logging
-from dotenv import load_dotenv
-import redis
 import os
+
+import redis
+from dotenv import load_dotenv
+from stable_baselines3 import PPO
+
+from src.bybit_api import BybitAPI
+from src.news_analyzer import NewsAnalyzer
+from src.rl_env import TradingEnv
+from src.strategies import strategies
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
 
-async def main(strategy='ppo'):
+
+async def main(strategy="ppo"):
     try:
         # Подключение к Redis
-        r = redis.from_url(os.getenv('REDIS_URL', 'redis://localhost:6379/0'))
+        r = redis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379/0"))
 
         # Загрузка данных
         api = BybitAPI()
-        data = await api.fetch_historical_data_async('BTC/USDT', '1h', limit=100)
+        data = await api.fetch_historical_data_async("BTC/USDT", "1h", limit=100)
 
         # Параметры стратегии
-        params = strategies.get(strategy, strategies['ppo'])
+        params = strategies.get(strategy, strategies["ppo"])
 
         # Создание среды
         env = TradingEnv(data, strategy=strategy, **params)
@@ -46,7 +47,7 @@ async def main(strategy='ppo'):
             obs = await env.update_obs_live_async(sentiment, strategy)
 
             # Сохраняем последний сентимент в Redis для отладки
-            r.setex('last_sentiment', 300, str(sentiment))  # TTL 5 мин
+            r.setex("last_sentiment", 300, str(sentiment))  # TTL 5 мин
 
             # Предсказание и шаг
             action, _ = model.predict(obs)
@@ -56,6 +57,7 @@ async def main(strategy='ppo'):
             await asyncio.sleep(60)
     except Exception as e:
         logging.error(f"Error in live trading: {e}")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

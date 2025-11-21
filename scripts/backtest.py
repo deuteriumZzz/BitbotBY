@@ -1,25 +1,26 @@
-import pandas as pd
-import numpy as np
-from stable_baselines3 import PPO
-from src.rl_env import TradingEnv
-from src.data_loader import DataLoader
-from src.strategies import strategies
 import logging
+
 from dotenv import load_dotenv
+from stable_baselines3 import PPO
+
+from src.data_loader import DataLoader
+from src.rl_env import TradingEnv
+from src.strategies import strategies
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
 
-def main(strategy='ppo'):
+
+def main(strategy="ppo"):
     try:
         # Загрузка данных
         loader = DataLoader()
-        data = loader.load_historical_data('BTC/USDT', '1h', limit=1000)
+        data = loader.load_historical_data("BTC/USDT", "1h", limit=1000)
         if data.empty:
             raise ValueError("No data loaded")
 
         # Параметры стратегии
-        params = strategies.get(strategy, strategies['ppo'])
+        params = strategies.get(strategy, strategies["ppo"])
 
         # Создание среды
         env = TradingEnv(data, strategy=strategy, **params)
@@ -44,6 +45,7 @@ def main(strategy='ppo'):
         env.render()  # Показать итоги
     except Exception as e:
         logging.error(f"Error in backtest: {e}")
+
 
 if __name__ == "__main__":
     main()
