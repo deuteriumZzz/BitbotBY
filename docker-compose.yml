@@ -12,11 +12,13 @@ services:
     build: .
     depends_on:
       - redis
+    env_file:
+      - .env
     environment:
       - REDIS_URL=redis://redis:6379/0
     volumes:
       - .:/app
-    command: python scripts/main.py
+    command: python run_bot.py
 
 volumes:
   redis_data:

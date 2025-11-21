@@ -1,13 +1,15 @@
-FROM python:3.12-slim
+FROM python:3.11-slim
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --upgrade pip
+COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+COPY src/ /app/src/
+COPY scripts/ /app/scripts/
+COPY run_bot.py /app/
+COPY .env /app/
 
-RUN mkdir -p models
+ENV PYTHONPATH=/app
 
 CMD ["python", "run_bot.py"]
