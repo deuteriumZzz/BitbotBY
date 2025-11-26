@@ -1,4 +1,5 @@
 import logging
+import os
 
 from dotenv import load_dotenv
 from stable_baselines3 import PPO
