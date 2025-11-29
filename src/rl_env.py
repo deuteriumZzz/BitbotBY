@@ -1,129 +1,63 @@
-import logging
-import os
-
-import gymnasium as gym
 import numpy as np
-import pandas_ta as ta
-from dotenv import load_dotenv
-from gymnasium import spaces
+import pandas as pd
+from src.indicators import add_indicators
+from src.bybit_api import BybitAPI  # Для доступа к API в live
+import logging
 
-load_dotenv()
 logging.basicConfig(level=logging.INFO)
 
-
-class TradingEnv(gym.Env):
-    def __init__(
-        self, data, strategy="ppo", initial_balance=1000, commission=0.001, leverage=1
-    ):
-        super().__init__()
-        self.data = data.copy()
+class TradingEnv:
+    def __init__(self, data, strategy="ppo"):
+        self.data = data
         self.strategy = strategy
-        self.initial_balance = float(os.getenv("INITIAL_BALANCE", initial_balance))
-        self.balance = self.initial_balance
+        self.current_step = 0
         self.position = 0  # 0: no position, 1: long, -1: short
-        self.entry_price = 0
-        self.commission = float(os.getenv("COMMISSION", commission))
-        self.leverage = int(os.getenv("LEVERAGE", leverage))
+        self.balance = 10000  # Начальный баланс
+        self.api = BybitAPI()  # Для live-обновлений
+        self.data = add_indicators(self.data)  # Добавление индикаторов
+
+    def reset(self):
         self.current_step = 0
-
-        # Пространства
-        self.action_space = spaces.Discrete(3)  # 0: hold, 1: buy/long, 2: sell/short
-        self.observation_space = spaces.Box(
-            low=-np.inf, high=np.inf, shape=(9,), dtype=np.float32
-        )
-
-        # Расчёт индикаторов
-        self._calculate_indicators()
-
-    def _calculate_indicators(self):
-        self.data["rsi"] = ta.rsi(self.data["close"], length=14)
-        macd = ta.macd(self.data["close"])
-        self.data["macd"] = macd["MACD_12_26_9"]
-        self.data["ema"] = ta.ema(self.data["close"], length=20)
-        bb = ta.bbands(self.data["close"], length=20)
-        self.data["bb_upper"] = (
-            bb["BBU_20_2.0"] if bb is not None else self.data["close"]
-        )
-        self.data["bb_lower"] = (
-            bb["BBL_20_2.0"] if bb is not None else self.data["close"]
-        )
-        self.data["vol_ratio"] = (
-            self.data["volume"] / self.data["volume"].rolling(20).mean()
-        )
-        self.data.bfill(inplace=True)  # Замена на bfill()
-
-    def _get_obs(self, sentiment=0.0):
-        row = self.data.iloc[self.current_step]
-        price = row["close"]
-        rsi_norm = (row["rsi"] - 50) / 50 if not np.isnan(row["rsi"]) else 0
-        macd_norm = row["macd"] / price if not np.isnan(row["macd"]) else 0
-        ema_diff = (price - row["ema"]) / price if not np.isnan(row["ema"]) else 0
-        bb_upper_diff = (
-            (row["bb_upper"] - price) / price if not np.isnan(row["bb_upper"]) else 0
-        )
-        bb_lower_diff = (
-            (price - row["bb_lower"]) / price if not np.isnan(row["bb_lower"]) else 0
-        )
-        vol_ratio = row["vol_ratio"] if not np.isnan(row["vol_ratio"]) else 1
-        balance_norm = self.balance / self.initial_balance
-        return np.array(
-            [
-                rsi_norm,
-                macd_norm,
-                ema_diff,
-                bb_upper_diff,
-                bb_lower_diff,
-                vol_ratio,
-                balance_norm,
-                self.position,
-                sentiment,
-            ],
-            dtype=np.float32,
-        )
-
-    def reset(self, seed=None, options=None):
-        self.balance = self.initial_balance
         self.position = 0
-        self.entry_price = 0
-        self.current_step = 0
-        return self._get_obs(), {}
+        self.balance = 10000
+        return self._get_obs()
 
     def step(self, action):
-        row = self.data.iloc[self.current_step]
-        price = row["close"]
+        # Логика шага (упрощённая)
         reward = 0
-        done = self.current_step >= len(self.data) - 1
-
-        if action == 1 and self.position == 0:  # Buy/Long
+        if action == 1 and self.position == 0:  # Buy
             self.position = 1
-            self.entry_price = price
-            reward -= self.commission * self.balance
-        elif action == 2 and self.position == 0:  # Sell/Short
+        elif action == 2 and self.position == 0:  # Sell
             self.position = -1
-            self.entry_price = price
-            reward -= self.commission * self.balance
-        elif action == 0 and self.position != 0:  # Hold/Sell if in position
-            pnl = (price - self.entry_price) * self.position * self.leverage
-            reward += pnl - self.commission * abs(pnl)
-            self.balance += reward
+        elif action == 0 and self.position != 0:  # Close
             self.position = 0
-            self.entry_price = 0
-        else:  # Hold
-            unrealized_pnl = (
-                (price - self.entry_price) * self.position * self.leverage
-                if self.position != 0
-                else 0
-            )
-            reward += unrealized_pnl * 0.01  # Малый reward за unrealized
+            reward = 10  # Placeholder reward
 
         self.current_step += 1
-        obs = self._get_obs()
-        return obs, reward, done, False, {}
+        done = self.current_step >= len(self.data) - 1
+        return self._get_obs(), reward, done, {}
+
+    def _get_obs(self):
+        # Получение наблюдений (индикаторы + позиция)
+        obs = self.data.iloc[self.current_step][['close', 'rsi', 'macd', 'bb_upper']].values
+        obs = np.append(obs, self.position)
+        return obs
 
     async def update_obs_live_async(self, sentiment, strategy):
-        # Placeholder: обновите с реальными данными из BybitAPI
-        # Например, fetch новые данные и пересчитать индикаторы
-        return self._get_obs(sentiment)
+        try:
+            # Загрузка новых данных (пример: последние 100 свечей)
+            new_data = await self.api.fetch_historical_data_async("BTC/USDT", "1h", limit=100)
+            # Обновление данных: конкатенация и обрезка до последних 1000
+            self.data = pd.concat([self.data, new_data]).tail(1000)
+            self.data = add_indicators(self.data)  # Пересчёт индикаторов
 
-    def render(self):
-        logging.info(f"Final balance: {self.balance}, Position: {self.position}")
+            # Обновление current_step (например, на последний)
+            self.current_step = len(self.data) - 1
+
+            # Получение obs + добавление sentiment
+            obs = self._get_obs()
+            obs = np.append(obs, sentiment)
+            return obs
+        except Exception as e:
+            logging.error(f"Error updating obs: {e}")
+            return self._get_obs()  # Fallback
