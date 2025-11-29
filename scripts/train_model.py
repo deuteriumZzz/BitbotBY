@@ -1,45 +1,36 @@
-import logging
-import os
-
-from dotenv import load_dotenv
-from stable_baselines3 import PPO
-from stable_baselines3.common.vec_env import DummyVecEnv
+import os  # Убедитесь, что это есть
+import sys
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from src.data_loader import DataLoader
 from src.rl_env import TradingEnv
 from src.strategies import strategies
-
-load_dotenv()
-logging.basicConfig(level=logging.INFO)
-
+from stable_baselines3 import PPO
+from stable_baselines3.common.vec_env import DummyVecEnv
+import pandas as pd
 
 def main(strategy="ppo"):
     try:
         # Загрузка данных
-        loader = DataLoader()
-        data = loader.load_historical_data("BTC/USDT", "1h", limit=5000)
-        if data.empty:
-            raise ValueError("No data loaded")
+        data_loader = DataLoader()
+        data = data_loader.load_data("BTC/USDT", "1h", limit=10000)  # Увеличьте limit для обучения
 
-        # Параметры стратегии
+        # Получение параметров стратегии
         params = strategies.get(strategy, strategies["ppo"])
 
-        # Создание среды
-        env = DummyVecEnv([lambda: TradingEnv(data, strategy=strategy, **params)])
+        # Создание среды (уберите **params из TradingEnv)
+        env = DummyVecEnv([lambda: TradingEnv(data, strategy=strategy)])
 
-        # Модель PPO
-        model = PPO("MlpPolicy", env, verbose=1)
+        # Создание и обучение модели (передайте params в PPO)
+        model = PPO("MlpPolicy", env, **params)
+        model.learn(total_timesteps=50000)  # Увеличьте для лучшего обучения
 
-        # Тренировка
-        model.learn(total_timesteps=10000)
-
-        # Сохранение
-        os.makedirs("models", exist_ok=True)
-        model.save(f"models/ppo_{strategy}")
-        logging.info(f"Model saved: models/ppo_{strategy}.zip")
+        # Сохранение модели
+        os.makedirs("models", exist_ok=True)  # exist_ok=True для безопасности
+        model.save(f"models/{strategy}_model.zip")
+        print(f"Model saved to models/{strategy}_model.zip")
     except Exception as e:
-        logging.error(f"Error in training: {e}")
-
+        print(f"Error in training: {e}")
 
 if __name__ == "__main__":
     main()
