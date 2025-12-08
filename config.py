@@ -1,31 +1,38 @@
 import os
-from dotenv import load_dotenv
+from dataclasses import dataclass
+from typing import Dict, Any
 
-load_dotenv()
-
+@dataclass
 class Config:
-    # Bybit API settings
-    BYBIT_API_KEY = os.getenv('BYBIT_API_KEY')
-    BYBIT_API_SECRET = os.getenv('BYBIT_API_SECRET')
+    # Redis configuration
+    REDIS_HOST: str = os.getenv('REDIS_HOST', 'localhost')
+    REDIS_PORT: int = int(os.getenv('REDIS_PORT', 6379))
+    REDIS_PASSWORD: str = os.getenv('REDIS_PASSWORD', '')
     
-    # Redis settings
-    REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
-    REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))
-    REDIS_PASSWORD = os.getenv('REDIS_PASSWORD', '')
+    # Trading configuration
+    INITIAL_BALANCE: float = 10000.0
+    RISK_PER_TRADE: float = 0.02
+    COMMISSION_RATE: float = 0.001
     
-    # Trading settings
-    SYMBOL = os.getenv('SYMBOL', 'BTCUSDT')
-    TIMEFRAME = os.getenv('TIMEFRAME', '1h')
-    INITIAL_BALANCE = float(os.getenv('INITIAL_BALANCE', 1000))
-    RISK_PER_TRADE = float(os.getenv('RISK_PER_TRADE', 0.02))
+    # Data configuration
+    DATA_DIR: str = 'data'
+    SYMBOLS: list = None
     
-    # Strategy settings
-    DEFAULT_STRATEGY = os.getenv('DEFAULT_STRATEGY', 'ema_crossover')
+    def __post_init__(self):
+        if self.SYMBOLS is None:
+            self.SYMBOLS = ['BTC/USDT', 'ETH/USDT', 'ADA/USDT']
     
-    # Cache settings
-    MARKET_DATA_CACHE_TTL = 300  # 5 minutes
-    MODEL_CACHE_TTL = 604800     # 7 days
-    STATE_CACHE_TTL = 86400      # 24 hours
-    
-    # Performance monitoring
-    STATS_UPDATE_INTERVAL = 3600  # 1 hour
+    @classmethod
+    def from_env(cls) -> 'Config':
+        """Create config from environment variables"""
+        return cls(
+            REDIS_HOST=os.getenv('REDIS_HOST', 'localhost'),
+            REDIS_PORT=int(os.getenv('REDIS_PORT', 6379)),
+            REDIS_PASSWORD=os.getenv('REDIS_PASSWORD', ''),
+            INITIAL_BALANCE=float(os.getenv('INITIAL_BALANCE', 10000.0)),
+            RISK_PER_TRADE=float(os.getenv('RISK_PER_TRADE', 0.02)),
+            COMMISSION_RATE=float(os.getenv('COMMISSION_RATE', 0.001))
+        )
+
+# Global config instance
+config = Config.from_env()

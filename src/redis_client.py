@@ -1,98 +1,93 @@
 import redis
+import pandas as pd
 import json
-import pickle
 import logging
-from datetime import datetime, timedelta
-from config import Config
+from typing import Dict, Any, Optional
+from datetime import datetime
+import pickle
 
 class RedisClient:
-    _instance = None
+    def __init__(self, host='localhost', port=6379, password=None):
+        self.redis_client = redis.Redis(
+            host=host,
+            port=port,
+            password=password,
+            decode_responses=False
+        )
+        self.logger = logging.getLogger(__name__)
     
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super(RedisClient, cls).__new__(cls)
-            cls._instance._initialize()
-        return cls._instance
-    
-    def _initialize(self):
+    def save_market_data(self, key: str, data: pd.DataFrame):
+        """Save market data to Redis"""
         try:
-            self.redis_client = redis.Redis(
-                host=Config.REDIS_HOST,
-                port=Config.REDIS_PORT,
-                password=Config.REDIS_PASSWORD,
-                db=0,
-                decode_responses=False
-            )
-            # Test connection
-            self.redis_client.ping()
-            logging.info("Redis connection established successfully")
+            serialized_data = pickle.dumps(data)
+            self.redis_client.setex(key, 300, serialized_data)  # 5 minutes TTL
         except Exception as e:
-            logging.error(f"Failed to connect to Redis: {e}")
-            raise
+            self.logger.error(f"Error saving market data: {e}")
     
-    def save_trading_state(self, symbol, state_data):
-        """Save trading state for symbol"""
-        key = f"trading_state:{symbol}"
-        self.redis_client.setex(key, Config.STATE_CACHE_TTL, pickle.dumps(state_data))
+    def load_market_data(self, key: str) -> Optional[pd.DataFrame]:
+        """Load market data from Redis"""
+        try:
+            data = self.redis_client.get(key)
+            if data:
+                return pickle.loads(data)
+        except Exception as e:
+            self.logger.error(f"Error loading market data: {e}")
+        return None
     
-    def load_trading_state(self, symbol):
-        """Load trading state for symbol"""
-        key = f"trading_state:{symbol}"
-        data = self.redis_client.get(key)
-        return pickle.loads(data) if data else None
+    def save_trading_state(self, key: str, state: Dict[str, Any]):
+        """Save trading state to Redis"""
+        try:
+            serialized_state = json.dumps(state)
+            self.redis_client.setex(key, 86400, serialized_state)  # 24 hours TTL
+        except Exception as e:
+            self.logger.error(f"Error saving trading state: {e}")
     
-    def save_market_data(self, symbol, timeframe, data):
-        """Cache market data"""
-        key = f"market_data:{symbol}:{timeframe}"
-        self.redis_client.setex(key, Config.MARKET_DATA_CACHE_TTL, pickle.dumps(data))
+    def load_trading_state(self, key: str) -> Optional[Dict[str, Any]]:
+        """Load trading state from Redis"""
+        try:
+            state = self.redis_client.get(key)
+            if state:
+                return json.loads(state)
+        except Exception as e:
+            self.logger.error(f"Error loading trading state: {e}")
+        return None
     
-    def load_market_data(self, symbol, timeframe):
-        """Load cached market data"""
-        key = f"market_data:{symbol}:{timeframe}"
-        data = self.redis_client.get(key)
-        return pickle.loads(data) if data else None
-    
-    def save_model(self, strategy_name, model_data):
+    def save_model(self, strategy_name: str, model_data: Dict[str, Any]):
         """Save model to Redis"""
-        key = f"model:{strategy_name}"
-        self.redis_client.setex(key, Config.MODEL_CACHE_TTL, pickle.dumps(model_data))
+        try:
+            serialized_model = pickle.dumps(model_data)
+            self.redis_client.setex(f"model:{strategy_name}", 604800, serialized_model)  # 7 days TTL
+        except Exception as e:
+            self.logger.error(f"Error saving model: {e}")
     
-    def load_model(self, strategy_name):
+    def load_model(self, strategy_name: str) -> Optional[Dict[str, Any]]:
         """Load model from Redis"""
-        key = f"model:{strategy_name}"
-        data = self.redis_client.get(key)
-        return pickle.loads(data) if data else None
+        try:
+            model_data = self.redis_client.get(f"model:{strategy_name}")
+            if model_data:
+                return pickle.loads(model_data)
+        except Exception as e:
+            self.logger.error(f"Error loading model: {e}")
+        return None
     
-    def acquire_lock(self, lock_name, timeout=10):
+    def acquire_lock(self, lock_name: str, timeout: int = 10) -> bool:
         """Acquire distributed lock"""
-        lock = self.redis_client.lock(f"lock:{lock_name}", timeout=timeout)
-        return lock.acquire(blocking=False)
+        try:
+            return bool(self.redis_client.set(lock_name, "locked", nx=True, ex=timeout))
+        except Exception as e:
+            self.logger.error(f"Error acquiring lock: {e}")
+            return False
     
-    def release_lock(self, lock_name):
+    def release_lock(self, lock_name: str):
         """Release distributed lock"""
-        lock = self.redis_client.lock(f"lock:{lock_name}")
-        lock.release()
+        try:
+            self.redis_client.delete(lock_name)
+        except Exception as e:
+            self.logger.error(f"Error releasing lock: {e}")
     
-    def publish_signal(self, signal_data):
-        """Publish trading signal to Redis Pub/Sub"""
-        self.redis_client.publish("trading_signals", json.dumps(signal_data))
-    
-    def get_performance_stats(self):
-        """Get performance statistics"""
-        stats = self.redis_client.get("performance_stats")
-        return json.loads(stats) if stats else {}
-    
-    def update_performance_stats(self, stats):
-        """Update performance statistics"""
-        self.redis_client.setex("performance_stats", Config.STATS_UPDATE_INTERVAL, json.dumps(stats))
-    
-    def save_backtest_result(self, strategy_name, result):
-        """Save backtest result"""
-        key = f"backtest:{strategy_name}"
-        self.redis_client.setex(key, 86400, pickle.dumps(result))
-    
-    def load_backtest_result(self, strategy_name):
-        """Load backtest result"""
-        key = f"backtest:{strategy_name}"
-        data = self.redis_client.get(key)
-        return pickle.loads(data) if data else None
+    def publish_signal(self, signal_data: Dict[str, Any]):
+        """Publish signal via Redis Pub/Sub"""
+        try:
+            self.redis_client.publish('trading_signals', json.dumps(signal_data))
+        except Exception as e:
+            self.logger.error(f"Error publishing signal: {e}")

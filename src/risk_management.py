@@ -1,7 +1,7 @@
 import numpy as np
 import logging
 from typing import Dict, Any
-from .redis_client import RedisClient
+from src.redis_client import RedisClient
 
 class RiskManager:
     def __init__(self, initial_balance: float, risk_per_trade: float = 0.02):
