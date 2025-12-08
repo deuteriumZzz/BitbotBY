@@ -9,6 +9,7 @@ from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
 
+
 class NewsAnalyzer:
     def __init__(self):
         self.analyzer = SentimentIntensityAnalyzer()
@@ -34,7 +35,7 @@ class NewsAnalyzer:
             avg_sentiment = sum(sentiments) / len(sentiments) if sentiments else 0.0
             logging.info(f"News sentiment: {avg_sentiment}")
             return avg_sentiment
-            
+
         except Exception as e:
             logging.error(f"Error analyzing news: {e}")
             return 0.0
@@ -43,13 +44,13 @@ class NewsAnalyzer:
         try:
             loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(
-                None, 
+                None,
                 lambda: self.newsapi.get_everything(
                     q="bitcoin OR crypto OR BTC",
                     language="en",
                     sort_by="publishedAt",
                     page_size=10,
-                )
+                ),
             )
             return response.get("articles", [])
         except Exception as e:
