@@ -1,15 +1,12 @@
-FROM python:3.12-slim
+FROM python:3.9-slim
 
 WORKDIR /app
 
-COPY requirements.txt /app/
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY src/ /app/src/
-COPY scripts/ /app/scripts/
-COPY run_bot.py /app/
-COPY .env /app/
+COPY . .
 
-ENV PYTHONPATH=/app
+RUN mkdir -p logs data models
 
-CMD ["python", "run_bot.py"]
+CMD ["python", "-m", "scripts.main"]

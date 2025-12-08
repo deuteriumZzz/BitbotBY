@@ -1,31 +1,227 @@
-import os
+#!/usr/bin/env python3
+"""
+Main entry point for the Crypto Trading Bot
+"""
+
 import asyncio
+import signal
+import sys
+from typing import Dict, List, Optional
+from datetime import datetime
 import argparse
-from scripts.train_model import main as train_main
-from scripts.main import main as run_main
-import logging
-from dotenv import load_dotenv
 
-load_dotenv()
-logging.basicConfig(level=logging.INFO)
+# Add src directory to path
+import os
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--strategy', type=str, default=os.getenv('STRATEGY', 'ppo'), help='Trading strategy')
-    parser.add_argument('--skip_train', action='store_true', help='Skip training if model exists')
-    args = parser.parse_args()
+from config import Config
+from logger import logger, setup_error_handler
+from data_fetcher import DataFetcher
+from trading_engine import TradingEngine
+from portfolio_manager import PortfolioManager
+from rl_agent import RLAgent
+from risk_manager import RiskManager
 
-    # Единый формат имени файла модели
-    model_path = f"models/{args.strategy}_model.zip"
+class CryptoTradingBot:
+    def __init__(self, config: Config):
+        self.config = config
+        self.is_running = False
+        self.shutdown_requested = False
+        
+        # Initialize components
+        self.data_fetcher = DataFetcher(config)
+        self.portfolio_manager = PortfolioManager(config)
+        self.risk_manager = RiskManager(config)
+        self.rl_agent = RLAgent(
+            state_size=config.STATE_SIZE,
+            action_size=config.ACTION_SIZE
+        )
+        self.trading_engine = TradingEngine(
+            config=config,
+            data_fetcher=self.data_fetcher,
+            portfolio_manager=self.portfolio_manager,
+            risk_manager=self.risk_manager,
+            rl_agent=self.rl_agent
+        )
+        
+        # Load model if exists
+        self._load_model()
+        
+        logger.info("Crypto Trading Bot initialized")
+
+    def _load_model(self):
+        """Load trained RL model if available"""
+        model_path = os.path.join(self.config.MODELS_DIR, "rl_model.pth")
+        if os.path.exists(model_path):
+            try:
+                self.rl_agent.load_model(model_path)
+                logger.info(f"Loaded trained model from {model_path}")
+            except Exception as e:
+                logger.error(f"Failed to load model: {e}")
+        else:
+            logger.info("No trained model found, starting fresh")
+
+    async def run(self):
+        """Main trading loop"""
+        self.is_running = True
+        logger.info("Starting trading bot...")
+        
+        try:
+            # Initial data fetch
+            await self._initial_setup()
+            
+            # Main trading loop
+            while not self.shutdown_requested:
+                await self._trading_iteration()
+                await asyncio.sleep(self.config.TRADING_INTERVAL)
+                
+        except Exception as e:
+            logger.critical(f"Trading bot crashed: {e}", exc_info=True)
+        finally:
+            self.is_running = False
+            await self.shutdown()
+
+    async def _initial_setup(self):
+        """Perform initial setup and data loading"""
+        logger.info("Performing initial setup...")
+        
+        # Load portfolio state
+        await self.portfolio_manager.load_portfolio()
+        
+        # Fetch initial market data
+        for symbol in self.config.TRADING_SYMBOLS:
+            data = await self.data_fetcher.fetch_market_data(symbol)
+            if data:
+                logger.info(f"Initial data for {symbol}: {data['close']}")
+        
+        logger.info("Initial setup completed")
+
+    async def _trading_iteration(self):
+        """Execute one trading iteration"""
+        try:
+            # Fetch latest market data
+            market_data = {}
+            for symbol in self.config.TRADING_SYMBOLS:
+                data = await self.data_fetcher.fetch_market_data(symbol)
+                if data:
+                    market_data[symbol] = data
+            
+            if not market_data:
+                logger.warning("No market data available")
+                return
+            
+            # Get portfolio state
+            portfolio_state = self.portfolio_manager.get_portfolio_state()
+            
+            # Make trading decisions
+            trading_decisions = await self.trading_engine.make_trading_decisions(
+                market_data, portfolio_state
+            )
+            
+            # Execute trades
+            if trading_decisions:
+                await self.trading_engine.execute_trades(trading_decisions)
+            
+            # Update portfolio
+            await self.portfolio_manager.update_portfolio(market_data)
+            
+            # Save state periodically
+            if datetime.now().minute % 30 == 0:  # Every 30 minutes
+                await self._save_state()
+                
+        except Exception as e:
+            logger.error(f"Error in trading iteration: {e}", exc_info=True)
+
+    async def _save_state(self):
+        """Save bot state"""
+        try:
+            # Save portfolio
+            await self.portfolio_manager.save_portfolio()
+            
+            # Save RL model
+            model_path = os.path.join(self.config.MODELS_DIR, "rl_model.pth")
+            self.rl_agent.save_model(model_path)
+            
+            logger.debug("Bot state saved")
+            
+        except Exception as e:
+            logger.error(f"Failed to save state: {e}")
+
+    async def shutdown(self):
+        """Graceful shutdown"""
+        logger.info("Shutting down trading bot...")
+        
+        try:
+            # Save final state
+            await self._save_state()
+            
+            # Close connections
+            await self.data_fetcher.close()
+            
+            logger.info("Trading bot shutdown completed")
+            
+        except Exception as e:
+            logger.error(f"Error during shutdown: {e}")
+
+    def handle_signal(self, signal_name):
+        """Handle shutdown signals"""
+        logger.info(f"Received signal: {signal_name}")
+        self.shutdown_requested = True
+
+async def main():
+    """Main function"""
+    parser = argparse.ArgumentParser(description='Crypto Trading Bot')
+    parser.add_argument('--config', type=str, default='config.json',
+                       help='Path to config file')
+    parser.add_argument('--mode', choices=['live', 'paper', 'backtest'],
+                       default='paper', help='Trading mode')
+    parser.add_argument('--symbols', nargs='+', 
+                       default=['BTC/USDT', 'ETH/USDT'],
+                       help='Trading symbols')
+    parser.add_argument('--interval', type=int, default=60,
+                       help='Trading interval in seconds')
     
-    if not args.skip_train or not os.path.exists(model_path):
-        logging.info(f"Training model for strategy: {args.strategy}")
-        train_main(strategy=args.strategy)
-    else:
-        logging.info(f"Skipping training, using existing model: {model_path}")
-
-    logging.info("Launching live bot")
-    asyncio.run(run_main(strategy=args.strategy))
+    args = parser.parse_args()
+    
+    # Load configuration
+    config = Config()
+    
+    # Override config with command line arguments
+    if args.config != 'config.json':
+        config.load_config(args.config)
+    
+    config.TRADING_MODE = args.mode
+    config.TRADING_SYMBOLS = args.symbols
+    config.TRADING_INTERVAL = args.interval
+    
+    # Setup global error handling
+    setup_error_handler()
+    
+    logger.info(f"Starting Crypto Trading Bot in {config.TRADING_MODE} mode")
+    logger.info(f"Trading symbols: {config.TRADING_SYMBOLS}")
+    logger.info(f"Trading interval: {config.TRADING_INTERVAL}s")
+    
+    # Create and run bot
+    bot = CryptoTradingBot(config)
+    
+    # Setup signal handlers
+    for sig in [signal.SIGINT, signal.SIGTERM]:
+        signal.signal(sig, lambda s, f: bot.handle_signal(signal.Signals(s).name))
+    
+    try:
+        await bot.run()
+    except KeyboardInterrupt:
+        logger.info("Keyboard interrupt received")
+        bot.handle_signal("SIGINT")
+    finally:
+        if bot.is_running:
+            await bot.shutdown()
 
 if __name__ == "__main__":
-    main()
+    # Run the bot
+    try:
+        asyncio.run(main())
+    except Exception as e:
+        logger.critical(f"Fatal error: {e}", exc_info=True)
+        sys.exit(1)
