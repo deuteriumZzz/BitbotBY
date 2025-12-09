@@ -14,8 +14,8 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from src.data_fetcher import DataFetcher
-from src.risk_manager import RiskManager
-from src.rl_agent import RLAgent
+from src.risk_management import RiskManager
+from reinforcement_learning.rl_agent import RLAgent
 from src.trading_engine import TradingEngine
 
 from config import Config, config
