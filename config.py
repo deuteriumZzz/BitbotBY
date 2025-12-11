@@ -44,9 +44,7 @@ class Config:
     def from_env(cls) -> "Config":
         """Create config from environment variables"""
         return cls(
-            REDIS_HOST=os.getenv("REDIS_HOST", "localhost"),
-            REDIS_PORT=int(os.getenv("REDIS_PORT", 6379)),
-            REDIS_PASSWORD=os.getenv("REDIS_PASSWORD", ""),
+            REDIS_URL=os.getenv("REDIS_URL", "redis://localhost:6379/0"),
             BYBIT_API_KEY=os.getenv("BYBIT_API_KEY", ""),
             BYBIT_API_SECRET=os.getenv("BYBIT_API_SECRET", ""),
             INITIAL_BALANCE=float(os.getenv("INITIAL_BALANCE", 10000.0)),
