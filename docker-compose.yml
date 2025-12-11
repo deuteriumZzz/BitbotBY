@@ -24,9 +24,7 @@ services:
       - ./logs:/app/logs
     restart: unless-stopped
     environment:
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-your_redis_password}
+      - REDIS_URL=redis://redis:6379/0
       - PYTHONPATH=/app  # Важно для импортов
 
 volumes:
