@@ -1,267 +1,205 @@
 import asyncio
 import logging
-from typing import Dict, List, Optional
+from datetime import datetime
+from typing import Optional
 
-from config import config
+import pandas as pd
+
+from config import Config
 from src.bybit_api import BybitAPI
-from src.data_fetcher import DataFetcher
-from src.news_analyzer import NewsAnalyzer
+from src.data_loader import DataLoader
 from src.portfolio_manager import PortfolioManager
+from src.redis_client import RedisClient
 from src.risk_management import RiskManager
 from src.strategies import TradingStrategy
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
+
 
 class TradingBot:
-    """Main trading bot that orchestrates all components"""
-
     def __init__(self):
-        self.logger = logging.getLogger(__name__)
+        self.redis = RedisClient()
+        self.api = BybitAPI()
+        self.data_loader = DataLoader()
+        self.portfolio_manager = PortfolioManager(Config.INITIAL_BALANCE)
+        self.strategy = None
+        self.risk_manager = RiskManager(Config.INITIAL_BALANCE, Config.RISK_PER_TRADE)
         self.is_running = False
 
-        # Initialize components
-        self.api = BybitAPI()
-        self.data_fetcher = DataFetcher(config)
-        self.portfolio_manager = PortfolioManager(config.INITIAL_BALANCE)
-        self.risk_manager = RiskManager(config.INITIAL_BALANCE, config.RISK_PER_TRADE)
-        self.news_analyzer = NewsAnalyzer()
-
-        # Strategies
-        self.strategies: Dict[str, TradingStrategy] = {}
-
     async def initialize(self):
-        """Initialize all bot components"""
+        """Initialize trading bot"""
         try:
-            # Initialize API
-            await self.api.initialize(config.BYBIT_API_KEY, config.BYBIT_API_SECRET)
+            await self.api.initialize(Config.BYBIT_API_KEY, Config.BYBIT_API_SECRET)
+            await self.data_loader.initialize(
+                Config.BYBIT_API_KEY, Config.BYBIT_API_SECRET
+            )
 
-            # Initialize data fetcher
-            await self.data_fetcher.initialize()
+            # Initialize strategy
+            self.strategy = TradingStrategy(Config.DEFAULT_STRATEGY)
+            await self.strategy.initialize()
 
-            # Initialize strategies
-            strategy_names = ["ema_crossover", "rsi_momentum"]
-            for name in strategy_names:
-                strategy = TradingStrategy(name)
-                await strategy.initialize()
-                self.strategies[name] = strategy
+            # Restore state from Redis
+            await self._restore_state()
 
-            self.logger.info("Trading bot initialized successfully")
-            return True
+            logger.info("Trading bot initialized successfully")
 
         except Exception as e:
-            self.logger.error(f"Failed to initialize trading bot: {e}")
-            return False
+            logger.error(f"Failed to initialize trading bot: {e}")
+            raise
 
-    async def fetch_market_data(self, symbols: List[str]) -> Dict[str, Optional[Dict]]:
-        """Fetch market data for all symbols"""
-        market_data = {}
+    async def _restore_state(self):
+        """Restore state from Redis"""
+        state = self.redis.load_trading_state(Config.SYMBOL)
+        if state:
+            logger.info(f"Restored trading state from Redis: {state}")
 
-        for symbol in symbols:
-            data = await self.data_fetcher.fetch_market_data(symbol)
-            market_data[symbol] = data
-
-        return market_data
-
-    async def analyze_market(self, market_data: Dict[str, Dict]) -> Dict[str, Dict]:
-        """Analyze market and generate trading signals"""
-        signals = {}
-
-        for symbol, data in market_data.items():
-            if data is None:
-                continue
-
-            # Convert data to DataFrame for strategy analysis
-            df = await self._prepare_data_for_analysis(data)
-
-            # Get signals from all strategies
-            strategy_signals = {}
-            for strategy_name, strategy in self.strategies.items():
-                signal = await strategy.get_signal(df)
-                strategy_signals[strategy_name] = signal
-
-            signals[symbol] = strategy_signals
-
-        return signals
-
-    async def _prepare_data_for_analysis(self, data: Dict) -> "pd.DataFrame":
-        """Prepare data for analysis"""
-        # Convert your data to DataFrame format expected by strategies
-        import pandas as pd
-
-        # This is an example - adapt to your actual data format
-        df = pd.DataFrame([data])
-        df["timestamp"] = pd.to_datetime(df["timestamp"])
-        df.set_index("timestamp", inplace=True)
-
-        return df
-
-    async def execute_trading_decisions(
-        self, signals: Dict[str, Dict], market_data: Dict[str, Dict]
-    ):
-        """Execute trading decisions based on signals"""
-        for symbol, strategy_signals in signals.items():
-            if symbol not in market_data:
-                continue
-
-            current_price = market_data[symbol]["price"]
-
-            # Aggregate signals from all strategies
-            final_signal = await self._aggregate_signals(strategy_signals)
-
-            if final_signal["action"] == "hold":
-                continue
-
-            # Risk validation
-            if not await self.risk_manager.validate_signal(
-                final_signal, market_data[symbol]
-            ):
-                self.logger.warning(f"Signal for {symbol} failed risk validation")
-                continue
-
-            # Calculate position size
-            stop_loss = await self.risk_manager.calculate_stop_loss(
-                current_price, final_signal
+        # Restore portfolio state
+        portfolio_state = self.redis.load_trading_state("portfolio_state")
+        if portfolio_state:
+            self.portfolio_manager.current_balance = portfolio_state.get(
+                "balance", Config.INITIAL_BALANCE
             )
+            self.portfolio_manager.positions = portfolio_state.get("positions", {})
+
+    async def _execute_trade(self, signal: dict, market_data: pd.DataFrame):
+        """Execute trade based on signal"""
+        try:
+            if not await self.risk_manager.validate_signal(signal, market_data):
+                logger.info("Signal validation failed")
+                return
+
+            entry_price = signal.get("price", market_data["close"].iloc[-1])
+            stop_loss = await self.risk_manager.calculate_stop_loss(entry_price, signal)
             position_size = await self.risk_manager.calculate_position_size(
-                self.portfolio_manager.current_balance, current_price, stop_loss
+                await self.portfolio_manager.get_portfolio_value(
+                    {Config.SYMBOL: entry_price}
+                ),
+                entry_price,
+                stop_loss,
             )
 
             if position_size <= 0:
-                continue
+                logger.warning("Invalid position size")
+                return
 
             # Execute order
-            success = await self.portfolio_manager.update_portfolio(
-                symbol, final_signal["action"], position_size, current_price
+            order_side = "buy" if signal["action"] == "buy" else "sell"
+            order = await self.api.create_order(
+                Config.SYMBOL, "limit", order_side, position_size, entry_price
             )
 
-            if success:
-                self.logger.info(
-                    f"Executed {final_signal['action']} order for {symbol}, size: {position_size}"
+            if order:
+                logger.info(f"Order executed: {order}")
+                # Update portfolio
+                success = await self.portfolio_manager.update_portfolio(
+                    Config.SYMBOL, order_side, position_size, entry_price
                 )
-            else:
-                self.logger.warning(f"Failed to execute order for {symbol}")
 
-    async def _aggregate_signals(self, strategy_signals: Dict[str, Dict]) -> Dict:
-        """Aggregate signals from different strategies"""
-        # Simple aggregation logic - can be made more sophisticated
-        buy_signals = 0
-        sell_signals = 0
-        total_confidence = 0
-
-        for signal in strategy_signals.values():
-            if signal["action"] == "buy":
-                buy_signals += 1
-                total_confidence += signal["confidence"]
-            elif signal["action"] == "sell":
-                sell_signals += 1
-                total_confidence += signal["confidence"]
-
-        if buy_signals > sell_signals and buy_signals >= 1:
-            return {
-                "action": "buy",
-                "confidence": total_confidence / len(strategy_signals),
-            }
-        elif sell_signals > buy_signals and sell_signals >= 1:
-            return {
-                "action": "sell",
-                "confidence": total_confidence / len(strategy_signals),
-            }
-        else:
-            return {"action": "hold", "confidence": 0.5}
-
-    async def monitor_portfolio(self):
-        """Monitor and rebalance portfolio"""
-        try:
-            # Get current prices
-            symbols = list(self.portfolio_manager.positions.keys())
-            if symbols:
-                market_data = await self.fetch_market_data(symbols)
-                current_prices = {
-                    symbol: data["price"]
-                    for symbol, data in market_data.items()
-                    if data
-                }
-
-                # Calculate portfolio value
-                portfolio_value = await self.portfolio_manager.get_portfolio_value(
-                    current_prices
-                )
-                self.logger.info(f"Current portfolio value: {portfolio_value:.2f} USDT")
-
-                # Add rebalancing logic here
+                if success:
+                    logger.info("Portfolio updated successfully")
+                else:
+                    logger.warning("Failed to update portfolio")
 
         except Exception as e:
-            self.logger.error(f"Error in portfolio monitoring: {e}")
+            logger.error(f"Error executing trade: {e}")
 
-    async def run(
-        self, symbols: List[str] = ["BTCUSDT", "ETHUSDT"], interval: int = 300
-    ):
+    async def _update_performance_stats(self):
+        """Update performance statistics"""
+        try:
+            current_price = await self.api.get_current_price(Config.SYMBOL)
+            portfolio_value = await self.portfolio_manager.get_portfolio_value(
+                {Config.SYMBOL: current_price}
+            )
+
+            stats = {
+                "timestamp": datetime.now().isoformat(),
+                "current_balance": self.portfolio_manager.current_balance,
+                "portfolio_value": portfolio_value,
+                "profit_loss": (portfolio_value - Config.INITIAL_BALANCE)
+                / Config.INITIAL_BALANCE
+                * 100,
+                "positions": self.portfolio_manager.get_positions(),
+            }
+            self.redis.update_performance_stats(stats)
+
+        except Exception as e:
+            logger.error(f"Error updating performance stats: {e}")
+
+    async def analyze_market(self, symbol: str, timeframe: str) -> Optional[dict]:
+        """Analyze market and generate trading signal"""
+        try:
+            # Get market data
+            data = await self.data_loader.get_market_data(symbol, timeframe, limit=100)
+
+            # Calculate technical indicators
+            data = self.data_loader.calculate_technical_indicators(data)
+
+            # Get trading signal
+            signal = await self.strategy.get_signal(data)
+
+            logger.info(f"Generated signal for {symbol}: {signal}")
+            return signal
+
+        except Exception as e:
+            logger.error(f"Error analyzing market for {symbol}: {e}")
+            return None
+
+    async def trading_loop(self):
         """Main trading loop"""
         self.is_running = True
+        logger.info("Starting trading loop")
 
-        try:
-            while self.is_running:
-                self.logger.info("Starting trading cycle...")
+        while self.is_running:
+            try:
+                # Analyze market and get signal
+                signal = await self.analyze_market(Config.SYMBOL, Config.TIMEFRAME)
 
-                # 1. Fetch market data
-                market_data = await self.fetch_market_data(symbols)
-
-                # 2. Analyze market and generate signals
-                signals = await self.analyze_market(market_data)
-
-                # 3. Execute trading decisions
-                await self.execute_trading_decisions(signals, market_data)
-
-                # 4. Monitor portfolio
-                await self.monitor_portfolio()
-
-                # 5. Analyze news (asynchronously)
-                news_sentiment = await self.news_analyzer.analyze_news_async()
-                if abs(news_sentiment) > 0.3:  # Strong sentiment
-                    self.logger.info(
-                        f"Strong news sentiment detected: {news_sentiment:.2f}"
+                if signal and signal["action"] != "hold":
+                    # Get fresh market data for execution
+                    market_data = await self.data_loader.get_market_data(
+                        Config.SYMBOL, Config.TIMEFRAME, limit=100
+                    )
+                    market_data = self.data_loader.calculate_technical_indicators(
+                        market_data
                     )
 
-                self.logger.info(
-                    f"Trading cycle completed. Waiting {interval} seconds..."
-                )
-                await asyncio.sleep(interval)
+                    await self._execute_trade(signal, market_data)
 
-        except KeyboardInterrupt:
-            self.logger.info("Received interrupt signal")
-        except Exception as e:
-            self.logger.error(f"Error in trading loop: {e}")
-        finally:
-            await self.shutdown()
+                # Update performance statistics
+                await self._update_performance_stats()
 
-    async def shutdown(self):
-        """Graceful shutdown"""
+                # Wait for next iteration
+                await asyncio.sleep(Config.TRADING_INTERVAL)
+
+            except Exception as e:
+                logger.error(f"Error in trading loop: {e}")
+                await asyncio.sleep(30)
+
+    async def stop(self):
+        """Stop trading bot"""
         self.is_running = False
         await self.api.close()
-        await self.data_fetcher.close()
-        self.logger.info("Trading bot shut down successfully")
+        await self.data_loader.close()
+        logger.info("Trading bot stopped")
 
 
 async def main():
-    """Main entry point"""
-    from config import config
-
-    # Configure logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
-
+    """Main function"""
     bot = TradingBot()
 
-    if await bot.initialize():
-        try:
-            await bot.run(
-                symbols=config.TRADING_SYMBOLS, interval=config.TRADING_INTERVAL
-            )
-        except Exception as e:
-            logging.error(f"Bot crashed: {e}")
-    else:
-        logging.error("Failed to initialize trading bot")
+    try:
+        await bot.initialize()
+        await bot.trading_loop()
+    except KeyboardInterrupt:
+        logger.info("Received interrupt signal")
+    except Exception as e:
+        logger.error(f"Fatal error: {e}")
+    finally:
+        await bot.stop()
 
 
 if __name__ == "__main__":

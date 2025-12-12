@@ -66,6 +66,10 @@ class PortfolioManager:
 
         self.redis.save_trading_state("portfolio_state", portfolio_state)
 
+    def get_positions(self) -> Dict[str, float]:
+        """Get current positions"""
+        return self.positions.copy()
+
     async def get_position_size(self, symbol: str) -> float:
         """Get current position size for symbol"""
         return self.positions.get(symbol, 0.0)

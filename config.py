@@ -1,11 +1,15 @@
 import os
 from dataclasses import dataclass
+from typing import List
 
 
 @dataclass
 class Config:
     # Redis configuration
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    REDIS_HOST: str = os.getenv("REDIS_HOST", "localhost")
+    REDIS_PORT: int = int(os.getenv("REDIS_PORT", 6379))
+    REDIS_DB: int = int(os.getenv("REDIS_DB", 0))
 
     # Bybit API configuration
     BYBIT_API_KEY: str = os.getenv("BYBIT_API_KEY", "")
@@ -20,13 +24,15 @@ class Config:
     STOP_LOSS_PERCENT: float = 0.02
 
     # Strategy configuration
-    ENABLED_STRATEGIES: list = None
+    ENABLED_STRATEGIES: List[str] = None
     DEFAULT_STRATEGY: str = "ema_crossover"
 
     # Data configuration
     DATA_DIR: str = "data"
-    SYMBOLS: list = None
-    TRADING_SYMBOLS: list = None
+    SYMBOLS: List[str] = None
+    TRADING_SYMBOLS: List[str] = None
+    SYMBOL: str = os.getenv("TRADING_SYMBOL", "BTCUSDT")  # Добавлено
+    TIMEFRAME: str = os.getenv("TIMEFRAME", "15")  # Добавлено
 
     # News configuration
     NEWS_API_KEY: str = os.getenv("NEWS_API_KEY", "")
@@ -45,12 +51,17 @@ class Config:
         """Create config from environment variables"""
         return cls(
             REDIS_URL=os.getenv("REDIS_URL", "redis://localhost:6379/0"),
+            REDIS_HOST=os.getenv("REDIS_HOST", "localhost"),
+            REDIS_PORT=int(os.getenv("REDIS_PORT", 6379)),
+            REDIS_DB=int(os.getenv("REDIS_DB", 0)),
             BYBIT_API_KEY=os.getenv("BYBIT_API_KEY", ""),
             BYBIT_API_SECRET=os.getenv("BYBIT_API_SECRET", ""),
             INITIAL_BALANCE=float(os.getenv("INITIAL_BALANCE", 10000.0)),
             RISK_PER_TRADE=float(os.getenv("RISK_PER_TRADE", 0.02)),
             COMMISSION_RATE=float(os.getenv("COMMISSION_RATE", 0.001)),
             TRADING_INTERVAL=int(os.getenv("TRADING_INTERVAL", 300)),
+            SYMBOL=os.getenv("TRADING_SYMBOL", "BTCUSDT"),
+            TIMEFRAME=os.getenv("TIMEFRAME", "15"),
             NEWS_API_KEY=os.getenv("NEWS_API_KEY", ""),
         )
 
