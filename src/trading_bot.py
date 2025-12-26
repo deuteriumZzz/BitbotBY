@@ -74,11 +74,21 @@ class TradingBot:
 
             entry_price = signal.get("price", market_data["close"].iloc[-1])
             stop_loss = await self.risk_manager.calculate_stop_loss(entry_price, signal)
+            
+            # Получить текущий баланс и цену для расчета position_size
+            balance = await self.api.get_balance()
+            if not balance:
+                logger.error("Не удалось получить баланс аккаунта")
+                return
+            
+            current_price = await self.api.get_current_price(Config.SYMBOL)
+            if not current_price:
+                logger.error("Не удалось получить текущую цену")
+                return
+            
             position_size = await self.risk_manager.calculate_position_size(
-                await self.portfolio_manager.get_portfolio_value(
-                    {Config.SYMBOL: entry_price}
-                ),
-                entry_price,
+                self.portfolio_manager.current_balance,  # Используем баланс из portfolio_manager
+                current_price,
                 stop_loss,
             )
 
@@ -86,8 +96,21 @@ class TradingBot:
                 logger.warning("Invalid position size")
                 return
 
-            # Execute order
+            # Проверка баланса перед ордером (новое: предотвращает недостаточный баланс)
             order_side = "buy" if signal["action"] == "buy" else "sell"
+            if order_side == "buy":
+                cost = position_size * entry_price
+                usdt_balance = balance.get('free', {}).get('USDT', 0)
+                if cost > usdt_balance:
+                    logger.warning(f"Недостаточный баланс USDT: {usdt_balance} < {cost}. Пропускаю ордер.")
+                    return
+            elif order_side == "sell":
+                btc_balance = balance.get('free', {}).get('BTC', 0)
+                if btc_balance < position_size:
+                    logger.warning(f"Недостаточный баланс BTC: {btc_balance} < {position_size}. Пропускаю ордер.")
+                    return
+
+            # Execute order
             order = await self.api.create_order(
                 Config.SYMBOL, "limit", order_side, position_size, entry_price
             )
@@ -103,6 +126,8 @@ class TradingBot:
                     logger.info("Portfolio updated successfully")
                 else:
                     logger.warning("Failed to update portfolio")
+            else:
+                logger.error("Failed to create order")
 
         except Exception as e:
             logger.error(f"Error executing trade: {e}")
@@ -111,6 +136,10 @@ class TradingBot:
         """Update performance statistics"""
         try:
             current_price = await self.api.get_current_price(Config.SYMBOL)
+            if not current_price:
+                logger.error("Не удалось получить текущую цену для статистики")
+                return
+            
             portfolio_value = await self.portfolio_manager.get_portfolio_value(
                 {Config.SYMBOL: current_price}
             )

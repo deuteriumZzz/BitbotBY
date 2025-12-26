@@ -14,17 +14,26 @@ class BybitAPI:
         self.redis = RedisClient()
         self.logger = logging.getLogger(__name__)
 
-    async def initialize(self, api_key: str, api_secret: str):
+    async def initialize(self, api_key: str, api_secret: str, testnet: bool = False):
         """Initialize Bybit connection"""
         try:
-            self.exchange = ccxt.bybit(
-                {
+            # Новое: поддержка тестнета для безопасного тестирования
+            exchange_class = ccxt.bybit
+            if testnet:
+                self.exchange = exchange_class({
                     "apiKey": api_key,
                     "secret": api_secret,
                     "enableRateLimit": True,
                     "options": {"defaultType": "spot"},
-                }
-            )
+                    "urls": {"api": {"public": "https://api-testnet.bybit.com", "private": "https://api-testnet.bybit.com"}},
+                })
+            else:
+                self.exchange = exchange_class({
+                    "apiKey": api_key,
+                    "secret": api_secret,
+                    "enableRateLimit": True,
+                    "options": {"defaultType": "spot"},
+                })
             await self.exchange.load_markets()
             self.logger.info("Bybit API initialized successfully")
         except Exception as e:
@@ -112,6 +121,16 @@ class BybitAPI:
             return balance
         except Exception as e:
             self.logger.error(f"Error fetching balance: {e}")
+            return None
+
+    # Новое: метод для получения текущей цены (используется в trading_bot.py)
+    async def get_current_price(self, symbol: str) -> Optional[float]:
+        """Get current price for symbol"""
+        try:
+            ticker = await self.exchange.fetch_ticker(symbol)
+            return ticker['last']
+        except Exception as e:
+            self.logger.error(f"Error fetching current price for {symbol}: {e}")
             return None
 
     async def close(self):
