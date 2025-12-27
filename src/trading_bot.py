@@ -229,12 +229,11 @@ class TradingBot:
 
 async def main():
     """Main function"""
-    # Выбор режима
-    while True:
-        mode = input("Выберите режим: REAL (реальный) или DEMO (демо): ").strip().upper()
-        if mode in ["REAL", "DEMO"]:
-            break
-        print("Неверный выбор. Введите REAL или DEMO.")
+    # Выбор режима — теперь через config.TRADING_MODE (из переменной окружения или по умолчанию "DEMO")
+    mode = Config.TRADING_MODE.upper()
+    if mode not in ["REAL", "DEMO"]:
+        logger.error(f"Неверный TRADING_MODE в config: {mode}. Должен быть 'REAL' или 'DEMO'. Использую 'DEMO'.")
+        mode = "DEMO"
 
     bot = TradingBot()
 

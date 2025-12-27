@@ -24,6 +24,7 @@ class Config:
     TRADING_INTERVAL: int = int(os.getenv("TRADING_INTERVAL", 300))
     MAX_POSITION_SIZE: float = 0.1
     STOP_LOSS_PERCENT: float = 0.02
+    TRADING_MODE: str = os.getenv("TRADING_MODE", "DEMO")  # Добавлено: режим торговли ("DEMO" или "LIVE")
 
     # Strategy configuration
     ENABLED_STRATEGIES: List[str] = None
@@ -58,6 +59,8 @@ class Config:
             REDIS_DB=int(os.getenv("REDIS_DB", 0)),
             BYBIT_API_KEY=os.getenv("BYBIT_API_KEY", ""),
             BYBIT_API_SECRET=os.getenv("BYBIT_API_SECRET", ""),
+            DEMO_BYBIT_API_KEY=os.getenv("DEMO_BYBIT_API_KEY", ""),
+            DEMO_BYBIT_API_SECRET=os.getenv("DEMO_BYBIT_API_SECRET", ""),
             INITIAL_BALANCE=float(os.getenv("INITIAL_BALANCE", 10000.0)),
             RISK_PER_TRADE=float(os.getenv("RISK_PER_TRADE", 0.02)),
             COMMISSION_RATE=float(os.getenv("COMMISSION_RATE", 0.001)),
@@ -65,6 +68,7 @@ class Config:
             SYMBOL=os.getenv("TRADING_SYMBOL", "BTCUSDT"),
             TIMEFRAME=os.getenv("TIMEFRAME", "15"),
             NEWS_API_KEY=os.getenv("NEWS_API_KEY", ""),
+            TRADING_MODE=os.getenv("TRADING_MODE", "DEMO"),  # Добавлено
         )
 
 
