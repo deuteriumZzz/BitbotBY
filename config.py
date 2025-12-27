@@ -14,6 +14,8 @@ class Config:
     # Bybit API configuration
     BYBIT_API_KEY: str = os.getenv("BYBIT_API_KEY", "")
     BYBIT_API_SECRET: str = os.getenv("BYBIT_API_SECRET", "")
+    DEMO_BYBIT_API_KEY: str = os.getenv("DEMO_BYBIT_API_KEY", "")
+    DEMO_BYBIT_API_SECRET: str = os.getenv("DEMO_BYBIT_API_SECRET", "")
 
     # Trading configuration
     INITIAL_BALANCE: float = 10000.0

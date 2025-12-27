@@ -14,28 +14,21 @@ class BybitAPI:
         self.redis = RedisClient()
         self.logger = logging.getLogger(__name__)
 
-    async def initialize(self, api_key: str, api_secret: str, testnet: bool = False):
-        """Initialize Bybit connection"""
+    async def initialize(self, api_key: str, api_secret: str):
+        """Initialize Bybit connection (always main API for demo trading with virtual balance)"""
         try:
-            # Новое: поддержка тестнета для безопасного тестирования
+            # Убрал testnet логику — демо-ключи работают через основной API с виртуальным балансом
             exchange_class = ccxt.bybit
-            if testnet:
-                self.exchange = exchange_class({
-                    "apiKey": api_key,
-                    "secret": api_secret,
-                    "enableRateLimit": True,
-                    "options": {"defaultType": "spot"},
-                    "urls": {"api": {"public": "https://api-testnet.bybit.com", "private": "https://api-testnet.bybit.com"}},
-                })
-            else:
-                self.exchange = exchange_class({
-                    "apiKey": api_key,
-                    "secret": api_secret,
-                    "enableRateLimit": True,
-                    "options": {"defaultType": "spot"},
-                })
+            self.exchange = exchange_class({
+                "apiKey": api_key,
+                "secret": api_secret,
+                "enableRateLimit": True,
+                "options": {"defaultType": "spot"},
+                # Явно фиксируем на основной API (демо-ключи автоматически дают виртуальный баланс)
+                # Нет нужды в testnet URLs
+            })
             await self.exchange.load_markets()
-            self.logger.info("Bybit API initialized successfully")
+            self.logger.info("Bybit API initialized successfully (main API for demo/virtual trading)")
         except Exception as e:
             self.logger.error(f"Failed to initialize Bybit API: {e}")
             raise
