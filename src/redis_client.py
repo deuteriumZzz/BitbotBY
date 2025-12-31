@@ -124,53 +124,26 @@ class RedisClient:
         except Exception as e:
             self.logger.error(f"Error publishing signal: {e}")
 
-    # Новые методы для исправления ошибок и добавления демо-режима
-
     def update_performance_stats(self, stats: Dict[str, Any]):
-        """Update performance statistics in Redis"""
+        """Обновляет статистику производительности в Redis."""
         try:
             key = "performance_stats"
-            # Сохраняем как JSON (stats — словарь, например, {'total_trades': 10, 'profit': 100.0})
-            self.redis_client.set(key, json.dumps(stats))
-            self.logger.info(f"Performance stats updated: {stats}")
+            # Сериализуем весь dict как JSON для поддержки вложенных структур
+            self.redis_client.set(key, json.dumps(stats), ex=86400)  # TTL 24 часа
+            self.logger.debug(f"Updated performance stats: {stats}")
         except Exception as e:
             self.logger.error(f"Error updating performance stats: {e}")
 
-    def init_demo_balance(self, initial_balance: Dict[str, float]):
-        """Initialize demo balance in Redis (for demo trading mode)"""
+    def get_performance_stats(self) -> Dict[str, Any]:
+        """Получает статистику производительности из Redis."""
         try:
-            key = "demo_balance"
-            # Сохраняем как JSON (например, {'USDT': 10000.0, 'BTC': 1.0})
-            self.redis_client.set(key, json.dumps(initial_balance))
-            self.logger.info(f"Demo balance initialized: {initial_balance}")
-        except Exception as e:
-            self.logger.error(f"Error initializing demo balance: {e}")
-
-    def get_demo_balance(self) -> Optional[Dict[str, float]]:
-        """Get demo balance from Redis"""
-        try:
-            key = "demo_balance"
+            key = "performance_stats"
             data = self.redis_client.get(key)
             if data:
-                balance = json.loads(data)
-                self.logger.debug(f"Retrieved demo balance: {balance}")
-                return balance
+                # Декодируем из bytes и парсим JSON
+                return json.loads(data.decode('utf-8'))
+            return {}
         except Exception as e:
-            self.logger.error(f"Error retrieving demo balance: {e}")
-        return None
+            self.logger.error(f"Error getting performance stats: {e}")
+            return {}
 
-    def update_demo_balance(self, asset: str, amount: float):
-        """Update demo balance for a specific asset (e.g., after simulated trade)"""
-        try:
-            current_balance = self.get_demo_balance()
-            if current_balance is None:
-                self.logger.error("Demo balance not initialized")
-                return
-            if asset in current_balance:
-                current_balance[asset] += amount  # amount может быть положительным (покупка) или отрицательным (продажа)
-                self.redis_client.set("demo_balance", json.dumps(current_balance))
-                self.logger.info(f"Demo balance updated for {asset}: {current_balance}")
-            else:
-                self.logger.error(f"Asset {asset} not in demo balance")
-        except Exception as e:
-            self.logger.error(f"Error updating demo balance: {e}")

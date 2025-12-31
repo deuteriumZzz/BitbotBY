@@ -8,7 +8,7 @@ import pandas as pd
 from config import Config
 from src.bybit_api import BybitAPI
 from src.data_loader import DataLoader
-from src.portfolio_manager import PortfolioManager  # Обновленный, как предложено ранее
+from src.portfolio_manager import PortfolioManager
 from src.redis_client import RedisClient
 from src.risk_management import RiskManager
 from src.strategies import TradingStrategy
@@ -25,29 +25,18 @@ class TradingBot:
         self.redis = RedisClient()
         self.api = BybitAPI()
         self.data_loader = DataLoader()
-        self.portfolio_manager = None  # Инициализируем позже с режимом
+        self.portfolio_manager = PortfolioManager(Config.INITIAL_BALANCE)
         self.strategy = None
         self.risk_manager = RiskManager(Config.INITIAL_BALANCE, Config.RISK_PER_TRADE)
         self.is_running = False
-        self.trading_mode = None  # "REAL" или "DEMO"
 
-    async def initialize(self, trading_mode: str):
-        """Initialize trading bot with selected mode"""
-        self.trading_mode = trading_mode.upper()
+    async def initialize(self):
+        """Initialize trading bot"""
         try:
-            if self.trading_mode == "REAL":
-                await self.api.initialize(Config.BYBIT_API_KEY, Config.BYBIT_API_SECRET)
-            elif self.trading_mode == "DEMO":
-                # Для демо используем демо-ключи (виртуальный баланс на основном endpoint)
-                await self.api.initialize(Config.DEMO_BYBIT_API_KEY, Config.DEMO_BYBIT_API_SECRET)
-            
+            await self.api.initialize(Config.BYBIT_API_KEY, Config.BYBIT_API_SECRET)
             await self.data_loader.initialize(
-                Config.BYBIT_API_KEY if self.trading_mode == "REAL" else Config.DEMO_BYBIT_API_KEY,
-                Config.BYBIT_API_SECRET if self.trading_mode == "REAL" else Config.DEMO_BYBIT_API_SECRET
+                Config.BYBIT_API_KEY, Config.BYBIT_API_SECRET
             )
-
-            # Initialize portfolio manager with mode
-            self.portfolio_manager = PortfolioManager(Config.INITIAL_BALANCE, self.trading_mode)
 
             # Initialize strategy
             self.strategy = TradingStrategy(Config.DEFAULT_STRATEGY)
@@ -56,7 +45,7 @@ class TradingBot:
             # Restore state from Redis
             await self._restore_state()
 
-            logger.info(f"Trading bot initialized in {self.trading_mode} mode successfully")
+            logger.info("Trading bot initialized successfully")
 
         except Exception as e:
             logger.error(f"Failed to initialize trading bot: {e}")
@@ -86,18 +75,19 @@ class TradingBot:
             entry_price = signal.get("price", market_data["close"].iloc[-1])
             stop_loss = await self.risk_manager.calculate_stop_loss(entry_price, signal)
             
-            # Получить текущий баланс и цену
+            # Получить текущий баланс и цену для расчета position_size
             balance = await self.api.get_balance()
             if not balance:
                 logger.error("Не удалось получить баланс аккаунта")
                 return
+            
             current_price = await self.api.get_current_price(Config.SYMBOL)
             if not current_price:
                 logger.error("Не удалось получить текущую цену")
                 return
             
             position_size = await self.risk_manager.calculate_position_size(
-                self.portfolio_manager.current_balance,
+                self.portfolio_manager.current_balance,  # Используем баланс из portfolio_manager
                 current_price,
                 stop_loss,
             )
@@ -106,7 +96,7 @@ class TradingBot:
                 logger.warning("Invalid position size")
                 return
 
-            # Проверка баланса перед ордером
+            # Проверка баланса перед ордером (новое: предотвращает недостаточный баланс)
             order_side = "buy" if signal["action"] == "buy" else "sell"
             if order_side == "buy":
                 cost = position_size * entry_price
@@ -120,25 +110,24 @@ class TradingBot:
                     logger.warning(f"Недостаточный баланс BTC: {btc_balance} < {position_size}. Пропускаю ордер.")
                     return
 
-            # Execute order (теперь работает для обоих режимов через API, в DEMO с виртуальным балансом)
+            # Execute order
             order = await self.api.create_order(
                 Config.SYMBOL, "limit", order_side, position_size, entry_price
             )
+
             if order:
-                logger.info(f"Order executed in {self.trading_mode} mode: {order}")
+                logger.info(f"Order executed: {order}")
+                # Update portfolio
+                success = await self.portfolio_manager.update_portfolio(
+                    Config.SYMBOL, order_side, position_size, entry_price
+                )
+
+                if success:
+                    logger.info("Portfolio updated successfully")
+                else:
+                    logger.warning("Failed to update portfolio")
             else:
                 logger.error("Failed to create order")
-                return
-
-            # Update portfolio (синхронизируется с Redis для восстановления)
-            success = await self.portfolio_manager.update_portfolio(
-                Config.SYMBOL, order_side, position_size, entry_price
-            )
-
-            if success:
-                logger.info("Portfolio updated successfully")
-            else:
-                logger.warning("Failed to update portfolio")
 
         except Exception as e:
             logger.error(f"Error executing trade: {e}")
@@ -150,7 +139,7 @@ class TradingBot:
             if not current_price:
                 logger.error("Не удалось получить текущую цену для статистики")
                 return
-
+            
             portfolio_value = await self.portfolio_manager.get_portfolio_value(
                 {Config.SYMBOL: current_price}
             )
@@ -229,16 +218,10 @@ class TradingBot:
 
 async def main():
     """Main function"""
-    # Выбор режима — теперь через config.TRADING_MODE (из переменной окружения или по умолчанию "DEMO")
-    mode = Config.TRADING_MODE.upper()
-    if mode not in ["REAL", "DEMO"]:
-        logger.error(f"Неверный TRADING_MODE в config: {mode}. Должен быть 'REAL' или 'DEMO'. Использую 'DEMO'.")
-        mode = "DEMO"
-
     bot = TradingBot()
 
     try:
-        await bot.initialize(mode)
+        await bot.initialize()
         await bot.trading_loop()
     except KeyboardInterrupt:
         logger.info("Received interrupt signal")

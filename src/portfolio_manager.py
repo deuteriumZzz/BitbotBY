@@ -7,25 +7,12 @@ from src.redis_client import RedisClient
 
 
 class PortfolioManager:
-    def __init__(self, initial_balance: float, trading_mode: str = "REAL"):
+    def __init__(self, initial_balance: float):
         self.initial_balance = initial_balance
         self.current_balance = initial_balance
         self.positions: Dict[str, float] = {}
         self.redis = RedisClient()
-        self.trading_mode = trading_mode.upper()  # "DEMO" или "REAL"
         self.logger = logging.getLogger(__name__)
-        
-        # Загрузить состояние из Redis при инициализации (для демо)
-        if self.trading_mode == "DEMO":
-            self._load_portfolio_from_demo()
-
-    def _load_portfolio_from_demo(self):
-        """Загрузить портфель из демо-баланса Redis (для демо-режима)"""
-        demo_balance = self.redis.get_demo_balance()
-        if demo_balance:
-            self.current_balance = demo_balance.get("USDT", self.initial_balance)
-            self.positions = {"BTC": demo_balance.get("BTC", 0.0)}  # Предполагаем BTC как основную позицию
-            self.logger.info(f"Loaded demo portfolio: balance={self.current_balance}, positions={self.positions}")
 
     async def update_portfolio(
         self, symbol: str, action: str, quantity: float, price: float
@@ -77,12 +64,6 @@ class PortfolioManager:
             "total_value": await self.get_portfolio_value({}),
         }
 
-        if self.trading_mode == "DEMO":
-            # Для демо синхронизируем баланс с Redis
-            demo_balance = {"USDT": self.current_balance, "BTC": self.positions.get("BTC", 0.0)}
-            self.redis.init_demo_balance(demo_balance)  # Перезаписываем демо-баланс
-            self.logger.info(f"Synced demo portfolio to Redis: {demo_balance}")
-        
         self.redis.save_trading_state("portfolio_state", portfolio_state)
 
     def get_positions(self) -> Dict[str, float]:
