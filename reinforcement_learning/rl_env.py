@@ -7,7 +7,18 @@ from gym import spaces
 
 
 class TradingEnv(gym.Env):
+    """
+    Класс среды для симуляции торговли на основе данных о ценах и индикаторах.
+    Использует библиотеку Gym для интеграции с алгоритмами обучения с подкреплением.
+    """
+
     def __init__(self, data: pd.DataFrame, initial_balance: float = 10000.0):
+        """
+        Инициализирует среду торговли.
+
+        :param data: DataFrame с данными о ценах и индикаторах (OHLCV + индикаторы).
+        :param initial_balance: Начальный баланс портфеля (по умолчанию 10000.0).
+        """
         super(TradingEnv, self).__init__()
 
         self.data = data.copy()
@@ -25,7 +36,11 @@ class TradingEnv(gym.Env):
         self.reset()
 
     def _get_observation(self) -> np.ndarray:
-        """Get current observation"""
+        """
+        Получает текущее наблюдение из данных.
+
+        :return: Массив NumPy с текущими данными (OHLCV, индикаторы, баланс, позиция и т.д.).
+        """
         if self.current_step >= len(self.data):
             return np.zeros(self.observation_space.shape)
 
@@ -52,7 +67,11 @@ class TradingEnv(gym.Env):
         return observation
 
     def reset(self) -> np.ndarray:
-        """Reset environment"""
+        """
+        Сбрасывает среду в начальное состояние.
+
+        :return: Начальное наблюдение.
+        """
         self.balance = self.initial_balance
         self.position = 0
         self.entry_price = 0
@@ -63,7 +82,12 @@ class TradingEnv(gym.Env):
         return self._get_observation()
 
     def step(self, action: int) -> Tuple[np.ndarray, float, bool, Dict[str, Any]]:
-        """Execute one step in the environment"""
+        """
+        Выполняет один шаг в среде на основе выбранного действия.
+
+        :param action: Индекс действия (0=hold, 1=buy, 2=sell).
+        :return: Кортеж (наблюдение, награда, флаг завершения, дополнительная информация).
+        """
         if self.done:
             return self._get_observation(), 0, True, {}
 
@@ -105,7 +129,11 @@ class TradingEnv(gym.Env):
         return self._get_observation(), reward, self.done, info
 
     def render(self, mode="human"):
-        """Render environment state"""
+        """
+        Отображает текущее состояние среды.
+
+        :param mode: Режим рендеринга (по умолчанию "human").
+        """
         current_price = self.data.iloc[self.current_step]["close"]
         print(
             f"Step: {self.current_step}, Price: {current_price:.2f}, "

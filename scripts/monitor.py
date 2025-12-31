@@ -8,12 +8,23 @@ logger = logging.getLogger(__name__)
 
 
 class PerformanceMonitor:
+    """
+    Класс для мониторинга производительности торговой системы в реальном времени.
+    Отслеживает статистику, сигналы и выводит обновления на консоль.
+    """
+
     def __init__(self):
+        """
+        Инициализирует объект монитора производительности с подключением к Redis.
+        """
         self.redis = RedisClient()
         self.is_monitoring = False
 
     async def start_monitoring(self):
-        """Start performance monitoring"""
+        """
+        Запускает процесс мониторинга производительности.
+        Подписывается на канал сигналов в Redis и периодически выводит статистику.
+        """
         self.is_monitoring = True
         logger.info("Starting performance monitoring")
 
@@ -54,13 +65,18 @@ class PerformanceMonitor:
                 await asyncio.sleep(10)
 
     async def stop_monitoring(self):
-        """Stop performance monitoring"""
+        """
+        Останавливает процесс мониторинга производительности.
+        """
         self.is_monitoring = False
         logger.info("Performance monitoring stopped")
 
 
 async def main():
-    """Main monitoring function"""
+    """
+    Основная функция для запуска мониторинга производительности.
+    Обрабатывает прерывание и корректно завершает мониторинг.
+    """
     monitor = PerformanceMonitor()
 
     try:

@@ -9,13 +9,30 @@ from .redis_client import RedisClient
 
 
 class BybitAPI:
+    """
+    Класс для взаимодействия с API Bybit.
+    Обеспечивает подключение, получение данных OHLCV, создание ордеров,
+    управление балансом и кэшированием данных через Redis.
+    """
+
     def __init__(self):
+        """
+        Инициализирует объект BybitAPI с подключением к Redis и настройкой логгера.
+        """
         self.exchange = None
         self.redis = RedisClient()
         self.logger = logging.getLogger(__name__)
 
     async def initialize(self, api_key: str, api_secret: str, testnet: bool = False):
-        """Initialize Bybit connection"""
+        """
+        Инициализирует подключение к API Bybit.
+        Поддерживает тестнет для безопасного тестирования.
+
+        :param api_key: API-ключ Bybit.
+        :param api_secret: Секретный ключ Bybit.
+        :param testnet: Флаг использования тестнета (по умолчанию False).
+        :raises Exception: В случае ошибки инициализации.
+        """
         try:
             # Новое: поддержка тестнета для безопасного тестирования
             exchange_class = ccxt.bybit
@@ -41,7 +58,12 @@ class BybitAPI:
             raise
 
     def _process_ohlcv(self, ohlcv_data):
-        """Process OHLCV data into DataFrame"""
+        """
+        Обрабатывает данные OHLCV в DataFrame pandas.
+
+        :param ohlcv_data: Сырые данные OHLCV.
+        :return: DataFrame с обработанными данными.
+        """
         df = pd.DataFrame(
             ohlcv_data, columns=["timestamp", "open", "high", "low", "close", "volume"]
         )
@@ -50,7 +72,16 @@ class BybitAPI:
         return df
 
     async def get_ohlcv(self, symbol: str, timeframe: str = "1h", limit: int = 100):
-        """Get OHLCV data with Redis caching"""
+        """
+        Получает данные OHLCV с кэшированием в Redis.
+        Если данные есть в кэше, возвращает их; иначе загружает свежие и сохраняет в кэш.
+
+        :param symbol: Символ торговой пары (например, "BTC/USDT").
+        :param timeframe: Таймфрейм (по умолчанию "1h").
+        :param limit: Количество свечей (по умолчанию 100).
+        :return: DataFrame с данными OHLCV.
+        :raises Exception: В случае ошибки получения данных.
+        """
         cache_key = f"{symbol}:{timeframe}:{limit}"
 
         # Try to get from cache
@@ -81,7 +112,17 @@ class BybitAPI:
         amount: float,
         price: Optional[float] = None,
     ):
-        """Create order with locking to avoid conflicts"""
+        """
+        Создает ордер с блокировкой для избежания конфликтов.
+        Использует Redis для блокировки и сохранения состояния ордера.
+
+        :param symbol: Символ торговой пары.
+        :param order_type: Тип ордера (например, "limit" или "market").
+        :param side: Сторона ордера ("buy" или "sell").
+        :param amount: Количество.
+        :param price: Цена (опционально, для лимитных ордеров).
+        :return: Информация об ордере или None в случае ошибки.
+        """
         lock_name = f"order_lock:{symbol}"
 
         if not self.redis.acquire_lock(lock_name):
@@ -115,7 +156,11 @@ class BybitAPI:
             self.redis.release_lock(lock_name)
 
     async def get_balance(self):
-        """Get account balance"""
+        """
+        Получает баланс аккаунта.
+
+        :return: Словарь с балансом или None в случае ошибки.
+        """
         try:
             balance = await self.exchange.fetch_balance()
             return balance
@@ -125,7 +170,12 @@ class BybitAPI:
 
     # Новое: метод для получения текущей цены (используется в trading_bot.py)
     async def get_current_price(self, symbol: str) -> Optional[float]:
-        """Get current price for symbol"""
+        """
+        Получает текущую цену для заданного символа.
+
+        :param symbol: Символ торговой пары.
+        :return: Текущая цена или None в случае ошибки.
+        """
         try:
             ticker = await self.exchange.fetch_ticker(symbol)
             return ticker['last']
@@ -134,5 +184,7 @@ class BybitAPI:
             return None
 
     async def close(self):
-        """Close exchange connection"""
+        """
+        Закрывает подключение к обмену.
+        """
         await self.exchange.close()

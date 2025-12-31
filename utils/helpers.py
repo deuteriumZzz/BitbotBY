@@ -8,7 +8,18 @@ import talib
 
 
 def calculate_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
-    """Calculate technical indicators for given DataFrame"""
+    """
+    Рассчитывает технические индикаторы для заданного DataFrame с рыночными данными.
+
+    Функция вычисляет различные технические индикаторы, такие как RSI, MACD, Bollinger Bands,
+    скользящие средние, стохастический осциллятор, индикаторы объема, волатильности и тренда,
+    используя библиотеку TA-Lib. Если DataFrame пуст, возвращает его без изменений.
+    Добавляет новые столбцы в DataFrame с рассчитанными индикаторами.
+
+    :param df: DataFrame с рыночными данными, содержащий столбцы 'close', 'high', 'low', 'volume' (pd.DataFrame).
+    :return: DataFrame с добавленными техническими индикаторами (pd.DataFrame).
+    :raises ValueError: Если в DataFrame отсутствуют необходимые столбцы.
+    """
     if df.empty:
         return df
 
@@ -54,7 +65,17 @@ def calculate_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def generate_signals(df: pd.DataFrame) -> Dict[str, bool]:
-    """Generate trading signals based on technical indicators"""
+    """
+    Генерирует торговые сигналы на основе технических индикаторов.
+
+    Анализирует последние значения индикаторов в DataFrame и определяет сигналы,
+    такие как перекупленность/перепроданность RSI, бычьи/медвежьи сигналы MACD,
+    пересечения скользящих средних и другие. Если DataFrame пуст, возвращает пустой словарь.
+    Сигналы представлены в виде словаря булевых значений.
+
+    :param df: DataFrame с рассчитанными техническими индикаторами (pd.DataFrame).
+    :return: Словарь с торговыми сигналами, где ключи - названия сигналов, значения - булевы флаги (Dict[str, bool]).
+    """
     if df.empty:
         return {}
 
@@ -95,7 +116,19 @@ def generate_signals(df: pd.DataFrame) -> Dict[str, bool]:
 def calculate_position_size(
     account_balance: float, risk_per_trade: float, entry_price: float, stop_loss: float
 ) -> float:
-    """Calculate position size based on risk management"""
+    """
+    Рассчитывает размер позиции на основе управления рисками.
+
+    Определяет размер позиции, чтобы риск на сделку не превышал заданный процент от баланса аккаунта.
+    Риск рассчитывается как разница между ценой входа и стоп-лоссом. Если риск на акцию равен нулю,
+    возвращает 0.
+
+    :param account_balance: Текущий баланс аккаунта (float).
+    :param risk_per_trade: Процент риска на сделку (от 0 до 1) (float).
+    :param entry_price: Цена входа в позицию (float).
+    :param stop_loss: Цена стоп-лосса (float).
+    :return: Размер позиции в единицах актива (float).
+    """
     risk_amount = account_balance * risk_per_trade
     risk_per_share = abs(entry_price - stop_loss)
 
@@ -107,7 +140,15 @@ def calculate_position_size(
 
 
 def format_price(price: float) -> str:
-    """Format price with appropriate precision"""
+    """
+    Форматирует цену с соответствующей точностью.
+
+    В зависимости от величины цены применяет разное количество десятичных знаков:
+    для цен >= 1000 - 2 знака, >= 1 - 4 знака, иначе - 8 знаков.
+
+    :param price: Цена для форматирования (float).
+    :return: Отформатированная строка цены (str).
+    """
     if price >= 1000:
         return f"{price:.2f}"
     elif price >= 1:
@@ -117,7 +158,19 @@ def format_price(price: float) -> str:
 
 
 async def async_retry(func, max_retries: int = 3, delay: float = 1.0, **kwargs):
-    """Retry async function with exponential backoff"""
+    """
+    Повторяет асинхронную функцию с экспоненциальной задержкой.
+
+    Выполняет функцию до max_retries раз, увеличивая задержку между попытками экспоненциально.
+    Если все попытки исчерпаны, поднимает последнее исключение.
+
+    :param func: Асинхронная функция для повторения (callable).
+    :param max_retries: Максимальное количество попыток (int, по умолчанию 3).
+    :param delay: Начальная задержка в секундах (float, по умолчанию 1.0).
+    :param kwargs: Дополнительные аргументы для функции.
+    :return: Результат выполнения функции или None, если все попытки неудачны.
+    :raises Exception: Последнее исключение, если все попытки исчерпаны.
+    """
     for attempt in range(max_retries):
         try:
             return await func(**kwargs)
@@ -129,7 +182,16 @@ async def async_retry(func, max_retries: int = 3, delay: float = 1.0, **kwargs):
 
 
 def calculate_volatility(df: pd.DataFrame, period: int = 20) -> float:
-    """Calculate price volatility"""
+    """
+    Рассчитывает волатильность цены.
+
+    Вычисляет стандартное отклонение процентных изменений цены за заданный период.
+    Если данных недостаточно, возвращает 0.
+
+    :param df: DataFrame с ценовыми данными, содержащий столбец 'close' (pd.DataFrame).
+    :param period: Период для расчета волатильности (int, по умолчанию 20).
+    :return: Волатильность как стандартное отклонение (float).
+    """
     if len(df) < period:
         return 0
 
@@ -141,7 +203,15 @@ def calculate_volatility(df: pd.DataFrame, period: int = 20) -> float:
 
 
 def normalize_data(data: np.ndarray) -> np.ndarray:
-    """Normalize data to [0, 1] range"""
+    """
+    Нормализует данные в диапазон [0, 1].
+
+    Приводит массив данных к диапазону от 0 до 1 путем вычитания минимума и деления на размах.
+    Если все значения одинаковы, возвращает массив нулей.
+
+    :param data: Массив данных для нормализации (np.ndarray).
+    :return: Нормализованный массив (np.ndarray).
+    """
     if len(data) == 0:
         return data
 
@@ -157,7 +227,17 @@ def normalize_data(data: np.ndarray) -> np.ndarray:
 def create_lagged_features(
     df: pd.DataFrame, columns: List[str], lags: List[int]
 ) -> pd.DataFrame:
-    """Create lagged features for time series data"""
+    """
+    Создает лаговые признаки для временных рядов.
+
+    Добавляет новые столбцы с лаговыми значениями указанных столбцов на заданные лаги.
+    Используется для создания признаков в моделях машинного обучения.
+
+    :param df: DataFrame с данными (pd.DataFrame).
+    :param columns: Список столбцов для создания лагов (List[str]).
+    :param lags: Список лагов (List[int]).
+    :return: DataFrame с добавленными лаговыми признаками (pd.DataFrame).
+    """
     df_copy = df.copy()
 
     for col in columns:
@@ -168,20 +248,44 @@ def create_lagged_features(
 
 
 def calculate_correlation_matrix(prices_df: pd.DataFrame) -> pd.DataFrame:
-    """Calculate correlation matrix for multiple symbols"""
+    """
+    Рассчитывает корреляционную матрицу для нескольких символов.
+
+    Вычисляет корреляцию процентных изменений цен между символами.
+    Используется для анализа взаимосвязей активов.
+
+    :param prices_df: DataFrame с ценами для нескольких символов (pd.DataFrame).
+    :return: Корреляционная матрица (pd.DataFrame).
+    """
     returns = prices_df.pct_change().dropna()
     return returns.corr()
 
 
 def safe_divide(a: float, b: float) -> float:
-    """Safe division with zero check"""
+    """
+    Безопасное деление с проверкой на ноль.
+
+    Выполняет деление a на b, возвращая 0, если b равно 0, чтобы избежать деления на ноль.
+
+    :param a: Делимое (float).
+    :param b: Делитель (float).
+    :return: Результат деления или 0 (float).
+    """
     if b == 0:
         return 0
     return a / b
 
 
 def format_timestamp(timestamp: Any) -> str:
-    """Format timestamp to ISO string"""
+    """
+    Форматирует временную метку в строку ISO.
+
+    Преобразует различные типы временных меток (строка, datetime, timestamp) в строку ISO.
+    Если тип неизвестен, возвращает текущую временную метку.
+
+    :param timestamp: Временная метка для форматирования (Any).
+    :return: Строка в формате ISO (str).
+    """
     if isinstance(timestamp, str):
         return timestamp
     elif isinstance(timestamp, datetime):
@@ -193,13 +297,29 @@ def format_timestamp(timestamp: Any) -> str:
 
 
 def validate_market_data(data: Dict) -> bool:
-    """Validate market data structure"""
+    """
+    Проверяет структуру рыночных данных.
+
+    Убеждается, что словарь содержит все необходимые поля для рыночных данных.
+
+    :param data: Словарь с рыночными данными (Dict).
+    :return: True, если все поля присутствуют, иначе False (bool).
+    """
     required_fields = ["symbol", "timestamp", "open", "high", "low", "close", "volume"]
     return all(field in data for field in required_fields)
 
 
 def calculate_performance_metrics(trades: List[Dict]) -> Dict[str, float]:
-    """Calculate trading performance metrics"""
+    """
+    Рассчитывает метрики производительности торговли.
+
+    Анализирует список сделок и вычисляет метрики, такие как общее количество сделок,
+    количество выигрышных и проигрышных, коэффициент выигрыша, общий P&L и другие.
+    Если список сделок пуст, возвращает пустой словарь.
+
+    :param trades: Список словарей с данными о сделках (List[Dict]).
+    :return: Словарь с метриками производительности (Dict[str, float]).
+    """
     if not trades:
         return {}
 

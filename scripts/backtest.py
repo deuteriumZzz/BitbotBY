@@ -13,19 +13,36 @@ logger = logging.getLogger(__name__)
 
 
 class Backtester:
+    """
+    Класс для проведения бэктестинга торговых стратегий на исторических данных.
+    Включает загрузку данных, выполнение стратегии, расчет рисков и сохранение результатов.
+    """
+
     def __init__(self):
+        """
+        Инициализирует объект бэктестера с необходимыми компонентами.
+        """
         self.redis = RedisClient()
         self.data_loader = DataLoader()
         self.strategy = None
         self.risk_manager = RiskManager(Config.INITIAL_BALANCE)
 
     async def initialize(self):
-        """Initialize backtester"""
+        """
+        Инициализирует бэктестер: настраивает загрузчик данных и стратегию.
+        """
         await self.data_loader.initialize(Config.BYBIT_API_KEY, Config.BYBIT_API_SECRET)
         self.strategy = TradingStrategy(Config.DEFAULT_STRATEGY)
 
     async def run_backtest(self, symbol: str, timeframe: str, days: int = 30):
-        """Run backtest"""
+        """
+        Запускает бэктестинг для заданного символа, таймфрейма и периода.
+
+        :param symbol: Торговая пара (например, "BTCUSDT").
+        :param timeframe: Таймфрейм данных (например, "1h").
+        :param days: Количество дней для бэктестинга (по умолчанию 30).
+        :return: Словарь с результатами бэктестинга, включая метрики производительности и сделки.
+        """
         # Check if results are cached
         backtest_key = f"backtest:{symbol}:{timeframe}:{days}"
         cached_result = self.redis.load_backtest_result(backtest_key)
@@ -100,7 +117,13 @@ class Backtester:
             raise
 
     def _calculate_performance(self, equity_curve, trades):
-        """Calculate performance metrics"""
+        """
+        Рассчитывает метрики производительности на основе кривой капитала и сделок.
+
+        :param equity_curve: Список значений капитала на каждом шаге.
+        :param trades: Список выполненных сделок.
+        :return: Словарь с метриками производительности.
+        """
         final_balance = equity_curve[-1] if equity_curve else Config.INITIAL_BALANCE
         total_return = (
             (final_balance - Config.INITIAL_BALANCE) / Config.INITIAL_BALANCE * 100
@@ -120,13 +143,23 @@ class Backtester:
         }
 
     def _calculate_win_rate(self, trades):
-        """Calculate win rate"""
+        """
+        Рассчитывает процент выигрышных сделок.
+
+        :param trades: Список сделок.
+        :return: Процент выигрышных сделок (от 0 до 1).
+        """
         if len(trades) < 2:
             return 0
         return 0.5  # Placeholder
 
     def _calculate_max_drawdown(self, equity_curve):
-        """Calculate maximum drawdown"""
+        """
+        Рассчитывает максимальную просадку капитала.
+
+        :param equity_curve: Список значений капитала.
+        :return: Максимальная просадка в процентах.
+        """
         if not equity_curve:
             return 0
         peak = equity_curve[0]
@@ -141,7 +174,9 @@ class Backtester:
 
 
 async def main():
-    """Main backtest function"""
+    """
+    Основная функция для запуска бэктестинга и вывода результатов.
+    """
     backtester = Backtester()
     await backtester.initialize()
 

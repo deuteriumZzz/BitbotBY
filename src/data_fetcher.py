@@ -6,22 +6,40 @@ from config import config
 
 
 class DataFetcher:
-    """Адаптер для использования DataLoader в основном боте"""
+    """
+    Адаптер для использования DataLoader в основном торговом боте.
+    Обеспечивает получение рыночных данных в формате, ожидаемом ботом,
+    включая расчет технических индикаторов.
+    """
     
     def __init__(self, config):
+        """
+        Инициализирует объект DataFetcher с конфигурацией и экземпляром DataLoader.
+        
+        :param config: Объект конфигурации с настройками API и т.д.
+        """
         self.config = config
         self.data_loader = DataLoader()
         self.logger = logging.getLogger(__name__)
 
     async def initialize(self):
-        """Initialize data fetcher"""
+        """
+        Инициализирует DataFetcher, включая подключение DataLoader к API Bybit.
+        Использует ключи из конфигурации.
+        """
         await self.data_loader.initialize(
             config.BYBIT_API_KEY, 
             config.BYBIT_API_SECRET
         )
 
     async def fetch_market_data(self, symbol: str) -> Optional[Dict]:
-        """Fetch market data in format expected by trading bot"""
+        """
+        Получает рыночные данные в формате, ожидаемом торговым ботом.
+        Включает расчет технических индикаторов и извлечение последнего значения.
+        
+        :param symbol: Символ торговой пары (например, "BTC/USDT").
+        :return: Словарь с рыночными данными и индикаторами или None в случае ошибки.
+        """
         try:
             # Get raw data using existing DataLoader
             raw_data = await self.data_loader.get_market_data(symbol, "1h", 100)
@@ -55,5 +73,7 @@ class DataFetcher:
             return None
 
     async def close(self):
-        """Close connections"""
+        """
+        Закрывает соединения, включая подключение DataLoader.
+        """
         await self.data_loader.close()

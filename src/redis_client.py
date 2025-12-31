@@ -9,7 +9,26 @@ import redis
 
 
 class RedisClient:
+    """
+    Класс для взаимодействия с Redis.
+    
+    Предоставляет методы для сохранения и загрузки рыночных данных, состояний торговли,
+    моделей, управления блокировками, публикации сигналов и обновления статистики производительности.
+    Использует переменные окружения для конфигурации подключения.
+    """
+    
     def __init__(self, host=None, port=6379, password=None):
+        """
+        Инициализирует клиент Redis.
+        
+        Устанавливает подключение к Redis с использованием переменных окружения или значений по умолчанию.
+        Выполняет проверку подключения.
+        
+        :param host: Хост Redis (str, по умолчанию None - берется из REDIS_HOST).
+        :param port: Порт Redis (int, по умолчанию 6379 - берется из REDIS_PORT).
+        :param password: Пароль Redis (str, по умолчанию None - берется из REDIS_PASSWORD).
+        :raises Exception: Если подключение к Redis не удается.
+        """
         # Используем переменные окружения или значения по умолчанию
         redis_host = host or os.getenv("REDIS_HOST", "redis")  # имя сервиса в Docker
         redis_port = port or int(os.getenv("REDIS_PORT", 6379))
@@ -27,7 +46,13 @@ class RedisClient:
         self._test_connection()
 
     def _test_connection(self):
-        """Test Redis connection"""
+        """
+        Проверяет подключение к Redis.
+        
+        Отправляет ping-запрос и логирует результат. В случае ошибки вызывает исключение.
+        
+        :raises Exception: Если подключение не удается.
+        """
         try:
             self.redis_client.ping()
             self.logger.info(f"Connected to Redis at {self.redis_client.connection_pool.connection_kwargs['host']}:{self.redis_client.connection_pool.connection_kwargs['port']}")
@@ -36,7 +61,15 @@ class RedisClient:
             raise
 
     def save_market_data(self, key: str, data: pd.DataFrame):
-        """Save market data to Redis"""
+        """
+        Сохраняет рыночные данные в Redis.
+        
+        Сериализует DataFrame с помощью pickle и сохраняет с TTL 5 минут.
+        
+        :param key: Ключ для сохранения (str).
+        :param data: Данные для сохранения (pd.DataFrame).
+        :raises Exception: В случае ошибок сериализации или сохранения (логируется).
+        """
         try:
             serialized_data = pickle.dumps(data)
             self.redis_client.setex(key, 300, serialized_data)  # 5 minutes TTL
@@ -45,7 +78,15 @@ class RedisClient:
             self.logger.error(f"Error saving market data: {e}")
 
     def load_market_data(self, key: str) -> Optional[pd.DataFrame]:
-        """Load market data from Redis"""
+        """
+        Загружает рыночные данные из Redis.
+        
+        Десериализует данные с помощью pickle, если ключ существует.
+        
+        :param key: Ключ для загрузки (str).
+        :return: Загруженные данные (pd.DataFrame) или None, если ключ не найден.
+        :raises Exception: В случае ошибок десериализации или загрузки (логируется).
+        """
         try:
             data = self.redis_client.get(key)
             if data:
@@ -56,7 +97,15 @@ class RedisClient:
         return None
 
     def save_trading_state(self, key: str, state: Dict[str, Any]):
-        """Save trading state to Redis"""
+        """
+        Сохраняет состояние торговли в Redis.
+        
+        Сериализует состояние как JSON и сохраняет с TTL 24 часа.
+        
+        :param key: Ключ для сохранения (str).
+        :param state: Состояние для сохранения (Dict[str, Any]).
+        :raises Exception: В случае ошибок сериализации или сохранения (логируется).
+        """
         try:
             serialized_state = json.dumps(state)
             self.redis_client.setex(key, 86400, serialized_state)  # 24 hours TTL
@@ -65,7 +114,15 @@ class RedisClient:
             self.logger.error(f"Error saving trading state: {e}")
 
     def load_trading_state(self, key: str) -> Optional[Dict[str, Any]]:
-        """Load trading state from Redis"""
+        """
+        Загружает состояние торговли из Redis.
+        
+        Десериализует данные из JSON, если ключ существует.
+        
+        :param key: Ключ для загрузки (str).
+        :return: Загруженное состояние (Dict[str, Any]) или None, если ключ не найден.
+        :raises Exception: В случае ошибок десериализации или загрузки (логируется).
+        """
         try:
             state = self.redis_client.get(key)
             if state:
@@ -76,7 +133,15 @@ class RedisClient:
         return None
 
     def save_model(self, strategy_name: str, model_data: Dict[str, Any]):
-        """Save model to Redis"""
+        """
+        Сохраняет модель в Redis.
+        
+        Сериализует данные модели с помощью pickle и сохраняет с TTL 7 дней под ключом "model:{strategy_name}".
+        
+        :param strategy_name: Название стратегии (str).
+        :param model_data: Данные модели (Dict[str, Any]).
+        :raises Exception: В случае ошибок сериализации или сохранения (логируется).
+        """
         try:
             serialized_model = pickle.dumps(model_data)
             self.redis_client.setex(
@@ -87,7 +152,15 @@ class RedisClient:
             self.logger.error(f"Error saving model: {e}")
 
     def load_model(self, strategy_name: str) -> Optional[Dict[str, Any]]:
-        """Load model from Redis"""
+        """
+        Загружает модель из Redis.
+        
+        Десериализует данные модели с помощью pickle, если ключ "model:{strategy_name}" существует.
+        
+        :param strategy_name: Название стратегии (str).
+        :return: Загруженные данные модели (Dict[str, Any]) или None, если ключ не найден.
+        :raises Exception: В случае ошибок десериализации или загрузки (логируется).
+        """
         try:
             model_data = self.redis_client.get(f"model:{strategy_name}")
             if model_data:
@@ -98,7 +171,16 @@ class RedisClient:
         return None
 
     def acquire_lock(self, lock_name: str, timeout: int = 10) -> bool:
-        """Acquire distributed lock"""
+        """
+        Захватывает распределенную блокировку.
+        
+        Устанавливает блокировку с помощью SET NX с TTL по умолчанию 10 секунд.
+        
+        :param lock_name: Название блокировки (str).
+        :param timeout: Время жизни блокировки в секундах (int, по умолчанию 10).
+        :return: True, если блокировка захвачена, иначе False.
+        :raises Exception: В случае ошибок при захвате (логируется).
+        """
         try:
             result = bool(self.redis_client.set(lock_name, "locked", nx=True, ex=timeout))
             if result:
@@ -109,7 +191,14 @@ class RedisClient:
             return False
 
     def release_lock(self, lock_name: str):
-        """Release distributed lock"""
+        """
+        Освобождает распределенную блокировку.
+        
+        Удаляет ключ блокировки.
+        
+        :param lock_name: Название блокировки (str).
+        :raises Exception: В случае ошибок при освобождении (логируется).
+        """
         try:
             self.redis_client.delete(lock_name)
             self.logger.debug(f"Released lock: {lock_name}")
@@ -117,7 +206,14 @@ class RedisClient:
             self.logger.error(f"Error releasing lock: {e}")
 
     def publish_signal(self, signal_data: Dict[str, Any]):
-        """Publish signal via Redis Pub/Sub"""
+        """
+        Публикует сигнал через Redis Pub/Sub.
+        
+        Отправляет данные сигнала в канал "trading_signals".
+        
+        :param signal_data: Данные сигнала (Dict[str, Any]).
+        :raises Exception: В случае ошибок при публикации (логируется).
+        """
         try:
             self.redis_client.publish("trading_signals", json.dumps(signal_data))
             self.logger.debug("Published trading signal")
@@ -125,7 +221,14 @@ class RedisClient:
             self.logger.error(f"Error publishing signal: {e}")
 
     def update_performance_stats(self, stats: Dict[str, Any]):
-        """Обновляет статистику производительности в Redis."""
+        """
+        Обновляет статистику производительности в Redis.
+        
+        Сериализует статистику как JSON и сохраняет под ключом "performance_stats" с TTL 24 часа.
+        
+        :param stats: Статистика производительности (Dict[str, Any]).
+        :raises Exception: В случае ошибок сериализации или сохранения (логируется).
+        """
         try:
             key = "performance_stats"
             # Сериализуем весь dict как JSON для поддержки вложенных структур
@@ -135,7 +238,14 @@ class RedisClient:
             self.logger.error(f"Error updating performance stats: {e}")
 
     def get_performance_stats(self) -> Dict[str, Any]:
-        """Получает статистику производительности из Redis."""
+        """
+        Получает статистику производительности из Redis.
+        
+        Десериализует данные из JSON под ключом "performance_stats".
+        
+        :return: Статистика производительности (Dict[str, Any], пустой dict если ключ не найден).
+        :raises Exception: В случае ошибок десериализации или загрузки (логируется).
+        """
         try:
             key = "performance_stats"
             data = self.redis_client.get(key)
@@ -146,4 +256,3 @@ class RedisClient:
         except Exception as e:
             self.logger.error(f"Error getting performance stats: {e}")
             return {}
-

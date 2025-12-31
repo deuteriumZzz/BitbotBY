@@ -10,7 +10,15 @@ import torch.optim as optim
 
 
 class DQN(nn.Module):
+    """Класс нейронной сети DQN (Deep Q-Network) для аппроксимации Q-функции в обучении с подкреплением."""
+
     def __init__(self, state_size: int, action_size: int):
+        """
+        Инициализирует сеть DQN.
+
+        :param state_size: Размерность вектора состояния.
+        :param action_size: Количество возможных действий.
+        """
         super(DQN, self).__init__()
         self.fc1 = nn.Linear(state_size, 128)
         self.fc2 = nn.Linear(128, 128)
@@ -19,6 +27,12 @@ class DQN(nn.Module):
         self.relu = nn.ReLU()
 
     def forward(self, state):
+        """
+        Прямой проход через сеть.
+
+        :param state: Вектор состояния (тензор PyTorch).
+        :return: Выходные Q-значения для каждого действия.
+        """
         x = self.relu(self.fc1(state))
         x = self.relu(self.fc2(x))
         x = self.relu(self.fc3(x))
@@ -26,7 +40,15 @@ class DQN(nn.Module):
 
 
 class RLAgent:
+    """Класс агента обучения с подкреплением (RL), использующий DQN для принятия решений в торговле."""
+
     def __init__(self, state_size: int, action_size: int):
+        """
+        Инициализирует агента RL.
+
+        :param state_size: Размерность вектора состояния.
+        :param action_size: Количество возможных действий.
+        """
         self.state_size = state_size
         self.action_size = action_size
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -57,7 +79,13 @@ class RLAgent:
         self.logger.info(f"RL Agent initialized on {self.device}")
 
     def get_state(self, market_data: Dict, portfolio_state: Dict) -> np.ndarray:
-        """Convert market and portfolio data into state vector"""
+        """
+        Преобразует рыночные и портфельные данные в вектор состояния.
+
+        :param market_data: Словарь с рыночными данными (цена, объем, RSI и т.д.).
+        :param portfolio_state: Словарь с состоянием портфеля (общая стоимость, PnL и т.д.).
+        :return: Вектор состояния как массив NumPy.
+        """
         state = []
 
         # Market features
@@ -86,7 +114,13 @@ class RLAgent:
         return np.array(state, dtype=np.float32)
 
     def choose_action(self, state: np.ndarray, valid_actions: List[int] = None) -> int:
-        """Choose action using epsilon-greedy policy"""
+        """
+        Выбирает действие с использованием epsilon-жадной политики.
+
+        :param state: Вектор состояния.
+        :param valid_actions: Список допустимых действий (опционально).
+        :return: Индекс выбранного действия.
+        """
         if random.random() < self.epsilon:
             # Exploration: random valid action
             if valid_actions:
@@ -114,11 +148,23 @@ class RLAgent:
         next_state: np.ndarray,
         done: bool,
     ):
-        """Store experience in replay memory"""
+        """
+        Сохраняет опыт в памяти для повторного воспроизведения.
+
+        :param state: Текущее состояние.
+        :param action: Выполненное действие.
+        :param reward: Полученная награда.
+        :param next_state: Следующее состояние.
+        :param done: Флаг завершения эпизода.
+        """
         self.memory.append((state, action, reward, next_state, done))
 
     def replay(self):
-        """Train on batch from replay memory"""
+        """
+        Обучает сеть на батче из памяти повторного воспроизведения.
+
+        :return: Значение функции потерь (если обучение произошло).
+        """
         if len(self.memory) < self.batch_size:
             return
 
@@ -159,7 +205,13 @@ class RLAgent:
         return loss.item()
 
     def calculate_reward(self, trade_result: Dict, portfolio_state: Dict) -> float:
-        """Calculate reward based on trade outcome"""
+        """
+        Рассчитывает награду на основе результатов торговли.
+
+        :param trade_result: Словарь с результатами торговли (PnL, стоимость транзакции и т.д.).
+        :param portfolio_state: Словарь с состоянием портфеля.
+        :return: Значение награды.
+        """
         reward = 0
 
         # PnL based reward
@@ -178,7 +230,11 @@ class RLAgent:
         return reward
 
     def save_model(self, path: str):
-        """Save model weights"""
+        """
+        Сохраняет веса модели и параметры обучения.
+
+        :param path: Путь к файлу для сохранения.
+        """
         torch.save(
             {
                 "policy_net_state_dict": self.policy_net.state_dict(),
@@ -192,7 +248,11 @@ class RLAgent:
         self.logger.info(f"Model saved to {path}")
 
     def load_model(self, path: str):
-        """Load model weights"""
+        """
+        Загружает веса модели и параметры обучения.
+
+        :param path: Путь к файлу для загрузки.
+        """
         checkpoint = torch.load(path)
         self.policy_net.load_state_dict(checkpoint["policy_net_state_dict"])
         self.target_net.load_state_dict(checkpoint["target_net_state_dict"])
@@ -202,5 +262,9 @@ class RLAgent:
         self.logger.info(f"Model loaded from {path}")
 
     def get_action_meanings(self) -> Dict[int, str]:
-        """Get meaning of each action index"""
+        """
+        Возвращает словарь с описанием значений действий.
+
+        :return: Словарь, где ключ - индекс действия, значение - описание.
+        """
         return {0: "HOLD", 1: "BUY", 2: "SELL", 3: "CLOSE_POSITION"}

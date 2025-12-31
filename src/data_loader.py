@@ -7,17 +7,40 @@ from .redis_client import RedisClient
 
 
 class DataLoader:
+    """
+    Класс для загрузки и обработки рыночных данных.
+    Обеспечивает получение данных OHLCV из API Bybit, кэширование через Redis,
+    стандартизацию данных и расчет технических индикаторов.
+    """
+
     def __init__(self):
+        """
+        Инициализирует объект DataLoader с экземплярами RedisClient и BybitAPI.
+        """
         self.redis = RedisClient()
         self.api = BybitAPI()
         self.logger = logging.getLogger(__name__)
 
     async def initialize(self, api_key: str, api_secret: str):
-        """Initialize data loader"""
+        """
+        Инициализирует DataLoader, включая подключение к API Bybit.
+        
+        :param api_key: API-ключ Bybit.
+        :param api_secret: Секретный ключ Bybit.
+        """
         await self.api.initialize(api_key, api_secret)
 
     async def get_market_data(self, symbol: str, timeframe: str, limit: int = 100):
-        """Get market data with caching"""
+        """
+        Получает рыночные данные OHLCV с кэшированием через Redis.
+        Стандартизирует названия колонок и логирует информацию о данных.
+        
+        :param symbol: Символ торговой пары (например, "BTC/USDT").
+        :param timeframe: Таймфрейм (например, "1h").
+        :param limit: Количество свечей (по умолчанию 100).
+        :return: DataFrame с рыночными данными.
+        :raises Exception: В случае ошибки загрузки данных.
+        """
         try:
             data = await self.api.get_ohlcv(symbol, timeframe, limit)
 
@@ -36,7 +59,13 @@ class DataLoader:
             raise
 
     def _standardize_column_names(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Standardize column names to expected format"""
+        """
+        Стандартизирует названия колонок DataFrame к ожидаемому формату.
+        Автоматически определяет и переименовывает колонки на основе ключевых слов.
+        
+        :param df: Исходный DataFrame.
+        :return: DataFrame с стандартизированными названиями колонок.
+        """
         if df.empty:
             return df
 
@@ -79,12 +108,28 @@ class DataLoader:
         return df
 
     async def get_historical_data(self, symbol: str, timeframe: str, days: int = 30):
-        """Get historical data"""
+        """
+        Получает исторические данные OHLCV за указанное количество дней.
+        Использует метод get_market_data с расчетом лимита на основе дней.
+        
+        :param symbol: Символ торговой пары.
+        :param timeframe: Таймфрейм.
+        :param days: Количество дней (по умолчанию 30).
+        :return: DataFrame с историческими данными.
+        """
         limit = days * 24  # Approximate number of candles
         return await self.get_market_data(symbol, timeframe, limit)
 
     def calculate_technical_indicators(self, df: pd.DataFrame):
-        """Calculate technical indicators"""
+        """
+        Рассчитывает технические индикаторы (EMA, RSI, MACD) на основе данных OHLCV.
+        Проверяет наличие необходимых колонок и логирует ошибки.
+        
+        :param df: DataFrame с рыночными данными.
+        :return: DataFrame с добавленными индикаторами.
+        :raises ValueError: Если отсутствуют необходимые колонки.
+        :raises Exception: В случае ошибки расчета.
+        """
         try:
             # Проверяем наличие необходимых колонок
             required_columns = ["close"]
@@ -124,5 +169,7 @@ class DataLoader:
             raise
 
     async def close(self):
-        """Close connections"""
+        """
+        Закрывает соединения, включая подключение к API Bybit.
+        """
         await self.api.close()

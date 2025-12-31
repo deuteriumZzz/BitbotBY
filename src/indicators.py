@@ -8,7 +8,14 @@ logger = logging.getLogger(__name__)
 
 def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Добавляет технические индикаторы к DataFrame
+    Добавляет технические индикаторы к DataFrame с рыночными данными.
+    
+    Рассчитывает и добавляет индикаторы: RSI, MACD, Bollinger Bands, скользящие средние,
+    ATR, волатильность, моментум и объемные индикаторы. Заполняет NaN значения.
+    
+    :param df: DataFrame с колонками OHLCV (open, high, low, close, volume).
+    :return: DataFrame с добавленными индикаторами.
+    :raises Exception: В случае ошибки расчета индикаторов (логируется в logger).
     """
     try:
         df = df.copy()
@@ -54,7 +61,13 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def calculate_rsi(series: pd.Series, period: int = 14) -> pd.Series:
-    """Calculate RSI indicator"""
+    """
+    Рассчитывает индикатор RSI (Relative Strength Index).
+    
+    :param series: Серия цен закрытия (close prices).
+    :param period: Период расчета (по умолчанию 14).
+    :return: Серия значений RSI.
+    """
     delta = series.diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
@@ -65,7 +78,15 @@ def calculate_rsi(series: pd.Series, period: int = 14) -> pd.Series:
 def calculate_macd(
     series: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9
 ) -> Tuple[pd.Series, pd.Series]:
-    """Calculate MACD indicator"""
+    """
+    Рассчитывает индикатор MACD (Moving Average Convergence Divergence).
+    
+    :param series: Серия цен закрытия (close prices).
+    :param fast: Период быстрой EMA (по умолчанию 12).
+    :param slow: Период медленной EMA (по умолчанию 26).
+    :param signal: Период сигнальной линии (по умолчанию 9).
+    :return: Кортеж из двух серий: MACD и сигнальная линия.
+    """
     fast_ema = series.ewm(span=fast).mean()
     slow_ema = series.ewm(span=slow).mean()
     macd = fast_ema - slow_ema
@@ -76,7 +97,14 @@ def calculate_macd(
 def calculate_bollinger_bands(
     series: pd.Series, period: int = 20, num_std: float = 2.0
 ) -> Tuple[pd.Series, pd.Series, pd.Series]:
-    """Calculate Bollinger Bands"""
+    """
+    Рассчитывает Bollinger Bands.
+    
+    :param series: Серия цен закрытия (close prices).
+    :param period: Период расчета (по умолчанию 20).
+    :param num_std: Количество стандартных отклонений (по умолчанию 2.0).
+    :return: Кортеж из трех серий: верхняя полоса, средняя полоса, нижняя полоса.
+    """
     middle_band = series.rolling(window=period).mean()
     std_dev = series.rolling(window=period).std()
     upper_band = middle_band + (std_dev * num_std)
@@ -85,7 +113,13 @@ def calculate_bollinger_bands(
 
 
 def calculate_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
-    """Calculate Average True Range"""
+    """
+    Рассчитывает Average True Range (ATR).
+    
+    :param df: DataFrame с колонками high, low, close.
+    :param period: Период расчета (по умолчанию 14).
+    :return: Серия значений ATR.
+    """
     high_low = df["high"] - df["low"]
     high_close = abs(df["high"] - df["close"].shift())
     low_close = abs(df["low"] - df["close"].shift())
@@ -94,7 +128,15 @@ def calculate_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
 
 
 def normalize_data(df: pd.DataFrame) -> pd.DataFrame:
-    """Normalize data for ML models"""
+    """
+    Нормализует данные для моделей машинного обучения путем стандартизации (z-score).
+    
+    Вычитает среднее и делит на стандартное отклонение для каждой колонки.
+    Заполняет NaN значения нулями.
+    
+    :param df: DataFrame с числовыми данными.
+    :return: Нормализованный DataFrame.
+    """
     df_normalized = df.copy()
     for column in df.columns:
         if df[column].std() != 0:

@@ -10,7 +10,16 @@ logger = logging.getLogger(__name__)
 
 
 async def train_strategy_model(strategy_name: str):
-    """Train model for specific strategy"""
+    """
+    Обучает модель для заданной торговой стратегии на исторических данных.
+
+    Функция инициализирует загрузчик данных, стратегию и Redis-клиент,
+    загружает исторические данные, рассчитывает технические индикаторы,
+    обучает модель и проверяет сохранение в Redis.
+
+    :param strategy_name: Название стратегии для обучения (например, "ema_crossover").
+    :raises Exception: В случае ошибок при загрузке данных, обучении или сохранении модели.
+    """
     try:
         data_loader = DataLoader()
         strategy = TradingStrategy(strategy_name)
@@ -49,7 +58,12 @@ async def train_strategy_model(strategy_name: str):
 
 
 async def main():
-    """Main training function"""
+    """
+    Основная функция для обучения моделей торговых стратегий.
+
+    Перебирает список стратегий и обучает модели для каждой из них,
+    логируя процесс и результаты.
+    """
     strategies_to_train = ["ema_crossover", "rsi_momentum"]
 
     for strategy in strategies_to_train:
