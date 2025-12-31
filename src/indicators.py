@@ -9,10 +9,10 @@ logger = logging.getLogger(__name__)
 def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
     """
     Добавляет технические индикаторы к DataFrame с рыночными данными.
-    
+
     Рассчитывает и добавляет индикаторы: RSI, MACD, Bollinger Bands, скользящие средние,
     ATR, волатильность, моментум и объемные индикаторы. Заполняет NaN значения.
-    
+
     :param df: DataFrame с колонками OHLCV (open, high, low, close, volume).
     :return: DataFrame с добавленными индикаторами.
     :raises Exception: В случае ошибки расчета индикаторов (логируется в logger).
@@ -63,7 +63,7 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
 def calculate_rsi(series: pd.Series, period: int = 14) -> pd.Series:
     """
     Рассчитывает индикатор RSI (Relative Strength Index).
-    
+
     :param series: Серия цен закрытия (close prices).
     :param period: Период расчета (по умолчанию 14).
     :return: Серия значений RSI.
@@ -80,7 +80,7 @@ def calculate_macd(
 ) -> Tuple[pd.Series, pd.Series]:
     """
     Рассчитывает индикатор MACD (Moving Average Convergence Divergence).
-    
+
     :param series: Серия цен закрытия (close prices).
     :param fast: Период быстрой EMA (по умолчанию 12).
     :param slow: Период медленной EMA (по умолчанию 26).
@@ -99,7 +99,7 @@ def calculate_bollinger_bands(
 ) -> Tuple[pd.Series, pd.Series, pd.Series]:
     """
     Рассчитывает Bollinger Bands.
-    
+
     :param series: Серия цен закрытия (close prices).
     :param period: Период расчета (по умолчанию 20).
     :param num_std: Количество стандартных отклонений (по умолчанию 2.0).
@@ -115,7 +115,7 @@ def calculate_bollinger_bands(
 def calculate_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
     """
     Рассчитывает Average True Range (ATR).
-    
+
     :param df: DataFrame с колонками high, low, close.
     :param period: Период расчета (по умолчанию 14).
     :return: Серия значений ATR.
@@ -130,10 +130,10 @@ def calculate_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
 def normalize_data(df: pd.DataFrame) -> pd.DataFrame:
     """
     Нормализует данные для моделей машинного обучения путем стандартизации (z-score).
-    
+
     Вычитает среднее и делит на стандартное отклонение для каждой колонки.
     Заполняет NaN значения нулями.
-    
+
     :param df: DataFrame с числовыми данными.
     :return: Нормализованный DataFrame.
     """

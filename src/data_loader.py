@@ -24,7 +24,7 @@ class DataLoader:
     async def initialize(self, api_key: str, api_secret: str):
         """
         Инициализирует DataLoader, включая подключение к API Bybit.
-        
+
         :param api_key: API-ключ Bybit.
         :param api_secret: Секретный ключ Bybit.
         """
@@ -34,7 +34,7 @@ class DataLoader:
         """
         Получает рыночные данные OHLCV с кэшированием через Redis.
         Стандартизирует названия колонок и логирует информацию о данных.
-        
+
         :param symbol: Символ торговой пары (например, "BTC/USDT").
         :param timeframe: Таймфрейм (например, "1h").
         :param limit: Количество свечей (по умолчанию 100).
@@ -62,7 +62,7 @@ class DataLoader:
         """
         Стандартизирует названия колонок DataFrame к ожидаемому формату.
         Автоматически определяет и переименовывает колонки на основе ключевых слов.
-        
+
         :param df: Исходный DataFrame.
         :return: DataFrame с стандартизированными названиями колонок.
         """
@@ -111,7 +111,7 @@ class DataLoader:
         """
         Получает исторические данные OHLCV за указанное количество дней.
         Использует метод get_market_data с расчетом лимита на основе дней.
-        
+
         :param symbol: Символ торговой пары.
         :param timeframe: Таймфрейм.
         :param days: Количество дней (по умолчанию 30).
@@ -124,7 +124,7 @@ class DataLoader:
         """
         Рассчитывает технические индикаторы (EMA, RSI, MACD) на основе данных OHLCV.
         Проверяет наличие необходимых колонок и логирует ошибки.
-        
+
         :param df: DataFrame с рыночными данными.
         :return: DataFrame с добавленными индикаторами.
         :raises ValueError: Если отсутствуют необходимые колонки.
@@ -155,7 +155,9 @@ class DataLoader:
             exp1 = df["close"].ewm(span=12).mean()
             exp2 = df["close"].ewm(span=26).mean()
             df["macd"] = exp1 - exp2
-            df["signal"] = df["macd"].ewm(span=9).mean()  # Исправлено: macd_signal → signal
+            df["signal"] = (
+                df["macd"].ewm(span=9).mean()
+            )  # Исправлено: macd_signal → signal
 
             self.logger.info("Technical indicators calculated successfully")
             return df

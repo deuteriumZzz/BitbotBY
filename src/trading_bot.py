@@ -23,17 +23,17 @@ logger = logging.getLogger(__name__)
 class TradingBot:
     """
     Класс для управления торговым ботом криптовалют.
-    
+
     Координирует работу с API Bybit, загрузчиком данных, менеджером портфеля, стратегиями торговли,
     управлением рисками и Redis для хранения состояния. Включает инициализацию, основной торговый цикл,
     выполнение ордеров, анализ рынка и обновление статистики производительности. Использует асинхронные
     методы для эффективной работы и логирование для отслеживания операций и ошибок.
     """
-    
+
     def __init__(self):
         """
         Инициализирует торговый бот.
-        
+
         Создает экземпляры клиентов Redis, API Bybit, загрузчика данных, менеджера портфеля,
         стратегии (изначально None) и менеджера рисков. Устанавливает флаг is_running в False.
         """
@@ -48,11 +48,11 @@ class TradingBot:
     async def initialize(self):
         """
         Инициализирует торговый бот.
-        
+
         Выполняет инициализацию API Bybit и загрузчика данных с ключами из конфига,
         создает и инициализирует стратегию торговли, восстанавливает состояние из Redis.
         Логирует успех или ошибки. В случае исключения логирует ошибку и поднимает её.
-        
+
         :raises Exception: Если инициализация не удалась.
         """
         try:
@@ -77,7 +77,7 @@ class TradingBot:
     async def _restore_state(self):
         """
         Восстанавливает состояние из Redis.
-        
+
         Загружает состояние торговли и портфеля из Redis. Если состояние найдено, обновляет
         баланс и позиции портфеля. Логирует восстановление состояния.
         """
@@ -96,12 +96,12 @@ class TradingBot:
     async def _execute_trade(self, signal: dict, market_data: pd.DataFrame):
         """
         Выполняет торговый ордер на основе сигнала.
-        
+
         Проверяет сигнал через менеджер рисков, рассчитывает размер позиции, стоп-лосс,
         проверяет баланс аккаунта перед ордером. Если проверки пройдены, создает ордер
         через API, обновляет портфель. Логирует все шаги, ошибки и предупреждения.
         В случае исключения логирует ошибку.
-        
+
         :param signal: Словарь с торговым сигналом, содержащий "action", "price" и т.д. (dict).
         :param market_data: DataFrame с рыночными данными (pd.DataFrame).
         """
@@ -112,18 +112,18 @@ class TradingBot:
 
             entry_price = signal.get("price", market_data["close"].iloc[-1])
             stop_loss = await self.risk_manager.calculate_stop_loss(entry_price, signal)
-            
+
             # Получить текущий баланс и цену для расчета position_size
             balance = await self.api.get_balance()
             if not balance:
                 logger.error("Не удалось получить баланс аккаунта")
                 return
-            
+
             current_price = await self.api.get_current_price(Config.SYMBOL)
             if not current_price:
                 logger.error("Не удалось получить текущую цену")
                 return
-            
+
             position_size = await self.risk_manager.calculate_position_size(
                 self.portfolio_manager.current_balance,  # Используем баланс из portfolio_manager
                 current_price,
@@ -138,14 +138,18 @@ class TradingBot:
             order_side = "buy" if signal["action"] == "buy" else "sell"
             if order_side == "buy":
                 cost = position_size * entry_price
-                usdt_balance = balance.get('free', {}).get('USDT', 0)
+                usdt_balance = balance.get("free", {}).get("USDT", 0)
                 if cost > usdt_balance:
-                    logger.warning(f"Недостаточный баланс USDT: {usdt_balance} < {cost}. Пропускаю ордер.")
+                    logger.warning(
+                        f"Недостаточный баланс USDT: {usdt_balance} < {cost}. Пропускаю ордер."
+                    )
                     return
             elif order_side == "sell":
-                btc_balance = balance.get('free', {}).get('BTC', 0)
+                btc_balance = balance.get("free", {}).get("BTC", 0)
                 if btc_balance < position_size:
-                    logger.warning(f"Недостаточный баланс BTC: {btc_balance} < {position_size}. Пропускаю ордер.")
+                    logger.warning(
+                        f"Недостаточный баланс BTC: {btc_balance} < {position_size}. Пропускаю ордер."
+                    )
                     return
 
             # Execute order
@@ -173,11 +177,11 @@ class TradingBot:
     async def _update_performance_stats(self):
         """
         Обновляет статистику производительности.
-        
+
         Получает текущую цену актива, рассчитывает стоимость портфеля, прибыль/убыток,
         собирает статистику (баланс, позиции и т.д.) и сохраняет в Redis. Логирует ошибки,
         если не удалось получить данные.
-        
+
         :raises Exception: Если обновление статистики не удалось.
         """
         try:
@@ -185,7 +189,7 @@ class TradingBot:
             if not current_price:
                 logger.error("Не удалось получить текущую цену для статистики")
                 return
-            
+
             portfolio_value = await self.portfolio_manager.get_portfolio_value(
                 {Config.SYMBOL: current_price}
             )
@@ -207,11 +211,11 @@ class TradingBot:
     async def analyze_market(self, symbol: str, timeframe: str) -> Optional[dict]:
         """
         Анализирует рынок и генерирует торговый сигнал.
-        
+
         Загружает рыночные данные, рассчитывает технические индикаторы,
         получает сигнал от стратегии. Возвращает сигнал или None в случае ошибки.
         Логирует сгенерированный сигнал или ошибки.
-        
+
         :param symbol: Символ актива (str).
         :param timeframe: Таймфрейм данных (str).
         :return: Словарь с сигналом или None (Optional[dict]).
@@ -236,7 +240,7 @@ class TradingBot:
     async def trading_loop(self):
         """
         Основной торговый цикл.
-        
+
         Запускает бесконечный цикл, анализирует рынок, выполняет ордера при сигналах,
         обновляет статистику и ждет интервала. Останавливается при флаге is_running = False.
         Логирует ошибки и ждет 30 секунд при исключениях.
@@ -273,7 +277,7 @@ class TradingBot:
     async def stop(self):
         """
         Останавливает торговый бот.
-        
+
         Устанавливает флаг is_running в False, закрывает соединения с API и загрузчиком данных.
         Логирует остановку.
         """
@@ -286,7 +290,7 @@ class TradingBot:
 async def main():
     """
     Главная функция для запуска торгового бота.
-    
+
     Создает экземпляр TradingBot, инициализирует его, запускает торговый цикл.
     Обрабатывает прерывания клавиатуры и фатальные ошибки, в конце останавливает бота.
     """

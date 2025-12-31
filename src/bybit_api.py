@@ -37,20 +37,29 @@ class BybitAPI:
             # Новое: поддержка тестнета для безопасного тестирования
             exchange_class = ccxt.bybit
             if testnet:
-                self.exchange = exchange_class({
-                    "apiKey": api_key,
-                    "secret": api_secret,
-                    "enableRateLimit": True,
-                    "options": {"defaultType": "spot"},
-                    "urls": {"api": {"public": "https://api-testnet.bybit.com", "private": "https://api-testnet.bybit.com"}},
-                })
+                self.exchange = exchange_class(
+                    {
+                        "apiKey": api_key,
+                        "secret": api_secret,
+                        "enableRateLimit": True,
+                        "options": {"defaultType": "spot"},
+                        "urls": {
+                            "api": {
+                                "public": "https://api-testnet.bybit.com",
+                                "private": "https://api-testnet.bybit.com",
+                            }
+                        },
+                    }
+                )
             else:
-                self.exchange = exchange_class({
-                    "apiKey": api_key,
-                    "secret": api_secret,
-                    "enableRateLimit": True,
-                    "options": {"defaultType": "spot"},
-                })
+                self.exchange = exchange_class(
+                    {
+                        "apiKey": api_key,
+                        "secret": api_secret,
+                        "enableRateLimit": True,
+                        "options": {"defaultType": "spot"},
+                    }
+                )
             await self.exchange.load_markets()
             self.logger.info("Bybit API initialized successfully")
         except Exception as e:
@@ -178,7 +187,7 @@ class BybitAPI:
         """
         try:
             ticker = await self.exchange.fetch_ticker(symbol)
-            return ticker['last']
+            return ticker["last"]
         except Exception as e:
             self.logger.error(f"Error fetching current price for {symbol}: {e}")
             return None

@@ -2,7 +2,6 @@ import asyncio
 import logging
 from datetime import datetime
 
-
 from config import Config
 from src.data_loader import DataLoader
 from src.redis_client import RedisClient

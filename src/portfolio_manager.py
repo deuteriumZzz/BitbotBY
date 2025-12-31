@@ -9,15 +9,15 @@ from src.redis_client import RedisClient
 class PortfolioManager:
     """
     Класс для управления портфелем в торговле криптовалютой.
-    
+
     Отвечает за отслеживание баланса, позиций, обновление портфеля на основе торговых операций,
     расчет стоимости портфеля и ребалансировку. Использует Redis для сохранения состояния.
     """
-    
+
     def __init__(self, initial_balance: float):
         """
         Инициализирует экземпляр PortfolioManager.
-        
+
         :param initial_balance: Начальный баланс портфеля (float).
         """
         self.initial_balance = initial_balance
@@ -31,11 +31,11 @@ class PortfolioManager:
     ) -> bool:
         """
         Обновляет портфель на основе торговой операции.
-        
+
         Проверяет возможность операции (покупка или продажа), обновляет баланс и позиции,
         сохраняет состояние в Redis. Для покупки проверяет достаточность баланса,
         для продажи - наличие достаточного количества актива.
-        
+
         :param symbol: Символ актива (str, например, "BTC").
         :param action: Действие ("buy" или "sell").
         :param quantity: Количество актива (float).
@@ -73,10 +73,10 @@ class PortfolioManager:
     async def get_portfolio_value(self, current_prices: Dict[str, float]) -> float:
         """
         Рассчитывает общую стоимость портфеля.
-        
+
         Суммирует текущий баланс и стоимость всех позиций на основе текущих цен.
         Если цена для символа не указана, позиция игнорируется.
-        
+
         :param current_prices: Словарь текущих цен по символам (Dict[str, float]).
         :return: Общая стоимость портфеля (float).
         """
@@ -91,10 +91,10 @@ class PortfolioManager:
     async def _save_portfolio_state(self):
         """
         Сохраняет состояние портфеля в Redis.
-        
+
         Создает словарь с текущим timestamp, балансом, позициями и общей стоимостью
         (без текущих цен для позиций) и сохраняет его под ключом "portfolio_state".
-        
+
         :raises Exception: В случае ошибок при сохранении (не обрабатывается явно).
         """
         portfolio_state = {
@@ -109,7 +109,7 @@ class PortfolioManager:
     def get_positions(self) -> Dict[str, float]:
         """
         Возвращает копию текущих позиций.
-        
+
         :return: Словарь с символами и их количествами (Dict[str, float]).
         """
         return self.positions.copy()
@@ -117,7 +117,7 @@ class PortfolioManager:
     async def get_position_size(self, symbol: str) -> float:
         """
         Возвращает текущий размер позиции для заданного символа.
-        
+
         :param symbol: Символ актива (str).
         :return: Количество актива в позиции (float, 0.0 если позиция отсутствует).
         """
@@ -128,11 +128,11 @@ class PortfolioManager:
     ):
         """
         Реbalancing портфеля к целевым аллокациям.
-        
+
         Рассчитывает текущую стоимость портфеля, определяет необходимые покупки или продажи
         для достижения целевых аллокаций и выполняет соответствующие операции.
         Аллокации должны суммироваться к 1.0 (100%).
-        
+
         :param target_allocations: Словарь целевых аллокаций по символам (Dict[str, float], суммы должны быть 1.0).
         :param current_prices: Словарь текущих цен по символам (Dict[str, float]).
         :raises Exception: В случае ошибок при обновлении портфеля (логируется в update_portfolio).

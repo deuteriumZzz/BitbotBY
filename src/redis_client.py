@@ -11,19 +11,19 @@ import redis
 class RedisClient:
     """
     Класс для взаимодействия с Redis.
-    
+
     Предоставляет методы для сохранения и загрузки рыночных данных, состояний торговли,
     моделей, управления блокировками, публикации сигналов и обновления статистики производительности.
     Использует переменные окружения для конфигурации подключения.
     """
-    
+
     def __init__(self, host=None, port=6379, password=None):
         """
         Инициализирует клиент Redis.
-        
+
         Устанавливает подключение к Redis с использованием переменных окружения или значений по умолчанию.
         Выполняет проверку подключения.
-        
+
         :param host: Хост Redis (str, по умолчанию None - берется из REDIS_HOST).
         :param port: Порт Redis (int, по умолчанию 6379 - берется из REDIS_PORT).
         :param password: Пароль Redis (str, по умолчанию None - берется из REDIS_PASSWORD).
@@ -33,29 +33,31 @@ class RedisClient:
         redis_host = host or os.getenv("REDIS_HOST", "redis")  # имя сервиса в Docker
         redis_port = port or int(os.getenv("REDIS_PORT", 6379))
         redis_password = password or os.getenv("REDIS_PASSWORD")
-        
+
         self.redis_client = redis.Redis(
-            host=redis_host, 
-            port=redis_port, 
-            password=redis_password, 
-            decode_responses=False
+            host=redis_host,
+            port=redis_port,
+            password=redis_password,
+            decode_responses=False,
         )
         self.logger = logging.getLogger(__name__)
-        
+
         # Проверяем подключение при инициализации
         self._test_connection()
 
     def _test_connection(self):
         """
         Проверяет подключение к Redis.
-        
+
         Отправляет ping-запрос и логирует результат. В случае ошибки вызывает исключение.
-        
+
         :raises Exception: Если подключение не удается.
         """
         try:
             self.redis_client.ping()
-            self.logger.info(f"Connected to Redis at {self.redis_client.connection_pool.connection_kwargs['host']}:{self.redis_client.connection_pool.connection_kwargs['port']}")
+            self.logger.info(
+                f"Connected to Redis at {self.redis_client.connection_pool.connection_kwargs['host']}:{self.redis_client.connection_pool.connection_kwargs['port']}"
+            )
         except Exception as e:
             self.logger.error(f"Failed to connect to Redis: {e}")
             raise
@@ -63,9 +65,9 @@ class RedisClient:
     def save_market_data(self, key: str, data: pd.DataFrame):
         """
         Сохраняет рыночные данные в Redis.
-        
+
         Сериализует DataFrame с помощью pickle и сохраняет с TTL 5 минут.
-        
+
         :param key: Ключ для сохранения (str).
         :param data: Данные для сохранения (pd.DataFrame).
         :raises Exception: В случае ошибок сериализации или сохранения (логируется).
@@ -80,9 +82,9 @@ class RedisClient:
     def load_market_data(self, key: str) -> Optional[pd.DataFrame]:
         """
         Загружает рыночные данные из Redis.
-        
+
         Десериализует данные с помощью pickle, если ключ существует.
-        
+
         :param key: Ключ для загрузки (str).
         :return: Загруженные данные (pd.DataFrame) или None, если ключ не найден.
         :raises Exception: В случае ошибок десериализации или загрузки (логируется).
@@ -99,9 +101,9 @@ class RedisClient:
     def save_trading_state(self, key: str, state: Dict[str, Any]):
         """
         Сохраняет состояние торговли в Redis.
-        
+
         Сериализует состояние как JSON и сохраняет с TTL 24 часа.
-        
+
         :param key: Ключ для сохранения (str).
         :param state: Состояние для сохранения (Dict[str, Any]).
         :raises Exception: В случае ошибок сериализации или сохранения (логируется).
@@ -116,9 +118,9 @@ class RedisClient:
     def load_trading_state(self, key: str) -> Optional[Dict[str, Any]]:
         """
         Загружает состояние торговли из Redis.
-        
+
         Десериализует данные из JSON, если ключ существует.
-        
+
         :param key: Ключ для загрузки (str).
         :return: Загруженное состояние (Dict[str, Any]) или None, если ключ не найден.
         :raises Exception: В случае ошибок десериализации или загрузки (логируется).
@@ -135,9 +137,9 @@ class RedisClient:
     def save_model(self, strategy_name: str, model_data: Dict[str, Any]):
         """
         Сохраняет модель в Redis.
-        
+
         Сериализует данные модели с помощью pickle и сохраняет с TTL 7 дней под ключом "model:{strategy_name}".
-        
+
         :param strategy_name: Название стратегии (str).
         :param model_data: Данные модели (Dict[str, Any]).
         :raises Exception: В случае ошибок сериализации или сохранения (логируется).
@@ -154,9 +156,9 @@ class RedisClient:
     def load_model(self, strategy_name: str) -> Optional[Dict[str, Any]]:
         """
         Загружает модель из Redis.
-        
+
         Десериализует данные модели с помощью pickle, если ключ "model:{strategy_name}" существует.
-        
+
         :param strategy_name: Название стратегии (str).
         :return: Загруженные данные модели (Dict[str, Any]) или None, если ключ не найден.
         :raises Exception: В случае ошибок десериализации или загрузки (логируется).
@@ -173,16 +175,18 @@ class RedisClient:
     def acquire_lock(self, lock_name: str, timeout: int = 10) -> bool:
         """
         Захватывает распределенную блокировку.
-        
+
         Устанавливает блокировку с помощью SET NX с TTL по умолчанию 10 секунд.
-        
+
         :param lock_name: Название блокировки (str).
         :param timeout: Время жизни блокировки в секундах (int, по умолчанию 10).
         :return: True, если блокировка захвачена, иначе False.
         :raises Exception: В случае ошибок при захвате (логируется).
         """
         try:
-            result = bool(self.redis_client.set(lock_name, "locked", nx=True, ex=timeout))
+            result = bool(
+                self.redis_client.set(lock_name, "locked", nx=True, ex=timeout)
+            )
             if result:
                 self.logger.debug(f"Acquired lock: {lock_name}")
             return result
@@ -193,9 +197,9 @@ class RedisClient:
     def release_lock(self, lock_name: str):
         """
         Освобождает распределенную блокировку.
-        
+
         Удаляет ключ блокировки.
-        
+
         :param lock_name: Название блокировки (str).
         :raises Exception: В случае ошибок при освобождении (логируется).
         """
@@ -208,9 +212,9 @@ class RedisClient:
     def publish_signal(self, signal_data: Dict[str, Any]):
         """
         Публикует сигнал через Redis Pub/Sub.
-        
+
         Отправляет данные сигнала в канал "trading_signals".
-        
+
         :param signal_data: Данные сигнала (Dict[str, Any]).
         :raises Exception: В случае ошибок при публикации (логируется).
         """
@@ -223,9 +227,9 @@ class RedisClient:
     def update_performance_stats(self, stats: Dict[str, Any]):
         """
         Обновляет статистику производительности в Redis.
-        
+
         Сериализует статистику как JSON и сохраняет под ключом "performance_stats" с TTL 24 часа.
-        
+
         :param stats: Статистика производительности (Dict[str, Any]).
         :raises Exception: В случае ошибок сериализации или сохранения (логируется).
         """
@@ -240,9 +244,9 @@ class RedisClient:
     def get_performance_stats(self) -> Dict[str, Any]:
         """
         Получает статистику производительности из Redis.
-        
+
         Десериализует данные из JSON под ключом "performance_stats".
-        
+
         :return: Статистика производительности (Dict[str, Any], пустой dict если ключ не найден).
         :raises Exception: В случае ошибок десериализации или загрузки (логируется).
         """
@@ -251,7 +255,7 @@ class RedisClient:
             data = self.redis_client.get(key)
             if data:
                 # Декодируем из bytes и парсим JSON
-                return json.loads(data.decode('utf-8'))
+                return json.loads(data.decode("utf-8"))
             return {}
         except Exception as e:
             self.logger.error(f"Error getting performance stats: {e}")
