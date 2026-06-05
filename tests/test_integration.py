@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
 import pytest
-from cryptotradingbot import CryptoTradingBot
+from src.trading_bot import TradingBot
 
 
 class TestIntegration:
@@ -22,10 +22,10 @@ class TestIntegration:
     @pytest.fixture
     async def trading_bot(self, bot_config):
         """Создание тестового бота"""
-        bot = CryptoTradingBot(bot_config)
+        bot = TradingBot()
         await bot.initialize()
         yield bot
-        await bot.shutdown()
+        await bot.stop()
 
     @pytest.mark.asyncio
     async def test_full_trading_cycle(self, trading_bot):

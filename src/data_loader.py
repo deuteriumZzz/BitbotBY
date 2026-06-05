@@ -110,14 +110,25 @@ class DataLoader:
     async def get_historical_data(self, symbol: str, timeframe: str, days: int = 30):
         """
         Получает исторические данные OHLCV за указанное количество дней.
-        Использует метод get_market_data с расчетом лимита на основе дней.
+        Использует метод get_market_data с расчетом лимита на основе дней и таймфрейма.
 
         :param symbol: Символ торговой пары.
-        :param timeframe: Таймфрейм.
+        :param timeframe: Таймфрейм (например, "1m", "5m", "15m", "1h", "4h", "1d").
         :param days: Количество дней (по умолчанию 30).
         :return: DataFrame с историческими данными.
         """
-        limit = days * 24  # Approximate number of candles
+        # Map timeframes to minutes
+        timeframe_minutes = {
+            "1m": 1, "5m": 5, "15m": 15, "30m": 30,
+            "1h": 60, "2h": 120, "4h": 240, "6h": 360, "8h": 480, "12h": 720,
+            "1d": 1440, "3d": 4320, "1w": 10080, "1M": 43200
+        }
+
+        minutes_per_day = 24 * 60
+        timeframe_min = timeframe_minutes.get(timeframe, 60)
+        candles_per_day = minutes_per_day // timeframe_min
+        limit = days * candles_per_day
+
         return await self.get_market_data(symbol, timeframe, limit)
 
     def calculate_technical_indicators(self, df: pd.DataFrame):
@@ -148,16 +159,16 @@ class DataLoader:
             delta = df["close"].diff()
             gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
             loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-            rs = gain / loss
+            rs = gain / loss.where(loss != 0, 1)
             df["rsi"] = 100 - (100 / (1 + rs))
 
             # MACD
             exp1 = df["close"].ewm(span=12).mean()
             exp2 = df["close"].ewm(span=26).mean()
             df["macd"] = exp1 - exp2
-            df["signal"] = (
+            df["macd_signal"] = (
                 df["macd"].ewm(span=9).mean()
-            )  # Исправлено: macd_signal → signal
+            )
 
             self.logger.info("Technical indicators calculated successfully")
             return df

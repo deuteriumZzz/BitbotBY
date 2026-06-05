@@ -2,8 +2,7 @@ import asyncio
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from data_fetcher import DataFetcher
-from trading_engine import TradingEngine
+from src.data_fetcher import DataFetcher
 
 
 class TestAPI:
@@ -21,15 +20,10 @@ class TestAPI:
         return DataFetcher(config)
 
     @pytest.fixture
-    def trading_engine(self):
-        """Фикстура для создания экземпляра TradingEngine"""
-        config = {
-            "TRADING_MODE": "paper",
-            "EXCHANGE": "binance",
-            "API_KEY": "test_key",
-            "API_SECRET": "test_secret",
-        }
-        return TradingEngine(config)
+    def trading_bot(self):
+        """Фикстура для создания экземпляра TradingBot"""
+        from src.trading_bot import TradingBot
+        return TradingBot()
 
     @pytest.mark.asyncio
     async def test_fetch_market_data_success(self, data_fetcher):

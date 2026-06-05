@@ -1,5 +1,5 @@
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List
 
 
@@ -57,21 +57,21 @@ class Config:
     BYBIT_API_SECRET: str = os.getenv("BYBIT_API_SECRET", "")
 
     # Trading configuration
-    INITIAL_BALANCE: float = 10000.0
-    RISK_PER_TRADE: float = 0.02
-    COMMISSION_RATE: float = 0.001
+    INITIAL_BALANCE: float = float(os.getenv("INITIAL_BALANCE", "10000.0"))
+    RISK_PER_TRADE: float = float(os.getenv("RISK_PER_TRADE", "0.02"))
+    COMMISSION_RATE: float = float(os.getenv("COMMISSION_RATE", "0.001"))
     TRADING_INTERVAL: int = int(os.getenv("TRADING_INTERVAL", 300))
-    MAX_POSITION_SIZE: float = 0.1
-    STOP_LOSS_PERCENT: float = 0.02
+    MAX_POSITION_SIZE: float = float(os.getenv("MAX_POSITION_SIZE", "0.1"))
+    STOP_LOSS_PERCENT: float = float(os.getenv("STOP_LOSS_PERCENT", "0.02"))
 
     # Strategy configuration
-    ENABLED_STRATEGIES: List[str] = None
+    ENABLED_STRATEGIES: List[str] = field(default_factory=lambda: ["ema_crossover", "rsi_momentum"])
     DEFAULT_STRATEGY: str = "ema_crossover"
 
     # Data configuration
     DATA_DIR: str = "data"
-    SYMBOLS: List[str] = None
-    TRADING_SYMBOLS: List[str] = None
+    SYMBOLS: List[str] = field(default_factory=lambda: ["BTC/USDT", "ETH/USDT", "ADA/USDT"])
+    TRADING_SYMBOLS: List[str] = field(default_factory=lambda: ["BTCUSDT", "ETHUSDT", "ADAUSDT"])
     SYMBOL: str = os.getenv("TRADING_SYMBOL", "BTCUSDT")  # Добавлено
     TIMEFRAME: str = os.getenv("TIMEFRAME", "15")  # Добавлено
 
@@ -79,28 +79,6 @@ class Config:
     NEWS_API_KEY: str = os.getenv("NEWS_API_KEY", "")
     NEWS_UPDATE_INTERVAL: int = 3600
 
-    def __post_init__(self):
-        """
-        Пост-инициализация для установки значений по умолчанию для списков.
-
-        Этот метод вызывается автоматически после __init__. Он проверяет, не установлены
-        ли SYMBOLS, TRADING_SYMBOLS и ENABLED_STRATEGIES, и присваивает им значения
-        по умолчанию, если они равны None.
-
-        Логика: Для SYMBOLS устанавливается список базовых символов. Для TRADING_SYMBOLS
-        удаляются слэши из SYMBOLS. Для ENABLED_STRATEGIES устанавливается список
-        включенных стратегий.
-
-        Обработка ошибок: Не поднимает исключений; работает только с присваиваниями.
-
-        :return: None
-        """
-        if self.SYMBOLS is None:
-            self.SYMBOLS = ["BTC/USDT", "ETH/USDT", "ADA/USDT"]
-        if self.TRADING_SYMBOLS is None:
-            self.TRADING_SYMBOLS = [s.replace("/", "") for s in self.SYMBOLS]
-        if self.ENABLED_STRATEGIES is None:
-            self.ENABLED_STRATEGIES = ["ema_crossover", "rsi_momentum"]
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -135,6 +113,25 @@ class Config:
             TIMEFRAME=os.getenv("TIMEFRAME", "15"),
             NEWS_API_KEY=os.getenv("NEWS_API_KEY", ""),
         )
+
+    def validate(self):
+        """
+        Валидирует значения конфигурации.
+
+        Проверяет что все обязательные значения установлены и имеют допустимые диапазоны.
+
+        :raises ValueError: Если конфигурация некорректна.
+        """
+        if self.INITIAL_BALANCE <= 0:
+            raise ValueError("INITIAL_BALANCE must be positive")
+        if not 0 < self.RISK_PER_TRADE < 1:
+            raise ValueError("RISK_PER_TRADE must be between 0 and 1")
+        if self.MAX_POSITION_SIZE <= 0 or self.MAX_POSITION_SIZE > 1:
+            raise ValueError("MAX_POSITION_SIZE must be between 0 and 1")
+        if self.COMMISSION_RATE < 0:
+            raise ValueError("COMMISSION_RATE must be non-negative")
+        if self.TRADING_INTERVAL <= 0:
+            raise ValueError("TRADING_INTERVAL must be positive")
 
 
 # Global config instance

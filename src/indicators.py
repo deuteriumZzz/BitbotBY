@@ -51,7 +51,7 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
         df["volume_ratio"] = df["volume"] / df["volume_sma"]
 
         # Fill NaN values
-        df = df.fillna(method="bfill").fillna(method="ffill")
+        df = df.bfill().ffill()
 
         return df
 

@@ -125,7 +125,7 @@ class TradingBot:
                 return
 
             position_size = await self.risk_manager.calculate_position_size(
-                self.portfolio_manager.current_balance,  # Используем баланс из portfolio_manager
+                self.portfolio_manager.current_balance,
                 current_price,
                 stop_loss,
             )
@@ -136,19 +136,25 @@ class TradingBot:
 
             # Проверка баланса перед ордером (новое: предотвращает недостаточный баланс)
             order_side = "buy" if signal["action"] == "buy" else "sell"
+
+            # Динамически парсим базовый и котируемый активы из символа
+            symbol_parts = Config.SYMBOL.split("/") if "/" in Config.SYMBOL else [Config.SYMBOL[:-4], Config.SYMBOL[-4:]]
+            base_symbol = symbol_parts[0] if len(symbol_parts) > 0 else "BTC"
+            quote_symbol = symbol_parts[1] if len(symbol_parts) > 1 else "USDT"
+
             if order_side == "buy":
                 cost = position_size * entry_price
-                usdt_balance = balance.get("free", {}).get("USDT", 0)
+                usdt_balance = balance.get("free", {}).get(quote_symbol, 0)
                 if cost > usdt_balance:
                     logger.warning(
-                        f"Недостаточный баланс USDT: {usdt_balance} < {cost}. Пропускаю ордер."
+                        f"Недостаточный баланс {quote_symbol}: {usdt_balance} < {cost}. Пропускаю ордер."
                     )
                     return
             elif order_side == "sell":
-                btc_balance = balance.get("free", {}).get("BTC", 0)
-                if btc_balance < position_size:
+                base_balance = balance.get("free", {}).get(base_symbol, 0)
+                if base_balance < position_size:
                     logger.warning(
-                        f"Недостаточный баланс BTC: {btc_balance} < {position_size}. Пропускаю ордер."
+                        f"Недостаточный баланс {base_symbol}: {base_balance} < {position_size}. Пропускаю ордер."
                     )
                     return
 
@@ -190,9 +196,14 @@ class TradingBot:
                 logger.error("Не удалось получить текущую цену для статистики")
                 return
 
-            portfolio_value = await self.portfolio_manager.get_portfolio_value(
-                {Config.SYMBOL: current_price}
-            )
+            # Get prices for all positions to calculate accurate portfolio value
+            prices = {}
+            for symbol in self.portfolio_manager.positions.keys():
+                price = await self.api.get_current_price(symbol)
+                if price:
+                    prices[symbol] = price
+
+            portfolio_value = await self.portfolio_manager.get_portfolio_value(prices)
 
             stats = {
                 "timestamp": datetime.now().isoformat(),

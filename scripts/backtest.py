@@ -71,10 +71,12 @@ class Backtester:
 
                 # Execute trade logic
                 if signal["action"] == "buy" and position == 0:
-                    # Buy logic
-                    position_size = balance / current_price
+                    # Buy logic with position sizing constraints
+                    max_position_value = balance * Config.MAX_POSITION_SIZE
+                    max_position_size = max_position_value / current_price
+                    position_size = min(balance / current_price, max_position_size)
                     position = position_size
-                    balance = 0
+                    balance = balance - (position_size * current_price)
                     trades.append(
                         {
                             "type": "buy",
@@ -149,8 +151,25 @@ class Backtester:
         :return: Процент выигрышных сделок (от 0 до 1).
         """
         if len(trades) < 2:
-            return 0
-        return 0.5  # Placeholder
+            return 0.0
+
+        winning_trades = 0
+        i = 0
+        while i < len(trades) - 1:
+            if trades[i]["type"] == "buy" and trades[i + 1]["type"] == "sell":
+                entry_price = trades[i]["price"]
+                exit_price = trades[i + 1]["price"]
+                if exit_price > entry_price:
+                    winning_trades += 1
+                i += 2
+            else:
+                i += 1
+
+        total_completed_trades = len(trades) // 2
+        if total_completed_trades == 0:
+            return 0.0
+
+        return winning_trades / total_completed_trades
 
     def _calculate_max_drawdown(self, equity_curve):
         """

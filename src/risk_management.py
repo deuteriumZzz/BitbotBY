@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 from typing import Any, Dict
 
 import numpy as np
@@ -53,7 +54,7 @@ class RiskManager:
 
         # Save risk calculation to Redis
         risk_data = {
-            "timestamp": np.datetime64("now").astype(str),
+            "timestamp": datetime.now().isoformat(),
             "current_balance": current_balance,
             "entry_price": entry_price,
             "stop_loss": stop_loss,

@@ -38,7 +38,7 @@ class RedisClient:
             host=redis_host,
             port=redis_port,
             password=redis_password,
-            decode_responses=False,
+            decode_responses=True,
         )
         self.logger = logging.getLogger(__name__)
 
@@ -254,8 +254,7 @@ class RedisClient:
             key = "performance_stats"
             data = self.redis_client.get(key)
             if data:
-                # Декодируем из bytes и парсим JSON
-                return json.loads(data.decode("utf-8"))
+                return json.loads(data)
             return {}
         except Exception as e:
             self.logger.error(f"Error getting performance stats: {e}")

@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 from typing import Dict
 
 import numpy as np
@@ -98,7 +99,7 @@ class PortfolioManager:
         :raises Exception: В случае ошибок при сохранении (не обрабатывается явно).
         """
         portfolio_state = {
-            "timestamp": np.datetime64("now").astype(str),
+            "timestamp": datetime.now().isoformat(),
             "balance": self.current_balance,
             "positions": self.positions,
             "total_value": await self.get_portfolio_value({}),
