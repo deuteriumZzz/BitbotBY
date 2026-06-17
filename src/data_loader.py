@@ -131,44 +131,35 @@ class DataLoader:
 
         return await self.get_market_data(symbol, timeframe, limit)
 
-    def calculate_technical_indicators(self, df: pd.DataFrame):
+    def calculate_technical_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Рассчитывает технические индикаторы (EMA, RSI, MACD) на основе данных OHLCV.
-        Проверяет наличие необходимых колонок и логирует ошибки.
+        Рассчитывает полный набор технических индикаторов через indicators.py.
 
-        :param df: DataFrame с рыночными данными.
+        Добавляет: RSI, MACD, Bollinger Bands, SMA 20/50, EMA 12/26, ATR,
+        volatility, momentum, volume_sma, volume_ratio.
+        Алиасы ema_short/ema_long добавляются для совместимости со стратегиями.
+
+        :param df: DataFrame с колонками OHLCV.
         :return: DataFrame с добавленными индикаторами.
-        :raises ValueError: Если отсутствуют необходимые колонки.
-        :raises Exception: В случае ошибки расчета.
+        :raises ValueError: Если отсутствует колонка 'close'.
+        :raises Exception: В случае ошибки расчёта.
         """
+        from src.indicators import add_indicators
+
         try:
-            # Проверяем наличие необходимых колонок
-            required_columns = ["close"]
-            for col in required_columns:
-                if col not in df.columns:
-                    raise ValueError(
-                        f"Required column '{col}' not found in DataFrame. "
-                        f"Available columns: {df.columns.tolist()}"
-                    )
+            if "close" not in df.columns:
+                raise ValueError(
+                    f"Required column 'close' not found. "
+                    f"Available columns: {df.columns.tolist()}"
+                )
 
-            # EMA
-            df["ema_short"] = df["close"].ewm(span=12).mean()
-            df["ema_long"] = df["close"].ewm(span=26).mean()
+            df = add_indicators(df)
 
-            # RSI
-            delta = df["close"].diff()
-            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-            rs = gain / loss.where(loss != 0, 1)
-            df["rsi"] = 100 - (100 / (1 + rs))
-
-            # MACD
-            exp1 = df["close"].ewm(span=12).mean()
-            exp2 = df["close"].ewm(span=26).mean()
-            df["macd"] = exp1 - exp2
-            df["macd_signal"] = (
-                df["macd"].ewm(span=9).mean()
-            )
+            # Алиасы для совместимости со стратегиями
+            if "ema_12" in df.columns:
+                df["ema_short"] = df["ema_12"]
+            if "ema_26" in df.columns:
+                df["ema_long"] = df["ema_26"]
 
             self.logger.info("Technical indicators calculated successfully")
             return df
