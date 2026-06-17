@@ -34,11 +34,13 @@ class RedisClient:
         redis_port = port or int(os.getenv("REDIS_PORT", 6379))
         redis_password = password or os.getenv("REDIS_PASSWORD")
 
+        # decode_responses=False: нужно для хранения pickle-байтов (рыночные данные).
+        # JSON-ответы декодируются вручную через .decode() + json.loads().
         self.redis_client = redis.Redis(
             host=redis_host,
             port=redis_port,
             password=redis_password,
-            decode_responses=True,
+            decode_responses=False,
         )
         self.logger = logging.getLogger(__name__)
 
@@ -129,7 +131,7 @@ class RedisClient:
             state = self.redis_client.get(key)
             if state:
                 self.logger.debug(f"Loaded trading state with key: {key}")
-                return json.loads(state)
+                return json.loads(state.decode("utf-8"))
         except Exception as e:
             self.logger.error(f"Error loading trading state: {e}")
         return None
@@ -167,7 +169,7 @@ class RedisClient:
             model_data = self.redis_client.get(f"model:{strategy_name}")
             if model_data:
                 self.logger.debug(f"Loaded model for strategy: {strategy_name}")
-                return pickle.loads(model_data)
+                return pickle.loads(model_data)  # bytes — pickle корректен
         except Exception as e:
             self.logger.error(f"Error loading model: {e}")
         return None
@@ -254,7 +256,7 @@ class RedisClient:
             key = "performance_stats"
             data = self.redis_client.get(key)
             if data:
-                return json.loads(data)
+                return json.loads(data.decode("utf-8"))
             return {}
         except Exception as e:
             self.logger.error(f"Error getting performance stats: {e}")

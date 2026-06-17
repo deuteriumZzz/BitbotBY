@@ -79,8 +79,8 @@ class Config:
     DATA_DIR: str = "data"
     SYMBOLS: List[str] = field(default_factory=lambda: ["BTC/USDT", "ETH/USDT", "ADA/USDT"])
     TRADING_SYMBOLS: List[str] = field(default_factory=lambda: ["BTCUSDT", "ETHUSDT", "ADAUSDT"])
-    SYMBOL: str = os.getenv("TRADING_SYMBOL", "BTCUSDT")  # Добавлено
-    TIMEFRAME: str = os.getenv("TIMEFRAME", "15")  # Добавлено
+    SYMBOL: str = os.getenv("TRADING_SYMBOL", "BTC/USDT")   # ccxt spot format
+    TIMEFRAME: str = os.getenv("TIMEFRAME", "15m")           # ccxt timeframe format
 
     # News configuration
     NEWS_API_KEY: str = os.getenv("NEWS_API_KEY", "")

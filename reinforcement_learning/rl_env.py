@@ -1,9 +1,9 @@
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 
-import gym
+import gymnasium as gym
 import numpy as np
 import pandas as pd
-from gym import spaces
+from gymnasium import spaces
 
 
 class TradingEnv(gym.Env):
@@ -66,12 +66,13 @@ class TradingEnv(gym.Env):
 
         return observation
 
-    def reset(self) -> np.ndarray:
+    def reset(self, seed=None, options=None) -> Tuple[np.ndarray, Dict[str, Any]]:
         """
         Сбрасывает среду в начальное состояние.
 
-        :return: Начальное наблюдение.
+        :return: Кортеж (наблюдение, info) — gymnasium API.
         """
+        super().reset(seed=seed)
         self.balance = self.initial_balance
         self.position = 0
         self.entry_price = 0
@@ -79,17 +80,17 @@ class TradingEnv(gym.Env):
         self.done = False
         self.current_value = self.initial_balance
 
-        return self._get_observation()
+        return self._get_observation(), {}
 
-    def step(self, action: int) -> Tuple[np.ndarray, float, bool, Dict[str, Any]]:
+    def step(self, action: int) -> Tuple[np.ndarray, float, bool, bool, Dict[str, Any]]:
         """
         Выполняет один шаг в среде на основе выбранного действия.
 
         :param action: Индекс действия (0=hold, 1=buy, 2=sell).
-        :return: Кортеж (наблюдение, награда, флаг завершения, дополнительная информация).
+        :return: Кортеж (наблюдение, награда, terminated, truncated, info) — gymnasium API.
         """
         if self.done:
-            return self._get_observation(), 0, True, {}
+            return self._get_observation(), 0, True, False, {}
 
         current_price = self.data.iloc[self.current_step]["close"]
         prev_value = self.current_value
@@ -126,7 +127,7 @@ class TradingEnv(gym.Env):
             "price": current_price,
         }
 
-        return self._get_observation(), reward, self.done, info
+        return self._get_observation(), reward, self.done, False, info
 
     def render(self, mode="human"):
         """
