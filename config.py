@@ -5,139 +5,159 @@ from typing import List
 
 @dataclass
 class Config:
-    """
-    Конфигурационный класс для приложения криптовалютной торговли.
+    """Конфигурация торгового бота. Все параметры читаются из env."""
 
-    Этот класс содержит все необходимые параметры для настройки Redis, API Bybit,
-    торговых стратегий, данных и новостей. Он использует переменные окружения для
-    гибкой конфигурации и предоставляет значения по умолчанию. Класс наследуется
-    от dataclass для автоматической генерации методов __init__, __repr__ и т.д.
-
-    Поля:
-    - REDIS_URL: URL подключения к Redis (str).
-    - REDIS_HOST: Хост Redis (str).
-    - REDIS_PORT: Порт Redis (int).
-    - REDIS_DB: Номер базы данных Redis (int).
-    - BYBIT_API_KEY: API-ключ для Bybit (str).
-    - BYBIT_API_SECRET: Секретный ключ для Bybit (str).
-    - INITIAL_BALANCE: Начальный баланс портфеля (float).
-    - RISK_PER_TRADE: Риск на одну сделку (float, доля от баланса).
-    - COMMISSION_RATE: Ставка комиссии (float).
-    - TRADING_INTERVAL: Интервал торговли в секундах (int).
-    - MAX_POSITION_SIZE: Максимальный размер позиции (float, доля от баланса).
-    - STOP_LOSS_PERCENT: Процент стоп-лосса (float).
-    - ENABLED_STRATEGIES: Список включенных стратегий (List[str]).
-    - DEFAULT_STRATEGY: Стратегия по умолчанию (str).
-    - DATA_DIR: Директория для данных (str).
-    - SYMBOLS: Список символов в формате "BASE/QUOTE" (List[str]).
-    - TRADING_SYMBOLS: Список символов для торговли (List[str]).
-    - SYMBOL: Текущий торговый символ (str).
-    - TIMEFRAME: Таймфрейм для данных (str).
-    - NEWS_API_KEY: Ключ для API новостей (str).
-    - NEWS_UPDATE_INTERVAL: Интервал обновления новостей в секундах (int).
-
-    Логика: Поля инициализируются из переменных окружения с fallback на значения
-    по умолчанию. Метод __post_init__ устанавливает значения для списков, если они
-    не заданы. Классовый метод from_env создает экземпляр на основе переменных
-    окружения.
-
-    Обработка ошибок: Не поднимает исключений; преобразование типов (например, int
-    или float) может вызвать ValueError, если переменные окружения некорректны,
-    но это обрабатывается на уровне интерпретатора.
-    """
-
-    # Redis configuration
+    # ── Redis ──────────────────────────────────────────────────────────────
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
     REDIS_HOST: str = os.getenv("REDIS_HOST", "localhost")
     REDIS_PORT: int = int(os.getenv("REDIS_PORT", 6379))
     REDIS_DB: int = int(os.getenv("REDIS_DB", 0))
 
-    # Bybit API configuration
+    # ── Bybit API ──────────────────────────────────────────────────────────
     BYBIT_API_KEY: str = os.getenv("BYBIT_API_KEY", "")
     BYBIT_API_SECRET: str = os.getenv("BYBIT_API_SECRET", "")
 
-    # Trading configuration
-    INITIAL_BALANCE: float = float(os.getenv("INITIAL_BALANCE", "10000.0"))
-    RISK_PER_TRADE: float = float(os.getenv("RISK_PER_TRADE", "0.02"))
-    COMMISSION_RATE: float = float(os.getenv("COMMISSION_RATE", "0.001"))
-    TRADING_INTERVAL: int = int(os.getenv("TRADING_INTERVAL", 300))
-    MAX_POSITION_SIZE: float = float(os.getenv("MAX_POSITION_SIZE", "0.1"))
-    STOP_LOSS_PERCENT: float = float(os.getenv("STOP_LOSS_PERCENT", "0.02"))
+    # ── Trading ────────────────────────────────────────────────────────────
+    INITIAL_BALANCE: float = float(
+        os.getenv("INITIAL_BALANCE", "10000.0")
+    )
+    RISK_PER_TRADE: float = float(
+        os.getenv("RISK_PER_TRADE", "0.02")
+    )
+    COMMISSION_RATE: float = float(
+        os.getenv("COMMISSION_RATE", "0.001")
+    )
+    # Интервал между итерациями цикла в секундах (30 = real-time)
+    TRADING_INTERVAL: int = int(
+        os.getenv("TRADING_INTERVAL", "30")
+    )
+    MAX_POSITION_SIZE: float = float(
+        os.getenv("MAX_POSITION_SIZE", "0.1")
+    )
+    STOP_LOSS_PERCENT: float = float(
+        os.getenv("STOP_LOSS_PERCENT", "0.05")
+    )
 
-    # Strategy configuration
+    # ── Strategy ───────────────────────────────────────────────────────────
     ENABLED_STRATEGIES: List[str] = field(default_factory=lambda: [
-        "ema_crossover", "rsi_momentum", "macd_crossover", "bollinger_bands",
-        "scalping", "swing_trading", "breakout", "mean_reversion", "trend_following",
+        "ema_crossover",
+        "rsi_momentum",
+        "macd_crossover",
+        "bollinger_bands",
+        "scalping",
+        "swing_trading",
+        "breakout",
+        "mean_reversion",
+        "trend_following",
     ])
-    DEFAULT_STRATEGY: str = os.getenv("ACTIVE_STRATEGY", "ema_crossover")
-    # Если True — AI выбирает стратегию автоматически по рыночным условиям
-    AI_STRATEGY_SELECTION: bool = os.getenv("AI_STRATEGY_SELECTION", "false").lower() == "true"
-    # Минимальный confidence сигнала для исполнения (0.0–1.0)
-    MIN_SIGNAL_CONFIDENCE: float = float(os.getenv("MIN_SIGNAL_CONFIDENCE", "0.65"))
+    DEFAULT_STRATEGY: str = os.getenv(
+        "ACTIVE_STRATEGY", "ema_crossover"
+    )
+    # True → AI выбирает стратегию автоматически
+    AI_STRATEGY_SELECTION: bool = (
+        os.getenv("AI_STRATEGY_SELECTION", "false").lower() == "true"
+    )
+    # Минимальный confidence для исполнения сигнала (0.0–1.0)
+    MIN_SIGNAL_CONFIDENCE: float = float(
+        os.getenv("MIN_SIGNAL_CONFIDENCE", "0.65")
+    )
 
-    # Data configuration
+    # ── Data / Symbols ─────────────────────────────────────────────────────
     DATA_DIR: str = "data"
-    SYMBOLS: List[str] = field(default_factory=lambda: ["BTC/USDT", "ETH/USDT", "ADA/USDT"])
-    TRADING_SYMBOLS: List[str] = field(default_factory=lambda: ["BTCUSDT", "ETHUSDT", "ADAUSDT"])
-    SYMBOL: str = os.getenv("TRADING_SYMBOL", "BTC/USDT")   # ccxt spot format
-    TIMEFRAME: str = os.getenv("TIMEFRAME", "15m")           # ccxt timeframe format
+    SYMBOLS: List[str] = field(
+        default_factory=lambda: ["BTC/USDT", "ETH/USDT", "ADA/USDT"]
+    )
+    TRADING_SYMBOLS: List[str] = field(
+        default_factory=lambda: ["BTCUSDT", "ETHUSDT", "ADAUSDT"]
+    )
+    # Основной символ в формате ccxt spot: BTC/USDT
+    SYMBOL: str = os.getenv("TRADING_SYMBOL", "BTC/USDT")
+    # Таймфрейм в формате ccxt: 1m, 5m, 15m, 1h, 4h, 1d
+    TIMEFRAME: str = os.getenv("TIMEFRAME", "15m")
 
-    # News configuration
+    # ── AI (Claude API) ────────────────────────────────────────────────────
+    ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
+    AI_MODEL: str = os.getenv("AI_MODEL", "claude-sonnet-4-6")
+
+    # ── Market Scanner ─────────────────────────────────────────────────────
+    # Сколько монет сканировать (топ по объёму)
+    SCAN_TOP_N: int = int(os.getenv("SCAN_TOP_N", "20"))
+    # True → автоматически исполнять топ-1 рекомендацию
+    AUTO_EXECUTE: bool = (
+        os.getenv("AUTO_EXECUTE", "false").lower() == "true"
+    )
+
+    # ── News ───────────────────────────────────────────────────────────────
     NEWS_API_KEY: str = os.getenv("NEWS_API_KEY", "")
-    NEWS_UPDATE_INTERVAL: int = 3600
-
+    # Интервал обновления новостей в секундах (900 = 15 мин)
+    NEWS_UPDATE_INTERVAL: int = int(
+        os.getenv("NEWS_UPDATE_INTERVAL", "900")
+    )
 
     @classmethod
     def from_env(cls) -> "Config":
-        """
-        Создает экземпляр Config на основе переменных окружения.
-
-        Этот классовый метод считывает все необходимые переменные окружения и
-        создает объект Config с этими значениями, используя значения по умолчанию
-        для отсутствующих переменных.
-
-        Логика: Вызывает конструктор cls с параметрами, полученными из os.getenv,
-        с преобразованием типов где необходимо.
-
-        Обработка ошибок: Может поднять ValueError при некорректном преобразовании
-        типов (например, int(os.getenv(...))), но это обрабатывается на уровне
-        интерпретатора.
-
-        :return: Новый экземпляр Config (Config).
-        """
+        """Создаёт экземпляр Config из переменных окружения."""
         return cls(
-            REDIS_URL=os.getenv("REDIS_URL", "redis://localhost:6379/0"),
+            REDIS_URL=os.getenv(
+                "REDIS_URL", "redis://localhost:6379/0"
+            ),
             REDIS_HOST=os.getenv("REDIS_HOST", "localhost"),
             REDIS_PORT=int(os.getenv("REDIS_PORT", 6379)),
             REDIS_DB=int(os.getenv("REDIS_DB", 0)),
             BYBIT_API_KEY=os.getenv("BYBIT_API_KEY", ""),
             BYBIT_API_SECRET=os.getenv("BYBIT_API_SECRET", ""),
-            INITIAL_BALANCE=float(os.getenv("INITIAL_BALANCE", 10000.0)),
-            RISK_PER_TRADE=float(os.getenv("RISK_PER_TRADE", 0.02)),
-            COMMISSION_RATE=float(os.getenv("COMMISSION_RATE", 0.001)),
-            TRADING_INTERVAL=int(os.getenv("TRADING_INTERVAL", 300)),
+            INITIAL_BALANCE=float(
+                os.getenv("INITIAL_BALANCE", "10000.0")
+            ),
+            RISK_PER_TRADE=float(
+                os.getenv("RISK_PER_TRADE", "0.02")
+            ),
+            COMMISSION_RATE=float(
+                os.getenv("COMMISSION_RATE", "0.001")
+            ),
+            TRADING_INTERVAL=int(
+                os.getenv("TRADING_INTERVAL", "30")
+            ),
             SYMBOL=os.getenv("TRADING_SYMBOL", "BTC/USDT"),
             TIMEFRAME=os.getenv("TIMEFRAME", "15m"),
             NEWS_API_KEY=os.getenv("NEWS_API_KEY", ""),
-            DEFAULT_STRATEGY=os.getenv("ACTIVE_STRATEGY", "ema_crossover"),
-            AI_STRATEGY_SELECTION=os.getenv("AI_STRATEGY_SELECTION", "false").lower() == "true",
-            MIN_SIGNAL_CONFIDENCE=float(os.getenv("MIN_SIGNAL_CONFIDENCE", "0.65")),
+            DEFAULT_STRATEGY=os.getenv(
+                "ACTIVE_STRATEGY", "ema_crossover"
+            ),
+            AI_STRATEGY_SELECTION=(
+                os.getenv(
+                    "AI_STRATEGY_SELECTION", "false"
+                ).lower() == "true"
+            ),
+            MIN_SIGNAL_CONFIDENCE=float(
+                os.getenv("MIN_SIGNAL_CONFIDENCE", "0.65")
+            ),
+            ANTHROPIC_API_KEY=os.getenv("ANTHROPIC_API_KEY", ""),
+            AI_MODEL=os.getenv("AI_MODEL", "claude-sonnet-4-6"),
+            SCAN_TOP_N=int(os.getenv("SCAN_TOP_N", "20")),
+            AUTO_EXECUTE=(
+                os.getenv("AUTO_EXECUTE", "false").lower() == "true"
+            ),
+            NEWS_UPDATE_INTERVAL=int(
+                os.getenv("NEWS_UPDATE_INTERVAL", "900")
+            ),
         )
 
     def validate(self):
-        """
-        Валидирует значения конфигурации.
+        """Валидирует конфигурацию.
 
-        Проверяет что все обязательные значения установлены и имеют допустимые диапазоны.
-
-        :raises ValueError: Если конфигурация некорректна.
+        :raises ValueError: Если параметры за пределами допустимых значений.
         """
         if self.INITIAL_BALANCE <= 0:
             raise ValueError("INITIAL_BALANCE must be positive")
         if not 0 < self.RISK_PER_TRADE < 1:
-            raise ValueError("RISK_PER_TRADE must be between 0 and 1")
+            raise ValueError(
+                "RISK_PER_TRADE must be between 0 and 1"
+            )
         if self.MAX_POSITION_SIZE <= 0 or self.MAX_POSITION_SIZE > 1:
-            raise ValueError("MAX_POSITION_SIZE must be between 0 and 1")
+            raise ValueError(
+                "MAX_POSITION_SIZE must be between 0 and 1"
+            )
         if self.COMMISSION_RATE < 0:
             raise ValueError("COMMISSION_RATE must be non-negative")
         if self.TRADING_INTERVAL <= 0:

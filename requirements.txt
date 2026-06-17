@@ -1,3 +1,4 @@
+anthropic>=0.30.0
 backtrader==1.9.76.123
 stable-baselines3==2.3.2
 gymnasium==0.29.1
