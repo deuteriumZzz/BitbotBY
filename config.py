@@ -65,8 +65,15 @@ class Config:
     STOP_LOSS_PERCENT: float = float(os.getenv("STOP_LOSS_PERCENT", "0.02"))
 
     # Strategy configuration
-    ENABLED_STRATEGIES: List[str] = field(default_factory=lambda: ["ema_crossover", "rsi_momentum"])
-    DEFAULT_STRATEGY: str = "ema_crossover"
+    ENABLED_STRATEGIES: List[str] = field(default_factory=lambda: [
+        "ema_crossover", "rsi_momentum", "macd_crossover", "bollinger_bands",
+        "scalping", "swing_trading", "breakout", "mean_reversion", "trend_following",
+    ])
+    DEFAULT_STRATEGY: str = os.getenv("ACTIVE_STRATEGY", "ema_crossover")
+    # Если True — AI выбирает стратегию автоматически по рыночным условиям
+    AI_STRATEGY_SELECTION: bool = os.getenv("AI_STRATEGY_SELECTION", "false").lower() == "true"
+    # Минимальный confidence сигнала для исполнения (0.0–1.0)
+    MIN_SIGNAL_CONFIDENCE: float = float(os.getenv("MIN_SIGNAL_CONFIDENCE", "0.65"))
 
     # Data configuration
     DATA_DIR: str = "data"
@@ -109,9 +116,12 @@ class Config:
             RISK_PER_TRADE=float(os.getenv("RISK_PER_TRADE", 0.02)),
             COMMISSION_RATE=float(os.getenv("COMMISSION_RATE", 0.001)),
             TRADING_INTERVAL=int(os.getenv("TRADING_INTERVAL", 300)),
-            SYMBOL=os.getenv("TRADING_SYMBOL", "BTCUSDT"),
-            TIMEFRAME=os.getenv("TIMEFRAME", "15"),
+            SYMBOL=os.getenv("TRADING_SYMBOL", "BTC/USDT"),
+            TIMEFRAME=os.getenv("TIMEFRAME", "15m"),
             NEWS_API_KEY=os.getenv("NEWS_API_KEY", ""),
+            DEFAULT_STRATEGY=os.getenv("ACTIVE_STRATEGY", "ema_crossover"),
+            AI_STRATEGY_SELECTION=os.getenv("AI_STRATEGY_SELECTION", "false").lower() == "true",
+            MIN_SIGNAL_CONFIDENCE=float(os.getenv("MIN_SIGNAL_CONFIDENCE", "0.65")),
         )
 
     def validate(self):
