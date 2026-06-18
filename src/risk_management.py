@@ -4,6 +4,7 @@ from typing import Any, Dict
 
 import numpy as np
 
+from config import Config
 from src.redis_client import RedisClient
 
 
@@ -132,7 +133,7 @@ class RiskManager:
             return False
 
         # Check if confidence is sufficient
-        if signal.get("confidence", 0) < 0.6:
+        if signal.get("confidence", 0) < Config.MIN_SIGNAL_CONFIDENCE:
             self.logger.warning("Signal confidence too low")
             return False
 
