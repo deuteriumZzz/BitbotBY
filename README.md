@@ -10,9 +10,14 @@
 - **4 режима торговли** — `local`, `ai`, `dqn`, `hybrid`
 - **9 технических стратегий** — EMA, RSI, MACD, Bollinger Bands, Scalping, Swing, Breakout, Mean Reversion, Trend Following
 - **Claude AI** анализирует рынок и выбирает стратегию/монету для каждой сделки
-- **SAC нейросеть** (Stable-Baselines3) — RL-агент с reward на основе log-return − штраф за просадку
+- **SAC нейросеть** (Stable-Baselines3) — RL-агент, reward = log-return + rolling Sharpe bonus − drawdown penalty
 - **Train/test split 80/20** — оценка модели на out-of-sample данных после обучения
-- **Анализ новостей** — NewsAPI + VADER sentiment, кэш 15 мин
+- **Optuna** — автоматический поиск гиперпараметров SAC (30 trials, 50k шагов/trial)
+- **Walk-forward retraining** — скользящее 4-месячное окно, шаг 1 месяц
+- **Market regime detection** — GaussianHMM (hmmlearn) определяет trending_up / ranging / trending_down
+- **Kelly criterion** — Half-Kelly (×0.5) с кэпом 20% для расчёта размера позиции
+- **Реалистичный бэктест** — bid/ask spread 0.05% + market impact 0.02%
+- **Анализ новостей** — Claude API sentiment (fallback: VADER), кэш 15 мин
 - **Telegram-подтверждения** — кнопки Trade/Skip, авто-исполнение через 60 сек
 - **Backtest** — walk-forward тест всех 9 стратегий на 6 месяцах истории
 - **Win Rate и EV** — бэктест и live статистика отображаются раздельно
@@ -101,6 +106,8 @@ make backtest-eth      # ETH/USDT
 |---------|----------|
 | `make train` | Обучить SAC-модель (500k шагов) |
 | `make train-long` | Обучить SAC-модель (1M шагов) |
+| `make tune` | Optuna поиск гиперпараметров (30 trials) |
+| `make retrain` | Walk-forward retraining (4м окно, 1м шаг) |
 | `make backtest` | Walk-forward бэктест на BTC/USDT |
 | `make paper` | Paper trading (MODE=local, без ордеров) |
 | `make paper-ai` | Paper trading с Claude AI |
@@ -188,9 +195,10 @@ supervisor.py / run_bot.py
         ├── DataLoader         — OHLCV через ccxt, кэш CSV 24ч
         ├── indicators.py      — RSI, MACD, BB, ATR, EMA, SMA
         ├── 9 стратегий        — сигналы buy/sell/hold + confidence
-        ├── DQNSignal          — SAC-инференс (SB3), вес 40% в hybrid
+        ├── SACSignal          — SAC-инференс (SB3), вес 40% в hybrid
         ├── Claude AI          — анализ рынка, вес 60% в hybrid
-        ├── NewsAnalyzer       — VADER sentiment, Redis кэш 15 мин
+        ├── RegimeDetector     — GaussianHMM: trending_up/ranging/trending_down
+        ├── NewsAnalyzer       — Claude sentiment (VADER fallback), Redis 15 мин
         ├── SignalCombiner     — финальный взвешенный сигнал
         ├── RiskManager        — размер позиции, SL/TP, daily limit
         ├── TelegramNotifier   — Trade/Skip кнопки, 60с таймаут
@@ -209,8 +217,9 @@ docker-compose.yml
   └── bitbot_grafana    — дашборды (:3000)
 
 reinforcement_learning/
-  ├── rl_env.py      — TradingEnv (Gymnasium): log-return reward − drawdown penalty
-  └── train_sac.py   — обучение SAC: 80/20 train/test split, eval на out-of-sample
+  ├── rl_env.py      — TradingEnv: log-return + Sharpe bonus − drawdown penalty
+  ├── train_sac.py   — обучение SAC: 80/20 split, Optuna hyperparams, walk-forward
+  └── tune_sac.py    — Optuna поиск гиперпараметров → models/best_hyperparams.json
 ```
 
 ---

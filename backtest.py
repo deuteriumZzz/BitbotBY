@@ -29,6 +29,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config import Config
 from src.indicators import add_indicators
+from src.market_impact import estimate_from_df as _ac_impact
 from src.strategies import STRATEGY_REGISTRY, BaseStrategy
 
 # ── Constants ──────────────────────────────────────────────────────────────
@@ -315,7 +316,14 @@ def run_strategy(
             confidence = float(signal.get("confidence", 0.0))
 
             if action in ("buy", "sell") and confidence >= min_confidence:
-                entry_price = float(window["close"].iloc[-1])
+                mid = float(window["close"].iloc[-1])
+                position_usdt = balance * risk_per_trade
+                # Almgren-Chriss adaptive impact: adapts to order size & volatility
+                impact = _ac_impact(window, position_usdt)
+                if action == "buy":
+                    entry_price = mid * (1.0 + impact)
+                else:
+                    entry_price = mid * (1.0 - impact)
                 atr_val = (
                     float(window["atr"].iloc[-1]) if "atr" in window.columns else 0.0
                 )
@@ -366,7 +374,12 @@ def run_strategy(
             )
 
             if sl_hit or tp_hit:
-                exit_price = current_price
+                exit_impact = _ac_impact(window, open_trade["position_usdt"])
+                d = open_trade["direction"]
+                if d == 1:  # long → sell at bid
+                    exit_price = current_price * (1.0 - exit_impact)
+                else:  # short → buy at ask
+                    exit_price = current_price * (1.0 + exit_impact)
                 qty = open_trade["quantity"]
                 exit_comm = qty * exit_price * commission_rate
                 total_comm = open_trade["entry_comm"] + exit_comm
@@ -400,7 +413,13 @@ def run_strategy(
 
     # ── Force-close any remaining position ───────────────────────
     if open_trade is not None and n > 0:
-        exit_price = float(df["close"].iloc[-1])
+        d = open_trade["direction"]
+        mid_close = float(df["close"].iloc[-1])
+        close_impact = _ac_impact(df.iloc[-50:], open_trade["position_usdt"])
+        if d == 1:
+            exit_price = mid_close * (1.0 - close_impact)
+        else:
+            exit_price = mid_close * (1.0 + close_impact)
         qty = open_trade["quantity"]
         d = open_trade["direction"]
         exit_comm = qty * exit_price * commission_rate

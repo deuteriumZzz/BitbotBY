@@ -6,8 +6,6 @@ import logging
 import os
 from typing import List, Tuple
 
-from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
-
 from config import Config
 from src.redis_client import RedisClient
 
@@ -50,15 +48,17 @@ class NewsAnalyzer:
     """
 
     def __init__(self):
-        self.analyzer = SentimentIntensityAnalyzer()
         self.redis = RedisClient()
         self.logger = logging.getLogger(__name__)
-        api_key = os.getenv("NEWS_API_KEY", "")
-        self._enabled = bool(api_key)
+        news_key = os.getenv("NEWS_API_KEY", "")
+        self._enabled = bool(news_key)
         if self._enabled:
             from newsapi import NewsApiClient
 
-            self.newsapi = NewsApiClient(api_key=api_key)
+            self.newsapi = NewsApiClient(api_key=news_key)
+        # Claude API sentiment (preferred); VADER is fallback
+        self._anthropic_key = os.getenv("ANTHROPIC_API_KEY", "")
+        self._use_claude = bool(self._anthropic_key)
 
     def _cache_key(self, symbol: str) -> str:
         """
@@ -136,24 +136,92 @@ class NewsAnalyzer:
         if not articles:
             return 0.0, []
 
-        sentiments = []
-        headlines = []
-        for art in articles:
-            title = art.get("title", "") or ""
-            desc = art.get("description", "") or ""
-            text = f"{title} {desc}".strip()
-            if text:
-                scores = self.analyzer.polarity_scores(text)
-                sentiments.append(scores["compound"])
-                if title:
-                    headlines.append(title[:100])
+        headlines = [
+            (art.get("title", "") or "")[:100]
+            for art in articles
+            if art.get("title")
+        ]
 
-        sentiment = sum(sentiments) / len(sentiments) if sentiments else 0.0
+        if self._use_claude:
+            sentiment = await self._score_with_claude(base, headlines)
+        else:
+            sentiment = self._score_with_vader(articles)
+
         self._save_cache(symbol, sentiment, headlines[:5])
         self.logger.info(
-            f"News [{base}]: sentiment={sentiment:.3f}, " f"articles={len(articles)}"
+            "News [%s]: sentiment=%.3f, articles=%d (scorer=%s)",
+            base,
+            sentiment,
+            len(articles),
+            "claude" if self._use_claude else "vader",
         )
         return sentiment, headlines[:5]
+
+    async def _score_with_claude(self, coin: str, headlines: List[str]) -> float:
+        """
+        Score sentiment with Claude API (haiku-tier for cost efficiency).
+
+        Batches all headlines in one prompt, returns float -1..1.
+        Falls back to VADER if the API call fails.
+
+        :param coin: Coin ticker, e.g. "BTC".
+        :param headlines: List of news headline strings.
+        :return: Sentiment score -1.0 (very bearish) to +1.0 (very bullish).
+        """
+        if not headlines:
+            return 0.0
+        try:
+            import anthropic
+
+            bullet_list = "\n".join(f"- {h}" for h in headlines[:10])
+            prompt = (
+                f"Rate the overall market sentiment for {coin} cryptocurrency "
+                f"based on these recent news headlines:\n\n{bullet_list}\n\n"
+                "Reply with ONLY a single decimal number between -1.0 (extremely "
+                "bearish) and 1.0 (extremely bullish). No explanation."
+            )
+            client = anthropic.AsyncAnthropic(api_key=self._anthropic_key)
+            message = await client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=16,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            text = message.content[0].text.strip()
+            score = max(-1.0, min(1.0, float(text)))
+            return score
+        except Exception as exc:
+            self.logger.warning(
+                "Claude sentiment failed, falling back to VADER: %s", exc
+            )
+            return self._score_with_vader_headlines(headlines)
+
+    def _score_with_vader(self, articles: list) -> float:
+        """VADER fallback: score title+description for each article."""
+        try:
+            from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+
+            analyzer = SentimentIntensityAnalyzer()
+            scores = []
+            for art in articles:
+                title = art.get("title", "") or ""
+                desc = art.get("description", "") or ""
+                text = f"{title} {desc}".strip()
+                if text:
+                    scores.append(analyzer.polarity_scores(text)["compound"])
+            return sum(scores) / len(scores) if scores else 0.0
+        except Exception:
+            return 0.0
+
+    def _score_with_vader_headlines(self, headlines: List[str]) -> float:
+        """VADER fallback for headline-only list."""
+        try:
+            from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+
+            analyzer = SentimentIntensityAnalyzer()
+            scores = [analyzer.polarity_scores(h)["compound"] for h in headlines if h]
+            return sum(scores) / len(scores) if scores else 0.0
+        except Exception:
+            return 0.0
 
     async def _fetch_for_symbol(self, query: str) -> list:
         """

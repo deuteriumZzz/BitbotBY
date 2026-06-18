@@ -24,6 +24,10 @@ MODEL_PATH = "models/sac_model.zip"
 TOTAL_TIMESTEPS = int(os.getenv("TOTAL_TIMESTEPS", "500000"))
 # Доля данных для обучения (остаток — тестовая выборка)
 TRAIN_SPLIT = 0.8
+# Walk-forward: обучаем на N месяцах, тестируем на M, сдвигаем на M
+_WF_TRAIN_MONTHS = 4
+_WF_STEP_MONTHS = 1
+_CANDLES_PER_MONTH = 2880  # 15m * 24h * 30d
 
 
 def _backup_existing_model(path: str) -> None:
@@ -168,9 +172,27 @@ def train(
     )
     logger.info("Обучение SAC: %d шагов", total_timesteps)
 
+    # Load Optuna best hyperparams if available
+    hp_path = "models/best_hyperparams.json"
+    policy_kwargs: dict = {}
+    sac_kwargs: dict = {"verbose": 1}
+    if os.path.exists(hp_path):
+        with open(hp_path) as _f:
+            best_hp = json.load(_f)
+        arch_map = {"small": [64, 64], "medium": [256, 256], "large": [400, 300]}
+        arch_name = best_hp.pop("net_arch", "medium")
+        policy_kwargs = {"net_arch": arch_map.get(arch_name, [256, 256])}
+        sac_kwargs.update(best_hp)
+        logger.info("Загружены Optuna-гиперпараметры из %s", hp_path)
+
     try:
         env = Monitor(TradingEnv(train_df))
-        model = SAC("MlpPolicy", env, verbose=1)
+        model = SAC(
+            "MlpPolicy",
+            env,
+            policy_kwargs=policy_kwargs or None,
+            **sac_kwargs,
+        )
         model.learn(total_timesteps=total_timesteps)
     except Exception as e:
         logger.error(f"Ошибка обучения SAC: {e}", exc_info=True)
@@ -192,6 +214,90 @@ def train(
     _save_norm_stats(model_path, norm_stats)
 
     return model_path
+
+
+def train_walk_forward(
+    df: pd.DataFrame,
+    model_path: str = MODEL_PATH,
+    train_months: int = _WF_TRAIN_MONTHS,
+    step_months: int = _WF_STEP_MONTHS,
+    total_timesteps: int = 100_000,
+) -> str | None:
+    """
+    Walk-forward retraining: скользящее окно train→validate.
+
+    Обучает SAC на окне train_months, оценивает на следующем step_months,
+    сдвигает окно, повторяет. Последняя итерация сохраняет финальную модель.
+
+    :param df: Полный датафрейм OHLCV.
+    :param model_path: Куда сохранить итоговую модель.
+    :param train_months: Размер тренировочного окна (в месяцах).
+    :param step_months: Шаг сдвига окна (в месяцах).
+    :param total_timesteps: Шагов обучения за итерацию.
+    :return: Путь к финальной модели или None при ошибке.
+    """
+    train_size = train_months * _CANDLES_PER_MONTH
+    step_size = step_months * _CANDLES_PER_MONTH
+    n = len(df)
+
+    if n < train_size + step_size:
+        logger.error(
+            "Недостаточно данных для walk-forward: %d свечей, нужно %d",
+            n,
+            train_size + step_size,
+        )
+        return None
+
+    starts = list(range(0, n - train_size - step_size + 1, step_size))
+    logger.info(
+        "Walk-forward: %d итераций, окно=%d, шаг=%d свечей",
+        len(starts),
+        train_size,
+        step_size,
+    )
+
+    last_saved = None
+    for i, start in enumerate(starts, 1):
+        train_df = df.iloc[start : start + train_size].reset_index(drop=True)
+        val_df = df.iloc[
+            start + train_size : start + train_size + step_size
+        ].reset_index(drop=True)
+
+        logger.info(
+            "WF [%d/%d] train=[%d:%d] val=[%d:%d]",
+            i,
+            len(starts),
+            start,
+            start + train_size,
+            start + train_size,
+            start + train_size + step_size,
+        )
+
+        norm_stats = _compute_norm_stats(train_df)
+        try:
+            from stable_baselines3 import SAC  # noqa: I001
+            from stable_baselines3.common.monitor import Monitor
+
+            from reinforcement_learning.rl_env import TradingEnv
+
+            env = Monitor(TradingEnv(train_df))
+            model = SAC("MlpPolicy", env, verbose=0)
+            model.learn(total_timesteps=total_timesteps)
+        except Exception as exc:
+            logger.error("WF [%d/%d] ошибка обучения: %s", i, len(starts), exc)
+            continue
+
+        _evaluate_model(model, val_df)
+
+        # Финальная итерация — сохраняем как основную модель
+        if i == len(starts):
+            save_path = model_path.replace(".zip", "")
+            model.save(save_path)
+            _save_norm_stats(model_path, norm_stats)
+            last_saved = model_path
+            logger.info("Walk-forward завершён → %s.zip", save_path)
+
+    return last_saved
 
 
 if __name__ == "__main__":

@@ -5,33 +5,42 @@ from typing import Any, Dict, List, Tuple
 
 from config import Config
 from src.ai_analyzer import AIAnalyzer
-from src.dqn_signal import DQNSignal
+from src.dqn_signal import SACSignal
 
 logger = logging.getLogger(__name__)
 
 
+_REGIME_WEIGHTS: dict[str, tuple[float, float]] = {
+    # (sac_weight, ai_weight) per detected market regime
+    "trending_up": (0.5, 0.5),    # momentum favours SAC
+    "trending_down": (0.3, 0.7),  # uncertainty → trust AI more
+    "ranging": (0.4, 0.6),        # default balance
+    "unknown": (0.4, 0.6),
+}
+
+
 class SignalCombiner:
     """
-    Объединяет сигналы DQN и AI согласно MODE.
+    Объединяет сигналы SAC и AI согласно MODE.
 
     MODE=local   → [] (trading_bot использует local fallback)
-    MODE=dqn     → только DQN, без Claude API
-    MODE=ai      → только Claude API, без DQN
+    MODE=dqn     → только SAC, без Claude API
+    MODE=ai      → только Claude API, без SAC
     MODE=hybrid  → оба должны согласиться; расхождение → hold
 
     hybrid-логика:
-    - Оба buy/sell → combined conf = 0.4*DQN + 0.6*AI
+    - Оба buy/sell → combined conf = w_sac*SAC + w_ai*AI (режим-зависимо)
     - Расходятся → пропуск
-    - AI молчит, DQN conf >= 0.80 → доверяем DQN
+    - AI молчит, SAC conf >= 0.80 → доверяем SAC
     """
 
-    _W_DQN = 0.4
+    _W_SAC = 0.4
     _W_AI = 0.6
-    _DQN_SOLO_MIN = 0.80
+    _SAC_SOLO_MIN = 0.80
 
     def __init__(self, ai: AIAnalyzer):
         self.ai = ai
-        self.dqn = DQNSignal()
+        self.sac = SACSignal()
         self.logger = logging.getLogger(__name__)
         self.logger.info(f"SignalCombiner mode={Config.MODE}")
 
@@ -39,12 +48,14 @@ class SignalCombiner:
         self,
         snapshots: List[Dict[str, Any]],
         balance: float,
+        regime: str = "unknown",
     ) -> List[Dict[str, Any]]:
         """
         Возвращает рекомендации согласно MODE.
 
         :param snapshots: Снэпшоты из MarketScanner.
         :param balance: Баланс USDT.
+        :param regime: Текущий рыночный режим ("trending_up" / "ranging" / etc.).
         :return: Список рекомендаций.
         """
         mode = Config.MODE
@@ -56,10 +67,10 @@ class SignalCombiner:
             return await self.ai.analyze(snapshots, balance)
 
         if mode == "dqn":
-            return self._dqn_only(snapshots, balance)
+            return self._sac_only(snapshots, balance)
 
         if mode == "hybrid":
-            return await self._hybrid(snapshots, balance)
+            return await self._hybrid(snapshots, balance, regime)
 
         self.logger.warning(f"Unknown MODE='{mode}', fallback to 'ai'")
         return await self.ai.analyze(snapshots, balance)
@@ -82,13 +93,13 @@ class SignalCombiner:
             tp = price - 3.0 * atr
         return round(sl, 6), round(tp, 6)
 
-    def _dqn_only(
+    def _sac_only(
         self,
         snapshots: List[Dict[str, Any]],
         balance: float,
     ) -> List[Dict[str, Any]]:
         """
-        Формирует рекомендации только на основе DQN-сигналов.
+        Формирует рекомендации только на основе SAC-сигналов.
 
         :param snapshots: Снэпшоты из MarketScanner.
         :param balance: Баланс USDT.
@@ -97,7 +108,7 @@ class SignalCombiner:
         results: List[Dict[str, Any]] = []
         min_conf = Config.MIN_SIGNAL_CONFIDENCE
         for snap in snapshots:
-            sig = self.dqn.get_signal(snap, balance)
+            sig = self.sac.get_signal(snap, balance)
             if sig["action"] == "hold" or sig["confidence"] < min_conf:
                 continue
             price = snap.get("price", 0)
@@ -107,12 +118,12 @@ class SignalCombiner:
                 {
                     "symbol": snap["symbol"],
                     "action": sig["action"],
-                    "strategy": "dqn",
+                    "strategy": "sac",
                     "confidence": sig["confidence"],
                     "entry": price,
                     "stop_loss": sl,
                     "take_profit": tp,
-                    "reasoning": (f"DQN Q-conf {sig['confidence']:.0%}"),
+                    "reasoning": f"SAC conf {sig['confidence']:.0%}",
                 }
             )
         return results
@@ -121,30 +132,38 @@ class SignalCombiner:
         self,
         snapshots: List[Dict],
         balance: float,
+        regime: str = "unknown",
     ) -> List[Dict]:
         """
-        Гибридный режим: согласие DQN + AI.
+        Гибридный режим: согласие SAC + AI с режим-зависимыми весами.
 
-        Взвешенный confidence: 40% DQN + 60% AI.
+        Взвешенный confidence определяется текущим рыночным режимом:
+        trending_up → SAC 50%/AI 50%, trending_down → SAC 30%/AI 70%,
+        ranging / unknown → SAC 40%/AI 60%.
         """
+        w_sac, w_ai = _REGIME_WEIGHTS.get(regime, (self._W_SAC, self._W_AI))
+        if regime != "unknown":
+            self.logger.info("Hybrid weights: SAC=%.0f%% AI=%.0f%% (regime=%s)",
+                             w_sac * 100, w_ai * 100, regime)
+
         ai_recs = await self.ai.analyze(snapshots, balance)
         ai_map: Dict[str, Dict] = {r["symbol"]: r for r in ai_recs}
 
         results = []
         for snap in snapshots:
             sym = snap["symbol"]
-            dqn = self.dqn.get_signal(snap, balance)
+            sac_sig = self.sac.get_signal(snap, balance)
             ai = ai_map.get(sym)
 
-            d_action = dqn["action"]
-            d_conf = dqn["confidence"]
+            d_action = sac_sig["action"]
+            d_conf = sac_sig["confidence"]
 
             if d_action == "hold":
                 continue
 
-            # AI молчит — принимаем DQN только при высоком conf
+            # AI молчит — принимаем SAC только при высоком conf
             if ai is None:
-                if d_conf >= self._DQN_SOLO_MIN:
+                if d_conf >= self._SAC_SOLO_MIN:
                     price = snap.get("price", 0)
                     atr = snap.get("atr", price * 0.02)
                     sl, tp = self._sl_tp(price, atr, d_action)
@@ -152,12 +171,12 @@ class SignalCombiner:
                         {
                             "symbol": sym,
                             "action": d_action,
-                            "strategy": "dqn",
+                            "strategy": "sac",
                             "confidence": d_conf,
                             "entry": price,
                             "stop_loss": sl,
                             "take_profit": tp,
-                            "reasoning": (f"DQN {d_conf:.0%}, AI silent"),
+                            "reasoning": f"SAC {d_conf:.0%}, AI silent",
                         }
                     )
                 continue
@@ -166,24 +185,23 @@ class SignalCombiner:
 
             if d_action == a_action:
                 a_conf = ai.get("confidence", 0)
-                combined = round(
-                    d_conf * self._W_DQN + a_conf * self._W_AI,
-                    3,
-                )
+                combined = round(d_conf * w_sac + a_conf * w_ai, 3)
                 if combined < Config.MIN_SIGNAL_CONFIDENCE:
                     continue
                 rec = dict(ai)
                 rec["confidence"] = combined
                 base_strat = ai.get("strategy", "ai")
-                rec["strategy"] = f"hybrid({base_strat}+dqn)"
+                rec["strategy"] = f"hybrid({base_strat}+sac)"
                 reason = ai.get("reasoning", "").strip()
                 rec["reasoning"] = (
-                    f"{reason} [DQN {d_conf:.0%}]"
+                    f"{reason} [SAC {d_conf:.0%}, regime={regime}]"
                     if reason
-                    else f"AI+DQN agree, DQN {d_conf:.0%}"
+                    else f"AI+SAC agree, SAC {d_conf:.0%}, regime={regime}"
                 )
                 results.append(rec)
             else:
-                self.logger.debug(f"{sym}: AI={a_action} " f"vs DQN={d_action} → hold")
+                self.logger.debug(
+                    "%s: AI=%s vs SAC=%s → hold", sym, a_action, d_action
+                )
 
         return results

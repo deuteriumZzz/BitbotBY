@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from collections import deque
 from typing import Any, Dict, Tuple
 
 import gymnasium as gym
@@ -58,9 +59,9 @@ class TradingEnv(gym.Env):
         self.current_value = initial_balance
         self.total_commission = 0.0
 
-        # Непрерывное пространство действий для SAC
-        # Peak portfolio value for drawdown tracking
+        # Peak value for drawdown tracking; rolling returns for Sharpe
         self.peak_value: float = initial_balance
+        self._returns: deque = deque(maxlen=50)
 
         self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32)
 
@@ -123,6 +124,7 @@ class TradingEnv(gym.Env):
         self.current_value = self.initial_balance
         self.total_commission = 0.0
         self.peak_value = self.initial_balance
+        self._returns.clear()
         return self._get_observation(), {}
 
     def step(
@@ -168,18 +170,26 @@ class TradingEnv(gym.Env):
 
         self.current_value = self.balance + self.position * current_price
 
-        # Log return in percent (scales ±0.1% move → ±0.1 reward unit)
+        # Log return in percent (±0.1% move → ±0.1 reward unit)
         log_ret = 100.0 * float(np.log(self.current_value / max(prev_value, 1e-8)))
+        self._returns.append(log_ret)
 
-        # Track all-time peak to measure drawdown
+        # Rolling Sharpe bonus (only once ≥10 returns accumulated)
+        if len(self._returns) >= 10:
+            mu = float(np.mean(self._returns))
+            sd = float(np.std(self._returns)) + 1e-8
+            sharpe_bonus = 0.1 * (mu / sd)
+        else:
+            sharpe_bonus = 0.0
+
+        # Drawdown penalty (% of initial balance, factor 0.01)
         self.peak_value = max(self.peak_value, self.current_value)
-
-        # Drawdown from peak as % of initial balance; penalty factor 0.01
-        # keeps it on the same scale as log_ret for typical crypto moves
         drawdown_pct = (
-            100.0 * max(0.0, self.peak_value - self.current_value) / self.initial_balance
+            100.0
+            * max(0.0, self.peak_value - self.current_value)
+            / self.initial_balance
         )
-        reward = log_ret - 0.01 * drawdown_pct
+        reward = log_ret + sharpe_bonus - 0.01 * drawdown_pct
 
         self.current_step += 1
         if self.current_step >= len(self.data) - 1:

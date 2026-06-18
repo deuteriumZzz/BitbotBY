@@ -1,4 +1,4 @@
-.PHONY: train train-long backtest backtest-eth paper paper-ai live test lint fmt up down logs
+.PHONY: train train-long tune retrain backtest backtest-eth paper paper-ai live test lint fmt up down logs
 
 # ── Training ───────────────────────────────────────────────────────────────────
 train:
@@ -9,6 +9,23 @@ train:
 train-long:
 	@echo ">>> Training SAC model (1M steps, ~2 h on CPU)..."
 	PYTHONPATH=. TOTAL_TIMESTEPS=1000000 python3 reinforcement_learning/train_sac.py
+
+tune:
+	@echo ">>> Optuna hyperparameter search (30 trials × 50k steps)..."
+	PYTHONPATH=. python3 reinforcement_learning/tune_sac.py
+	@echo ">>> Best params saved to models/best_hyperparams.json"
+
+retrain:
+	@echo ">>> Walk-forward retraining (4-month windows, 1-month step)..."
+	PYTHONPATH=. python3 -c "import asyncio, os; \
+from src.data_loader import DataLoader; \
+from reinforcement_learning.train_sac import train_walk_forward; \
+async def r(): \
+    l = DataLoader(); \
+    await l.initialize(os.getenv('BYBIT_API_KEY',''), os.getenv('BYBIT_API_SECRET','')); \
+    df = await l.load_ohlcv(os.getenv('TRADING_SYMBOL','BTC/USDT'), '15m', limit=17280); \
+    train_walk_forward(df); \
+asyncio.run(r())"
 
 # ── Backtesting ────────────────────────────────────────────────────────────────
 backtest:

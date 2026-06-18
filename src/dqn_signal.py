@@ -115,12 +115,11 @@ def _snap_to_obs(
     return raw
 
 
-class DQNSignal:
+class SACSignal:
     """
-    Инференс SAC-модели (SB3) для одного снэпшота рынка.
+    Инференс SAC-модели (Stable-Baselines3) для одного снэпшота рынка.
 
-    Сохраняет имя класса DQNSignal для обратной совместимости
-    с SignalCombiner. Загружает модель из Config.SAC_MODEL_PATH.
+    Загружает модель из Config.SAC_MODEL_PATH.
     При отсутствии файла модели возвращает hold с conf=0.
     """
 
@@ -224,3 +223,6 @@ class DQNSignal:
         except Exception as e:
             self.logger.error(f"Ошибка инференса SAC: {e}", exc_info=True)
             return default
+
+
+DQNSignal = SACSignal  # backward-compat alias for SignalCombiner

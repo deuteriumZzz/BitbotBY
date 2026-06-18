@@ -145,6 +145,45 @@ class RiskManager:
 
         return True
 
+    def calculate_kelly_size(
+        self,
+        entry_price: float,
+        stop_loss: float,
+        take_profit: float,
+        win_rate: float,
+        current_balance: float,
+    ) -> float:
+        """
+        Рассчитывает размер позиции по критерию Келли (Half-Kelly).
+
+        Kelly fraction = (p·b − q) / b, где b = reward/risk, p = win_rate.
+        Используется Half-Kelly (×0.5) и кэп 20% баланса для защиты от
+        оverbetting при зашумлённых оценках win_rate.
+
+        :param entry_price: Цена входа.
+        :param stop_loss: Цена стоп-лосса.
+        :param take_profit: Цена тейк-профита.
+        :param win_rate: Доля прибыльных сделок [0, 1].
+        :param current_balance: Текущий баланс USDT.
+        :return: Размер позиции в единицах актива (0 если Kelly ≤ 0).
+        """
+        if entry_price <= 0 or stop_loss <= 0 or take_profit <= 0:
+            return 0.0
+        risk = abs(entry_price - stop_loss)
+        reward = abs(take_profit - entry_price)
+        if risk <= 0:
+            return 0.0
+
+        b = reward / risk  # reward-to-risk ratio
+        p = max(0.0, min(1.0, win_rate))
+        q = 1.0 - p
+
+        kelly = (p * b - q) / b
+        # Half-Kelly, capped at 20% to limit overbetting from noisy win_rate
+        fraction = max(0.0, min(kelly * 0.5, 0.20))
+        usdt = current_balance * fraction
+        return usdt / entry_price
+
     def check_daily_loss_limit(self, current_balance: float) -> bool:
         """
         Проверяет, не превышен ли дневной лимит потерь.

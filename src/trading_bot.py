@@ -9,10 +9,13 @@ from config import Config
 from src.ai_analyzer import AIAnalyzer
 from src.bybit_api import BybitAPI
 from src.data_loader import DataLoader
+from src.market_impact import estimate_from_df as _ac_impact
 from src.market_scanner import MarketScanner
 from src.news_analyzer import NewsAnalyzer
 from src.portfolio_manager import PortfolioManager
+from src.portfolio_optimizer import PortfolioOptimizer
 from src.redis_client import RedisClient
+from src.regime_detector import RegimeDetector
 from src.risk_management import RiskManager
 from src.signal_combiner import SignalCombiner
 from src.strategies import TradingStrategy
@@ -54,6 +57,9 @@ class TradingBot:
         self.news = NewsAnalyzer()
         self.ai = AIAnalyzer()
         self.combiner = SignalCombiner(self.ai)
+        self.regime_detector = RegimeDetector()
+        self._current_regime: str = "unknown"
+        self.portfolio_optimizer = PortfolioOptimizer()
         self.is_running = False
         # symbol → {qty, stop_loss, take_profit, side, ...}
         self._monitored: dict = {}
@@ -89,6 +95,7 @@ class TradingBot:
             await self.strategy.initialize()
             await self._restore_state()
             await self.telegram.start()
+            await self._fit_regime_detector()
             logger.info("Trading bot initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize: {e}")
@@ -104,6 +111,75 @@ class TradingBot:
                 "balance", Config.INITIAL_BALANCE
             )
             self.portfolio_manager.positions = portfolio.get("positions", {})
+
+    async def _fit_regime_detector(self) -> None:
+        """Загружает исторические данные и обучает RegimeDetector."""
+        try:
+            df = await self.data_loader.load_ohlcv(
+                Config.SYMBOL, Config.TIMEFRAME, limit=2000
+            )
+            if df is not None and not df.empty:
+                self.regime_detector.fit(df)
+                logger.info("RegimeDetector fitted on %d candles", len(df))
+        except Exception as exc:
+            logger.warning("RegimeDetector fit skipped: %s", exc)
+
+    def _optimize_allocation(
+        self,
+        recs: list,
+        market_data: dict,
+    ) -> list:
+        """
+        Annotate buy recommendations with CVaR-optimal allocation fractions.
+
+        When ≥2 buy signals exist, runs PortfolioOptimizer.allocate() on the
+        joint returns matrix and adds "alloc_fraction" to each rec.
+        Single-signal or sell signals keep Config.RISK_PER_TRADE.
+
+        :param recs: Recommendations from SignalCombiner.
+        :param market_data: {symbol: DataFrame} from the current cycle scan.
+        :return: recs with "alloc_fraction" field populated.
+        """
+        buy_syms = [r["symbol"] for r in recs if r.get("action") == "buy"]
+
+        if len(buy_syms) < 2:
+            for r in recs:
+                r.setdefault("alloc_fraction", Config.RISK_PER_TRADE)
+            return recs
+
+        returns_list = []
+        valid: list[str] = []
+        for sym in buy_syms:
+            df = market_data.get(sym)
+            if df is not None and len(df) >= 30:
+                ret = (
+                    df["close"]
+                    .astype(float)
+                    .pct_change()
+                    .dropna()
+                    .rename(sym)
+                )
+                returns_list.append(ret)
+                valid.append(sym)
+
+        if len(valid) >= 2:
+            import pandas as pd
+
+            returns_df = pd.concat(returns_list, axis=1).dropna()
+            weights = self.portfolio_optimizer.allocate(valid, returns_df)
+        else:
+            weights = {}
+
+        for r in recs:
+            sym = r.get("symbol", "")
+            if r.get("action") == "buy" and sym in weights:
+                # Weight is portfolio share; scale to max RISK_PER_TRADE * 3
+                r["alloc_fraction"] = min(
+                    weights[sym], Config.RISK_PER_TRADE * 3
+                )
+            else:
+                r.setdefault("alloc_fraction", Config.RISK_PER_TRADE)
+        return recs
 
     async def _get_balance_usdt(self) -> float:
         """Свободный баланс USDT (fallback — PortfolioManager)."""
@@ -256,7 +332,43 @@ class TradingBot:
             return
 
         balance = await self._get_balance_usdt()
-        quantity = balance * Config.RISK_PER_TRADE / entry
+
+        # Portfolio optimizer provides the allocation fraction (CVaR-optimal)
+        alloc_fraction = top.get("alloc_fraction", Config.RISK_PER_TRADE)
+        portfolio_qty = balance * alloc_fraction / entry
+
+        # Kelly criterion caps the portfolio allocation when enough trade history
+        stop_loss = top.get("stop_loss", 0.0)
+        take_profit = top.get("take_profit", 0.0)
+        if stop_loss and take_profit and live_n >= 10:
+            kelly_qty = self.risk_manager.calculate_kelly_size(
+                entry_price=entry,
+                stop_loss=stop_loss,
+                take_profit=take_profit,
+                win_rate=live_wr,
+                current_balance=balance,
+            )
+            quantity = min(portfolio_qty, kelly_qty) if kelly_qty > 0 else portfolio_qty
+            logger.info(
+                "Sizing: portfolio=%.6f kelly=%.6f final=%.6f "
+                "(win_rate=%.0f%% alloc=%.1f%% regime=%s)",
+                portfolio_qty, kelly_qty, quantity,
+                live_wr * 100, alloc_fraction * 100, self._current_regime,
+            )
+        else:
+            quantity = portfolio_qty
+
+        # AC model: adjust entry price for estimated market impact
+        sym = top.get("symbol", Config.SYMBOL)
+        main_df = market_data.get(sym)
+        if main_df is not None and not main_df.empty:
+            impact = _ac_impact(main_df, quantity * entry)
+            action = top.get("action")
+            if action == "buy":
+                entry = entry * (1.0 + impact)
+            elif action == "sell":
+                entry = entry * (1.0 - impact)
+
         if quantity <= 0:
             return
 
@@ -543,7 +655,17 @@ class TradingBot:
                 snapshots = await self._collect_snapshots(scanned, market_data)
 
                 balance = await self._get_balance_usdt()
-                recs = await self.combiner.combine(snapshots, balance)
+
+                # Detect market regime from main symbol data
+                main_df = market_data.get(Config.SYMBOL)
+                if main_df is not None and not main_df.empty:
+                    self._current_regime = self.regime_detector.predict(main_df)
+                    logger.info("Market regime: %s", self._current_regime)
+
+                recs = await self.combiner.combine(
+                    snapshots, balance, regime=self._current_regime
+                )
+                recs = self._optimize_allocation(recs, market_data)
 
                 if not recs:
                     logger.info(f"MODE={Config.MODE}, " "no signals — local fallback")
