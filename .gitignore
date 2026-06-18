@@ -10,3 +10,5 @@ venv/
 models/
 .env
 data/historical_btc.csv  # Если не хотите коммитить данные
+.claude
+claude/
