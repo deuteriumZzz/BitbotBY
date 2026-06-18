@@ -37,6 +37,14 @@ class Config:
     STOP_LOSS_PERCENT: float = float(
         os.getenv("STOP_LOSS_PERCENT", "0.05")
     )
+    # Max daily loss as fraction of initial balance (5% = 0.05)
+    DAILY_LOSS_LIMIT: float = float(
+        os.getenv("DAILY_LOSS_LIMIT", "0.05")
+    )
+    # True → use Bybit testnet (safe for testing)
+    TESTNET: bool = (
+        os.getenv("TESTNET", "false").lower() == "true"
+    )
 
     # ── Strategy ───────────────────────────────────────────────────────────
     ENABLED_STRATEGIES: List[str] = field(default_factory=lambda: [
@@ -155,6 +163,12 @@ class Config:
             ),
             NEWS_UPDATE_INTERVAL=int(
                 os.getenv("NEWS_UPDATE_INTERVAL", "900")
+            ),
+            DAILY_LOSS_LIMIT=float(
+                os.getenv("DAILY_LOSS_LIMIT", "0.05")
+            ),
+            TESTNET=(
+                os.getenv("TESTNET", "false").lower() == "true"
             ),
         )
 

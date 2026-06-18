@@ -204,30 +204,42 @@ class RLAgent:
 
         return loss.item()
 
-    def calculate_reward(self, trade_result: Dict, portfolio_state: Dict) -> float:
+    def calculate_reward(
+        self,
+        trade_result: Dict,
+        portfolio_state: Dict,
+    ) -> float:
         """
         Рассчитывает награду на основе результатов торговли.
 
-        :param trade_result: Словарь с результатами торговли (PnL, стоимость транзакции и т.д.).
+        Использует risk-adjusted return (Sharpe-like),
+        штраф за комиссии и просадку.
+
+        :param trade_result: Словарь с результатами торговли.
         :param portfolio_state: Словарь с состоянием портфеля.
         :return: Значение награды.
         """
-        reward = 0
+        pnl = trade_result.get("pnl", 0)
+        commission = trade_result.get("transaction_cost", 0)
+        volatility = max(
+            portfolio_state.get("volatility", 1.0), 1e-8
+        )
 
-        # PnL based reward
-        reward += trade_result.get("pnl", 0) * 10
+        # Risk-adjusted return (Sharpe-like)
+        risk_adj = pnl / volatility
 
-        # Risk penalty
-        reward -= portfolio_state.get("concentration_risk", 0) * 100
+        # Heavy commission penalty (real cost)
+        commission_penalty = commission * 20
 
-        # Transaction cost penalty
-        reward -= trade_result.get("transaction_cost", 0) * 5
+        # Drawdown penalty
+        total_val = portfolio_state.get("total_value", 1)
+        initial = portfolio_state.get(
+            "initial_balance", total_val
+        )
+        drawdown = max(0, (initial - total_val) / initial)
+        drawdown_penalty = drawdown * 50
 
-        # Time decay for holding positions
-        if trade_result.get("holding_time", 0) > 10:
-            reward -= trade_result["holding_time"] * 0.1
-
-        return reward
+        return risk_adj - commission_penalty - drawdown_penalty
 
     def save_model(self, path: str):
         """

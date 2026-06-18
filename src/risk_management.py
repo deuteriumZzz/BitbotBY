@@ -72,21 +72,28 @@ class RiskManager:
         """
         Рассчитывает цену стоп-лосса.
 
-        Для сигнала "buy" устанавливает стоп-лосс на 5% ниже цены входа,
-        для "sell" - на 5% выше. Для других сигналов возвращает цену входа.
+        Если сигнал содержит ATR, использует ATR-based SL (1.5x ATR).
+        Иначе — STOP_LOSS_PERCENT из Config.
 
         :param entry_price: Цена входа в позицию (float).
-        :param signal: Словарь с данными сигнала, содержащий ключ "action" (Dict[str, Any]).
+        :param signal: Словарь с данными сигнала (Dict[str, Any]).
         :return: Рассчитанная цена стоп-лосса (float).
         """
+        # ATR-based SL: 1.5x ATR from entry
+        atr = signal.get("atr", None)
+        if atr and atr > 0:
+            if signal["action"] == "buy":
+                return entry_price - 1.5 * atr
+            elif signal["action"] == "sell":
+                return entry_price + 1.5 * atr
+            return entry_price
+        # Fallback: use STOP_LOSS_PERCENT from config
+        pct = Config.STOP_LOSS_PERCENT
         if signal["action"] == "buy":
-            stop_loss = entry_price * 0.95  # 5% stop loss
+            return entry_price * (1 - pct)
         elif signal["action"] == "sell":
-            stop_loss = entry_price * 1.05  # 5% stop loss
-        else:
-            stop_loss = entry_price
-
-        return stop_loss
+            return entry_price * (1 + pct)
+        return entry_price
 
     async def calculate_take_profit(
         self, entry_price: float, signal: Dict[str, Any]
@@ -138,4 +145,24 @@ class RiskManager:
             return False
 
         # Additional risk checks can be added here
+        return True
+
+    def check_daily_loss_limit(
+        self, current_balance: float
+    ) -> bool:
+        """
+        Returns True if daily loss limit is NOT breached.
+        Returns False if bot should stop trading today.
+        """
+        loss = self.initial_balance - current_balance
+        limit = (
+            self.initial_balance * Config.DAILY_LOSS_LIMIT
+        )
+        if loss >= limit:
+            self.logger.warning(
+                f"Daily loss limit reached: "
+                f"${loss:.2f} >= ${limit:.2f}. "
+                "Stopping trading."
+            )
+            return False
         return True

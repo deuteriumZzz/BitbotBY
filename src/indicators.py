@@ -31,7 +31,10 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
         df["bb_upper"], df["bb_middle"], df["bb_lower"] = calculate_bollinger_bands(
             df["close"]
         )
-        df["bb_width"] = (df["bb_upper"] - df["bb_lower"]) / df["bb_middle"]
+        df["bb_width"] = (
+            (df["bb_upper"] - df["bb_lower"])
+            / df["bb_middle"].replace(0, float("nan"))
+        ).fillna(0.0)
 
         # Moving Averages
         df["sma_20"] = df["close"].rolling(window=20).mean()
@@ -48,10 +51,13 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
 
         # Volume indicators
         df["volume_sma"] = df["volume"].rolling(window=20).mean()
-        df["volume_ratio"] = df["volume"] / df["volume_sma"]
+        df["volume_ratio"] = (
+            df["volume"]
+            / df["volume_sma"].replace(0, float("nan"))
+        ).fillna(1.0)
 
         # Fill NaN values
-        df = df.bfill().ffill()
+        df = df.ffill().fillna(0.0)
 
         return df
 
@@ -71,8 +77,10 @@ def calculate_rsi(series: pd.Series, period: int = 14) -> pd.Series:
     delta = series.diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-    rs = gain / loss
-    return 100 - (100 / (1 + rs))
+    rs = gain / loss.replace(0, float("nan"))
+    rsi = 100 - (100 / (1 + rs))
+    # loss==0 means pure bullish → RSI=100
+    return rsi.fillna(100)
 
 
 def calculate_macd(

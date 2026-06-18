@@ -4,6 +4,7 @@ from typing import Dict
 
 import numpy as np
 
+from config import Config
 from src.redis_client import RedisClient
 
 
@@ -24,6 +25,8 @@ class PortfolioManager:
         self.initial_balance = initial_balance
         self.current_balance = initial_balance
         self.positions: Dict[str, float] = {}
+        self.commission_rate: float = Config.COMMISSION_RATE
+        self.total_commissions: float = 0.0
         self.redis = RedisClient()
         self.logger = logging.getLogger(__name__)
 
@@ -46,17 +49,30 @@ class PortfolioManager:
         """
         try:
             if action == "buy":
-                cost = quantity * price
+                commission = (
+                    quantity * price * self.commission_rate
+                )
+                cost = quantity * price + commission
                 if cost <= self.current_balance:
                     self.current_balance -= cost
-                    self.positions[symbol] = self.positions.get(symbol, 0) + quantity
+                    self.total_commissions += commission
+                    self.positions[symbol] = (
+                        self.positions.get(symbol, 0) + quantity
+                    )
                     await self._save_portfolio_state()
                     return True
 
             elif action == "sell":
-                if symbol in self.positions and self.positions[symbol] >= quantity:
-                    revenue = quantity * price
+                if (
+                    symbol in self.positions
+                    and self.positions[symbol] >= quantity
+                ):
+                    commission = (
+                        quantity * price * self.commission_rate
+                    )
+                    revenue = quantity * price - commission
                     self.current_balance += revenue
+                    self.total_commissions += commission
                     self.positions[symbol] -= quantity
 
                     if self.positions[symbol] <= 0:
@@ -102,10 +118,11 @@ class PortfolioManager:
             "timestamp": datetime.now().isoformat(),
             "balance": self.current_balance,
             "positions": self.positions,
-            "total_value": await self.get_portfolio_value({}),
+            "total_commissions": self.total_commissions,
         }
-
-        self.redis.save_trading_state("portfolio_state", portfolio_state)
+        self.redis.save_trading_state(
+            "portfolio_state", portfolio_state
+        )
 
     def get_positions(self) -> Dict[str, float]:
         """
@@ -141,23 +158,26 @@ class PortfolioManager:
         total_value = await self.get_portfolio_value(current_prices)
 
         for symbol, target_allocation in target_allocations.items():
+            price = current_prices.get(symbol)
+            if price is None or price <= 0:
+                continue
             target_value = total_value * target_allocation
-            current_value = await self.get_position_size(symbol) * current_prices.get(
-                symbol, 0
+            current_value = (
+                await self.get_position_size(symbol) * price
             )
 
             if current_value < target_value:
                 # Need to buy
                 buy_value = target_value - current_value
-                quantity = buy_value / current_prices[symbol]
+                quantity = buy_value / price
                 await self.update_portfolio(
-                    symbol, "buy", quantity, current_prices[symbol]
+                    symbol, "buy", quantity, price
                 )
 
             elif current_value > target_value:
                 # Need to sell
                 sell_value = current_value - target_value
-                quantity = sell_value / current_prices[symbol]
+                quantity = sell_value / price
                 await self.update_portfolio(
-                    symbol, "sell", quantity, current_prices[symbol]
+                    symbol, "sell", quantity, price
                 )

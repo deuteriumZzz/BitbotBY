@@ -4,6 +4,8 @@
 Запуск:
     python reinforcement_learning/train_dqn.py
 
+Данные кешируются в data/cache/{symbol}_{timeframe}.csv (TTL 24ч).
+При повторном запуске догружаются только новые свечи.
 Результат → DQN_MODEL_PATH (по умолч. models/dqn_model.pth).
 После обучения установите MODE=dqn или MODE=hybrid в .env.
 """
@@ -31,14 +33,21 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-EPISODES = int(os.getenv("DQN_EPISODES", "200"))
+EPISODES = int(os.getenv("DQN_EPISODES", "300"))
+DQN_MONTHS = int(os.getenv("DQN_MONTHS", "6"))
 SYMBOL = Config.SYMBOL
 TIMEFRAME = Config.TIMEFRAME
-LIMIT = 1000
+# Доля данных для финальной валидации (не участвует в обучении)
+TRAIN_RATIO = 0.80
 
 
 async def fetch_data() -> pd.DataFrame:
-    """Загружает OHLCV + индикаторы через DataLoader."""
+    """
+    Загружает исторические OHLCV через пагинацию.
+
+    Первый запуск: скачивает DQN_MONTHS месяцев батчами по 200.
+    Повторный: загружает из CSV-кэша, догружает только новые свечи.
+    """
     api = BybitAPI()
     loader = DataLoader()
     await api.initialize(
@@ -48,13 +57,8 @@ async def fetch_data() -> pd.DataFrame:
         Config.BYBIT_API_KEY, Config.BYBIT_API_SECRET
     )
     try:
-        df = await loader.get_market_data(
-            SYMBOL, TIMEFRAME, limit=LIMIT
-        )
-        df = loader.calculate_technical_indicators(df)
-        logger.info(
-            f"Loaded {len(df)} candles "
-            f"for {SYMBOL} ({TIMEFRAME})"
+        df = await loader.get_paginated_history(
+            SYMBOL, TIMEFRAME, months=DQN_MONTHS
         )
         return df
     finally:
@@ -62,27 +66,68 @@ async def fetch_data() -> pd.DataFrame:
         await loader.close()
 
 
-def train(df: pd.DataFrame) -> RLAgent:
+def split_train_val(
+    df: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Обучает DQN на TradingEnv с историческими данными.
+    Делит DataFrame на train (80%) и validation (20%).
 
-    Каждый эпизод — один прогон по всему DataFrame.
-    Агент учится максимизировать portfolio value.
+    Модель обучается только на train; val используется
+    для финальной оценки (не участвует в обучении).
+    """
+    split = int(len(df) * TRAIN_RATIO)
+    return df.iloc[:split].copy(), df.iloc[split:].copy()
 
-    :param df: DataFrame с OHLCV + индикаторами.
-    :return: Обученный RLAgent.
+
+def evaluate(agent: RLAgent, df: pd.DataFrame) -> float:
+    """
+    Запускает один эпизод без обучения (epsilon=0).
+
+    :return: Финальная стоимость портфеля.
     """
     env = TradingEnv(df, Config.INITIAL_BALANCE)
+    obs, _ = env.reset()
+    done = False
+    info = {}
+    saved_eps = agent.epsilon
+    agent.epsilon = 0.0  # greedy
+
+    while not done:
+        action = agent.choose_action(obs)
+        obs, _, done, _, info = env.step(action)
+
+    agent.epsilon = saved_eps
+    return info.get("value", 0.0)
+
+
+def train(
+    df_train: pd.DataFrame,
+    df_val: pd.DataFrame,
+) -> RLAgent:
+    """
+    Обучает DQN на df_train, валидирует на df_val.
+
+    Каждые 50 эпизодов выводит метрики и сохраняет
+    лучшую по val-стоимости модель.
+
+    :param df_train: Обучающая выборка (80%).
+    :param df_val: Валидационная выборка (20%).
+    :return: Лучший RLAgent по val-метрике.
+    """
+    env = TradingEnv(df_train, Config.INITIAL_BALANCE)
     state_size = env.observation_space.shape[0]
     action_size = env.action_space.n
 
     agent = RLAgent(state_size, action_size)
     logger.info(
-        f"Training DQN: state_size={state_size}, "
-        f"actions={action_size}, episodes={EPISODES}"
+        f"Training DQN: "
+        f"state={state_size}, actions={action_size}, "
+        f"episodes={EPISODES}, "
+        f"train={len(df_train)} / val={len(df_val)} candles"
     )
 
-    best_value = 0.0
+    best_val_value = 0.0
+    best_state = None
 
     for ep in range(1, EPISODES + 1):
         obs, _ = env.reset()
@@ -101,18 +146,35 @@ def train(df: pd.DataFrame) -> RLAgent:
             obs = next_obs
             total_reward += reward
 
-        final_value = info.get("value", 0)
-        if final_value > best_value:
-            best_value = final_value
+        train_value = info.get("value", 0.0)
 
-        if ep % 20 == 0 or ep == EPISODES:
+        if ep % 50 == 0 or ep == EPISODES:
+            val_value = evaluate(agent, df_val)
             logger.info(
                 f"Ep {ep:>4}/{EPISODES} | "
+                f"train=${train_value:.2f} | "
+                f"val=${val_value:.2f} | "
                 f"reward={total_reward:+.1f} | "
-                f"value=${final_value:.2f} | "
-                f"best=${best_value:.2f} | "
                 f"eps={agent.epsilon:.3f}"
             )
+            if val_value > best_val_value:
+                best_val_value = val_value
+                # Сохраняем state_dict лучшей модели
+                import copy
+                best_state = copy.deepcopy(
+                    agent.policy_net.state_dict()
+                )
+                logger.info(
+                    f"  ✓ New best val=${val_value:.2f}"
+                )
+
+    # Восстанавливаем лучшие веса
+    if best_state is not None:
+        agent.policy_net.load_state_dict(best_state)
+        agent.target_net.load_state_dict(best_state)
+        logger.info(
+            f"Restored best model (val=${best_val_value:.2f})"
+        )
 
     return agent
 
@@ -131,17 +193,35 @@ def save_model(agent: RLAgent) -> None:
 
 async def main() -> None:
     logger.info(
-        f"DQN Training | {SYMBOL} | "
-        f"{TIMEFRAME} | {EPISODES} episodes"
+        f"DQN Training | {SYMBOL} {TIMEFRAME} | "
+        f"{DQN_MONTHS} months | {EPISODES} episodes"
     )
     df = await fetch_data()
-    if df.empty or len(df) < 50:
+
+    if df.empty or len(df) < 100:
         logger.error(
-            "Not enough data. "
+            f"Not enough data ({len(df)} candles). "
             "Check BYBIT_API_KEY and TRADING_SYMBOL."
         )
         return
-    agent = train(df)
+
+    logger.info(
+        f"Total candles: {len(df)} "
+        f"({len(df) * 15 // 60 // 24} days for 15m)"
+    )
+
+    df_train, df_val = split_train_val(df)
+    agent = train(df_train, df_val)
+
+    # Финальная оценка
+    val_final = evaluate(agent, df_val)
+    roi = (val_final - Config.INITIAL_BALANCE) / Config.INITIAL_BALANCE
+    logger.info(
+        f"Final validation: "
+        f"${val_final:.2f} "
+        f"(ROI {roi:+.1%} vs buy-and-hold)"
+    )
+
     save_model(agent)
 
 

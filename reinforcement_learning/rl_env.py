@@ -79,6 +79,7 @@ class TradingEnv(gym.Env):
         self.current_step = 0
         self.done = False
         self.current_value = self.initial_balance
+        self.total_commission = 0.0
 
         return self._get_observation(), {}
 
@@ -101,15 +102,26 @@ class TradingEnv(gym.Env):
                 self.position = self.balance / current_price
                 self.entry_price = current_price
                 self.balance = 0
+                commission = (
+                    current_price * self.position * 0.001
+                )
+                self.balance -= commission
+                self.total_commission += commission
 
         elif action == 2:  # Sell
             if self.position > 0:
-                self.balance = self.position * current_price
+                revenue = self.position * current_price
+                self.balance = revenue
                 self.position = 0
                 self.entry_price = 0
+                commission = revenue * 0.001
+                self.balance -= commission
+                self.total_commission += commission
 
         # Update current portfolio value
-        self.current_value = self.balance + (self.position * current_price)
+        self.current_value = (
+            self.balance + (self.position * current_price)
+        )
 
         # Calculate reward
         reward = self.current_value - prev_value

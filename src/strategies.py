@@ -43,6 +43,14 @@ class BaseStrategy(ABC):
             return float(val) if pd.notna(val) else default
         return default
 
+    def _prev2(
+        self, data: pd.DataFrame, col: str, default: float = 0.0
+    ) -> float:
+        if col in data.columns and len(data) > 2:
+            val = data[col].iloc[-3]
+            return float(val) if pd.notna(val) else default
+        return default
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. EMA CROSSOVER
@@ -65,18 +73,38 @@ class EMACrossoverStrategy(BaseStrategy):
         ema_l = self._last(data, "ema_long", close)
         ema_s_p = self._prev(data, "ema_short", ema_s)
         ema_l_p = self._prev(data, "ema_long", ema_l)
+        ema_s_p2 = self._prev2(data, "ema_short", ema_s)
+        ema_l_p2 = self._prev2(data, "ema_long", ema_l)
 
-        bullish_cross = ema_s > ema_l and ema_s_p <= ema_l_p
-        bearish_cross = ema_s < ema_l and ema_s_p >= ema_l_p
+        # Confirmed bullish: current AND prev bar ema_s > ema_l
+        # AND the bar before that had ema_s <= ema_l (actual crossover)
+        bullish_cross = (
+            ema_s > ema_l
+            and ema_s_p > ema_l_p
+            and ema_s_p2 <= ema_l_p2
+        )
+        bearish_cross = (
+            ema_s < ema_l
+            and ema_s_p < ema_l_p
+            and ema_s_p2 >= ema_l_p2
+        )
 
         if bullish_cross:
-            return {"action": "buy", "confidence": 0.82, "price": close}
+            return {
+                "action": "buy", "confidence": 0.82, "price": close
+            }
         if bearish_cross:
-            return {"action": "sell", "confidence": 0.78, "price": close}
+            return {
+                "action": "sell", "confidence": 0.78, "price": close
+            }
         if ema_s > ema_l:
-            return {"action": "buy", "confidence": 0.60, "price": close}
+            return {
+                "action": "buy", "confidence": 0.60, "price": close
+            }
         if ema_s < ema_l:
-            return {"action": "sell", "confidence": 0.58, "price": close}
+            return {
+                "action": "sell", "confidence": 0.58, "price": close
+            }
         return {"action": "hold", "confidence": 0.50}
 
 

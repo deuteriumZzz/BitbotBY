@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from datetime import datetime
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import pandas as pd
 
@@ -60,6 +60,10 @@ class TradingBot:
         self.ai = AIAnalyzer()
         self.combiner = SignalCombiner(self.ai)
         self.is_running = False
+        # symbol → {qty, stop_loss, take_profit, side}
+        self._monitored: Dict[str, Dict] = {}
+        self._daily_start_balance: float = 0.0
+        self._monitor_task: Optional[asyncio.Task] = None
 
     async def initialize(self):
         """
@@ -81,6 +85,9 @@ class TradingBot:
             )
             await self.strategy.initialize()
             await self._restore_state()
+            self._daily_start_balance = (
+                await self._get_balance_usdt()
+            )
             logger.info(
                 "Trading bot initialized successfully"
             )
@@ -361,6 +368,86 @@ class TradingBot:
                 f"Error updating performance stats: {e}"
             )
 
+    async def _monitor_positions(self) -> None:
+        """
+        Background task: checks SL/TP every 5 seconds.
+        Executes market close when price hits SL or TP.
+        """
+        while self.is_running:
+            for sym, pos in list(self._monitored.items()):
+                try:
+                    price = await self.api.get_current_price(
+                        sym
+                    )
+                    if not price:
+                        continue
+                    sl = pos.get("stop_loss", 0)
+                    tp = pos.get("take_profit", 0)
+                    side = pos.get("side", "buy")
+                    qty = pos.get("qty", 0)
+
+                    triggered = False
+                    if side == "buy":
+                        if sl and price <= sl:
+                            logger.warning(
+                                f"SL hit {sym}: "
+                                f"price={price} <= sl={sl}"
+                            )
+                            triggered = True
+                        elif tp and price >= tp:
+                            logger.info(
+                                f"TP hit {sym}: "
+                                f"price={price} >= tp={tp}"
+                            )
+                            triggered = True
+                    else:
+                        if sl and price >= sl:
+                            logger.warning(
+                                f"SL hit {sym}: "
+                                f"price={price} >= sl={sl}"
+                            )
+                            triggered = True
+                        elif tp and price <= tp:
+                            logger.info(
+                                f"TP hit {sym}: "
+                                f"price={price} <= tp={tp}"
+                            )
+                            triggered = True
+
+                    if triggered:
+                        close_side = (
+                            "sell" if side == "buy" else "buy"
+                        )
+                        await self.api.create_order(
+                            sym, "market", close_side, qty
+                        )
+                        await (
+                            self.portfolio_manager
+                            .update_portfolio(
+                                sym, close_side, qty, price
+                            )
+                        )
+                        del self._monitored[sym]
+                        logger.info(
+                            f"Position closed: {sym} "
+                            f"at {price}"
+                        )
+                except Exception as e:
+                    logger.error(
+                        f"Monitor error for {sym}: {e}"
+                    )
+            await asyncio.sleep(5)
+
+    async def _check_kill_switch(self) -> bool:
+        """
+        Returns False if daily loss limit is breached.
+        Bot should stop if this returns False.
+        """
+        balance = await self._get_balance_usdt()
+        return self.risk_manager.check_daily_loss_limit(
+            balance
+        )
+
     async def trading_loop(self):
         """
         Основной гибридный цикл (30 сек).
@@ -369,6 +456,9 @@ class TradingBot:
         При ошибке ждёт 10 сек и продолжает.
         """
         self.is_running = True
+        self._monitor_task = asyncio.create_task(
+            self._monitor_positions()
+        )
         cycle = 0
         ai_status = "on" if self.ai.enabled else "off"
         logger.info(
@@ -383,6 +473,13 @@ class TradingBot:
             t0 = loop.time()
 
             try:
+                if not await self._check_kill_switch():
+                    logger.warning(
+                        "Daily loss limit reached. "
+                        "Stopping bot for today."
+                    )
+                    break
+
                 symbols = await self.scanner.get_top_symbols(
                     Config.SCAN_TOP_N
                 )
@@ -432,6 +529,20 @@ class TradingBot:
                 await self._execute_top_rec(
                     filtered, market_data
                 )
+                if Config.AUTO_EXECUTE and filtered:
+                    top = filtered[0]
+                    sym = top.get("symbol", Config.SYMBOL)
+                    if top.get("action") in ("buy", "sell"):
+                        self._monitored[sym] = {
+                            "qty": Config.RISK_PER_TRADE,
+                            "stop_loss": top.get(
+                                "stop_loss", 0
+                            ),
+                            "take_profit": top.get(
+                                "take_profit", 0
+                            ),
+                            "side": top.get("action"),
+                        }
                 await self._update_performance_stats()
 
                 elapsed = loop.time() - t0
@@ -471,6 +582,8 @@ class TradingBot:
 
     async def stop(self):
         self.is_running = False
+        if hasattr(self, "_monitor_task") and self._monitor_task:
+            self._monitor_task.cancel()
         await self.api.close()
         await self.data_loader.close()
         logger.info("Trading bot stopped")
