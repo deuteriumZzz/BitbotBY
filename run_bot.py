@@ -19,20 +19,16 @@ asyncio.run(), если скрипт выполняется напрямую (т
 """
 
 import asyncio
+import sys
 
+from config import Config
 from src.trading_bot import main
 
 if __name__ == "__main__":
-    """
-    Основной блок выполнения скрипта.
+    try:
+        Config().validate()
+    except ValueError as exc:
+        print(f"[CONFIG ERROR] {exc}", file=sys.stderr)
+        sys.exit(1)
 
-    Этот блок выполняется только если модуль запущен напрямую. Он запускает
-    асинхронную функцию main() из торгового бота с помощью asyncio.run().
-
-    Логика: Вызывает asyncio.run(main()), что инициализирует и запускает весь
-    торговый бот, включая конфигурацию, стратегии и торговлю.
-
-    Обработка ошибок: Исключения из main() будут переданы в asyncio.run(),
-    который завершит программу с traceback.
-    """
     asyncio.run(main())

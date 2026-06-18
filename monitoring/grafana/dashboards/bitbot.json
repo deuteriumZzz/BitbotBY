@@ -1,0 +1,77 @@
+{
+  "title": "BitbotBY",
+  "uid": "bitbotby",
+  "schemaVersion": 38,
+  "refresh": "15s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1, "type": "stat", "title": "Bot Running",
+      "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+      "options": { "colorMode": "background", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "steps": [{"value": 0, "color": "red"}, {"value": 1, "color": "green"}] },
+          "mappings": [{"type": "value", "options": {"0": {"text": "DOWN"}, "1": {"text": "UP"}}}]
+        }
+      },
+      "targets": [{ "expr": "bitbot_running", "legendFormat": "" }]
+    },
+    {
+      "id": 2, "type": "stat", "title": "Balance USDT",
+      "gridPos": { "x": 4, "y": 0, "w": 5, "h": 4 },
+      "options": { "colorMode": "value", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "fieldConfig": {
+        "defaults": { "unit": "currencyUSD", "decimals": 2,
+          "thresholds": { "steps": [{"value": 0, "color": "red"}, {"value": 1000, "color": "yellow"}, {"value": 5000, "color": "green"}] }
+        }
+      },
+      "targets": [{ "expr": "bitbot_balance_usdt", "legendFormat": "" }]
+    },
+    {
+      "id": 3, "type": "stat", "title": "Total PnL",
+      "gridPos": { "x": 9, "y": 0, "w": 5, "h": 4 },
+      "options": { "colorMode": "background", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "fieldConfig": {
+        "defaults": { "unit": "currencyUSD", "decimals": 2,
+          "thresholds": { "steps": [{"value": -999999, "color": "red"}, {"value": 0, "color": "green"}] }
+        }
+      },
+      "targets": [{ "expr": "bitbot_total_pnl_usdt", "legendFormat": "" }]
+    },
+    {
+      "id": 4, "type": "gauge", "title": "Win Rate %",
+      "gridPos": { "x": 14, "y": 0, "w": 5, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "minVizValue": 0, "maxVizValue": 100 },
+      "fieldConfig": {
+        "defaults": { "unit": "percent", "min": 0, "max": 100,
+          "thresholds": { "steps": [{"value": 0, "color": "red"}, {"value": 50, "color": "yellow"}, {"value": 60, "color": "green"}] }
+        }
+      },
+      "targets": [{ "expr": "bitbot_win_rate_percent", "legendFormat": "" }]
+    },
+    {
+      "id": 5, "type": "stat", "title": "Total Trades",
+      "gridPos": { "x": 19, "y": 0, "w": 5, "h": 4 },
+      "options": { "colorMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "fieldConfig": { "defaults": { "decimals": 0 } },
+      "targets": [{ "expr": "bitbot_total_trades", "legendFormat": "" }]
+    },
+    {
+      "id": 6, "type": "timeseries", "title": "Balance over time",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD", "custom": { "lineWidth": 2 } } },
+      "targets": [{ "expr": "bitbot_balance_usdt", "legendFormat": "Balance" }]
+    },
+    {
+      "id": 7, "type": "timeseries", "title": "PnL over time",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "fieldConfig": {
+        "defaults": { "unit": "currencyUSD", "custom": { "lineWidth": 2 },
+          "thresholds": { "steps": [{"value": -999999, "color": "red"}, {"value": 0, "color": "green"}] }
+        }
+      },
+      "targets": [{ "expr": "bitbot_total_pnl_usdt", "legendFormat": "PnL" }]
+    }
+  ]
+}

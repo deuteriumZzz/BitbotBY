@@ -65,6 +65,10 @@ class TradingBot:
             Config.TELEGRAM_CHAT_ID,
         )
         self._paper_balance: float = Config.INITIAL_BALANCE
+        if Config.PAPER_TRADING:
+            logger.warning(
+                "*** PAPER TRADING MODE — no real orders will be placed ***"
+            )
 
     async def initialize(self):
         """

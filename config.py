@@ -151,10 +151,11 @@ class Config:
             TRAILING_STOP_ATR_MULT=float(os.getenv("TRAILING_STOP_ATR_MULT", "1.0")),
         )
 
-    def validate(self):
-        """Валидирует конфигурацию.
+    def validate(self) -> None:
+        """Валидирует конфигурацию и обязательные секреты.
 
-        :raises ValueError: Если параметры за пределами допустимых значений.
+        :raises ValueError: Если параметры за пределами допустимых значений
+            или отсутствуют обязательные переменные окружения.
         """
         if self.INITIAL_BALANCE <= 0:
             raise ValueError("INITIAL_BALANCE must be positive")
@@ -166,6 +167,35 @@ class Config:
             raise ValueError("COMMISSION_RATE must be non-negative")
         if self.TRADING_INTERVAL <= 0:
             raise ValueError("TRADING_INTERVAL must be positive")
+
+        # Bybit API keys required for live trading
+        if not self.PAPER_TRADING:
+            missing = []
+            if not self.BYBIT_API_KEY:
+                missing.append("BYBIT_API_KEY")
+            if not self.BYBIT_API_SECRET:
+                missing.append("BYBIT_API_SECRET")
+            if missing:
+                raise ValueError(
+                    f"Missing required env vars for live trading: "
+                    f"{', '.join(missing)}. "
+                    f"Set them in .env or use PAPER_TRADING=true."
+                )
+
+        # Claude API key required for AI/hybrid modes
+        if self.MODE in ("ai", "hybrid") and not self.ANTHROPIC_API_KEY:
+            raise ValueError(
+                f"ANTHROPIC_API_KEY is required for MODE={self.MODE}. "
+                f"Get it at console.anthropic.com or use MODE=local."
+            )
+
+        # SAC model file required for dqn/hybrid modes
+        if self.MODE in ("dqn", "hybrid"):
+            if not os.path.exists(self.SAC_MODEL_PATH):
+                raise ValueError(
+                    f"SAC model not found: {self.SAC_MODEL_PATH}. "
+                    f"Train it first: make train"
+                )
 
 
 # Global config instance

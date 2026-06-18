@@ -39,8 +39,7 @@ jobs:
         run: flake8 src/ tests/ reinforcement_learning/ config.py dashboard.py supervisor.py
 
       - name: Type check with mypy
-        run: mypy src/ --ignore-missing-imports --no-strict-optional
-        continue-on-error: true
+        run: mypy src/
 
       - name: Syntax check
         run: |

@@ -59,6 +59,9 @@ class TradingEnv(gym.Env):
         self.total_commission = 0.0
 
         # Непрерывное пространство действий для SAC
+        # Peak portfolio value for drawdown tracking
+        self.peak_value: float = initial_balance
+
         self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32)
 
         self.observation_space = spaces.Box(
@@ -119,6 +122,7 @@ class TradingEnv(gym.Env):
         self.done = False
         self.current_value = self.initial_balance
         self.total_commission = 0.0
+        self.peak_value = self.initial_balance
         return self._get_observation(), {}
 
     def step(
@@ -163,7 +167,19 @@ class TradingEnv(gym.Env):
                 self.entry_price = 0.0
 
         self.current_value = self.balance + self.position * current_price
-        reward = self.current_value - prev_value
+
+        # Log return in percent (scales ±0.1% move → ±0.1 reward unit)
+        log_ret = 100.0 * float(np.log(self.current_value / max(prev_value, 1e-8)))
+
+        # Track all-time peak to measure drawdown
+        self.peak_value = max(self.peak_value, self.current_value)
+
+        # Drawdown from peak as % of initial balance; penalty factor 0.01
+        # keeps it on the same scale as log_ret for typical crypto moves
+        drawdown_pct = (
+            100.0 * max(0.0, self.peak_value - self.current_value) / self.initial_balance
+        )
+        reward = log_ret - 0.01 * drawdown_pct
 
         self.current_step += 1
         if self.current_step >= len(self.data) - 1:
