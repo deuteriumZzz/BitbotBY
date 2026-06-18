@@ -49,13 +49,15 @@ class SignalCombiner:
         snapshots: List[Dict[str, Any]],
         balance: float,
         regime: str = "unknown",
+        regimes: Dict[str, str] | None = None,
     ) -> List[Dict[str, Any]]:
         """
         Возвращает рекомендации согласно MODE.
 
         :param snapshots: Снэпшоты из MarketScanner.
         :param balance: Баланс USDT.
-        :param regime: Текущий рыночный режим ("trending_up" / "ranging" / etc.).
+        :param regime: Fallback-режим (используется если regimes=None).
+        :param regimes: Per-symbol режимы {"BTC/USDT": "trending_up", ...}.
         :return: Список рекомендаций.
         """
         mode = Config.MODE
@@ -70,7 +72,7 @@ class SignalCombiner:
             return self._sac_only(snapshots, balance)
 
         if mode == "hybrid":
-            return await self._hybrid(snapshots, balance, regime)
+            return await self._hybrid(snapshots, balance, regime, regimes)
 
         self.logger.warning(f"Unknown MODE='{mode}', fallback to 'ai'")
         return await self.ai.analyze(snapshots, balance)
@@ -133,25 +135,25 @@ class SignalCombiner:
         snapshots: List[Dict],
         balance: float,
         regime: str = "unknown",
+        regimes: Dict[str, str] | None = None,
     ) -> List[Dict]:
         """
         Гибридный режим: согласие SAC + AI с режим-зависимыми весами.
 
-        Взвешенный confidence определяется текущим рыночным режимом:
+        Веса определяются per-symbol режимом из regimes (если передан),
+        иначе используется общий fallback-режим.
         trending_up → SAC 50%/AI 50%, trending_down → SAC 30%/AI 70%,
         ranging / unknown → SAC 40%/AI 60%.
         """
-        w_sac, w_ai = _REGIME_WEIGHTS.get(regime, (self._W_SAC, self._W_AI))
-        if regime != "unknown":
-            self.logger.info("Hybrid weights: SAC=%.0f%% AI=%.0f%% (regime=%s)",
-                             w_sac * 100, w_ai * 100, regime)
-
         ai_recs = await self.ai.analyze(snapshots, balance)
         ai_map: Dict[str, Dict] = {r["symbol"]: r for r in ai_recs}
 
         results = []
         for snap in snapshots:
             sym = snap["symbol"]
+            sym_regime = (regimes or {}).get(sym, regime)
+            w_sac, w_ai = _REGIME_WEIGHTS.get(sym_regime, (self._W_SAC, self._W_AI))
+
             sac_sig = self.sac.get_signal(snap, balance)
             ai = ai_map.get(sym)
 
@@ -194,9 +196,9 @@ class SignalCombiner:
                 rec["strategy"] = f"hybrid({base_strat}+sac)"
                 reason = ai.get("reasoning", "").strip()
                 rec["reasoning"] = (
-                    f"{reason} [SAC {d_conf:.0%}, regime={regime}]"
+                    f"{reason} [SAC {d_conf:.0%}, regime={sym_regime}]"
                     if reason
-                    else f"AI+SAC agree, SAC {d_conf:.0%}, regime={regime}"
+                    else f"AI+SAC agree, SAC {d_conf:.0%}, regime={sym_regime}"
                 )
                 results.append(rec)
             else:

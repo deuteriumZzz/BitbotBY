@@ -319,7 +319,16 @@ def run_strategy(
 
             if action in ("buy", "sell") and confidence >= min_confidence:
                 mid = float(window["close"].iloc[-1])
-                position_usdt = balance * risk_per_trade
+                # Kelly criterion after 10 closed trades (half-Kelly, capped 20%)
+                n_closed = len(closed_trades)
+                if n_closed >= 10:
+                    wr = sum(1 for t in closed_trades if t["pnl"] > 0) / n_closed
+                    b = _RR  # reward/risk ratio fixed at 2.0
+                    kelly_f = max(0.0, min((wr * b - (1 - wr)) / b * 0.5, 0.20))
+                    fraction = kelly_f if kelly_f > 0 else risk_per_trade
+                else:
+                    fraction = risk_per_trade
+                position_usdt = balance * fraction
                 # Almgren-Chriss adaptive impact: adapts to order size & volatility
                 impact = _ac_impact(window, position_usdt)
                 if action == "buy":

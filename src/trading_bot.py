@@ -163,8 +163,6 @@ class TradingBot:
                 valid.append(sym)
 
         if len(valid) >= 2:
-            import pandas as pd
-
             returns_df = pd.concat(returns_list, axis=1).dropna()
             weights = self.portfolio_optimizer.allocate(valid, returns_df)
         else:
@@ -356,7 +354,13 @@ class TradingBot:
                 live_wr * 100, alloc_fraction * 100, self._current_regime,
             )
         else:
-            quantity = portfolio_qty
+            # No trade history yet: cap at standard RISK_PER_TRADE (conservative)
+            conservative_qty = balance * Config.RISK_PER_TRADE / entry
+            quantity = min(portfolio_qty, conservative_qty)
+            logger.info(
+                "Sizing (early trades %d/10): conservative cap=%.6f final=%.6f",
+                live_n, conservative_qty, quantity,
+            )
 
         # AC model: adjust entry price for estimated market impact
         sym = top.get("symbol", Config.SYMBOL)
@@ -576,14 +580,31 @@ class TradingBot:
 
                 balance = await self._get_balance_usdt()
 
-                # Detect market regime from main symbol data
-                main_df = market_data.get(Config.SYMBOL)
-                if main_df is not None and not main_df.empty:
-                    self._current_regime = self.regime_detector.predict(main_df)
-                    logger.info("Market regime: %s", self._current_regime)
+                # Enforce daily loss limit before doing anything this cycle
+                if not self.risk_manager.check_daily_loss_limit(balance):
+                    await self.telegram.notify(
+                        "⛔ Дневной лимит потерь достигнут. "
+                        f"Баланс: ${balance:.2f}. Торговля остановлена до завтра."
+                    )
+                    logger.warning("Daily loss limit hit — stopping bot")
+                    self.is_running = False
+                    break
+
+                # Detect regime per symbol; fallback to main symbol regime
+                regimes: dict = {}
+                for sym, df in market_data.items():
+                    if df is not None and not df.empty:
+                        regimes[sym] = self.regime_detector.predict(df)
+                self._current_regime = regimes.get(Config.SYMBOL, "unknown")
+                logger.info(
+                    "Regimes: %s",
+                    {s: r for s, r in regimes.items() if r != "unknown"},
+                )
 
                 recs = await self.combiner.combine(
-                    snapshots, balance, regime=self._current_regime
+                    snapshots, balance,
+                    regime=self._current_regime,
+                    regimes=regimes,
                 )
                 recs = self._optimize_allocation(recs, market_data)
 
