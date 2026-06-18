@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import sqlite3
+import threading
 from datetime import datetime
 from typing import Dict, Optional
 
@@ -47,6 +48,7 @@ def get_backtest_stats(strategy: str) -> Dict:
         "total_return_pct": 0.0,
     }
 
+
 logger = logging.getLogger(__name__)
 
 _DB_PATH = os.path.join("data", "trades.db")
@@ -78,8 +80,10 @@ class TradeHistory:
         self._conn = sqlite3.connect(
             db_path, check_same_thread=False
         )
-        self._conn.execute(_DDL)
-        self._conn.commit()
+        self._lock = threading.Lock()
+        with self._lock:
+            self._conn.execute(_DDL)
+            self._conn.commit()
 
     # ── Write ─────────────────────────────────────────────
 
@@ -94,21 +98,22 @@ class TradeHistory:
         commission: float = 0.0,
     ) -> int:
         """Insert an open trade; return its row id."""
-        cur = self._conn.execute(
-            """
-            INSERT INTO trades
-              (symbol, strategy, action, entry_price,
-               quantity, confidence, commission, entry_time)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                symbol, strategy, action, entry_price,
-                quantity, confidence, commission,
-                datetime.now().isoformat(),
-            ),
-        )
-        self._conn.commit()
-        return cur.lastrowid
+        with self._lock:
+            cur = self._conn.execute(
+                """
+                INSERT INTO trades
+                  (symbol, strategy, action, entry_price,
+                   quantity, confidence, commission, entry_time)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    symbol, strategy, action, entry_price,
+                    quantity, confidence, commission,
+                    datetime.now().isoformat(),
+                ),
+            )
+            self._conn.commit()
+            return cur.lastrowid
 
     def record_close(
         self,
@@ -117,42 +122,49 @@ class TradeHistory:
         commission: float = 0.0,
     ) -> None:
         """Close a trade; compute PnL."""
-        row = self._conn.execute(
-            "SELECT action, entry_price, quantity, commission "
-            "FROM trades WHERE id = ?",
-            (trade_id,),
-        ).fetchone()
-        if row is None:
-            logger.warning(f"trade_id={trade_id} not found")
-            return
-        action, entry_price, qty, entry_comm = row
-        total_comm = entry_comm + commission
-        if action == "buy":
-            pnl = (
-                (exit_price - entry_price) * qty - total_comm
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT action, entry_price, quantity, "
+                "commission FROM trades WHERE id = ?",
+                (trade_id,),
+            ).fetchone()
+            if row is None:
+                logger.warning(
+                    f"trade_id={trade_id} not found"
+                )
+                return
+            action, entry_price, qty, entry_comm = row
+            total_comm = entry_comm + commission
+            if action == "buy":
+                pnl = (
+                    (exit_price - entry_price) * qty
+                    - total_comm
+                )
+            else:
+                pnl = (
+                    (entry_price - exit_price) * qty
+                    - total_comm
+                )
+            pnl_pct = (
+                pnl / (entry_price * qty)
+                if entry_price else 0
             )
-        else:
-            pnl = (
-                (entry_price - exit_price) * qty - total_comm
+            self._conn.execute(
+                """
+                UPDATE trades
+                SET exit_price=?, commission=commission+?,
+                    pnl=?, pnl_pct=?, exit_time=?,
+                    status='closed'
+                WHERE id=?
+                """,
+                (
+                    exit_price, commission,
+                    pnl, pnl_pct,
+                    datetime.now().isoformat(),
+                    trade_id,
+                ),
             )
-        pnl_pct = (
-            pnl / (entry_price * qty) if entry_price else 0
-        )
-        self._conn.execute(
-            """
-            UPDATE trades
-            SET exit_price=?, commission=commission+?,
-                pnl=?, pnl_pct=?, exit_time=?, status='closed'
-            WHERE id=?
-            """,
-            (
-                exit_price, commission,
-                pnl, pnl_pct,
-                datetime.now().isoformat(),
-                trade_id,
-            ),
-        )
-        self._conn.commit()
+            self._conn.commit()
 
     # ── Read ──────────────────────────────────────────────
 
@@ -161,7 +173,7 @@ class TradeHistory:
         strategy: Optional[str] = None,
         lookback: int = 50,
     ) -> float:
-        """Fraction of profitable closed trades (0.0–1.0)."""
+        """Fraction of profitable closed trades (0.0-1.0)."""
         where = (
             "WHERE status='closed' AND strategy=?"
             if strategy
@@ -170,19 +182,21 @@ class TradeHistory:
         params = (
             (strategy, lookback) if strategy else (lookback,)
         )
-        row = self._conn.execute(
-            f"""
-            SELECT
-              COUNT(*) AS total,
-              SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END) AS wins
-            FROM (
-              SELECT pnl, strategy FROM trades
-              {where}
-              ORDER BY id DESC LIMIT ?
-            )
-            """,
-            params,
-        ).fetchone()
+        with self._lock:
+            row = self._conn.execute(
+                f"""
+                SELECT
+                  COUNT(*) AS total,
+                  SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END)
+                      AS wins
+                FROM (
+                  SELECT pnl, strategy FROM trades
+                  {where}
+                  ORDER BY id DESC LIMIT ?
+                )
+                """,
+                params,
+            ).fetchone()
         if not row or not row[0]:
             return 0.5  # default assumption: 50%
         return row[1] / row[0]
@@ -204,14 +218,15 @@ class TradeHistory:
         params = (
             (strategy, lookback) if strategy else (lookback,)
         )
-        rows = self._conn.execute(
-            f"""
-            SELECT pnl_pct FROM trades
-            {where}
-            ORDER BY id DESC LIMIT ?
-            """,
-            params,
-        ).fetchall()
+        with self._lock:
+            rows = self._conn.execute(
+                f"""
+                SELECT pnl_pct FROM trades
+                {where}
+                ORDER BY id DESC LIMIT ?
+                """,
+                params,
+            ).fetchall()
         if not rows:
             return 0.0
         wins = [
@@ -245,30 +260,32 @@ class TradeHistory:
         params = (
             (strategy, lookback) if strategy else (lookback,)
         )
-        row = self._conn.execute(
-            f"SELECT COUNT(*) FROM "
-            f"(SELECT id FROM trades {where} "
-            f"ORDER BY id DESC LIMIT ?)",
-            params,
-        ).fetchone()
+        with self._lock:
+            row = self._conn.execute(
+                f"SELECT COUNT(*) FROM "
+                f"(SELECT id FROM trades {where} "
+                f"ORDER BY id DESC LIMIT ?)",
+                params,
+            ).fetchone()
         return row[0] if row else 0
 
     def get_summary(self) -> Dict:
         """Overall stats dict for display."""
-        row = self._conn.execute(
-            """
-            SELECT
-              COUNT(*) AS total,
-              SUM(CASE WHEN status='closed' AND pnl>0
-                  THEN 1 ELSE 0 END) AS wins,
-              SUM(CASE WHEN status='closed' THEN 1 ELSE 0 END)
-                  AS closed,
-              SUM(CASE WHEN status='closed' THEN pnl ELSE 0 END)
-                  AS total_pnl,
-              SUM(commission) AS total_comm
-            FROM trades
-            """
-        ).fetchone()
+        with self._lock:
+            row = self._conn.execute(
+                """
+                SELECT
+                  COUNT(*) AS total,
+                  SUM(CASE WHEN status='closed' AND pnl>0
+                      THEN 1 ELSE 0 END) AS wins,
+                  SUM(CASE WHEN status='closed'
+                      THEN 1 ELSE 0 END) AS closed,
+                  SUM(CASE WHEN status='closed'
+                      THEN pnl ELSE 0 END) AS total_pnl,
+                  SUM(commission) AS total_comm
+                FROM trades
+                """
+            ).fetchone()
         total, wins, closed, total_pnl, total_comm = row
         win_rate = (wins / closed) if closed else 0.0
         return {

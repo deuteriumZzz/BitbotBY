@@ -18,14 +18,11 @@ class SignalCombiner:
     MODE=hybrid  → оба должны согласиться; расхождение → hold
 
     hybrid-логика:
-    - Оба buy/sell → combined conf = 0.4*DQN + 0.6*AI
+    - Оба buy/sell → combined conf = DQN_WEIGHT*DQN
+                                   + AI_WEIGHT*AI
     - Расходятся → пропуск
-    - AI молчит, DQN conf >= 0.80 → доверяем DQN
+    - AI молчит, DQN conf >= DQN_SOLO_CONFIDENCE → доверяем DQN
     """
-
-    _W_DQN = 0.4
-    _W_AI = 0.6
-    _DQN_SOLO_MIN = 0.80
 
     def __init__(self, ai: AIAnalyzer):
         self.ai = ai
@@ -137,7 +134,7 @@ class SignalCombiner:
 
             # AI молчит — принимаем DQN только при высоком conf
             if ai is None:
-                if d_conf >= self._DQN_SOLO_MIN:
+                if d_conf >= Config.DQN_SOLO_CONFIDENCE:
                     price = snap.get("price", 0)
                     atr = snap.get("atr", price * 0.02)
                     sl, tp = self._sl_tp(price, atr, d_action)
@@ -160,8 +157,8 @@ class SignalCombiner:
             if d_action == a_action:
                 a_conf = ai.get("confidence", 0)
                 combined = round(
-                    d_conf * self._W_DQN
-                    + a_conf * self._W_AI,
+                    d_conf * Config.DQN_WEIGHT
+                    + a_conf * Config.AI_WEIGHT,
                     3,
                 )
                 if combined < Config.MIN_SIGNAL_CONFIDENCE:

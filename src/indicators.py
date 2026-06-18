@@ -41,13 +41,16 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
         df["sma_50"] = df["close"].rolling(window=50).mean()
         df["ema_12"] = df["close"].ewm(span=12).mean()
         df["ema_26"] = df["close"].ewm(span=26).mean()
+        # Aliases expected by strategy classes
+        df["ema_short"] = df["ema_12"]
+        df["ema_long"] = df["ema_26"]
 
         # Volatility
         df["atr"] = calculate_atr(df, period=14)
         df["volatility"] = df["close"].rolling(window=20).std()
 
         # Momentum
-        df["momentum"] = df["close"].pct_change(period=10)
+        df["momentum"] = df["close"].pct_change(periods=10)
 
         # Volume indicators
         df["volume_sma"] = df["volume"].rolling(window=20).mean()
@@ -133,6 +136,10 @@ def calculate_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
     low_close = abs(df["low"] - df["close"].shift())
     true_range = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
     return true_range.rolling(window=period).mean()
+
+
+# Public alias used by tests and data_loader
+calculate_technical_indicators = add_indicators
 
 
 def normalize_data(df: pd.DataFrame) -> pd.DataFrame:

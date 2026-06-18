@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from datetime import datetime
 from typing import List, Optional
 
@@ -16,7 +17,7 @@ from src.portfolio_manager import PortfolioManager
 from src.redis_client import RedisClient
 from src.risk_management import RiskManager
 from src.strategies import TradingStrategy
-from src.trade_history import TradeHistory, get_backtest_stats
+from src.trade_history import TradeHistory
 from src.telegram_notifier import TelegramNotifier
 
 logging.basicConfig(
@@ -219,41 +220,16 @@ class TradingBot:
                 )
             if reasoning:
                 print(f"       {reasoning}")
-            strat_key = r.get("strategy")
-            bt = get_backtest_stats(strat_key or "")
-            live_wr = self.trade_history.get_win_rate(
-                strat_key, lookback=50
+            wr = self.trade_history.get_win_rate(
+                r.get("strategy"), lookback=50
             )
-            live_ev = self.trade_history.get_expected_value(
-                strat_key, lookback=50
+            ev = self.trade_history.get_expected_value(
+                r.get("strategy"), lookback=50
             )
-            live_n = self.trade_history.get_trade_count(
-                strat_key, lookback=50
+            logger.info(
+                f"  Win Rate: {wr:.0%}  "
+                f"EV: {ev*100:+.2f}% per trade"
             )
-            if bt["total_trades"] > 0:
-                print(
-                    f"       backtest : "
-                    f"{bt['win_rate']:.0%} win  "
-                    f"EV {bt['ev']*100:+.2f}%  "
-                    f"({bt['total_trades']} сделок)"
-                )
-            else:
-                print(
-                    "       backtest : нет данных"
-                    " (запустите backtest.py)"
-                )
-            if live_n > 0:
-                print(
-                    f"       live     : "
-                    f"{live_wr:.0%} win  "
-                    f"EV {live_ev*100:+.2f}%  "
-                    f"({live_n} сделок)"
-                )
-            else:
-                print(
-                    "       live     : "
-                    "-- (нет сделок пока)"
-                )
         print(sep)
 
     async def _execute_top_rec(
@@ -280,30 +256,20 @@ class TradingBot:
             )
             return
 
-        # Win rate: backtest (historical) + live (separate)
+        # EV and win rate for this strategy
         strategy = top.get(
             "strategy", Config.DEFAULT_STRATEGY
         )
-        bt = get_backtest_stats(strategy)
-        live_wr = self.trade_history.get_win_rate(
+        win_rate = self.trade_history.get_win_rate(
             strategy, lookback=50
         )
-        live_ev = self.trade_history.get_expected_value(
-            strategy, lookback=50
-        )
-        live_n = self.trade_history.get_trade_count(
+        ev = self.trade_history.get_expected_value(
             strategy, lookback=50
         )
 
         # Telegram Variant B confirmation
         confirmed = await self.telegram.ask_confirm(
-            top,
-            live_win_rate=live_wr,
-            live_trades=live_n,
-            live_ev=live_ev,
-            bt_win_rate=bt["win_rate"],
-            bt_trades=bt["total_trades"],
-            bt_ev=bt["ev"],
+            top, win_rate, ev,
             timeout=Config.TELEGRAM_CONFIRM_TIMEOUT,
         )
         if not confirmed:
@@ -714,6 +680,12 @@ class TradingBot:
                     filtered, market_data
                 )
                 await self._update_performance_stats()
+
+                # Write healthcheck timestamp
+                _hc = os.path.join("data", "healthcheck.txt")
+                os.makedirs("data", exist_ok=True)
+                with open(_hc, "w") as _f:
+                    _f.write(datetime.now().isoformat())
 
                 elapsed = loop.time() - t0
                 sleep_for = max(
