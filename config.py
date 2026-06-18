@@ -2,6 +2,13 @@ import os
 from dataclasses import dataclass, field
 from typing import List
 
+# Stablecoins excluded from scanning and trading
+STABLECOIN_BASES: frozenset[str] = frozenset({
+    "USDC", "BUSD", "FDUSD", "TUSD", "DAI", "USDE", "PYUSD",
+    "FRAX", "LUSD", "GUSD", "USDP", "SUSD", "CUSD", "USDJ",
+    "HUSD", "EURS", "EURT", "USDD", "CRVUSD", "MKUSD",
+})
+
 
 @dataclass
 class Config:
@@ -157,6 +164,13 @@ class Config:
         :raises ValueError: Если параметры за пределами допустимых значений
             или отсутствуют обязательные переменные окружения.
         """
+        # Reject stablecoin as main trading symbol
+        base = self.SYMBOL.split("/")[0]
+        if base in STABLECOIN_BASES:
+            raise ValueError(
+                f"TRADING_SYMBOL={self.SYMBOL} is a stablecoin — set a real asset."
+            )
+
         if self.INITIAL_BALANCE <= 0:
             raise ValueError("INITIAL_BALANCE must be positive")
         if not 0 < self.RISK_PER_TRADE < 1:

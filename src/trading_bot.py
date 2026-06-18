@@ -71,6 +71,8 @@ class TradingBot:
             Config.TELEGRAM_CHAT_ID,
         )
         self._paper_balance: float = Config.INITIAL_BALANCE
+        # symbol → last notified action ("buy"/"sell"/"hold")
+        self._last_signals: dict = {}
         if Config.PAPER_TRADING:
             logger.warning(
                 "*** PAPER TRADING MODE — no real orders will be placed ***"
@@ -273,6 +275,52 @@ class TradingBot:
             if reasoning:
                 print(f"       {reasoning}")
         print(sep)
+
+    async def _notify_new_signals(self, recs: list, balance: float, cycle: int) -> None:
+        """
+        Отправляет в Telegram только новые или изменившиеся buy/sell сигналы.
+        Hold и повторы одного и того же действия по символу не отправляются.
+        """
+        new_lines = []
+        for r in recs:
+            sym = r.get("symbol", "")
+            action = r.get("action", "hold")
+            if action not in ("buy", "sell"):
+                continue
+            if self._last_signals.get(sym) == action:
+                continue  # уже отправляли этот сигнал
+
+            icon = "🟢" if action == "buy" else "🔴"
+            conf = r.get("confidence", 0) * 100
+            strat = r.get("strategy", "?")
+            entry = r.get("entry", 0)
+            sl = r.get("stop_loss", 0)
+            tp = r.get("take_profit", 0)
+            regime = self._current_regime
+            reasoning = r.get("reasoning", "")
+
+            line = f"{icon} *{sym}* — {action.upper()}\n"
+            line += f"   Conf: {conf:.0f}% | {strat} | Режим: {regime}\n"
+            if entry:
+                line += f"   Entry: ${entry:.4f} | SL: ${sl:.4f} | TP: ${tp:.4f}\n"
+            if reasoning:
+                line += f"   _{reasoning[:120]}_"
+            new_lines.append(line)
+            self._last_signals[sym] = action
+
+        # Сбрасываем hold-символы из кэша (чтобы при следующем buy/sell уведомить)
+        signaled = {r.get("symbol") for r in recs if r.get("action") in ("buy", "sell")}
+        for sym in list(self._last_signals):
+            if sym not in signaled:
+                self._last_signals.pop(sym, None)
+
+        if not new_lines:
+            return
+
+        ts = datetime.now().strftime("%H:%M:%S")
+        header = f"📊 Цикл \\#{cycle} | {ts} | Баланс: ${balance:.2f}\n\n"
+        text = header + "\n\n".join(new_lines)
+        await self.telegram.notify(text)
 
     async def _execute_top_rec(
         self,
@@ -630,6 +678,7 @@ class TradingBot:
                 )
 
                 self._print_recommendations(filtered, balance, cycle)
+                await self._notify_new_signals(filtered, balance, cycle)
                 await self._execute_top_rec(filtered, market_data)
                 await self._update_performance_stats()
 

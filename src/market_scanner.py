@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
-from config import Config
+from config import Config, STABLECOIN_BASES
 from src.bybit_api import BybitAPI
 from src.data_loader import DataLoader
 from src.redis_client import RedisClient
@@ -46,7 +46,9 @@ class MarketScanner:
             usdt = {
                 sym: t
                 for sym, t in tickers.items()
-                if sym.endswith("/USDT") and (t.get("quoteVolume") or 0) > 0
+                if sym.endswith("/USDT")
+                and (t.get("quoteVolume") or 0) > 0
+                and sym.split("/")[0] not in STABLECOIN_BASES
             }
             ranked = sorted(
                 usdt.items(),
