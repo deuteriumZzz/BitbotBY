@@ -362,7 +362,7 @@ class TradingBot:
         sym = top.get("symbol", Config.SYMBOL)
         main_df = market_data.get(sym)
         if main_df is not None and not main_df.empty:
-            impact = _ac_impact(main_df, quantity * entry)
+            impact = _ac_impact(main_df, quantity * entry, Config.TIMEFRAME)
             action = top.get("action")
             if action == "buy":
                 entry = entry * (1.0 + impact)
@@ -421,86 +421,6 @@ class TradingBot:
             f"TP: ${top.get('take_profit', 0):.4f}"
         )
         logger.info(f"Position opened: {sym} {action} " f"{quantity:.6f} @ {entry:.4f}")
-
-    async def _execute_trade(
-        self,
-        signal: dict,
-        market_data: pd.DataFrame,
-        symbol: Optional[str] = None,
-    ):
-        """
-        Проверяет сигнал и создаёт ордер через API.
-
-        :param signal: {action, price, confidence}.
-        :param market_data: DataFrame с OHLCV.
-        :param symbol: Символ (по умолч. Config.SYMBOL).
-        """
-        if symbol is None:
-            symbol = Config.SYMBOL
-        try:
-            ok = await self.risk_manager.validate_signal(signal, market_data)
-            if not ok:
-                logger.info("Signal validation failed")
-                return
-
-            entry = signal.get("price", 0)
-            if entry <= 0 and not market_data.empty:
-                entry = float(market_data["close"].iloc[-1])
-            if entry <= 0:
-                logger.warning(f"Invalid entry_price for {symbol}")
-                return
-
-            sl = await self.risk_manager.calculate_stop_loss(entry, signal)
-            balance = await self.api.get_balance()
-            if not balance:
-                logger.error("Could not get balance")
-                return
-
-            cur_price = await self.api.get_current_price(symbol)
-            if not cur_price:
-                logger.error("Could not get price")
-                return
-
-            pos_size = await self.risk_manager.calculate_position_size(
-                self.portfolio_manager.current_balance,
-                cur_price,
-                sl,
-            )
-            if pos_size <= 0:
-                logger.warning("Invalid position size")
-                return
-
-            side = "buy" if signal["action"] == "buy" else "sell"
-            parts = symbol.split("/") if "/" in symbol else [symbol[:-4], symbol[-4:]]
-            base = parts[0]
-            quote = parts[1] if len(parts) > 1 else "USDT"
-            free = balance.get("free", {})
-
-            if side == "buy":
-                cost = pos_size * entry
-                if cost > free.get(quote, 0):
-                    logger.warning(
-                        f"Insufficient {quote}: "
-                        f"need {cost:.2f}, "
-                        f"have {free.get(quote, 0):.2f}"
-                    )
-                    return
-            else:
-                if free.get(base, 0) < pos_size:
-                    logger.warning(f"Insufficient {base} for sell")
-                    return
-
-            order = await self.api.create_order(symbol, "limit", side, pos_size, entry)
-            if order:
-                logger.info(f"Order executed: {order}")
-                await self.portfolio_manager.update_portfolio(
-                    symbol, side, pos_size, entry
-                )
-            else:
-                logger.error("Failed to create order")
-
-        except Exception as e:
-            logger.error(f"Error executing trade: {e}")
 
     async def _monitor_positions(self) -> None:
         """

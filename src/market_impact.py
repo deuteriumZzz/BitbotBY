@@ -28,9 +28,18 @@ logger = logging.getLogger(__name__)
 # Almgren-Chriss coefficients calibrated to Bybit BTC/USDT spot
 _ETA = 0.1    # temporary impact (square-root term)
 _GAMMA = 0.1  # permanent impact (linear term)
-_CANDLES_PER_DAY = 96  # 15-minute candles in 24 hours
 _MIN_IMPACT = 0.0002   # floor: 2 bp (exchange fee floor)
 _MAX_IMPACT = 0.02     # cap: 2% max assumed impact
+
+# Candles per 24 h for each supported ccxt timeframe
+_TF_CANDLES: dict[str, int] = {
+    "1m": 1440, "3m": 480, "5m": 288, "15m": 96,
+    "30m": 48, "1h": 24, "2h": 12, "4h": 6, "1d": 1,
+}
+
+
+def _candles_per_day(timeframe: str) -> int:
+    return _TF_CANDLES.get(timeframe, 96)
 
 
 def almgren_chriss_impact(
@@ -67,7 +76,7 @@ def almgren_chriss_impact(
 def estimate_from_df(
     df: pd.DataFrame,
     order_size_usdt: float,
-    candles_per_day: int = _CANDLES_PER_DAY,
+    timeframe: str = "15m",
     eta: float = _ETA,
     gamma: float = _GAMMA,
 ) -> float:
@@ -79,24 +88,25 @@ def estimate_from_df(
 
     :param df: OHLCV DataFrame with 'close' and optionally 'volume' columns.
     :param order_size_usdt: Order notional in USDT.
-    :param candles_per_day: Candles per 24 h (96 for 15 m).
+    :param timeframe: ccxt timeframe string ("1m", "15m", "1h", etc.).
     :return: Market impact fraction.
     """
     if df is None or len(df) < 2 or "close" not in df.columns:
         return _MIN_IMPACT
 
+    cpd = _candles_per_day(timeframe)
     close = df["close"].astype(float)
     last_price = float(close.iloc[-1])
 
     if "volume" in df.columns:
         avg_candle_vol = df["volume"].astype(float).mean()
-        daily_volume_usdt = avg_candle_vol * candles_per_day * last_price
+        daily_volume_usdt = avg_candle_vol * cpd * last_price
     else:
         daily_volume_usdt = order_size_usdt * 10_000  # generous fallback
 
     log_ret = np.log(close / close.shift(1)).dropna()
     if len(log_ret) >= 5:
-        daily_vol = float(log_ret.std()) * (candles_per_day ** 0.5)
+        daily_vol = float(log_ret.std()) * (cpd ** 0.5)
     else:
         daily_vol = 0.02  # 2% fallback
 
