@@ -28,6 +28,7 @@ import pandas as pd
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config import Config
+from src.alpha_tester import AlphaTester
 from src.indicators import add_indicators
 from src.market_impact import estimate_from_df as _ac_impact
 from src.strategies import STRATEGY_REGISTRY, BaseStrategy
@@ -66,6 +67,7 @@ class BacktestResult:
     num_wins: int
     num_losses: int
     trades: list = field(default_factory=list, repr=False)
+    trade_returns: list = field(default_factory=list, repr=False)
 
 
 # ── CSV cache helpers (no Redis, no API key required) ─────────────────────
@@ -477,6 +479,7 @@ def run_strategy(
         num_wins=len(wins),
         num_losses=len(losses),
         trades=closed_trades,
+        trade_returns=trade_returns,
     )
 
 
@@ -617,6 +620,25 @@ async def main() -> None:
 
     # ── Print report ──────────────────────────────────────────────
     print_report(results, symbol, timeframe, months)
+
+    # ── Alpha significance tests ──────────────────────────────────
+    tester = AlphaTester()
+    sep = "=" * 68
+    print(f"\n{sep}")
+    print("ALPHA SIGNIFICANCE  (bootstrap Sharpe + Wilcoxon signed-rank)")
+    print(sep)
+    sig_count = 0
+    for r in results:
+        alpha = tester.test(r.trade_returns, name=r.strategy)
+        print(alpha.summary())
+        if alpha.is_significant:
+            sig_count += 1
+    print(sep)
+    print(
+        f"{sig_count}/{len(results)} strategies show statistically "
+        f"significant alpha at p<{0.05:.0%}"
+    )
+    print(sep)
 
     # ── Save JSON ─────────────────────────────────────────────────
     save_json(results, symbol, timeframe, months)
