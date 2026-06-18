@@ -8,6 +8,7 @@ import pandas as pd
 from config import Config
 from src.ai_analyzer import AIAnalyzer
 from src.bybit_api import BybitAPI
+from src.signal_combiner import SignalCombiner
 from src.data_loader import DataLoader
 from src.market_scanner import MarketScanner
 from src.news_analyzer import NewsAnalyzer
@@ -57,6 +58,7 @@ class TradingBot:
         )
         self.news = NewsAnalyzer()
         self.ai = AIAnalyzer()
+        self.combiner = SignalCombiner(self.ai)
         self.is_running = False
 
     async def initialize(self):
@@ -393,19 +395,19 @@ class TradingBot:
                 )
 
                 balance = await self._get_balance_usdt()
-                recs = await self.ai.analyze(
+                recs = await self.combiner.combine(
                     snapshots, balance
                 )
 
                 if not recs:
                     logger.info(
-                        "AI off — using local strategy"
+                        f"MODE={Config.MODE}, "
+                        "no signals — local fallback"
                     )
                     for snap in snapshots:
                         strat, conf = (
-                            self.ai.recommend_strategy_local(
-                                snap
-                            )
+                            self.combiner.ai
+                            .recommend_strategy_local(snap)
                         )
                         if conf >= Config.MIN_SIGNAL_CONFIDENCE:
                             recs.append({

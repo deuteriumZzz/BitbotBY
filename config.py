@@ -79,6 +79,17 @@ class Config:
     ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
     AI_MODEL: str = os.getenv("AI_MODEL", "claude-sonnet-4-6")
 
+    # ── Mode ───────────────────────────────────────────────────────────────
+    # local  → только правила (9 стратегий, без внешних API)
+    # dqn    → только обученная DQN-модель
+    # ai     → только Claude API
+    # hybrid → DQN + Claude должны согласиться
+    MODE: str = os.getenv("MODE", "ai")
+    # Путь к файлу весов DQN (создаётся train_dqn.py)
+    DQN_MODEL_PATH: str = os.getenv(
+        "DQN_MODEL_PATH", "models/dqn_model.pth"
+    )
+
     # ── Market Scanner ─────────────────────────────────────────────────────
     # Сколько монет сканировать (топ по объёму)
     SCAN_TOP_N: int = int(os.getenv("SCAN_TOP_N", "20"))
@@ -134,6 +145,10 @@ class Config:
             ),
             ANTHROPIC_API_KEY=os.getenv("ANTHROPIC_API_KEY", ""),
             AI_MODEL=os.getenv("AI_MODEL", "claude-sonnet-4-6"),
+            MODE=os.getenv("MODE", "ai"),
+            DQN_MODEL_PATH=os.getenv(
+                "DQN_MODEL_PATH", "models/dqn_model.pth"
+            ),
             SCAN_TOP_N=int(os.getenv("SCAN_TOP_N", "20")),
             AUTO_EXECUTE=(
                 os.getenv("AUTO_EXECUTE", "false").lower() == "true"
