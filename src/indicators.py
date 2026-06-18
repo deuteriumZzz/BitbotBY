@@ -47,13 +47,17 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
 
         # Volatility
         df["atr"] = calculate_atr(df, period=14)
-        df["volatility"] = df["close"].rolling(window=20).std()
+        df["volatility"] = (
+            df["close"].rolling(window=20).std()
+        )
 
         # Momentum
         df["momentum"] = df["close"].pct_change(periods=10)
 
         # Volume indicators
-        df["volume_sma"] = df["volume"].rolling(window=20).mean()
+        df["volume_sma"] = (
+            df["volume"].rolling(window=20).mean()
+        )
         df["volume_ratio"] = (
             df["volume"]
             / df["volume_sma"].replace(0, float("nan"))
@@ -66,7 +70,7 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
 
     except Exception as e:
         logger.error(f"Error adding indicators: {e}")
-        return df
+        raise
 
 
 def calculate_rsi(series: pd.Series, period: int = 14) -> pd.Series:
@@ -134,7 +138,9 @@ def calculate_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
     high_low = df["high"] - df["low"]
     high_close = abs(df["high"] - df["close"].shift())
     low_close = abs(df["low"] - df["close"].shift())
-    true_range = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+    true_range = pd.concat(
+        [high_low, high_close, low_close], axis=1
+    ).max(axis=1)
     return true_range.rolling(window=period).mean()
 
 

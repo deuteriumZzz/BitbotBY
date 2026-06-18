@@ -164,7 +164,7 @@ class DataLoader:
         if age > _CSV_CACHE_TTL:
             return None
         try:
-            df = pd.read_csv(path, index_col=0, parse_dates=True)
+            df = pd.read_csv(path, index_col=None)
             if "timestamp" in df.columns:
                 df["timestamp"] = pd.to_numeric(
                     df["timestamp"], errors="coerce"
@@ -176,7 +176,8 @@ class DataLoader:
     @staticmethod
     def _save_csv_cache(df: pd.DataFrame, path: str) -> None:
         try:
-            df.to_csv(path)
+            save_df = df.reset_index(drop=False)
+            save_df.to_csv(path, index=False)
         except Exception:
             pass
 
@@ -214,7 +215,12 @@ class DataLoader:
 
         if cached is not None and not cached.empty:
             # Инкрементальная загрузка: только новые свечи
-            last_ts = int(cached["timestamp"].max())
+            if "timestamp" in cached.columns:
+                last_ts = int(cached["timestamp"].max())
+            elif cached.index.name == "timestamp":
+                last_ts = int(cached.index.max())
+            else:
+                last_ts = 0
             self.logger.info(
                 f"CSV cache hit for {symbol} {timeframe}. "
                 f"Fetching candles since last timestamp."
@@ -278,6 +284,11 @@ class DataLoader:
         all_frames = []
         current = since_ms
 
+        if self.api.exchange is None:
+            raise RuntimeError(
+                "DataLoader not initialized. "
+                "Call await loader.initialize() first."
+            )
         while current < until_ms:
             try:
                 raw = await self.api.exchange.fetch_ohlcv(
@@ -373,4 +384,5 @@ class DataLoader:
         """
         Закрывает соединения, включая подключение к API Bybit.
         """
-        await self.api.close()
+        if self.api and self.api.exchange:
+            await self.api.close()

@@ -49,6 +49,7 @@ class TelegramNotifier:
         self._token = token
         self._chat_id = chat_id
         self._app: Optional[object] = None
+        self._polling_task: Optional[asyncio.Task] = None
         self._pending: dict = {}  # message_id → asyncio.Event
         self._decisions: dict = {}  # message_id → bool
         self._enabled = bool(
@@ -69,11 +70,19 @@ class TelegramNotifier:
         )
         await self._app.initialize()
         await self._app.start()
-        asyncio.create_task(self._app.updater.start_polling())
+        self._polling_task = asyncio.create_task(
+            self._app.updater.start_polling()
+        )
         logger.info("Telegram notifier started")
 
     async def stop(self) -> None:
         """Stop the Telegram application."""
+        if self._polling_task:
+            self._polling_task.cancel()
+            try:
+                await self._polling_task
+            except asyncio.CancelledError:
+                pass
         if self._app:
             await self._app.updater.stop()
             await self._app.stop()
@@ -124,40 +133,34 @@ class TelegramNotifier:
 
         if bt_trades > 0:
             bt_line = (
-                f"Бэктест (история):  "
+                f"Backtest:  "
                 f"*{bt_win_rate:.0%}*  "
-                f"({bt_trades} сделок)  "
+                f"({bt_trades} trades)  "
                 f"EV: *{bt_ev*100:+.2f}%*"
             )
         else:
-            bt_line = (
-                "Бэктест: нет данных "
-                "\\(запустите backtest\\.py\\)"
-            )
+            bt_line = "Backtest: no data"
 
         if live_trades > 0:
             live_line = (
-                f"Live торговля:      "
+                f"Live:      "
                 f"*{live_win_rate:.0%}*  "
-                f"({live_trades} сделок)  "
+                f"({live_trades} trades)  "
                 f"EV: *{live_ev*100:+.2f}%*"
             )
         else:
-            live_line = (
-                "Live торговля:      "
-                "\\-\\- \\(нет сделок пока\\)"
-            )
+            live_line = "Live: -- (no trades yet)"
 
         text = (
-            f"*{symbol}*  \\-\\-  {action}\n\n"
-            f"Стратегия: `{strategy}`\n"
-            f"Вход: `${entry:.4f}`\n"
+            f"*{symbol}*  --  {action}\n\n"
+            f"Strategy: `{strategy}`\n"
+            f"Entry: `${entry:.4f}`\n"
             f"SL: `${sl:.4f}`   "
             f"TP: `${tp:.4f}`\n\n"
-            f"AI уверенность: *{confidence:.0%}*\n\n"
+            f"AI confidence: *{confidence:.0%}*\n\n"
             f"{bt_line}\n"
             f"{live_line}\n\n"
-            f"Авто\\-исполнение через {timeout}с"
+            f"Auto-execute in {timeout}s"
         )
         keyboard = InlineKeyboardMarkup([
             [
@@ -176,7 +179,7 @@ class TelegramNotifier:
             msg = await bot.send_message(
                 chat_id=self._chat_id,
                 text=text,
-                parse_mode="MarkdownV2",
+                parse_mode="Markdown",
                 reply_markup=keyboard,
             )
             mid = msg.message_id

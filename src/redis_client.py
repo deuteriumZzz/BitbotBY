@@ -249,8 +249,10 @@ class RedisClient:
 
         Десериализует данные из JSON под ключом "performance_stats".
 
-        :return: Статистика производительности (Dict[str, Any], пустой dict если ключ не найден).
-        :raises Exception: В случае ошибок десериализации или загрузки (логируется).
+        :return: Статистика производительности
+            (Dict[str, Any], пустой dict если ключ не найден).
+        :raises Exception: В случае ошибок десериализации
+            или загрузки (логируется).
         """
         try:
             key = "performance_stats"
@@ -259,5 +261,15 @@ class RedisClient:
                 return json.loads(data.decode("utf-8"))
             return {}
         except Exception as e:
-            self.logger.error(f"Error getting performance stats: {e}")
+            self.logger.error(
+                f"Error getting performance stats: {e}"
+            )
             return {}
+
+    def close(self) -> None:
+        """Close the Redis connection pool."""
+        try:
+            if hasattr(self, "redis_client"):
+                self.redis_client.close()
+        except Exception as e:
+            self.logger.error(f"Redis close error: {e}")

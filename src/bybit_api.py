@@ -253,4 +253,5 @@ class BybitAPI:
         """
         Закрывает подключение к обмену.
         """
-        await self.exchange.close()
+        if self.exchange:
+            await self.exchange.close()

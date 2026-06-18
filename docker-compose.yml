@@ -1,29 +1,60 @@
-version: '3.8'
+version: "3.9"
 
 services:
   redis:
-    image: redis:alpine
-    ports:
-      - "6379:6379"
+    image: redis:7-alpine
+    container_name: bitbot_redis
+    restart: unless-stopped
     volumes:
       - redis_data:/data
-    command: redis-server --appendonly yes
-    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   bot:
     build: .
-    depends_on:
-      - redis
-    env_file:
-      - .env
-    volumes:
-      - ./models:/app/models
-      - ./data:/app/data
-      - ./logs:/app/logs
+    container_name: bitbot_bot
     restart: unless-stopped
+    command: python run_bot.py
+    env_file: .env
     environment:
+      - REDIS_HOST=redis
       - REDIS_URL=redis://redis:6379/0
-      - PYTHONPATH=/app  # Важно для импортов
+      - PYTHONPATH=/app
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./logs:/app/logs
+      - ./.env:/app/.env
+    depends_on:
+      redis:
+        condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  dashboard:
+    build: .
+    container_name: bitbot_dashboard
+    restart: unless-stopped
+    command: python dashboard.py
+    env_file: .env
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_URL=redis://redis:6379/0
+      - PYTHONPATH=/app
+    volumes:
+      - ./data:/app/data
+      - ./.env:/app/.env
+    ports:
+      - "8080:8080"
+    depends_on:
+      redis:
+        condition: service_healthy
 
 volumes:
   redis_data:

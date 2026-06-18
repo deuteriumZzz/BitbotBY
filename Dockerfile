@@ -1,22 +1,26 @@
-FROM python:3.12-slim
+FROM python:3.11-slim
 
 WORKDIR /app
 
-# Установка системных зависимостей
-RUN apt-get update && apt-get install -y \
+# System deps for native packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     g++ \
     && rm -rf /var/lib/apt/lists/*
 
+# Install Python deps first (layer caching)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copy source
 COPY . .
 
-# Создание необходимых директорий
-RUN mkdir -p logs data models
+# Create data directory
+RUN mkdir -p data/cache models logs
 
-# Установка PYTHONPATH для корректных импортов
+# Ensure imports work
 ENV PYTHONPATH=/app
+
+EXPOSE 8080
 
 CMD ["python", "run_bot.py"]

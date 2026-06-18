@@ -1,0 +1,14 @@
+.git
+.gitignore
+.env
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+tests/
+*.md
+.claude/
+models/
+data/cache/
+data/trades.db
+logs/

@@ -52,8 +52,19 @@ async def run_with_supervision():
             # Import here so each restart gets fresh state
             from src.trading_bot import TradingBot
             bot = TradingBot()
-            await bot.initialize()
-            await bot.trading_loop()
+            try:
+                await bot.initialize()
+                await bot.trading_loop()
+            except KeyboardInterrupt:
+                raise
+            finally:
+                try:
+                    await bot.stop()
+                except Exception as stop_err:
+                    logger.error(
+                        f"Error during bot.stop(): "
+                        f"{stop_err}"
+                    )
         except KeyboardInterrupt:
             logger.info("Stopped by user.")
             return

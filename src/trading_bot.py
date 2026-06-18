@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import os
 from datetime import datetime
 from typing import List, Optional
 
@@ -65,6 +64,7 @@ class TradingBot:
         self.is_running = False
         # symbol → {qty, stop_loss, take_profit, side, ...}
         self._monitored: dict = {}
+        self._monitored_lock = asyncio.Lock()
         self._monitor_task: Optional[asyncio.Task] = None
         self.trade_history = TradeHistory()
         self.telegram = TelegramNotifier(
@@ -141,12 +141,19 @@ class TradingBot:
         :return: Список снэпшотов для AIAnalyzer.
         """
         news_results = await asyncio.gather(
-            *[self.news.get_sentiment(s) for s in symbols]
+            *[self.news.get_sentiment(s) for s in symbols],
+            return_exceptions=True,
         )
         snapshots = []
-        for sym, (sent, headlines) in zip(
-            symbols, news_results
-        ):
+        for sym, result in zip(symbols, news_results):
+            if isinstance(result, Exception):
+                logger.warning(
+                    f"News sentiment failed for {sym}: "
+                    f"{result}"
+                )
+                sent, headlines = 0.0, []
+            else:
+                sent, headlines = result
             df = market_data.get(sym)
             if df is None or df.empty:
                 continue
@@ -220,16 +227,6 @@ class TradingBot:
                 )
             if reasoning:
                 print(f"       {reasoning}")
-            wr = self.trade_history.get_win_rate(
-                r.get("strategy"), lookback=50
-            )
-            ev = self.trade_history.get_expected_value(
-                r.get("strategy"), lookback=50
-            )
-            logger.info(
-                f"  Win Rate: {wr:.0%}  "
-                f"EV: {ev*100:+.2f}% per trade"
-            )
         print(sep)
 
     async def _execute_top_rec(
@@ -248,28 +245,48 @@ class TradingBot:
         if action not in ("buy", "sell"):
             return
 
-        # Max positions check
-        if len(self._monitored) >= Config.MAX_POSITIONS:
-            logger.warning(
-                f"Max positions ({Config.MAX_POSITIONS}) "
-                "reached. Skipping."
-            )
-            return
+        # Max positions check + duplicate guard (race-safe)
+        async with self._monitored_lock:
+            if len(self._monitored) >= Config.MAX_POSITIONS:
+                logger.warning(
+                    f"Max positions "
+                    f"({Config.MAX_POSITIONS}) "
+                    "reached. Skipping."
+                )
+                return
+            if sym in self._monitored:
+                logger.info(
+                    f"{sym} already monitored, skip"
+                )
+                return
 
         # EV and win rate for this strategy
         strategy = top.get(
             "strategy", Config.DEFAULT_STRATEGY
         )
-        win_rate = self.trade_history.get_win_rate(
+        from src.trade_history import get_backtest_stats
+        bt = get_backtest_stats(strategy)
+        live_wr = await self.trade_history.get_win_rate(
             strategy, lookback=50
         )
-        ev = self.trade_history.get_expected_value(
+        live_n = await self.trade_history.get_trade_count(
             strategy, lookback=50
+        )
+        live_ev = (
+            await self.trade_history.get_expected_value(
+                strategy, lookback=50
+            )
         )
 
-        # Telegram Variant B confirmation
+        # Telegram confirmation with full stats
         confirmed = await self.telegram.ask_confirm(
-            top, win_rate, ev,
+            top,
+            live_win_rate=live_wr,
+            live_trades=live_n,
+            live_ev=live_ev,
+            bt_win_rate=bt["win_rate"],
+            bt_trades=bt["total_trades"],
+            bt_ev=bt["ev"],
             timeout=Config.TELEGRAM_CONFIRM_TIMEOUT,
         )
         if not confirmed:
@@ -316,7 +333,7 @@ class TradingBot:
                 return
 
         # Record in trade history
-        trade_id = self.trade_history.record_open(
+        trade_id = await self.trade_history.record_open(
             symbol=sym,
             strategy=strategy,
             action=action,
@@ -326,17 +343,20 @@ class TradingBot:
             commission=commission,
         )
 
-        # Register for SL/TP monitoring
-        self._monitored[sym] = {
-            "trade_id": trade_id,
-            "qty": quantity,
-            "entry": entry,
-            "stop_loss": top.get("stop_loss", 0.0),
-            "take_profit": top.get("take_profit", 0.0),
-            "side": action,
-            "atr": top.get("atr", 0.0),
-            "peak_price": entry,
-        }
+        # Register for SL/TP monitoring (under lock)
+        async with self._monitored_lock:
+            self._monitored[sym] = {
+                "trade_id": trade_id,
+                "qty": quantity,
+                "entry": entry,
+                "stop_loss": top.get("stop_loss", 0.0),
+                "take_profit": top.get(
+                    "take_profit", 0.0
+                ),
+                "side": action,
+                "atr": top.get("atr", 0.0),
+                "peak_price": entry,
+            }
 
         await self.telegram.notify(
             f"Opened position *{sym}*\n"
@@ -458,8 +478,11 @@ class TradingBot:
         Executes market close when price hits SL or TP.
         Applies trailing stop-loss based on ATR.
         """
+        _error_counts: dict = {}
         while self.is_running:
-            for sym, pos in list(self._monitored.items()):
+            async with self._monitored_lock:
+                snapshot = list(self._monitored.items())
+            for sym, pos in snapshot:
                 try:
                     price = await self.api.get_current_price(
                         sym
@@ -471,7 +494,7 @@ class TradingBot:
                     side = pos.get("side", "buy")
                     qty = pos.get("qty", 0)
 
-                    # Trailing stop-loss: move SL toward price
+                    # Trailing stop-loss
                     atr = pos.get("atr", 0.0)
                     mult = Config.TRAILING_STOP_ATR_MULT
                     if atr and atr > 0 and mult > 0:
@@ -480,20 +503,40 @@ class TradingBot:
                             if trail > pos.get(
                                 "stop_loss", 0
                             ):
-                                self._monitored[sym][
-                                    "stop_loss"
-                                ] = trail
-                                pos["stop_loss"] = trail
+                                async with (
+                                    self._monitored_lock
+                                ):
+                                    if sym in (
+                                        self._monitored
+                                    ):
+                                        self._monitored[
+                                            sym
+                                        ]["stop_loss"] = (
+                                            trail
+                                        )
+                                        pos[
+                                            "stop_loss"
+                                        ] = trail
                                 sl = trail
                         else:
                             trail = price + atr * mult
                             if trail < pos.get(
                                 "stop_loss", float("inf")
                             ):
-                                self._monitored[sym][
-                                    "stop_loss"
-                                ] = trail
-                                pos["stop_loss"] = trail
+                                async with (
+                                    self._monitored_lock
+                                ):
+                                    if sym in (
+                                        self._monitored
+                                    ):
+                                        self._monitored[
+                                            sym
+                                        ]["stop_loss"] = (
+                                            trail
+                                        )
+                                        pos[
+                                            "stop_loss"
+                                        ] = trail
                                 sl = trail
 
                     triggered = False
@@ -527,7 +570,9 @@ class TradingBot:
                     if triggered:
                         trade_id = pos.get("trade_id")
                         close_side = (
-                            "sell" if side == "buy" else "buy"
+                            "sell"
+                            if side == "buy"
+                            else "buy"
                         )
                         if not Config.PAPER_TRADING:
                             await self.api.create_order(
@@ -540,22 +585,28 @@ class TradingBot:
                                 sym, close_side, qty, price
                             )
                         )
-                        del self._monitored[sym]
+                        async with self._monitored_lock:
+                            self._monitored.pop(sym, None)
                         logger.info(
                             f"Position closed: {sym} "
                             f"at {price}"
                         )
                         if trade_id:
-                            self.trade_history.record_close(
-                                trade_id=trade_id,
-                                exit_price=price,
-                                commission=(
-                                    qty
-                                    * price
-                                    * Config.COMMISSION_RATE
-                                ),
+                            await (
+                                self.trade_history
+                                .record_close(
+                                    trade_id=trade_id,
+                                    exit_price=price,
+                                    commission=(
+                                        qty
+                                        * price
+                                        * Config
+                                        .COMMISSION_RATE
+                                    ),
+                                )
                             )
                         stats = (
+                            await
                             self.trade_history.get_summary()
                         )
                         await self.telegram.notify(
@@ -568,10 +619,24 @@ class TradingBot:
                             f"Total PnL: "
                             f"${stats['total_pnl']:+.2f}"
                         )
+                    _error_counts.pop(sym, None)
                 except Exception as e:
-                    logger.error(
-                        f"Monitor error for {sym}: {e}"
+                    _error_counts[sym] = (
+                        _error_counts.get(sym, 0) + 1
                     )
+                    count = _error_counts[sym]
+                    logger.error(
+                        f"Monitor error {sym} "
+                        f"(attempt {count}): {e}"
+                    )
+                    if count >= 5:
+                        logger.warning(
+                            f"Removing {sym} from monitor"
+                            " after 5 consecutive errors"
+                        )
+                        async with self._monitored_lock:
+                            self._monitored.pop(sym, None)
+                        _error_counts.pop(sym, None)
             await asyncio.sleep(5)
 
     async def _update_performance_stats(self):
@@ -681,12 +746,6 @@ class TradingBot:
                 )
                 await self._update_performance_stats()
 
-                # Write healthcheck timestamp
-                _hc = os.path.join("data", "healthcheck.txt")
-                os.makedirs("data", exist_ok=True)
-                with open(_hc, "w") as _f:
-                    _f.write(datetime.now().isoformat())
-
                 elapsed = loop.time() - t0
                 sleep_for = max(
                     0, Config.TRADING_INTERVAL - elapsed
@@ -726,9 +785,14 @@ class TradingBot:
         self.is_running = False
         if self._monitor_task:
             self._monitor_task.cancel()
+            try:
+                await self._monitor_task
+            except asyncio.CancelledError:
+                pass
         await self.telegram.stop()
         await self.api.close()
         await self.data_loader.close()
+        self.redis.close()
         logger.info("Trading bot stopped")
 
 
