@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import logging
 from typing import Any, Dict, List, Tuple
@@ -38,6 +40,11 @@ class AIAnalyzer:
         self.logger = logging.getLogger(__name__)
 
     def _build_strategy_list(self) -> str:
+        """
+        Формирует текстовый список доступных стратегий для промпта.
+
+        :return: Многострочная строка с описанием каждой стратегии.
+        """
         lines = []
         for s in self.strategies:
             desc = s["description"][:60]
@@ -50,9 +57,16 @@ class AIAnalyzer:
 
     def _build_prompt(
         self,
-        snapshots: List[Dict],
+        snapshots: List[Dict[str, Any]],
         balance: float,
     ) -> str:
+        """
+        Строит промпт для Claude API на основе снэпшотов рынка.
+
+        :param snapshots: Список снэпшотов из MarketScanner.
+        :param balance: Баланс пользователя в USDT.
+        :return: Готовый текст промпта.
+        """
         strategy_block = self._build_strategy_list()
         data_block = json.dumps(
             snapshots, indent=2, ensure_ascii=False

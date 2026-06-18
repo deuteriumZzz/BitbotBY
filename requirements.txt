@@ -1,7 +1,7 @@
 anthropic>=0.30.0
-backtrader==1.9.76.123
-stable-baselines3==2.3.2
-gymnasium==0.29.1
+tenacity>=8.2.0
+stable-baselines3>=2.3.2
+gymnasium>=0.29.1
 pandas-ta==0.4.71b0
 vaderSentiment==3.3.2
 ccxt==4.3.47

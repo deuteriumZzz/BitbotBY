@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 from config import Config
 from src.ai_analyzer import AIAnalyzer
@@ -18,11 +20,14 @@ class SignalCombiner:
     MODE=hybrid  → оба должны согласиться; расхождение → hold
 
     hybrid-логика:
-    - Оба buy/sell → combined conf = DQN_WEIGHT*DQN
-                                   + AI_WEIGHT*AI
+    - Оба buy/sell → combined conf = 0.4*DQN + 0.6*AI
     - Расходятся → пропуск
-    - AI молчит, DQN conf >= DQN_SOLO_CONFIDENCE → доверяем DQN
+    - AI молчит, DQN conf >= 0.80 → доверяем DQN
     """
+
+    _W_DQN = 0.4
+    _W_AI = 0.6
+    _DQN_SOLO_MIN = 0.80
 
     def __init__(self, ai: AIAnalyzer):
         self.ai = ai
@@ -64,8 +69,15 @@ class SignalCombiner:
     @staticmethod
     def _sl_tp(
         price: float, atr: float, action: str
-    ):
-        """Стоп-лосс и тейк-профит через ATR."""
+    ) -> Tuple[float, float]:
+        """
+        Рассчитывает стоп-лосс и тейк-профит через ATR (1.5x / 3.0x).
+
+        :param price: Текущая цена актива.
+        :param atr: Средний истинный диапазон (ATR).
+        :param action: Направление сделки ("buy" или "sell").
+        :return: Кортеж (stop_loss, take_profit).
+        """
         if action == "buy":
             sl = price - 1.5 * atr
             tp = price + 3.0 * atr
@@ -76,10 +88,17 @@ class SignalCombiner:
 
     def _dqn_only(
         self,
-        snapshots: List[Dict],
+        snapshots: List[Dict[str, Any]],
         balance: float,
-    ) -> List[Dict]:
-        results = []
+    ) -> List[Dict[str, Any]]:
+        """
+        Формирует рекомендации только на основе DQN-сигналов.
+
+        :param snapshots: Снэпшоты из MarketScanner.
+        :param balance: Баланс USDT.
+        :return: Список рекомендаций с action, confidence, entry, sl/tp.
+        """
+        results: List[Dict[str, Any]] = []
         min_conf = Config.MIN_SIGNAL_CONFIDENCE
         for snap in snapshots:
             sig = self.dqn.get_signal(snap, balance)
@@ -134,7 +153,7 @@ class SignalCombiner:
 
             # AI молчит — принимаем DQN только при высоком conf
             if ai is None:
-                if d_conf >= Config.DQN_SOLO_CONFIDENCE:
+                if d_conf >= self._DQN_SOLO_MIN:
                     price = snap.get("price", 0)
                     atr = snap.get("atr", price * 0.02)
                     sl, tp = self._sl_tp(price, atr, d_action)
@@ -157,8 +176,8 @@ class SignalCombiner:
             if d_action == a_action:
                 a_conf = ai.get("confidence", 0)
                 combined = round(
-                    d_conf * Config.DQN_WEIGHT
-                    + a_conf * Config.AI_WEIGHT,
+                    d_conf * self._W_DQN
+                    + a_conf * self._W_AI,
                     3,
                 )
                 if combined < Config.MIN_SIGNAL_CONFIDENCE:

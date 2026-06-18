@@ -1,155 +1,206 @@
-from typing import Any, Dict, Optional, Tuple
+"""
+Среда Gymnasium для симуляции крипто-торговли с SAC (непрерывные действия).
+"""
+from __future__ import annotations
+
+from typing import Any, Dict, Tuple
 
 import gymnasium as gym
 import numpy as np
 import pandas as pd
 from gymnasium import spaces
 
+# Зона нечувствительности: |action| <= HOLD_ZONE → HOLD
+HOLD_ZONE = 0.3
+# Комиссия за сделку (0.1%)
+COMMISSION = 0.001
+# Размер вектора наблюдения: 11 рыночных + 3 портфельных
+OBS_DIM = 14
+
 
 class TradingEnv(gym.Env):
     """
-    Класс среды для симуляции торговли на основе данных о ценах и индикаторах.
-    Использует библиотеку Gym для интеграции с алгоритмами обучения с подкреплением.
+    Среда для симуляции торговли на исторических OHLCV-данных.
+
+    Пространство действий — непрерывное Box(-1, 1):
+        action > HOLD_ZONE  → BUY  (fraction of balance)
+        action < -HOLD_ZONE → SELL (fraction of position)
+        else                → HOLD
+
+    Пространство наблюдений Box(-inf, inf, shape=(14,)):
+        [open, high, low, close, volume, rsi, macd, macd_signal,
+         bb_upper, bb_middle, bb_lower, balance, position, current_value]
     """
 
-    def __init__(self, data: pd.DataFrame, initial_balance: float = 10000.0):
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        initial_balance: float = 10000.0,
+    ) -> None:
         """
-        Инициализирует среду торговли.
+        Инициализирует торговую среду.
 
-        :param data: DataFrame с данными о ценах и индикаторах (OHLCV + индикаторы).
-        :param initial_balance: Начальный баланс портфеля (по умолчанию 10000.0).
+        :param data: DataFrame с OHLCV и индикаторами.
+        :param initial_balance: Начальный баланс (по умолчанию 10000.0).
         """
         super(TradingEnv, self).__init__()
 
         self.data = data.copy()
         self.initial_balance = initial_balance
+
+        # Инициализация портфельного состояния до построения obs
+        self.balance = initial_balance
+        self.position = 0.0
+        self.entry_price = 0.0
         self.current_step = 0
+        self.done = False
+        self.current_value = initial_balance
+        self.total_commission = 0.0
 
-        # Action space: 0=hold, 1=buy, 2=sell
-        self.action_space = spaces.Discrete(3)
-
-        # Observation space: OHLCV + indicators
-        self.observation_space = spaces.Box(
-            low=-np.inf, high=np.inf, shape=(len(self._get_observation().flatten()),)
+        # Непрерывное пространство действий для SAC
+        self.action_space = spaces.Box(
+            low=-1.0, high=1.0, shape=(1,), dtype=np.float32
         )
 
-        self.reset()
+        self.observation_space = spaces.Box(
+            low=-np.inf,
+            high=np.inf,
+            shape=(OBS_DIM,),
+            dtype=np.float32,
+        )
 
     def _get_observation(self) -> np.ndarray:
         """
-        Получает текущее наблюдение из данных.
+        Возвращает вектор наблюдения из текущего шага данных.
 
-        :return: Массив NumPy с текущими данными (OHLCV, индикаторы, баланс, позиция и т.д.).
+        :return: float32-массив shape=(OBS_DIM,).
         """
         if self.current_step >= len(self.data):
-            return np.zeros(self.observation_space.shape)
+            return np.zeros(OBS_DIM, dtype=np.float32)
 
-        current_data = self.data.iloc[self.current_step]
-        observation = np.array(
-            [
-                current_data["open"],
-                current_data["high"],
-                current_data["low"],
-                current_data["close"],
-                current_data["volume"],
-                current_data.get("rsi", 50),
-                current_data.get("macd", 0),
-                current_data.get("macd_signal", 0),
-                current_data.get("bb_upper", 0),
-                current_data.get("bb_middle", 0),
-                current_data.get("bb_lower", 0),
-                self.balance,
-                self.position,
-                self.current_value,
-            ]
-        )
+        row = self.data.iloc[self.current_step]
+        price = float(row["close"])
+        return np.array([
+            float(row["open"]),
+            float(row["high"]),
+            float(row["low"]),
+            price,
+            float(row["volume"]),
+            float(row.get("rsi", 50)),
+            float(row.get("macd", 0)),
+            float(row.get("macd_signal", 0)),
+            float(row.get("bb_upper", price * 1.02)),
+            float(row.get("bb_middle", price)),
+            float(row.get("bb_lower", price * 0.98)),
+            self.balance,
+            self.position,
+            self.current_value,
+        ], dtype=np.float32)
 
-        return observation
-
-    def reset(self, seed=None, options=None) -> Tuple[np.ndarray, Dict[str, Any]]:
+    def reset(
+        self,
+        seed: Any = None,
+        options: Any = None,
+    ) -> Tuple[np.ndarray, Dict[str, Any]]:
         """
         Сбрасывает среду в начальное состояние.
 
-        :return: Кортеж (наблюдение, info) — gymnasium API.
+        :param seed: Зерно генератора случайных чисел (Gymnasium API).
+        :param options: Дополнительные параметры (Gymnasium API).
+        :return: Кортеж (наблюдение, info).
         """
         super().reset(seed=seed)
         self.balance = self.initial_balance
-        self.position = 0
-        self.entry_price = 0
+        self.position = 0.0
+        self.entry_price = 0.0
         self.current_step = 0
         self.done = False
         self.current_value = self.initial_balance
         self.total_commission = 0.0
-
         return self._get_observation(), {}
 
-    def step(self, action: int) -> Tuple[np.ndarray, float, bool, bool, Dict[str, Any]]:
+    def step(
+        self, action: np.ndarray
+    ) -> Tuple[np.ndarray, float, bool, bool, Dict[str, Any]]:
         """
-        Выполняет один шаг в среде на основе выбранного действия.
+        Выполняет один шаг среды.
 
-        :param action: Индекс действия (0=hold, 1=buy, 2=sell).
-        :return: Кортеж (наблюдение, награда, terminated, truncated, info) — gymnasium API.
+        :param action: float32-массив shape=(1,), диапазон [-1, 1].
+            > HOLD_ZONE  → BUY  (пропорционально свободному балансу)
+            < -HOLD_ZONE → SELL (пропорционально текущей позиции)
+            else         → HOLD
+        :return: (obs, reward, terminated, truncated, info).
         """
         if self.done:
-            return self._get_observation(), 0, True, False, {}
+            return self._get_observation(), 0.0, True, False, {}
 
-        current_price = self.data.iloc[self.current_step]["close"]
+        a = float(action[0])
+        current_price = float(
+            self.data.iloc[self.current_step]["close"]
+        )
         prev_value = self.current_value
 
-        # Execute action
-        if action == 1:  # Buy
-            if self.balance > 0:
-                self.position = self.balance / current_price
-                self.entry_price = current_price
-                self.balance = 0
-                commission = (
-                    current_price * self.position * 0.001
-                )
-                self.balance -= commission
-                self.total_commission += commission
+        if a > HOLD_ZONE and self.balance > 0:
+            fraction = min(
+                1.0, (a - HOLD_ZONE) / (1.0 - HOLD_ZONE)
+            )
+            spend = self.balance * fraction
+            bought = spend / current_price
+            commission = spend * COMMISSION
+            self.balance -= spend + commission
+            self.position += bought
+            self.entry_price = current_price
+            self.total_commission += commission
 
-        elif action == 2:  # Sell
-            if self.position > 0:
-                revenue = self.position * current_price
-                self.balance = revenue
-                self.position = 0
-                self.entry_price = 0
-                commission = revenue * 0.001
-                self.balance -= commission
-                self.total_commission += commission
+        elif a < -HOLD_ZONE and self.position > 0:
+            fraction = min(
+                1.0, (abs(a) - HOLD_ZONE) / (1.0 - HOLD_ZONE)
+            )
+            sell_qty = self.position * fraction
+            revenue = sell_qty * current_price
+            commission = revenue * COMMISSION
+            self.balance += revenue - commission
+            self.position -= sell_qty
+            self.total_commission += commission
+            if self.position < 1e-8:
+                self.position = 0.0
+                self.entry_price = 0.0
 
-        # Update current portfolio value
         self.current_value = (
-            self.balance + (self.position * current_price)
+            self.balance + self.position * current_price
         )
-
-        # Calculate reward
         reward = self.current_value - prev_value
 
-        # Move to next step
         self.current_step += 1
         if self.current_step >= len(self.data) - 1:
             self.done = True
 
-        info = {
+        info: Dict[str, Any] = {
             "step": self.current_step,
             "balance": self.balance,
             "position": self.position,
             "value": self.current_value,
             "price": current_price,
         }
+        return (
+            self._get_observation(),
+            reward,
+            self.done,
+            False,
+            info,
+        )
 
-        return self._get_observation(), reward, self.done, False, info
-
-    def render(self, mode="human"):
+    def render(self, mode: str = "human") -> None:
         """
-        Отображает текущее состояние среды.
+        Выводит текущее состояние среды в консоль.
 
         :param mode: Режим рендеринга (по умолчанию "human").
         """
-        current_price = self.data.iloc[self.current_step]["close"]
+        price = self.data.iloc[self.current_step]["close"]
         print(
-            f"Step: {self.current_step}, Price: {current_price:.2f}, "
-            f"Balance: {self.balance:.2f}, Position: {self.position:.4f}, "
+            f"Step: {self.current_step}, "
+            f"Price: {price:.2f}, "
+            f"Balance: {self.balance:.2f}, "
+            f"Position: {self.position:.4f}, "
             f"Value: {self.current_value:.2f}"
         )

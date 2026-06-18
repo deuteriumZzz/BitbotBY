@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
@@ -58,10 +60,24 @@ class NewsAnalyzer:
             self.newsapi = NewsApiClient(api_key=api_key)
 
     def _cache_key(self, symbol: str) -> str:
+        """
+        Формирует ключ Redis-кэша для символа.
+
+        :param symbol: Символ ccxt ('BTC/USDT').
+        :return: Строка вида 'news:BTC'.
+        """
         base = symbol.split("/")[0]
         return f"news:{base}"
 
-    def _load_cached(self, symbol: str):
+    def _load_cached(
+        self, symbol: str
+    ) -> tuple[float, list[str]] | None:
+        """
+        Загружает сентимент из Redis-кэша.
+
+        :param symbol: Символ ccxt.
+        :return: Кортеж (sentiment, headlines) или None если кэш пуст.
+        """
         try:
             raw = self.redis.redis_client.get(
                 self._cache_key(symbol)
@@ -79,6 +95,15 @@ class NewsAnalyzer:
         sentiment: float,
         headlines: List[str],
     ) -> None:
+        """
+        Сохраняет сентимент и заголовки в Redis-кэш.
+
+        TTL определяется Config.NEWS_UPDATE_INTERVAL (по умолчанию 900 с).
+
+        :param symbol: Символ ccxt.
+        :param sentiment: Compound-оценка VADER от -1 до 1.
+        :param headlines: Список заголовков новостей.
+        """
         try:
             key = self._cache_key(symbol)
             payload = json.dumps(
@@ -144,7 +169,12 @@ class NewsAnalyzer:
         return sentiment, headlines[:5]
 
     async def _fetch_for_symbol(self, query: str) -> list:
-        """Выполняет запрос к NewsAPI в thread executor."""
+        """
+        Выполняет запрос к NewsAPI в thread executor.
+
+        :param query: Поисковый запрос (например, "Bitcoin OR BTC").
+        :return: Список статей или пустой список при ошибке.
+        """
         if not self._enabled:
             return []
         try:
@@ -166,6 +196,12 @@ class NewsAnalyzer:
             return []
 
     async def analyze_news_async(self) -> float:
-        """Общий сентимент по крипторынку (обратная совместимость)."""
+        """
+        Возвращает общий сентимент по крипторынку через BTC/USDT.
+
+        Метод сохранён для обратной совместимости.
+
+        :return: Compound-оценка VADER от -1 до 1.
+        """
         sentiment, _ = await self.get_sentiment("BTC/USDT")
         return sentiment

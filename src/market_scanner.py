@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import logging
 from datetime import datetime
@@ -105,7 +107,17 @@ class MarketScanner:
         return data
 
     @staticmethod
-    def _safe(row: pd.Series, col: str, default: float = 0.0) -> float:
+    def _safe(
+        row: pd.Series, col: str, default: float = 0.0
+    ) -> float:
+        """
+        Безопасно извлекает числовое значение из строки DataFrame.
+
+        :param row: Строка DataFrame.
+        :param col: Название колонки.
+        :param default: Значение по умолчанию если колонка отсутствует.
+        :return: Числовое значение или default.
+        """
         if col in row.index and pd.notna(row[col]):
             return float(row[col])
         return default
@@ -113,10 +125,18 @@ class MarketScanner:
     def _pct(
         self, current: float, df: pd.DataFrame, bars_back: int
     ) -> float:
-        idx = -(bars_back + 1)
-        past = float(
-            df.iloc[idx]["close"] if len(df) > bars_back else df.iloc[0]["close"]
-        )
+        """
+        Рассчитывает процентное изменение цены за N свечей назад.
+
+        :param current: Текущая цена.
+        :param df: DataFrame с колонкой 'close'.
+        :param bars_back: Количество свечей назад.
+        :return: Изменение в процентах, округлённое до 2 знаков.
+        """
+        if len(df) > bars_back:
+            past = float(df.iloc[-(bars_back + 1)]["close"])
+        else:
+            past = float(df.iloc[0]["close"])
         return round((current - past) / past * 100, 2) if past else 0.0
 
     def build_snapshot(

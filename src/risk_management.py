@@ -1,8 +1,11 @@
+"""
+Управление рисками: расчёт позиций, стоп-лосса, тейк-профита и валидация сигналов.
+"""
+from __future__ import annotations
+
 import logging
 from datetime import datetime
 from typing import Any, Dict
-
-import numpy as np
 
 from config import Config
 from src.redis_client import RedisClient
@@ -10,20 +13,24 @@ from src.redis_client import RedisClient
 
 class RiskManager:
     """
-    Класс для управления рисками в торговле.
+    Менеджер рисков для торгового бота.
 
-    Предоставляет методы для расчета размера позиции, стоп-лосса, тейк-профита и валидации сигналов
-    на основе заданных параметров риска. Использует Redis для сохранения расчетов рисков и логирование для отслеживания операций.
+    Рассчитывает размер позиции, стоп-лосс, тейк-профит и валидирует
+    торговые сигналы на основе параметров риска. Сохраняет расчёты
+    в Redis для аудита.
     """
 
-    def __init__(self, initial_balance: float, risk_per_trade: float = 0.02):
+    def __init__(
+        self,
+        initial_balance: float,
+        risk_per_trade: float = 0.02,
+    ) -> None:
         """
         Инициализирует менеджер рисков.
 
-        Устанавливает начальный баланс, процент риска на сделку, клиент Redis и логгер.
-
-        :param initial_balance: Начальный баланс счета (float).
-        :param risk_per_trade: Процент риска на одну сделку (float, по умолчанию 0.02 - 2%).
+        :param initial_balance: Начальный баланс счёта.
+        :param risk_per_trade: Доля баланса на риск в сделке
+            (по умолчанию 0.02 = 2%).
         """
         self.initial_balance = initial_balance
         self.risk_per_trade = risk_per_trade
@@ -31,19 +38,21 @@ class RiskManager:
         self.logger = logging.getLogger(__name__)
 
     async def calculate_position_size(
-        self, current_balance: float, entry_price: float, stop_loss: float
+        self,
+        current_balance: float,
+        entry_price: float,
+        stop_loss: float,
     ) -> float:
         """
-        Рассчитывает размер позиции на основе правил управления рисками.
+        Рассчитывает размер позиции по правилам управления рисками.
 
-        Определяет сумму риска, вычисляет размер позиции как риск деленный на разницу цен,
-        сохраняет данные расчета в Redis под ключом "risk_calculation".
-        Если разница цен равна нулю, возвращает 0.
+        Размер = (баланс × риск) / |entry - stop_loss|.
+        Результат сохраняется в Redis под ключом "risk_calculation".
 
-        :param current_balance: Текущий баланс счета (float).
-        :param entry_price: Цена входа в позицию (float).
-        :param stop_loss: Цена стоп-лосса (float).
-        :return: Рассчитанный размер позиции (float).
+        :param current_balance: Текущий баланс счёта.
+        :param entry_price: Цена входа в позицию.
+        :param stop_loss: Цена стоп-лосса.
+        :return: Рассчитанный размер позиции (0 если разница цен = 0).
         """
         risk_amount = current_balance * self.risk_per_trade
         price_difference = abs(entry_price - stop_loss)
@@ -53,7 +62,6 @@ class RiskManager:
 
         position_size = risk_amount / price_difference
 
-        # Save risk calculation to Redis
         risk_data = {
             "timestamp": datetime.now().isoformat(),
             "current_balance": current_balance,
@@ -62,24 +70,24 @@ class RiskManager:
             "position_size": position_size,
             "risk_amount": risk_amount,
         }
-        self.redis.save_trading_state("risk_calculation", risk_data)
-
+        self.redis.save_trading_state(
+            "risk_calculation", risk_data
+        )
         return position_size
 
     async def calculate_stop_loss(
         self, entry_price: float, signal: Dict[str, Any]
     ) -> float:
         """
-        Рассчитывает цену стоп-лосса.
+        Рассчитывает цену стоп-лосса для сигнала.
 
-        Если сигнал содержит ATR, использует ATR-based SL (1.5x ATR).
-        Иначе — STOP_LOSS_PERCENT из Config.
+        Если сигнал содержит ATR — использует ATR-based SL (1.5× ATR).
+        Иначе применяет STOP_LOSS_PERCENT из Config.
 
-        :param entry_price: Цена входа в позицию (float).
-        :param signal: Словарь с данными сигнала (Dict[str, Any]).
-        :return: Рассчитанная цена стоп-лосса (float).
+        :param entry_price: Цена входа.
+        :param signal: Сигнал с ключами "action" и опционально "atr".
+        :return: Цена стоп-лосса.
         """
-        # ATR-based SL: 1.5x ATR from entry
         atr = signal.get("atr", None)
         if atr and atr > 0:
             if signal["action"] == "buy":
@@ -87,7 +95,7 @@ class RiskManager:
             elif signal["action"] == "sell":
                 return entry_price + 1.5 * atr
             return entry_price
-        # Fallback: use STOP_LOSS_PERCENT from config
+
         pct = Config.STOP_LOSS_PERCENT
         if signal["action"] == "buy":
             return entry_price * (1 - pct)
@@ -99,70 +107,68 @@ class RiskManager:
         self, entry_price: float, signal: Dict[str, Any]
     ) -> float:
         """
-        Рассчитывает цену тейк-профита.
+        Рассчитывает цену тейк-профита с соотношением риск/прибыль 1:2.
 
-        Использует соотношение риска к прибыли 1:2. Рассчитывает риск на основе стоп-лосса,
-        затем определяет тейк-профит как цену входа плюс/минус удвоенный риск в зависимости от действия сигнала.
-        Для других сигналов возвращает цену входа.
-
-        :param entry_price: Цена входа в позицию (float).
-        :param signal: Словарь с данными сигнала, содержащий ключ "action" (Dict[str, Any]).
-        :return: Рассчитанная цена тейк-профита (float).
+        :param entry_price: Цена входа.
+        :param signal: Сигнал с ключом "action".
+        :return: Цена тейк-профита.
         """
-        risk_reward_ratio = 2.0  # 1:2 risk-reward ratio
+        rr = 2.0  # соотношение риск/прибыль 1:2
 
         if signal["action"] == "buy":
-            stop_loss = await self.calculate_stop_loss(entry_price, signal)
+            stop_loss = await self.calculate_stop_loss(
+                entry_price, signal
+            )
             risk = entry_price - stop_loss
-            take_profit = entry_price + (risk * risk_reward_ratio)
+            return entry_price + risk * rr
+
         elif signal["action"] == "sell":
-            stop_loss = await self.calculate_stop_loss(entry_price, signal)
+            stop_loss = await self.calculate_stop_loss(
+                entry_price, signal
+            )
             risk = stop_loss - entry_price
-            take_profit = entry_price - (risk * risk_reward_ratio)
-        else:
-            take_profit = entry_price
+            return entry_price - risk * rr
 
-        return take_profit
+        return entry_price
 
-    async def validate_signal(self, signal: Dict[str, Any], market_data: Any) -> bool:
+    async def validate_signal(
+        self, signal: Dict[str, Any], market_data: Any
+    ) -> bool:
         """
-        Валидирует торговый сигнал на основе правил риска.
+        Валидирует торговый сигнал по правилам риска.
 
-        Проверяет, что сигнал не "hold", уверенность сигнала не ниже 0.6.
-        Логирует предупреждение при низкой уверенности. Возвращает False, если проверки не пройдены.
-        Дополнительные проверки риска могут быть добавлены.
+        Проверяет: сигнал не "hold", уверенность >= MIN_SIGNAL_CONFIDENCE.
 
-        :param signal: Словарь с данными сигнала, содержащий ключи "action" и опционально "confidence" (Dict[str, Any]).
-        :param market_data: Рыночные данные (любой тип, не используется в текущей реализации).
-        :return: True, если сигнал валиден, иначе False.
+        :param signal: Словарь с ключами "action" и "confidence".
+        :param market_data: Рыночные данные (не используется).
+        :return: True если сигнал проходит проверку, False иначе.
         """
         if signal["action"] == "hold":
             return False
 
-        # Check if confidence is sufficient
         if signal.get("confidence", 0) < Config.MIN_SIGNAL_CONFIDENCE:
-            self.logger.warning("Signal confidence too low")
+            self.logger.warning("Уверенность сигнала слишком низкая")
             return False
 
-        # Additional risk checks can be added here
         return True
 
     def check_daily_loss_limit(
         self, current_balance: float
     ) -> bool:
         """
-        Returns True if daily loss limit is NOT breached.
-        Returns False if bot should stop trading today.
+        Проверяет, не превышен ли дневной лимит потерь.
+
+        :param current_balance: Текущий баланс счёта.
+        :return: True если лимит НЕ превышен (торговля разрешена),
+            False если бот должен прекратить торговлю на сегодня.
         """
         loss = self.initial_balance - current_balance
-        limit = (
-            self.initial_balance * Config.DAILY_LOSS_LIMIT
-        )
+        limit = self.initial_balance * Config.DAILY_LOSS_LIMIT
         if loss >= limit:
             self.logger.warning(
-                f"Daily loss limit reached: "
+                f"Достигнут дневной лимит потерь: "
                 f"${loss:.2f} >= ${limit:.2f}. "
-                "Stopping trading."
+                "Торговля остановлена."
             )
             return False
         return True
