@@ -3,11 +3,49 @@ SQLite-based trade history tracker.
 Stores open/closed trades and computes win rate + expected value.
 DB path: data/trades.db
 """
+import json
 import logging
 import os
 import sqlite3
 from datetime import datetime
 from typing import Dict, Optional
+
+_BACKTEST_JSON = os.path.join("data", "backtest_results.json")
+
+
+def get_backtest_stats(strategy: str) -> Dict:
+    """
+    Read per-strategy stats from data/backtest_results.json.
+    Returns zeros when file is missing or strategy not found.
+    Run backtest.py once to generate the file.
+    """
+    try:
+        with open(_BACKTEST_JSON, encoding="utf-8") as f:
+            data = json.load(f)
+        for r in data.get("results", []):
+            if r.get("strategy") == strategy:
+                return {
+                    "win_rate": float(
+                        r.get("win_rate", 0.0)
+                    ),
+                    "total_trades": int(
+                        r.get("total_trades", 0)
+                    ),
+                    "ev": float(
+                        r.get("expected_value", 0.0)
+                    ),
+                    "total_return_pct": float(
+                        r.get("total_return_pct", 0.0)
+                    ),
+                }
+    except (FileNotFoundError, json.JSONDecodeError, KeyError):
+        pass
+    return {
+        "win_rate": 0.0,
+        "total_trades": 0,
+        "ev": 0.0,
+        "total_return_pct": 0.0,
+    }
 
 logger = logging.getLogger(__name__)
 
@@ -193,6 +231,27 @@ class TradeHistory:
             abs(sum(losses) / len(losses)) if losses else 0.0
         )
         return wr * avg_win - (1 - wr) * avg_loss
+
+    def get_trade_count(
+        self,
+        strategy: Optional[str] = None,
+        lookback: int = 50,
+    ) -> int:
+        """Count of closed trades used for win rate."""
+        where = (
+            "WHERE status='closed' AND strategy=?"
+            if strategy else "WHERE status='closed'"
+        )
+        params = (
+            (strategy, lookback) if strategy else (lookback,)
+        )
+        row = self._conn.execute(
+            f"SELECT COUNT(*) FROM "
+            f"(SELECT id FROM trades {where} "
+            f"ORDER BY id DESC LIMIT ?)",
+            params,
+        ).fetchone()
+        return row[0] if row else 0
 
     def get_summary(self) -> Dict:
         """Overall stats dict for display."""

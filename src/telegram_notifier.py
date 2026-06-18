@@ -98,12 +98,17 @@ class TelegramNotifier:
     async def ask_confirm(
         self,
         rec: dict,
-        win_rate: float,
-        ev: float,
+        live_win_rate: float = 0.5,
+        live_trades: int = 0,
+        live_ev: float = 0.0,
+        bt_win_rate: float = 0.0,
+        bt_trades: int = 0,
+        bt_ev: float = 0.0,
         timeout: int = _CONFIRM_TIMEOUT,
     ) -> bool:
         """
         Send trade proposal; return True if confirmed or timed out.
+        Shows backtest and live win rates separately.
         Returns True immediately if Telegram is disabled.
         """
         if not self._enabled:
@@ -117,18 +122,42 @@ class TelegramNotifier:
         tp = rec.get("take_profit", 0.0)
         strategy = rec.get("strategy", "?")
 
-        ev_pct = ev * 100
-        wr_pct = win_rate * 100
+        if bt_trades > 0:
+            bt_line = (
+                f"Бэктест (история):  "
+                f"*{bt_win_rate:.0%}*  "
+                f"({bt_trades} сделок)  "
+                f"EV: *{bt_ev*100:+.2f}%*"
+            )
+        else:
+            bt_line = (
+                "Бэктест: нет данных "
+                "\\(запустите backtest\\.py\\)"
+            )
+
+        if live_trades > 0:
+            live_line = (
+                f"Live торговля:      "
+                f"*{live_win_rate:.0%}*  "
+                f"({live_trades} сделок)  "
+                f"EV: *{live_ev*100:+.2f}%*"
+            )
+        else:
+            live_line = (
+                "Live торговля:      "
+                "\\-\\- \\(нет сделок пока\\)"
+            )
 
         text = (
-            f"*{symbol}*  --  {action}\n\n"
-            f"Strategy: `{strategy}`\n"
-            f"Entry: `${entry:.4f}`\n"
-            f"SL: `${sl:.4f}`   TP: `${tp:.4f}`\n\n"
-            f"AI confidence: *{confidence:.0%}*\n"
-            f"Strategy win rate: *{wr_pct:.0f}%*\n"
-            f"Expected value: *{ev_pct:+.2f}%* per trade\n\n"
-            f"Auto-execute in {timeout}s"
+            f"*{symbol}*  \\-\\-  {action}\n\n"
+            f"Стратегия: `{strategy}`\n"
+            f"Вход: `${entry:.4f}`\n"
+            f"SL: `${sl:.4f}`   "
+            f"TP: `${tp:.4f}`\n\n"
+            f"AI уверенность: *{confidence:.0%}*\n\n"
+            f"{bt_line}\n"
+            f"{live_line}\n\n"
+            f"Авто\\-исполнение через {timeout}с"
         )
         keyboard = InlineKeyboardMarkup([
             [
@@ -147,7 +176,7 @@ class TelegramNotifier:
             msg = await bot.send_message(
                 chat_id=self._chat_id,
                 text=text,
-                parse_mode="Markdown",
+                parse_mode="MarkdownV2",
                 reply_markup=keyboard,
             )
             mid = msg.message_id
