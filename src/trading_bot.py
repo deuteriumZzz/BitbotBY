@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 import pandas as pd
 
@@ -16,6 +16,8 @@ from src.portfolio_manager import PortfolioManager
 from src.redis_client import RedisClient
 from src.risk_management import RiskManager
 from src.strategies import TradingStrategy
+from src.trade_history import TradeHistory
+from src.telegram_notifier import TelegramNotifier
 
 logging.basicConfig(
     level=logging.INFO,
@@ -60,10 +62,15 @@ class TradingBot:
         self.ai = AIAnalyzer()
         self.combiner = SignalCombiner(self.ai)
         self.is_running = False
-        # symbol → {qty, stop_loss, take_profit, side}
-        self._monitored: Dict[str, Dict] = {}
-        self._daily_start_balance: float = 0.0
+        # symbol → {qty, stop_loss, take_profit, side, ...}
+        self._monitored: dict = {}
         self._monitor_task: Optional[asyncio.Task] = None
+        self.trade_history = TradeHistory()
+        self.telegram = TelegramNotifier(
+            Config.TELEGRAM_BOT_TOKEN,
+            Config.TELEGRAM_CHAT_ID,
+        )
+        self._paper_balance: float = Config.INITIAL_BALANCE
 
     async def initialize(self):
         """
@@ -85,9 +92,7 @@ class TradingBot:
             )
             await self.strategy.initialize()
             await self._restore_state()
-            self._daily_start_balance = (
-                await self._get_balance_usdt()
-            )
+            await self.telegram.start()
             logger.info(
                 "Trading bot initialized successfully"
             )
@@ -214,26 +219,135 @@ class TradingBot:
                 )
             if reasoning:
                 print(f"       {reasoning}")
+            wr = self.trade_history.get_win_rate(
+                r.get("strategy"), lookback=50
+            )
+            ev = self.trade_history.get_expected_value(
+                r.get("strategy"), lookback=50
+            )
+            logger.info(
+                f"  Win Rate: {wr:.0%}  "
+                f"EV: {ev*100:+.2f}% per trade"
+            )
         print(sep)
 
     async def _execute_top_rec(
         self,
-        recs: list,
+        filtered: list,
         market_data: dict,
     ) -> None:
         """Исполняет топ-1 (только если AUTO_EXECUTE)."""
-        if not recs or not Config.AUTO_EXECUTE:
+        if not filtered or not Config.AUTO_EXECUTE:
             return
-        top = recs[0]
+
+        top = filtered[0]
         sym = top.get("symbol", Config.SYMBOL)
-        df = market_data.get(sym, pd.DataFrame())
-        signal = {
-            "action": top.get("action", "hold"),
-            "price": top.get("entry", 0),
-            "confidence": top.get("confidence", 0),
-            "strategy": top.get("strategy", ""),
+        action = top.get("action")
+
+        if action not in ("buy", "sell"):
+            return
+
+        # Max positions check
+        if len(self._monitored) >= Config.MAX_POSITIONS:
+            logger.warning(
+                f"Max positions ({Config.MAX_POSITIONS}) "
+                "reached. Skipping."
+            )
+            return
+
+        # EV and win rate for this strategy
+        strategy = top.get(
+            "strategy", Config.DEFAULT_STRATEGY
+        )
+        win_rate = self.trade_history.get_win_rate(
+            strategy, lookback=50
+        )
+        ev = self.trade_history.get_expected_value(
+            strategy, lookback=50
+        )
+
+        # Telegram Variant B confirmation
+        confirmed = await self.telegram.ask_confirm(
+            top, win_rate, ev,
+            timeout=Config.TELEGRAM_CONFIRM_TIMEOUT,
+        )
+        if not confirmed:
+            logger.info(f"Trade rejected by user: {sym}")
+            return
+
+        entry = top.get("entry", 0.0)
+        if not entry:
+            return
+
+        balance = await self._get_balance_usdt()
+        quantity = (
+            balance * Config.RISK_PER_TRADE / entry
+        )
+        if quantity <= 0:
+            return
+
+        commission = (
+            quantity * entry * Config.COMMISSION_RATE
+        )
+
+        if Config.PAPER_TRADING:
+            # Simulate: no real order
+            logger.info(
+                f"[PAPER] {action.upper()} "
+                f"{quantity:.6f} {sym} @ {entry:.4f}"
+            )
+            if action == "buy":
+                self._paper_balance -= (
+                    quantity * entry + commission
+                )
+            else:
+                self._paper_balance += (
+                    quantity * entry - commission
+                )
+        else:
+            order = await self.api.create_order(
+                sym, "market", action, quantity
+            )
+            if not order:
+                logger.error(
+                    f"Order failed for {sym}"
+                )
+                return
+
+        # Record in trade history
+        trade_id = self.trade_history.record_open(
+            symbol=sym,
+            strategy=strategy,
+            action=action,
+            entry_price=entry,
+            quantity=quantity,
+            confidence=top.get("confidence", 0.0),
+            commission=commission,
+        )
+
+        # Register for SL/TP monitoring
+        self._monitored[sym] = {
+            "trade_id": trade_id,
+            "qty": quantity,
+            "entry": entry,
+            "stop_loss": top.get("stop_loss", 0.0),
+            "take_profit": top.get("take_profit", 0.0),
+            "side": action,
+            "atr": top.get("atr", 0.0),
+            "peak_price": entry,
         }
-        await self._execute_trade(signal, df, sym)
+
+        await self.telegram.notify(
+            f"Opened position *{sym}*\n"
+            f"{action.upper()} {quantity:.6f} "
+            f"@ ${entry:.4f}\n"
+            f"SL: ${top.get('stop_loss', 0):.4f}  "
+            f"TP: ${top.get('take_profit', 0):.4f}"
+        )
+        logger.info(
+            f"Position opened: {sym} {action} "
+            f"{quantity:.6f} @ {entry:.4f}"
+        )
 
     async def _execute_trade(
         self,
@@ -337,6 +451,128 @@ class TradingBot:
         except Exception as e:
             logger.error(f"Error executing trade: {e}")
 
+    async def _monitor_positions(self) -> None:
+        """
+        Background task: checks SL/TP every 5 seconds.
+        Executes market close when price hits SL or TP.
+        Applies trailing stop-loss based on ATR.
+        """
+        while self.is_running:
+            for sym, pos in list(self._monitored.items()):
+                try:
+                    price = await self.api.get_current_price(
+                        sym
+                    )
+                    if not price:
+                        continue
+                    sl = pos.get("stop_loss", 0)
+                    tp = pos.get("take_profit", 0)
+                    side = pos.get("side", "buy")
+                    qty = pos.get("qty", 0)
+
+                    # Trailing stop-loss: move SL toward price
+                    atr = pos.get("atr", 0.0)
+                    mult = Config.TRAILING_STOP_ATR_MULT
+                    if atr and atr > 0 and mult > 0:
+                        if side == "buy":
+                            trail = price - atr * mult
+                            if trail > pos.get(
+                                "stop_loss", 0
+                            ):
+                                self._monitored[sym][
+                                    "stop_loss"
+                                ] = trail
+                                pos["stop_loss"] = trail
+                                sl = trail
+                        else:
+                            trail = price + atr * mult
+                            if trail < pos.get(
+                                "stop_loss", float("inf")
+                            ):
+                                self._monitored[sym][
+                                    "stop_loss"
+                                ] = trail
+                                pos["stop_loss"] = trail
+                                sl = trail
+
+                    triggered = False
+                    if side == "buy":
+                        if sl and price <= sl:
+                            logger.warning(
+                                f"SL hit {sym}: "
+                                f"price={price} <= sl={sl}"
+                            )
+                            triggered = True
+                        elif tp and price >= tp:
+                            logger.info(
+                                f"TP hit {sym}: "
+                                f"price={price} >= tp={tp}"
+                            )
+                            triggered = True
+                    else:
+                        if sl and price >= sl:
+                            logger.warning(
+                                f"SL hit {sym}: "
+                                f"price={price} >= sl={sl}"
+                            )
+                            triggered = True
+                        elif tp and price <= tp:
+                            logger.info(
+                                f"TP hit {sym}: "
+                                f"price={price} <= tp={tp}"
+                            )
+                            triggered = True
+
+                    if triggered:
+                        trade_id = pos.get("trade_id")
+                        close_side = (
+                            "sell" if side == "buy" else "buy"
+                        )
+                        if not Config.PAPER_TRADING:
+                            await self.api.create_order(
+                                sym, "market",
+                                close_side, qty
+                            )
+                        await (
+                            self.portfolio_manager
+                            .update_portfolio(
+                                sym, close_side, qty, price
+                            )
+                        )
+                        del self._monitored[sym]
+                        logger.info(
+                            f"Position closed: {sym} "
+                            f"at {price}"
+                        )
+                        if trade_id:
+                            self.trade_history.record_close(
+                                trade_id=trade_id,
+                                exit_price=price,
+                                commission=(
+                                    qty
+                                    * price
+                                    * Config.COMMISSION_RATE
+                                ),
+                            )
+                        stats = (
+                            self.trade_history.get_summary()
+                        )
+                        await self.telegram.notify(
+                            f"Closed position *{sym}* "
+                            f"@ ${price:.4f}\n"
+                            f"Total trades: "
+                            f"{stats['closed_trades']}  "
+                            f"Win Rate: "
+                            f"{stats['win_rate']:.0%}\n"
+                            f"Total PnL: "
+                            f"${stats['total_pnl']:+.2f}"
+                        )
+                except Exception as e:
+                    logger.error(
+                        f"Monitor error for {sym}: {e}"
+                    )
+            await asyncio.sleep(5)
+
     async def _update_performance_stats(self):
         try:
             prices = {}
@@ -368,86 +604,6 @@ class TradingBot:
                 f"Error updating performance stats: {e}"
             )
 
-    async def _monitor_positions(self) -> None:
-        """
-        Background task: checks SL/TP every 5 seconds.
-        Executes market close when price hits SL or TP.
-        """
-        while self.is_running:
-            for sym, pos in list(self._monitored.items()):
-                try:
-                    price = await self.api.get_current_price(
-                        sym
-                    )
-                    if not price:
-                        continue
-                    sl = pos.get("stop_loss", 0)
-                    tp = pos.get("take_profit", 0)
-                    side = pos.get("side", "buy")
-                    qty = pos.get("qty", 0)
-
-                    triggered = False
-                    if side == "buy":
-                        if sl and price <= sl:
-                            logger.warning(
-                                f"SL hit {sym}: "
-                                f"price={price} <= sl={sl}"
-                            )
-                            triggered = True
-                        elif tp and price >= tp:
-                            logger.info(
-                                f"TP hit {sym}: "
-                                f"price={price} >= tp={tp}"
-                            )
-                            triggered = True
-                    else:
-                        if sl and price >= sl:
-                            logger.warning(
-                                f"SL hit {sym}: "
-                                f"price={price} >= sl={sl}"
-                            )
-                            triggered = True
-                        elif tp and price <= tp:
-                            logger.info(
-                                f"TP hit {sym}: "
-                                f"price={price} <= tp={tp}"
-                            )
-                            triggered = True
-
-                    if triggered:
-                        close_side = (
-                            "sell" if side == "buy" else "buy"
-                        )
-                        await self.api.create_order(
-                            sym, "market", close_side, qty
-                        )
-                        await (
-                            self.portfolio_manager
-                            .update_portfolio(
-                                sym, close_side, qty, price
-                            )
-                        )
-                        del self._monitored[sym]
-                        logger.info(
-                            f"Position closed: {sym} "
-                            f"at {price}"
-                        )
-                except Exception as e:
-                    logger.error(
-                        f"Monitor error for {sym}: {e}"
-                    )
-            await asyncio.sleep(5)
-
-    async def _check_kill_switch(self) -> bool:
-        """
-        Returns False if daily loss limit is breached.
-        Bot should stop if this returns False.
-        """
-        balance = await self._get_balance_usdt()
-        return self.risk_manager.check_daily_loss_limit(
-            balance
-        )
-
     async def trading_loop(self):
         """
         Основной гибридный цикл (30 сек).
@@ -473,13 +629,6 @@ class TradingBot:
             t0 = loop.time()
 
             try:
-                if not await self._check_kill_switch():
-                    logger.warning(
-                        "Daily loss limit reached. "
-                        "Stopping bot for today."
-                    )
-                    break
-
                 symbols = await self.scanner.get_top_symbols(
                     Config.SCAN_TOP_N
                 )
@@ -529,20 +678,6 @@ class TradingBot:
                 await self._execute_top_rec(
                     filtered, market_data
                 )
-                if Config.AUTO_EXECUTE and filtered:
-                    top = filtered[0]
-                    sym = top.get("symbol", Config.SYMBOL)
-                    if top.get("action") in ("buy", "sell"):
-                        self._monitored[sym] = {
-                            "qty": Config.RISK_PER_TRADE,
-                            "stop_loss": top.get(
-                                "stop_loss", 0
-                            ),
-                            "take_profit": top.get(
-                                "take_profit", 0
-                            ),
-                            "side": top.get("action"),
-                        }
                 await self._update_performance_stats()
 
                 elapsed = loop.time() - t0
@@ -582,8 +717,9 @@ class TradingBot:
 
     async def stop(self):
         self.is_running = False
-        if hasattr(self, "_monitor_task") and self._monitor_task:
+        if self._monitor_task:
             self._monitor_task.cancel()
+        await self.telegram.stop()
         await self.api.close()
         await self.data_loader.close()
         logger.info("Trading bot stopped")

@@ -37,14 +37,6 @@ class Config:
     STOP_LOSS_PERCENT: float = float(
         os.getenv("STOP_LOSS_PERCENT", "0.05")
     )
-    # Max daily loss as fraction of initial balance (5% = 0.05)
-    DAILY_LOSS_LIMIT: float = float(
-        os.getenv("DAILY_LOSS_LIMIT", "0.05")
-    )
-    # True → use Bybit testnet (safe for testing)
-    TESTNET: bool = (
-        os.getenv("TESTNET", "false").lower() == "true"
-    )
 
     # ── Strategy ───────────────────────────────────────────────────────────
     ENABLED_STRATEGIES: List[str] = field(default_factory=lambda: [
@@ -113,6 +105,32 @@ class Config:
         os.getenv("NEWS_UPDATE_INTERVAL", "900")
     )
 
+    # ── Telegram ───────────────────────────────────────────────────────────
+    # Токен BotFather: /newbot → скопировать токен
+    TELEGRAM_BOT_TOKEN: str = os.getenv(
+        "TELEGRAM_BOT_TOKEN", ""
+    )
+    # Chat ID (личный или группа): @userinfobot → узнать id
+    TELEGRAM_CHAT_ID: str = os.getenv(
+        "TELEGRAM_CHAT_ID", ""
+    )
+    # Секунд ждать подтверждения (потом → авто-исполнение)
+    TELEGRAM_CONFIRM_TIMEOUT: int = int(
+        os.getenv("TELEGRAM_CONFIRM_TIMEOUT", "60")
+    )
+
+    # ── Position Management ────────────────────────────────────────────────
+    # Максимум одновременных открытых позиций
+    MAX_POSITIONS: int = int(os.getenv("MAX_POSITIONS", "3"))
+    # True → симулировать сделки без реальных ордеров
+    PAPER_TRADING: bool = (
+        os.getenv("PAPER_TRADING", "false").lower() == "true"
+    )
+    # Trailing SL: двигать SL вслед за ценой (кратно ATR)
+    TRAILING_STOP_ATR_MULT: float = float(
+        os.getenv("TRAILING_STOP_ATR_MULT", "1.0")
+    )
+
     @classmethod
     def from_env(cls) -> "Config":
         """Создаёт экземпляр Config из переменных окружения."""
@@ -164,11 +182,25 @@ class Config:
             NEWS_UPDATE_INTERVAL=int(
                 os.getenv("NEWS_UPDATE_INTERVAL", "900")
             ),
-            DAILY_LOSS_LIMIT=float(
-                os.getenv("DAILY_LOSS_LIMIT", "0.05")
+            TELEGRAM_BOT_TOKEN=os.getenv(
+                "TELEGRAM_BOT_TOKEN", ""
             ),
-            TESTNET=(
-                os.getenv("TESTNET", "false").lower() == "true"
+            TELEGRAM_CHAT_ID=os.getenv(
+                "TELEGRAM_CHAT_ID", ""
+            ),
+            TELEGRAM_CONFIRM_TIMEOUT=int(
+                os.getenv("TELEGRAM_CONFIRM_TIMEOUT", "60")
+            ),
+            MAX_POSITIONS=int(
+                os.getenv("MAX_POSITIONS", "3")
+            ),
+            PAPER_TRADING=(
+                os.getenv(
+                    "PAPER_TRADING", "false"
+                ).lower() == "true"
+            ),
+            TRAILING_STOP_ATR_MULT=float(
+                os.getenv("TRAILING_STOP_ATR_MULT", "1.0")
             ),
         )
 
