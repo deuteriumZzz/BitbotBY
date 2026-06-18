@@ -8,23 +8,20 @@ import pandas as pd
 from config import Config
 from src.ai_analyzer import AIAnalyzer
 from src.bybit_api import BybitAPI
-from src.signal_combiner import SignalCombiner
 from src.data_loader import DataLoader
 from src.market_scanner import MarketScanner
 from src.news_analyzer import NewsAnalyzer
 from src.portfolio_manager import PortfolioManager
 from src.redis_client import RedisClient
 from src.risk_management import RiskManager
+from src.signal_combiner import SignalCombiner
 from src.strategies import TradingStrategy
-from src.trade_history import TradeHistory
 from src.telegram_notifier import TelegramNotifier
+from src.trade_history import TradeHistory
 
 logging.basicConfig(
     level=logging.INFO,
-    format=(
-        "%(asctime)s - %(name)s - "
-        "%(levelname)s - %(message)s"
-    ),
+    format=("%(asctime)s - %(name)s - " "%(levelname)s - %(message)s"),
 )
 logger = logging.getLogger(__name__)
 
@@ -47,17 +44,13 @@ class TradingBot:
         self.redis = RedisClient()
         self.api = BybitAPI()
         self.data_loader = DataLoader()
-        self.portfolio_manager = PortfolioManager(
-            Config.INITIAL_BALANCE
-        )
+        self.portfolio_manager = PortfolioManager(Config.INITIAL_BALANCE)
         self.strategy = None
         self.risk_manager = RiskManager(
             Config.INITIAL_BALANCE,
             Config.RISK_PER_TRADE,
         )
-        self.scanner = MarketScanner(
-            self.api, self.data_loader
-        )
+        self.scanner = MarketScanner(self.api, self.data_loader)
         self.news = NewsAnalyzer()
         self.ai = AIAnalyzer()
         self.combiner = SignalCombiner(self.ai)
@@ -88,15 +81,11 @@ class TradingBot:
                 Config.BYBIT_API_KEY,
                 Config.BYBIT_API_SECRET,
             )
-            self.strategy = TradingStrategy(
-                Config.DEFAULT_STRATEGY
-            )
+            self.strategy = TradingStrategy(Config.DEFAULT_STRATEGY)
             await self.strategy.initialize()
             await self._restore_state()
             await self.telegram.start()
-            logger.info(
-                "Trading bot initialized successfully"
-            )
+            logger.info("Trading bot initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize: {e}")
             raise
@@ -105,25 +94,19 @@ class TradingBot:
         state = self.redis.load_trading_state(Config.SYMBOL)
         if state:
             logger.info(f"Restored state: {state}")
-        portfolio = self.redis.load_trading_state(
-            "portfolio_state"
-        )
+        portfolio = self.redis.load_trading_state("portfolio_state")
         if portfolio:
-            self.portfolio_manager.current_balance = (
-                portfolio.get("balance", Config.INITIAL_BALANCE)
+            self.portfolio_manager.current_balance = portfolio.get(
+                "balance", Config.INITIAL_BALANCE
             )
-            self.portfolio_manager.positions = portfolio.get(
-                "positions", {}
-            )
+            self.portfolio_manager.positions = portfolio.get("positions", {})
 
     async def _get_balance_usdt(self) -> float:
         """Свободный баланс USDT (fallback — PortfolioManager)."""
         try:
             bal = await self.api.get_balance()
             if bal:
-                return float(
-                    bal.get("free", {}).get("USDT", 0)
-                )
+                return float(bal.get("free", {}).get("USDT", 0))
         except Exception as e:
             logger.warning(f"Balance fetch failed: {e}")
         return self.portfolio_manager.current_balance
@@ -147,26 +130,19 @@ class TradingBot:
         snapshots = []
         for sym, result in zip(symbols, news_results):
             if isinstance(result, Exception):
-                logger.warning(
-                    f"News sentiment failed for {sym}: "
-                    f"{result}"
-                )
+                logger.warning(f"News sentiment failed for {sym}: " f"{result}")
                 sent, headlines = 0.0, []
             else:
                 sent, headlines = result
             df = market_data.get(sym)
             if df is None or df.empty:
                 continue
-            snap = self.scanner.build_snapshot(
-                sym, df, sent, headlines
-            )
+            snap = self.scanner.build_snapshot(sym, df, sent, headlines)
             if snap:
                 snapshots.append(snap)
         return snapshots
 
-    def _filter_by_balance(
-        self, recs: list, balance: float
-    ) -> list:
+    def _filter_by_balance(self, recs: list, balance: float) -> list:
         """
         Оставляет рекомендации, доступные по балансу.
 
@@ -198,10 +174,7 @@ class TradingBot:
         sep = "=" * 60
         ts = datetime.now().strftime("%H:%M:%S")
         print(f"\n{sep}")
-        print(
-            f"  CYCLE #{cycle} | {ts} | "
-            f"Balance: ${balance:.2f} USDT"
-        )
+        print(f"  CYCLE #{cycle} | {ts} | " f"Balance: ${balance:.2f} USDT")
         print(sep)
         if not recs:
             print("  No actionable signals this cycle.")
@@ -216,15 +189,9 @@ class TradingBot:
             sl = r.get("stop_loss", 0)
             tp = r.get("take_profit", 0)
             reasoning = r.get("reasoning", "")
-            print(
-                f"  [{i}] {action:4s} {sym:<12s} "
-                f"conf={conf:.0f}% strat={strat}"
-            )
+            print(f"  [{i}] {action:4s} {sym:<12s} " f"conf={conf:.0f}% strat={strat}")
             if entry:
-                print(
-                    f"       entry={entry:.4f} "
-                    f"SL={sl:.4f} TP={tp:.4f}"
-                )
+                print(f"       entry={entry:.4f} " f"SL={sl:.4f} TP={tp:.4f}")
             if reasoning:
                 print(f"       {reasoning}")
         print(sep)
@@ -249,34 +216,21 @@ class TradingBot:
         async with self._monitored_lock:
             if len(self._monitored) >= Config.MAX_POSITIONS:
                 logger.warning(
-                    f"Max positions "
-                    f"({Config.MAX_POSITIONS}) "
-                    "reached. Skipping."
+                    f"Max positions " f"({Config.MAX_POSITIONS}) " "reached. Skipping."
                 )
                 return
             if sym in self._monitored:
-                logger.info(
-                    f"{sym} already monitored, skip"
-                )
+                logger.info(f"{sym} already monitored, skip")
                 return
 
         # EV and win rate for this strategy
-        strategy = top.get(
-            "strategy", Config.DEFAULT_STRATEGY
-        )
+        strategy = top.get("strategy", Config.DEFAULT_STRATEGY)
         from src.trade_history import get_backtest_stats
+
         bt = get_backtest_stats(strategy)
-        live_wr = await self.trade_history.get_win_rate(
-            strategy, lookback=50
-        )
-        live_n = await self.trade_history.get_trade_count(
-            strategy, lookback=50
-        )
-        live_ev = (
-            await self.trade_history.get_expected_value(
-                strategy, lookback=50
-            )
-        )
+        live_wr = await self.trade_history.get_win_rate(strategy, lookback=50)
+        live_n = await self.trade_history.get_trade_count(strategy, lookback=50)
+        live_ev = await self.trade_history.get_expected_value(strategy, lookback=50)
 
         # Telegram confirmation with full stats
         confirmed = await self.telegram.ask_confirm(
@@ -298,38 +252,25 @@ class TradingBot:
             return
 
         balance = await self._get_balance_usdt()
-        quantity = (
-            balance * Config.RISK_PER_TRADE / entry
-        )
+        quantity = balance * Config.RISK_PER_TRADE / entry
         if quantity <= 0:
             return
 
-        commission = (
-            quantity * entry * Config.COMMISSION_RATE
-        )
+        commission = quantity * entry * Config.COMMISSION_RATE
 
         if Config.PAPER_TRADING:
             # Simulate: no real order
             logger.info(
-                f"[PAPER] {action.upper()} "
-                f"{quantity:.6f} {sym} @ {entry:.4f}"
+                f"[PAPER] {action.upper()} " f"{quantity:.6f} {sym} @ {entry:.4f}"
             )
             if action == "buy":
-                self._paper_balance -= (
-                    quantity * entry + commission
-                )
+                self._paper_balance -= quantity * entry + commission
             else:
-                self._paper_balance += (
-                    quantity * entry - commission
-                )
+                self._paper_balance += quantity * entry - commission
         else:
-            order = await self.api.create_order(
-                sym, "market", action, quantity
-            )
+            order = await self.api.create_order(sym, "market", action, quantity)
             if not order:
-                logger.error(
-                    f"Order failed for {sym}"
-                )
+                logger.error(f"Order failed for {sym}")
                 return
 
         # Record in trade history
@@ -350,9 +291,7 @@ class TradingBot:
                 "qty": quantity,
                 "entry": entry,
                 "stop_loss": top.get("stop_loss", 0.0),
-                "take_profit": top.get(
-                    "take_profit", 0.0
-                ),
+                "take_profit": top.get("take_profit", 0.0),
                 "side": action,
                 "atr": top.get("atr", 0.0),
                 "peak_price": entry,
@@ -365,10 +304,7 @@ class TradingBot:
             f"SL: ${top.get('stop_loss', 0):.4f}  "
             f"TP: ${top.get('take_profit', 0):.4f}"
         )
-        logger.info(
-            f"Position opened: {sym} {action} "
-            f"{quantity:.6f} @ {entry:.4f}"
-        )
+        logger.info(f"Position opened: {sym} {action} " f"{quantity:.6f} @ {entry:.4f}")
 
     async def _execute_trade(
         self,
@@ -386,58 +322,40 @@ class TradingBot:
         if symbol is None:
             symbol = Config.SYMBOL
         try:
-            ok = await self.risk_manager.validate_signal(
-                signal, market_data
-            )
+            ok = await self.risk_manager.validate_signal(signal, market_data)
             if not ok:
                 logger.info("Signal validation failed")
                 return
 
             entry = signal.get("price", 0)
             if entry <= 0 and not market_data.empty:
-                entry = float(
-                    market_data["close"].iloc[-1]
-                )
+                entry = float(market_data["close"].iloc[-1])
             if entry <= 0:
-                logger.warning(
-                    f"Invalid entry_price for {symbol}"
-                )
+                logger.warning(f"Invalid entry_price for {symbol}")
                 return
 
-            sl = await self.risk_manager.calculate_stop_loss(
-                entry, signal
-            )
+            sl = await self.risk_manager.calculate_stop_loss(entry, signal)
             balance = await self.api.get_balance()
             if not balance:
                 logger.error("Could not get balance")
                 return
 
-            cur_price = await self.api.get_current_price(
-                symbol
-            )
+            cur_price = await self.api.get_current_price(symbol)
             if not cur_price:
                 logger.error("Could not get price")
                 return
 
-            pos_size = (
-                await self.risk_manager.calculate_position_size(
-                    self.portfolio_manager.current_balance,
-                    cur_price,
-                    sl,
-                )
+            pos_size = await self.risk_manager.calculate_position_size(
+                self.portfolio_manager.current_balance,
+                cur_price,
+                sl,
             )
             if pos_size <= 0:
                 logger.warning("Invalid position size")
                 return
 
-            side = (
-                "buy" if signal["action"] == "buy" else "sell"
-            )
-            parts = (
-                symbol.split("/")
-                if "/" in symbol
-                else [symbol[:-4], symbol[-4:]]
-            )
+            side = "buy" if signal["action"] == "buy" else "sell"
+            parts = symbol.split("/") if "/" in symbol else [symbol[:-4], symbol[-4:]]
             base = parts[0]
             quote = parts[1] if len(parts) > 1 else "USDT"
             free = balance.get("free", {})
@@ -453,14 +371,10 @@ class TradingBot:
                     return
             else:
                 if free.get(base, 0) < pos_size:
-                    logger.warning(
-                        f"Insufficient {base} for sell"
-                    )
+                    logger.warning(f"Insufficient {base} for sell")
                     return
 
-            order = await self.api.create_order(
-                symbol, "limit", side, pos_size, entry
-            )
+            order = await self.api.create_order(symbol, "limit", side, pos_size, entry)
             if order:
                 logger.info(f"Order executed: {order}")
                 await self.portfolio_manager.update_portfolio(
@@ -484,9 +398,7 @@ class TradingBot:
                 snapshot = list(self._monitored.items())
             for sym, pos in snapshot:
                 try:
-                    price = await self.api.get_current_price(
-                        sym
-                    )
+                    price = await self.api.get_current_price(sym)
                     if not price:
                         continue
                     sl = pos.get("stop_loss", 0)
@@ -500,115 +412,59 @@ class TradingBot:
                     if atr and atr > 0 and mult > 0:
                         if side == "buy":
                             trail = price - atr * mult
-                            if trail > pos.get(
-                                "stop_loss", 0
-                            ):
-                                async with (
-                                    self._monitored_lock
-                                ):
-                                    if sym in (
-                                        self._monitored
-                                    ):
-                                        self._monitored[
-                                            sym
-                                        ]["stop_loss"] = (
-                                            trail
-                                        )
-                                        pos[
-                                            "stop_loss"
-                                        ] = trail
+                            if trail > pos.get("stop_loss", 0):
+                                async with self._monitored_lock:
+                                    if sym in (self._monitored):
+                                        self._monitored[sym]["stop_loss"] = trail
+                                        pos["stop_loss"] = trail
                                 sl = trail
                         else:
                             trail = price + atr * mult
-                            if trail < pos.get(
-                                "stop_loss", float("inf")
-                            ):
-                                async with (
-                                    self._monitored_lock
-                                ):
-                                    if sym in (
-                                        self._monitored
-                                    ):
-                                        self._monitored[
-                                            sym
-                                        ]["stop_loss"] = (
-                                            trail
-                                        )
-                                        pos[
-                                            "stop_loss"
-                                        ] = trail
+                            if trail < pos.get("stop_loss", float("inf")):
+                                async with self._monitored_lock:
+                                    if sym in (self._monitored):
+                                        self._monitored[sym]["stop_loss"] = trail
+                                        pos["stop_loss"] = trail
                                 sl = trail
 
                     triggered = False
                     if side == "buy":
                         if sl and price <= sl:
                             logger.warning(
-                                f"SL hit {sym}: "
-                                f"price={price} <= sl={sl}"
+                                f"SL hit {sym}: " f"price={price} <= sl={sl}"
                             )
                             triggered = True
                         elif tp and price >= tp:
-                            logger.info(
-                                f"TP hit {sym}: "
-                                f"price={price} >= tp={tp}"
-                            )
+                            logger.info(f"TP hit {sym}: " f"price={price} >= tp={tp}")
                             triggered = True
                     else:
                         if sl and price >= sl:
                             logger.warning(
-                                f"SL hit {sym}: "
-                                f"price={price} >= sl={sl}"
+                                f"SL hit {sym}: " f"price={price} >= sl={sl}"
                             )
                             triggered = True
                         elif tp and price <= tp:
-                            logger.info(
-                                f"TP hit {sym}: "
-                                f"price={price} <= tp={tp}"
-                            )
+                            logger.info(f"TP hit {sym}: " f"price={price} <= tp={tp}")
                             triggered = True
 
                     if triggered:
                         trade_id = pos.get("trade_id")
-                        close_side = (
-                            "sell"
-                            if side == "buy"
-                            else "buy"
-                        )
+                        close_side = "sell" if side == "buy" else "buy"
                         if not Config.PAPER_TRADING:
-                            await self.api.create_order(
-                                sym, "market",
-                                close_side, qty
-                            )
-                        await (
-                            self.portfolio_manager
-                            .update_portfolio(
-                                sym, close_side, qty, price
-                            )
+                            await self.api.create_order(sym, "market", close_side, qty)
+                        await self.portfolio_manager.update_portfolio(
+                            sym, close_side, qty, price
                         )
                         async with self._monitored_lock:
                             self._monitored.pop(sym, None)
-                        logger.info(
-                            f"Position closed: {sym} "
-                            f"at {price}"
-                        )
+                        logger.info(f"Position closed: {sym} " f"at {price}")
                         if trade_id:
-                            await (
-                                self.trade_history
-                                .record_close(
-                                    trade_id=trade_id,
-                                    exit_price=price,
-                                    commission=(
-                                        qty
-                                        * price
-                                        * Config
-                                        .COMMISSION_RATE
-                                    ),
-                                )
+                            await self.trade_history.record_close(
+                                trade_id=trade_id,
+                                exit_price=price,
+                                commission=(qty * price * Config.COMMISSION_RATE),
                             )
-                        stats = (
-                            await
-                            self.trade_history.get_summary()
-                        )
+                        stats = await self.trade_history.get_summary()
                         await self.telegram.notify(
                             f"Closed position *{sym}* "
                             f"@ ${price:.4f}\n"
@@ -621,18 +477,12 @@ class TradingBot:
                         )
                     _error_counts.pop(sym, None)
                 except Exception as e:
-                    _error_counts[sym] = (
-                        _error_counts.get(sym, 0) + 1
-                    )
+                    _error_counts[sym] = _error_counts.get(sym, 0) + 1
                     count = _error_counts[sym]
-                    logger.error(
-                        f"Monitor error {sym} "
-                        f"(attempt {count}): {e}"
-                    )
+                    logger.error(f"Monitor error {sym} " f"(attempt {count}): {e}")
                     if count >= 5:
                         logger.warning(
-                            f"Removing {sym} from monitor"
-                            " after 5 consecutive errors"
+                            f"Removing {sym} from monitor" " after 5 consecutive errors"
                         )
                         async with self._monitored_lock:
                             self._monitored.pop(sym, None)
@@ -646,29 +496,19 @@ class TradingBot:
                 p = await self.api.get_current_price(sym)
                 if p:
                     prices[sym] = p
-            pv = (
-                await self.portfolio_manager
-                .get_portfolio_value(prices)
+            pv = await self.portfolio_manager.get_portfolio_value(prices)
+            pnl = (pv - Config.INITIAL_BALANCE) / Config.INITIAL_BALANCE * 100
+            self.redis.update_performance_stats(
+                {
+                    "timestamp": datetime.now().isoformat(),
+                    "current_balance": (self.portfolio_manager.current_balance),
+                    "portfolio_value": pv,
+                    "profit_loss": pnl,
+                    "positions": (self.portfolio_manager.get_positions()),
+                }
             )
-            pnl = (
-                (pv - Config.INITIAL_BALANCE)
-                / Config.INITIAL_BALANCE * 100
-            )
-            self.redis.update_performance_stats({
-                "timestamp": datetime.now().isoformat(),
-                "current_balance": (
-                    self.portfolio_manager.current_balance
-                ),
-                "portfolio_value": pv,
-                "profit_loss": pnl,
-                "positions": (
-                    self.portfolio_manager.get_positions()
-                ),
-            })
         except Exception as e:
-            logger.error(
-                f"Error updating performance stats: {e}"
-            )
+            logger.error(f"Error updating performance stats: {e}")
 
     async def trading_loop(self):
         """
@@ -678,9 +518,7 @@ class TradingBot:
         При ошибке ждёт 10 сек и продолжает.
         """
         self.is_running = True
-        self._monitor_task = asyncio.create_task(
-            self._monitor_positions()
-        )
+        self._monitor_task = asyncio.create_task(self._monitor_positions())
         cycle = 0
         ai_status = "on" if self.ai.enabled else "off"
         logger.info(
@@ -695,85 +533,55 @@ class TradingBot:
             t0 = loop.time()
 
             try:
-                symbols = await self.scanner.get_top_symbols(
-                    Config.SCAN_TOP_N
-                )
-                market_data = await self.scanner.scan_all(
-                    symbols, Config.TIMEFRAME
-                )
+                symbols = await self.scanner.get_top_symbols(Config.SCAN_TOP_N)
+                market_data = await self.scanner.scan_all(symbols, Config.TIMEFRAME)
                 scanned = list(market_data.keys())
-                snapshots = await self._collect_snapshots(
-                    scanned, market_data
-                )
+                snapshots = await self._collect_snapshots(scanned, market_data)
 
                 balance = await self._get_balance_usdt()
-                recs = await self.combiner.combine(
-                    snapshots, balance
-                )
+                recs = await self.combiner.combine(snapshots, balance)
 
                 if not recs:
-                    logger.info(
-                        f"MODE={Config.MODE}, "
-                        "no signals — local fallback"
-                    )
+                    logger.info(f"MODE={Config.MODE}, " "no signals — local fallback")
                     for snap in snapshots:
-                        strat, conf = (
-                            self.combiner.ai
-                            .recommend_strategy_local(snap)
-                        )
+                        strat, conf = self.combiner.ai.recommend_strategy_local(snap)
                         if conf >= Config.MIN_SIGNAL_CONFIDENCE:
-                            recs.append({
-                                "symbol": snap["symbol"],
-                                "action": "hold",
-                                "strategy": strat,
-                                "confidence": conf,
-                                "reasoning": "Local analysis",
-                            })
+                            recs.append(
+                                {
+                                    "symbol": snap["symbol"],
+                                    "action": "hold",
+                                    "strategy": strat,
+                                    "confidence": conf,
+                                    "reasoning": "Local analysis",
+                                }
+                            )
 
-                filtered = self._filter_by_balance(
-                    recs, balance
-                )
+                filtered = self._filter_by_balance(recs, balance)
                 filtered.sort(
                     key=lambda x: x.get("confidence", 0),
                     reverse=True,
                 )
 
-                self._print_recommendations(
-                    filtered, balance, cycle
-                )
-                await self._execute_top_rec(
-                    filtered, market_data
-                )
+                self._print_recommendations(filtered, balance, cycle)
+                await self._execute_top_rec(filtered, market_data)
                 await self._update_performance_stats()
 
                 elapsed = loop.time() - t0
-                sleep_for = max(
-                    0, Config.TRADING_INTERVAL - elapsed
-                )
+                sleep_for = max(0, Config.TRADING_INTERVAL - elapsed)
                 logger.info(
-                    f"Cycle #{cycle}: {elapsed:.1f}s, "
-                    f"sleep {sleep_for:.1f}s"
+                    f"Cycle #{cycle}: {elapsed:.1f}s, " f"sleep {sleep_for:.1f}s"
                 )
                 await asyncio.sleep(sleep_for)
 
             except Exception as e:
-                logger.error(
-                    f"Error in trading loop: {e}"
-                )
+                logger.error(f"Error in trading loop: {e}")
                 await asyncio.sleep(10)
 
-    async def analyze_market(
-        self, symbol: str, timeframe: str
-    ):
+    async def analyze_market(self, symbol: str, timeframe: str):
         """Анализ одного символа (обратная совместимость)."""
         try:
-            data = await self.data_loader.get_market_data(
-                symbol, timeframe, limit=100
-            )
-            data = (
-                self.data_loader
-                .calculate_technical_indicators(data)
-            )
+            data = await self.data_loader.get_market_data(symbol, timeframe, limit=100)
+            data = self.data_loader.calculate_technical_indicators(data)
             signal = await self.strategy.get_signal(data)
             logger.info(f"Signal for {symbol}: {signal}")
             return signal

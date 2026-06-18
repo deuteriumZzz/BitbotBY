@@ -1,6 +1,7 @@
 """
 Загрузчик рыночных данных с пагинацией, кэшированием в CSV и расчётом индикаторов.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -47,9 +48,7 @@ async def _fetch_batch_with_retry(
     :return: Список OHLCV-записей.
     :raises ccxt.NetworkError: После исчерпания попыток retry.
     """
-    return await exchange.fetch_ohlcv(
-        symbol, timeframe, since=since, limit=limit
-    )
+    return await exchange.fetch_ohlcv(symbol, timeframe, since=since, limit=limit)
 
 
 class DataLoader:
@@ -94,14 +93,10 @@ class DataLoader:
         """
         try:
             data = await self.api.get_ohlcv(symbol, timeframe, limit)
-            self.logger.info(
-                f"Сырые колонки: {data.columns.tolist()}"
-            )
+            self.logger.info(f"Сырые колонки: {data.columns.tolist()}")
             self.logger.info(f"Размер данных: {data.shape}")
             if not data.empty:
-                self.logger.info(
-                    f"Первая строка: {data.iloc[0].to_dict()}"
-                )
+                self.logger.info(f"Первая строка: {data.iloc[0].to_dict()}")
             data = self._standardize_column_names(data)
             return data
         except asyncio.CancelledError:
@@ -177,9 +172,20 @@ class DataLoader:
         :return: DataFrame с историческими данными.
         """
         timeframe_minutes = {
-            "1m": 1, "5m": 5, "15m": 15, "30m": 30,
-            "1h": 60, "2h": 120, "4h": 240, "6h": 360, "8h": 480, "12h": 720,
-            "1d": 1440, "3d": 4320, "1w": 10080, "1M": 43200,
+            "1m": 1,
+            "5m": 5,
+            "15m": 15,
+            "30m": 30,
+            "1h": 60,
+            "2h": 120,
+            "4h": 240,
+            "6h": 360,
+            "8h": 480,
+            "12h": 720,
+            "1d": 1440,
+            "3d": 4320,
+            "1w": 10080,
+            "1M": 43200,
         }
         minutes_per_day = 24 * 60
         timeframe_min = timeframe_minutes.get(timeframe, 60)
@@ -334,7 +340,11 @@ class DataLoader:
             except ccxt.AuthenticationError as e:
                 self.logger.critical(f"Ошибка авторизации при пагинации {symbol}: {e}")
                 raise
-            except (ccxt.NetworkError, ccxt.RequestTimeout, ccxt.ExchangeNotAvailable) as e:
+            except (
+                ccxt.NetworkError,
+                ccxt.RequestTimeout,
+                ccxt.ExchangeNotAvailable,
+            ) as e:
                 self.logger.error(f"Сетевая ошибка при загрузке батча {symbol}: {e}")
                 break
             except Exception as e:

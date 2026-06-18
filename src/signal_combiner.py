@@ -61,15 +61,11 @@ class SignalCombiner:
         if mode == "hybrid":
             return await self._hybrid(snapshots, balance)
 
-        self.logger.warning(
-            f"Unknown MODE='{mode}', fallback to 'ai'"
-        )
+        self.logger.warning(f"Unknown MODE='{mode}', fallback to 'ai'")
         return await self.ai.analyze(snapshots, balance)
 
     @staticmethod
-    def _sl_tp(
-        price: float, atr: float, action: str
-    ) -> Tuple[float, float]:
+    def _sl_tp(price: float, atr: float, action: str) -> Tuple[float, float]:
         """
         Рассчитывает стоп-лосс и тейк-профит через ATR (1.5x / 3.0x).
 
@@ -102,26 +98,23 @@ class SignalCombiner:
         min_conf = Config.MIN_SIGNAL_CONFIDENCE
         for snap in snapshots:
             sig = self.dqn.get_signal(snap, balance)
-            if (
-                sig["action"] == "hold"
-                or sig["confidence"] < min_conf
-            ):
+            if sig["action"] == "hold" or sig["confidence"] < min_conf:
                 continue
             price = snap.get("price", 0)
             atr = snap.get("atr", price * 0.02)
             sl, tp = self._sl_tp(price, atr, sig["action"])
-            results.append({
-                "symbol": snap["symbol"],
-                "action": sig["action"],
-                "strategy": "dqn",
-                "confidence": sig["confidence"],
-                "entry": price,
-                "stop_loss": sl,
-                "take_profit": tp,
-                "reasoning": (
-                    f"DQN Q-conf {sig['confidence']:.0%}"
-                ),
-            })
+            results.append(
+                {
+                    "symbol": snap["symbol"],
+                    "action": sig["action"],
+                    "strategy": "dqn",
+                    "confidence": sig["confidence"],
+                    "entry": price,
+                    "stop_loss": sl,
+                    "take_profit": tp,
+                    "reasoning": (f"DQN Q-conf {sig['confidence']:.0%}"),
+                }
+            )
         return results
 
     async def _hybrid(
@@ -135,9 +128,7 @@ class SignalCombiner:
         Взвешенный confidence: 40% DQN + 60% AI.
         """
         ai_recs = await self.ai.analyze(snapshots, balance)
-        ai_map: Dict[str, Dict] = {
-            r["symbol"]: r for r in ai_recs
-        }
+        ai_map: Dict[str, Dict] = {r["symbol"]: r for r in ai_recs}
 
         results = []
         for snap in snapshots:
@@ -157,18 +148,18 @@ class SignalCombiner:
                     price = snap.get("price", 0)
                     atr = snap.get("atr", price * 0.02)
                     sl, tp = self._sl_tp(price, atr, d_action)
-                    results.append({
-                        "symbol": sym,
-                        "action": d_action,
-                        "strategy": "dqn",
-                        "confidence": d_conf,
-                        "entry": price,
-                        "stop_loss": sl,
-                        "take_profit": tp,
-                        "reasoning": (
-                            f"DQN {d_conf:.0%}, AI silent"
-                        ),
-                    })
+                    results.append(
+                        {
+                            "symbol": sym,
+                            "action": d_action,
+                            "strategy": "dqn",
+                            "confidence": d_conf,
+                            "entry": price,
+                            "stop_loss": sl,
+                            "take_profit": tp,
+                            "reasoning": (f"DQN {d_conf:.0%}, AI silent"),
+                        }
+                    )
                 continue
 
             a_action = ai.get("action", "hold")
@@ -176,8 +167,7 @@ class SignalCombiner:
             if d_action == a_action:
                 a_conf = ai.get("confidence", 0)
                 combined = round(
-                    d_conf * self._W_DQN
-                    + a_conf * self._W_AI,
+                    d_conf * self._W_DQN + a_conf * self._W_AI,
                     3,
                 )
                 if combined < Config.MIN_SIGNAL_CONFIDENCE:
@@ -185,9 +175,7 @@ class SignalCombiner:
                 rec = dict(ai)
                 rec["confidence"] = combined
                 base_strat = ai.get("strategy", "ai")
-                rec["strategy"] = (
-                    f"hybrid({base_strat}+dqn)"
-                )
+                rec["strategy"] = f"hybrid({base_strat}+dqn)"
                 reason = ai.get("reasoning", "").strip()
                 rec["reasoning"] = (
                     f"{reason} [DQN {d_conf:.0%}]"
@@ -196,9 +184,6 @@ class SignalCombiner:
                 )
                 results.append(rec)
             else:
-                self.logger.debug(
-                    f"{sym}: AI={a_action} "
-                    f"vs DQN={d_action} → hold"
-                )
+                self.logger.debug(f"{sym}: AI={a_action} " f"vs DQN={d_action} → hold")
 
         return results

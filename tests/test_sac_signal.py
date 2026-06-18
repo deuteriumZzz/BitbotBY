@@ -9,6 +9,7 @@
 - нормализацию через norm_stats
 - поведение DQNSignal без модели (загрузки нет → hold)
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -52,6 +53,7 @@ _SNAP_BEARISH = {
 
 # ── Тесты _snap_to_obs ────────────────────────────────
 
+
 def test_obs_shape_and_dtype():
     obs = _snap_to_obs(_SNAP_MINIMAL, balance=5000.0, norm_stats=None)
     assert obs.shape == (OBS_DIM,)
@@ -60,13 +62,13 @@ def test_obs_shape_and_dtype():
 
 def test_ohlcv_values_used_when_present():
     obs = _snap_to_obs(_SNAP_WITH_OHLCV, balance=5000.0, norm_stats=None)
-    assert obs[0] == pytest.approx(49800.0)   # open
-    assert obs[1] == pytest.approx(50500.0)   # high
-    assert obs[2] == pytest.approx(49500.0)   # low
-    assert obs[3] == pytest.approx(50000.0)   # close
-    assert obs[4] == pytest.approx(1234.5)    # volume
-    assert obs[6] == pytest.approx(150.0)     # macd (числовой)
-    assert obs[7] == pytest.approx(120.0)     # macd_signal
+    assert obs[0] == pytest.approx(49800.0)  # open
+    assert obs[1] == pytest.approx(50500.0)  # high
+    assert obs[2] == pytest.approx(49500.0)  # low
+    assert obs[3] == pytest.approx(50000.0)  # close
+    assert obs[4] == pytest.approx(1234.5)  # volume
+    assert obs[6] == pytest.approx(150.0)  # macd (числовой)
+    assert obs[7] == pytest.approx(120.0)  # macd_signal
 
 
 def test_fallback_to_price_without_ohlcv():
@@ -110,11 +112,12 @@ def test_volume_fallback_uses_training_mean():
 def test_portfolio_features_set_correctly():
     obs = _snap_to_obs(_SNAP_MINIMAL, balance=3000.0, norm_stats=None)
     assert obs[11] == pytest.approx(3000.0)  # balance
-    assert obs[12] == pytest.approx(0.0)     # position (нет позиции при инференсе)
+    assert obs[12] == pytest.approx(0.0)  # position (нет позиции при инференсе)
     assert obs[13] == pytest.approx(3000.0)  # current_value
 
 
 # ── Тесты DQNSignal ───────────────────────────────────
+
 
 def test_dqn_signal_not_loaded_without_model_file():
     sig = DQNSignal()

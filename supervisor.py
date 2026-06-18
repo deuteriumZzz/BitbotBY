@@ -1,6 +1,7 @@
 """
 Точка входа супервизора: настройка логирования и запуск торгового бота.
 """
+
 from __future__ import annotations
 
 import os
@@ -36,9 +37,7 @@ async def main() -> None:
         logger.info("Задача отменена")
         raise
     except Exception as e:
-        logger.critical(
-            f"Критическая ошибка супервизора: {e}", exc_info=True
-        )
+        logger.critical(f"Критическая ошибка супервизора: {e}", exc_info=True)
         raise
     finally:
         await bot.stop()

@@ -32,9 +32,7 @@ class AIAnalyzer:
     def __init__(self):
         self.enabled = bool(Config.ANTHROPIC_API_KEY)
         if self.enabled:
-            self.client = anthropic.AsyncAnthropic(
-                api_key=Config.ANTHROPIC_API_KEY
-            )
+            self.client = anthropic.AsyncAnthropic(api_key=Config.ANTHROPIC_API_KEY)
         self.model = Config.AI_MODEL
         self.strategies = get_all_strategies()
         self.logger = logging.getLogger(__name__)
@@ -68,9 +66,7 @@ class AIAnalyzer:
         :return: Готовый текст промпта.
         """
         strategy_block = self._build_strategy_list()
-        data_block = json.dumps(
-            snapshots, indent=2, ensure_ascii=False
-        )
+        data_block = json.dumps(snapshots, indent=2, ensure_ascii=False)
         min_conf = Config.MIN_SIGNAL_CONFIDENCE
         return (
             f"Analyze the following crypto market data and provide "
@@ -131,11 +127,10 @@ class AIAnalyzer:
             if not isinstance(recs, list):
                 recs = [recs]
 
-            required_keys = (
-                "symbol", "action", "strategy", "confidence"
-            )
+            required_keys = ("symbol", "action", "strategy", "confidence")
             valid = [
-                r for r in recs
+                r
+                for r in recs
                 if (
                     isinstance(r, dict)
                     and all(k in r for k in required_keys)
@@ -145,8 +140,7 @@ class AIAnalyzer:
             ]
 
             self.logger.info(
-                f"AI: {len(valid)} signals "
-                f"from {len(snapshots)} symbols"
+                f"AI: {len(valid)} signals " f"from {len(snapshots)} symbols"
             )
             return valid
 
@@ -160,9 +154,7 @@ class AIAnalyzer:
             self.logger.error(f"AI analysis failed: {e}")
             return []
 
-    def recommend_strategy_local(
-        self, snapshot: Dict[str, Any]
-    ) -> Tuple[str, float]:
+    def recommend_strategy_local(self, snapshot: Dict[str, Any]) -> Tuple[str, float]:
         """
         Локальный выбор стратегии без AI (fallback).
 

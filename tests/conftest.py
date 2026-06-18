@@ -9,8 +9,8 @@ _redis_mock.Redis = MagicMock
 _redis_mock.ConnectionError = ConnectionError
 sys.modules.setdefault("redis", _redis_mock)
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 import pytest
 
 
@@ -22,22 +22,18 @@ def make_ohlcv(
     """Synthetic OHLCV DataFrame for testing."""
     prices = [start_price]
     for _ in range(n - 1):
-        prices.append(
-            prices[-1] * (
-                1 + trend + np.random.normal(0, 0.005)
-            )
-        )
+        prices.append(prices[-1] * (1 + trend + np.random.normal(0, 0.005)))
     prices = np.array(prices)
-    df = pd.DataFrame({
-        "timestamp": pd.date_range(
-            "2024-01-01", periods=n, freq="15min"
-        ),
-        "open":   prices * 0.999,
-        "high":   prices * 1.005,
-        "low":    prices * 0.995,
-        "close":  prices,
-        "volume": np.random.uniform(100, 1000, n),
-    })
+    df = pd.DataFrame(
+        {
+            "timestamp": pd.date_range("2024-01-01", periods=n, freq="15min"),
+            "open": prices * 0.999,
+            "high": prices * 1.005,
+            "low": prices * 0.995,
+            "close": prices,
+            "volume": np.random.uniform(100, 1000, n),
+        }
+    )
     df.set_index("timestamp", inplace=True)
     return df
 

@@ -1,6 +1,7 @@
 """
 Клиент Redis для кэширования рыночных данных, состояний торговли и блокировок.
 """
+
 from __future__ import annotations
 
 import json
@@ -60,24 +61,15 @@ class RedisClient:
         """
         try:
             self.redis_client.ping()
-            kwargs = (
-                self.redis_client
-                .connection_pool
-                .connection_kwargs
-            )
+            kwargs = self.redis_client.connection_pool.connection_kwargs
             self.logger.info(
-                f"Подключено к Redis: "
-                f"{kwargs['host']}:{kwargs['port']}"
+                f"Подключено к Redis: " f"{kwargs['host']}:{kwargs['port']}"
             )
         except Exception as e:
-            self.logger.error(
-                f"Не удалось подключиться к Redis: {e}"
-            )
+            self.logger.error(f"Не удалось подключиться к Redis: {e}")
             raise
 
-    def save_market_data(
-        self, key: str, data: pd.DataFrame
-    ) -> None:
+    def save_market_data(self, key: str, data: pd.DataFrame) -> None:
         """
         Сохраняет рыночные данные (DataFrame) в Redis через pickle.
 
@@ -91,13 +83,9 @@ class RedisClient:
             self.redis_client.setex(key, 300, serialized)
             self.logger.debug(f"Сохранены данные: {key}")
         except Exception as e:
-            self.logger.error(
-                f"Ошибка сохранения рыночных данных: {e}"
-            )
+            self.logger.error(f"Ошибка сохранения рыночных данных: {e}")
 
-    def load_market_data(
-        self, key: str
-    ) -> Optional[pd.DataFrame]:
+    def load_market_data(self, key: str) -> Optional[pd.DataFrame]:
         """
         Загружает рыночные данные из Redis.
 
@@ -110,14 +98,10 @@ class RedisClient:
                 self.logger.debug(f"Загружены данные: {key}")
                 return pickle.loads(data)
         except Exception as e:
-            self.logger.error(
-                f"Ошибка загрузки рыночных данных: {e}"
-            )
+            self.logger.error(f"Ошибка загрузки рыночных данных: {e}")
         return None
 
-    def save_trading_state(
-        self, key: str, state: Dict[str, Any]
-    ) -> None:
+    def save_trading_state(self, key: str, state: Dict[str, Any]) -> None:
         """
         Сохраняет состояние торговли в Redis как JSON.
 
@@ -129,17 +113,11 @@ class RedisClient:
         try:
             serialized = json.dumps(state)
             self.redis_client.setex(key, 86400, serialized)
-            self.logger.debug(
-                f"Сохранено состояние: {key}"
-            )
+            self.logger.debug(f"Сохранено состояние: {key}")
         except Exception as e:
-            self.logger.error(
-                f"Ошибка сохранения состояния: {e}"
-            )
+            self.logger.error(f"Ошибка сохранения состояния: {e}")
 
-    def load_trading_state(
-        self, key: str
-    ) -> Optional[Dict[str, Any]]:
+    def load_trading_state(self, key: str) -> Optional[Dict[str, Any]]:
         """
         Загружает состояние торговли из Redis.
 
@@ -149,14 +127,10 @@ class RedisClient:
         try:
             state = self.redis_client.get(key)
             if state:
-                self.logger.debug(
-                    f"Загружено состояние: {key}"
-                )
+                self.logger.debug(f"Загружено состояние: {key}")
                 return json.loads(state.decode("utf-8"))
         except Exception as e:
-            self.logger.error(
-                f"Ошибка загрузки состояния: {e}"
-            )
+            self.logger.error(f"Ошибка загрузки состояния: {e}")
         return None
 
     def save_model(
@@ -174,20 +148,12 @@ class RedisClient:
         """
         try:
             serialized = pickle.dumps(model_data)
-            self.redis_client.setex(
-                f"model:{strategy_name}", 604800, serialized
-            )
-            self.logger.debug(
-                f"Сохранена модель: {strategy_name}"
-            )
+            self.redis_client.setex(f"model:{strategy_name}", 604800, serialized)
+            self.logger.debug(f"Сохранена модель: {strategy_name}")
         except Exception as e:
-            self.logger.error(
-                f"Ошибка сохранения модели: {e}"
-            )
+            self.logger.error(f"Ошибка сохранения модели: {e}")
 
-    def load_model(
-        self, strategy_name: str
-    ) -> Optional[Dict[str, Any]]:
+    def load_model(self, strategy_name: str) -> Optional[Dict[str, Any]]:
         """
         Загружает данные модели из Redis.
 
@@ -195,23 +161,15 @@ class RedisClient:
         :return: Данные модели или None если не найдены.
         """
         try:
-            model_data = self.redis_client.get(
-                f"model:{strategy_name}"
-            )
+            model_data = self.redis_client.get(f"model:{strategy_name}")
             if model_data:
-                self.logger.debug(
-                    f"Загружена модель: {strategy_name}"
-                )
+                self.logger.debug(f"Загружена модель: {strategy_name}")
                 return pickle.loads(model_data)
         except Exception as e:
-            self.logger.error(
-                f"Ошибка загрузки модели: {e}"
-            )
+            self.logger.error(f"Ошибка загрузки модели: {e}")
         return None
 
-    def acquire_lock(
-        self, lock_name: str, timeout: int = 10
-    ) -> bool:
+    def acquire_lock(self, lock_name: str, timeout: int = 10) -> bool:
         """
         Захватывает распределённую блокировку через SET NX.
 
@@ -221,19 +179,13 @@ class RedisClient:
         """
         try:
             result = bool(
-                self.redis_client.set(
-                    lock_name, "locked", nx=True, ex=timeout
-                )
+                self.redis_client.set(lock_name, "locked", nx=True, ex=timeout)
             )
             if result:
-                self.logger.debug(
-                    f"Блокировка захвачена: {lock_name}"
-                )
+                self.logger.debug(f"Блокировка захвачена: {lock_name}")
             return result
         except Exception as e:
-            self.logger.error(
-                f"Ошибка захвата блокировки: {e}"
-            )
+            self.logger.error(f"Ошибка захвата блокировки: {e}")
             return False
 
     def release_lock(self, lock_name: str) -> None:
@@ -244,17 +196,11 @@ class RedisClient:
         """
         try:
             self.redis_client.delete(lock_name)
-            self.logger.debug(
-                f"Блокировка освобождена: {lock_name}"
-            )
+            self.logger.debug(f"Блокировка освобождена: {lock_name}")
         except Exception as e:
-            self.logger.error(
-                f"Ошибка освобождения блокировки: {e}"
-            )
+            self.logger.error(f"Ошибка освобождения блокировки: {e}")
 
-    def publish_signal(
-        self, signal_data: Dict[str, Any]
-    ) -> None:
+    def publish_signal(self, signal_data: Dict[str, Any]) -> None:
         """
         Публикует торговый сигнал через Redis Pub/Sub.
 
@@ -269,13 +215,9 @@ class RedisClient:
             )
             self.logger.debug("Сигнал опубликован")
         except Exception as e:
-            self.logger.error(
-                f"Ошибка публикации сигнала: {e}"
-            )
+            self.logger.error(f"Ошибка публикации сигнала: {e}")
 
-    def update_performance_stats(
-        self, stats: Dict[str, Any]
-    ) -> None:
+    def update_performance_stats(self, stats: Dict[str, Any]) -> None:
         """
         Обновляет статистику производительности в Redis.
 
@@ -289,13 +231,9 @@ class RedisClient:
                 json.dumps(stats),
                 ex=86400,
             )
-            self.logger.debug(
-                f"Статистика обновлена: {stats}"
-            )
+            self.logger.debug(f"Статистика обновлена: {stats}")
         except Exception as e:
-            self.logger.error(
-                f"Ошибка обновления статистики: {e}"
-            )
+            self.logger.error(f"Ошибка обновления статистики: {e}")
 
     def get_performance_stats(self) -> Dict[str, Any]:
         """
@@ -309,7 +247,5 @@ class RedisClient:
                 return json.loads(data.decode("utf-8"))
             return {}
         except Exception as e:
-            self.logger.error(
-                f"Ошибка получения статистики: {e}"
-            )
+            self.logger.error(f"Ошибка получения статистики: {e}")
             return {}

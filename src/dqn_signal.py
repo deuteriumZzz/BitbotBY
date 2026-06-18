@@ -5,6 +5,7 @@
 выполняет детерминированный инференс SAC и возвращает
 {action, confidence, source="sac"}.
 """
+
 from __future__ import annotations
 
 import json
@@ -15,15 +16,23 @@ from typing import Any, Dict, Optional
 import numpy as np
 
 from config import Config
-from reinforcement_learning.rl_env import HOLD_ZONE, OBS_DIM
+from reinforcement_learning.rl_env import HOLD_ZONE
 
 logger = logging.getLogger(__name__)
 
 # Колонки obs[0..10] — рыночные фичи (порядок совпадает с TradingEnv)
 _MARKET_COLS = [
-    "open", "high", "low", "close", "volume",
-    "rsi", "macd", "macd_signal",
-    "bb_upper", "bb_middle", "bb_lower",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "rsi",
+    "macd",
+    "macd_signal",
+    "bb_upper",
+    "bb_middle",
+    "bb_lower",
 ]
 
 
@@ -59,11 +68,7 @@ def _snap_to_obs(
 
     # Для volume: если нет ohlcv — используем training-mean, чтобы
     # нормализация давала 0 (нейтральный сигнал), а не выброс.
-    vol_mean = (
-        norm_stats["volume"][0]
-        if norm_stats and "volume" in norm_stats
-        else 0.0
-    )
+    vol_mean = norm_stats["volume"][0] if norm_stats and "volume" in norm_stats else 0.0
     volume = float(ohlcv.get("volume", vol_mean))
 
     # MACD: предпочитаем числовое значение из ohlcv, иначе
@@ -80,22 +85,25 @@ def _snap_to_obs(
     bb_upper = price * (1.0 + bb_w / 2.0)
     bb_lower = price * (1.0 - bb_w / 2.0)
 
-    raw = np.array([
-        open_,            # open
-        high,             # high
-        low,              # low
-        close,            # close
-        volume,           # volume
-        float(ind.get("rsi", 50.0)),   # rsi
-        macd_val,         # macd
-        macd_signal_val,  # macd_signal
-        bb_upper,         # bb_upper
-        price,            # bb_middle
-        bb_lower,         # bb_lower
-        balance,          # portfolio: balance
-        0.0,              # portfolio: position
-        balance,          # portfolio: current_value
-    ], dtype=np.float32)
+    raw = np.array(
+        [
+            open_,  # open
+            high,  # high
+            low,  # low
+            close,  # close
+            volume,  # volume
+            float(ind.get("rsi", 50.0)),  # rsi
+            macd_val,  # macd
+            macd_signal_val,  # macd_signal
+            bb_upper,  # bb_upper
+            price,  # bb_middle
+            bb_lower,  # bb_lower
+            balance,  # portfolio: balance
+            0.0,  # portfolio: position
+            balance,  # portfolio: current_value
+        ],
+        dtype=np.float32,
+    )
 
     if norm_stats:
         for i, col in enumerate(_MARKET_COLS):
@@ -135,8 +143,7 @@ class DQNSignal:
             from stable_baselines3 import SAC  # noqa: PLC0415
         except ImportError:
             self.logger.error(
-                "stable-baselines3 не установлен. "
-                "pip install stable-baselines3"
+                "stable-baselines3 не установлен. " "pip install stable-baselines3"
             )
             return
 
@@ -161,18 +168,12 @@ class DQNSignal:
             try:
                 with open(norm_path, encoding="utf-8") as f:
                     self._norm_stats = json.load(f)
-                self.logger.info(
-                    f"Norm stats загружены из {norm_path}"
-                )
+                self.logger.info(f"Norm stats загружены из {norm_path}")
             except (OSError, json.JSONDecodeError) as e:
                 self._norm_stats = None
-                self.logger.warning(
-                    f"Ошибка загрузки norm stats: {e}"
-                )
+                self.logger.warning(f"Ошибка загрузки norm stats: {e}")
         else:
-            self.logger.warning(
-                "Norm stats не найдены — инференс без нормализации"
-            )
+            self.logger.warning("Norm stats не найдены — инференс без нормализации")
 
     def get_signal(
         self,
@@ -201,9 +202,7 @@ class DQNSignal:
 
         try:
             obs = _snap_to_obs(snap, balance, self._norm_stats)
-            action, _ = self._model.predict(
-                obs, deterministic=True
-            )
+            action, _ = self._model.predict(obs, deterministic=True)
             a = float(action[0])
 
             if a > HOLD_ZONE:
@@ -223,7 +222,5 @@ class DQNSignal:
             return default
 
         except Exception as e:
-            self.logger.error(
-                f"Ошибка инференса SAC: {e}", exc_info=True
-            )
+            self.logger.error(f"Ошибка инференса SAC: {e}", exc_info=True)
             return default

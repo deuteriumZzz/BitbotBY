@@ -9,6 +9,7 @@ Flow:
 
 Requirements: python-telegram-bot>=20.0 (async)
 """
+
 import asyncio
 import logging
 from typing import Optional
@@ -16,17 +17,9 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 try:
-    from telegram import (
-        Bot,
-        InlineKeyboardButton,
-        InlineKeyboardMarkup,
-        Update,
-    )
-    from telegram.ext import (
-        Application,
-        CallbackQueryHandler,
-        ContextTypes,
-    )
+    from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
+    from telegram.ext import Application, CallbackQueryHandler, ContextTypes
+
     _TG_AVAILABLE = True
 except ImportError:
     _TG_AVAILABLE = False
@@ -52,27 +45,17 @@ class TelegramNotifier:
         self._polling_task: Optional[asyncio.Task] = None
         self._pending: dict = {}  # message_id → asyncio.Event
         self._decisions: dict = {}  # message_id → bool
-        self._enabled = bool(
-            _TG_AVAILABLE and token and chat_id
-        )
+        self._enabled = bool(_TG_AVAILABLE and token and chat_id)
 
     async def start(self) -> None:
         """Build and start telegram polling (background)."""
         if not self._enabled:
             return
-        self._app = (
-            Application.builder()
-            .token(self._token)
-            .build()
-        )
-        self._app.add_handler(
-            CallbackQueryHandler(self._handle_callback)
-        )
+        self._app = Application.builder().token(self._token).build()
+        self._app.add_handler(CallbackQueryHandler(self._handle_callback))
         await self._app.initialize()
         await self._app.start()
-        self._polling_task = asyncio.create_task(
-            self._app.updater.start_polling()
-        )
+        self._polling_task = asyncio.create_task(self._app.updater.start_polling())
         logger.info("Telegram notifier started")
 
     async def stop(self) -> None:
@@ -98,11 +81,9 @@ class TelegramNotifier:
         mid = query.message.message_id
         data = query.data  # "confirm" or "reject"
         if mid in self._pending:
-            self._decisions[mid] = (data == "confirm")
+            self._decisions[mid] = data == "confirm"
             self._pending[mid].set()
-        await query.edit_message_reply_markup(
-            reply_markup=None
-        )
+        await query.edit_message_reply_markup(reply_markup=None)
 
     async def ask_confirm(
         self,
@@ -162,18 +143,20 @@ class TelegramNotifier:
             f"{live_line}\n\n"
             f"Auto-execute in {timeout}s"
         )
-        keyboard = InlineKeyboardMarkup([
+        keyboard = InlineKeyboardMarkup(
             [
-                InlineKeyboardButton(
-                    "Trade",
-                    callback_data="confirm",
-                ),
-                InlineKeyboardButton(
-                    "Skip",
-                    callback_data="reject",
-                ),
+                [
+                    InlineKeyboardButton(
+                        "Trade",
+                        callback_data="confirm",
+                    ),
+                    InlineKeyboardButton(
+                        "Skip",
+                        callback_data="reject",
+                    ),
+                ]
             ]
-        ])
+        )
         try:
             bot: Bot = self._app.bot
             msg = await bot.send_message(
@@ -188,14 +171,9 @@ class TelegramNotifier:
             self._decisions[mid] = True  # default: confirm
 
             try:
-                await asyncio.wait_for(
-                    event.wait(), timeout=timeout
-                )
+                await asyncio.wait_for(event.wait(), timeout=timeout)
             except asyncio.TimeoutError:
-                logger.info(
-                    f"Telegram timeout for {symbol} "
-                    "-> auto-confirm"
-                )
+                logger.info(f"Telegram timeout for {symbol} " "-> auto-confirm")
                 await bot.edit_message_reply_markup(
                     chat_id=self._chat_id,
                     message_id=mid,

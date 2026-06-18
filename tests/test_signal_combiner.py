@@ -1,14 +1,16 @@
 """Тесты для SignalCombiner — логика объединения сигналов DQN и AI."""
-import pytest
+
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from config import Config
 from src.signal_combiner import SignalCombiner
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def make_snapshot(symbol="BTC/USDT", price=30000.0, atr=300.0):
     return {
@@ -23,6 +25,7 @@ def make_snapshot(symbol="BTC/USDT", price=30000.0, atr=300.0):
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def mock_ai():
@@ -55,6 +58,7 @@ def combiner(mock_ai, mock_dqn_signal):
 # Tests
 # ---------------------------------------------------------------------------
 
+
 async def test_local_mode_returns_empty(combiner):
     snap = make_snapshot()
     with patch.object(Config, "MODE", "local"):
@@ -74,7 +78,9 @@ async def test_ai_mode_delegates_to_ai(combiner, mock_ai):
 
 async def test_dqn_mode_skips_hold(combiner, mock_dqn_signal):
     mock_dqn_signal.get_signal.return_value = {
-        "action": "hold", "confidence": 0.9, "source": "dqn"
+        "action": "hold",
+        "confidence": 0.9,
+        "source": "dqn",
     }
     snap = make_snapshot()
     with patch.object(Config, "MODE", "dqn"):
@@ -84,7 +90,9 @@ async def test_dqn_mode_skips_hold(combiner, mock_dqn_signal):
 
 async def test_dqn_mode_returns_buy_above_threshold(combiner, mock_dqn_signal):
     mock_dqn_signal.get_signal.return_value = {
-        "action": "buy", "confidence": 0.8, "source": "dqn"
+        "action": "buy",
+        "confidence": 0.8,
+        "source": "dqn",
     }
     snap = make_snapshot()
     with patch.object(Config, "MODE", "dqn"):
@@ -97,7 +105,9 @@ async def test_dqn_mode_returns_buy_above_threshold(combiner, mock_dqn_signal):
 async def test_dqn_mode_skips_low_confidence(combiner, mock_dqn_signal):
     """conf=0.3 is below MIN_SIGNAL_CONFIDENCE=0.65 → empty result."""
     mock_dqn_signal.get_signal.return_value = {
-        "action": "buy", "confidence": 0.3, "source": "dqn"
+        "action": "buy",
+        "confidence": 0.3,
+        "source": "dqn",
     }
     snap = make_snapshot()
     with patch.object(Config, "MODE", "dqn"):
@@ -110,12 +120,19 @@ async def test_hybrid_agree_buy(combiner, mock_ai, mock_dqn_signal):
     dqn_conf = 0.75
     ai_conf = 0.80
     mock_dqn_signal.get_signal.return_value = {
-        "action": "buy", "confidence": dqn_conf, "source": "dqn"
+        "action": "buy",
+        "confidence": dqn_conf,
+        "source": "dqn",
     }
     ai_rec = {
-        "symbol": "BTC/USDT", "action": "buy", "confidence": ai_conf,
-        "strategy": "momentum", "reasoning": "trend up",
-        "entry": 30000.0, "stop_loss": 29500.0, "take_profit": 31000.0,
+        "symbol": "BTC/USDT",
+        "action": "buy",
+        "confidence": ai_conf,
+        "strategy": "momentum",
+        "reasoning": "trend up",
+        "entry": 30000.0,
+        "stop_loss": 29500.0,
+        "take_profit": 31000.0,
     }
     mock_ai.analyze.return_value = [ai_rec]
     snap = make_snapshot()
@@ -132,12 +149,19 @@ async def test_hybrid_agree_buy(combiner, mock_ai, mock_dqn_signal):
 async def test_hybrid_disagree_returns_empty(combiner, mock_ai, mock_dqn_signal):
     """DQN=buy, AI=sell → hold (no signal)."""
     mock_dqn_signal.get_signal.return_value = {
-        "action": "buy", "confidence": 0.85, "source": "dqn"
+        "action": "buy",
+        "confidence": 0.85,
+        "source": "dqn",
     }
     ai_rec = {
-        "symbol": "BTC/USDT", "action": "sell", "confidence": 0.80,
-        "strategy": "reversal", "reasoning": "overbought",
-        "entry": 30000.0, "stop_loss": 30500.0, "take_profit": 29000.0,
+        "symbol": "BTC/USDT",
+        "action": "sell",
+        "confidence": 0.80,
+        "strategy": "reversal",
+        "reasoning": "overbought",
+        "entry": 30000.0,
+        "stop_loss": 30500.0,
+        "take_profit": 29000.0,
     }
     mock_ai.analyze.return_value = [ai_rec]
     snap = make_snapshot()
@@ -151,7 +175,9 @@ async def test_hybrid_disagree_returns_empty(combiner, mock_ai, mock_dqn_signal)
 async def test_hybrid_ai_silent_high_dqn_conf(combiner, mock_ai, mock_dqn_signal):
     """AI returns nothing, DQN conf=0.85 >= 0.80 → use DQN signal."""
     mock_dqn_signal.get_signal.return_value = {
-        "action": "buy", "confidence": 0.85, "source": "dqn"
+        "action": "buy",
+        "confidence": 0.85,
+        "source": "dqn",
     }
     mock_ai.analyze.return_value = []
     snap = make_snapshot()
@@ -167,7 +193,9 @@ async def test_hybrid_ai_silent_high_dqn_conf(combiner, mock_ai, mock_dqn_signal
 async def test_hybrid_ai_silent_low_dqn_conf(combiner, mock_ai, mock_dqn_signal):
     """AI returns nothing, DQN conf=0.5 < 0.80 → skip."""
     mock_dqn_signal.get_signal.return_value = {
-        "action": "buy", "confidence": 0.5, "source": "dqn"
+        "action": "buy",
+        "confidence": 0.5,
+        "source": "dqn",
     }
     mock_ai.analyze.return_value = []
     snap = make_snapshot()

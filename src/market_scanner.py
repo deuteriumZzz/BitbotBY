@@ -46,8 +46,7 @@ class MarketScanner:
             usdt = {
                 sym: t
                 for sym, t in tickers.items()
-                if sym.endswith("/USDT")
-                and (t.get("quoteVolume") or 0) > 0
+                if sym.endswith("/USDT") and (t.get("quoteVolume") or 0) > 0
             }
             ranked = sorted(
                 usdt.items(),
@@ -56,8 +55,7 @@ class MarketScanner:
             )
             symbols = [sym for sym, _ in ranked[:n]]
             self.logger.info(
-                f"Top {len(symbols)} by volume: "
-                f"{', '.join(symbols[:5])}..."
+                f"Top {len(symbols)} by volume: " f"{', '.join(symbols[:5])}..."
             )
             return symbols
         except Exception as e:
@@ -71,9 +69,7 @@ class MarketScanner:
     ) -> Optional[Tuple[str, pd.DataFrame]]:
         """OHLCV + индикаторы для одного символа."""
         try:
-            df = await self.data_loader.get_market_data(
-                symbol, timeframe, limit=100
-            )
+            df = await self.data_loader.get_market_data(symbol, timeframe, limit=100)
             df = self.data_loader.calculate_technical_indicators(df)
             return symbol, df
         except Exception as e:
@@ -101,15 +97,11 @@ class MarketScanner:
                 sym, df = r
                 data[sym] = df
 
-        self.logger.info(
-            f"Scanned {len(data)}/{len(symbols)} symbols"
-        )
+        self.logger.info(f"Scanned {len(data)}/{len(symbols)} symbols")
         return data
 
     @staticmethod
-    def _safe(
-        row: pd.Series, col: str, default: float = 0.0
-    ) -> float:
+    def _safe(row: pd.Series, col: str, default: float = 0.0) -> float:
         """
         Безопасно извлекает числовое значение из строки DataFrame.
 
@@ -122,9 +114,7 @@ class MarketScanner:
             return float(row[col])
         return default
 
-    def _pct(
-        self, current: float, df: pd.DataFrame, bars_back: int
-    ) -> float:
+    def _pct(self, current: float, df: pd.DataFrame, bars_back: int) -> float:
         """
         Рассчитывает процентное изменение цены за N свечей назад.
 

@@ -1,6 +1,7 @@
 """
 Среда Gymnasium для симуляции крипто-торговли с SAC (непрерывные действия).
 """
+
 from __future__ import annotations
 
 from typing import Any, Dict, Tuple
@@ -58,9 +59,7 @@ class TradingEnv(gym.Env):
         self.total_commission = 0.0
 
         # Непрерывное пространство действий для SAC
-        self.action_space = spaces.Box(
-            low=-1.0, high=1.0, shape=(1,), dtype=np.float32
-        )
+        self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32)
 
         self.observation_space = spaces.Box(
             low=-np.inf,
@@ -80,22 +79,25 @@ class TradingEnv(gym.Env):
 
         row = self.data.iloc[self.current_step]
         price = float(row["close"])
-        return np.array([
-            float(row["open"]),
-            float(row["high"]),
-            float(row["low"]),
-            price,
-            float(row["volume"]),
-            float(row.get("rsi", 50)),
-            float(row.get("macd", 0)),
-            float(row.get("macd_signal", 0)),
-            float(row.get("bb_upper", price * 1.02)),
-            float(row.get("bb_middle", price)),
-            float(row.get("bb_lower", price * 0.98)),
-            self.balance,
-            self.position,
-            self.current_value,
-        ], dtype=np.float32)
+        return np.array(
+            [
+                float(row["open"]),
+                float(row["high"]),
+                float(row["low"]),
+                price,
+                float(row["volume"]),
+                float(row.get("rsi", 50)),
+                float(row.get("macd", 0)),
+                float(row.get("macd_signal", 0)),
+                float(row.get("bb_upper", price * 1.02)),
+                float(row.get("bb_middle", price)),
+                float(row.get("bb_lower", price * 0.98)),
+                self.balance,
+                self.position,
+                self.current_value,
+            ],
+            dtype=np.float32,
+        )
 
     def reset(
         self,
@@ -135,15 +137,11 @@ class TradingEnv(gym.Env):
             return self._get_observation(), 0.0, True, False, {}
 
         a = float(action[0])
-        current_price = float(
-            self.data.iloc[self.current_step]["close"]
-        )
+        current_price = float(self.data.iloc[self.current_step]["close"])
         prev_value = self.current_value
 
         if a > HOLD_ZONE and self.balance > 0:
-            fraction = min(
-                1.0, (a - HOLD_ZONE) / (1.0 - HOLD_ZONE)
-            )
+            fraction = min(1.0, (a - HOLD_ZONE) / (1.0 - HOLD_ZONE))
             spend = self.balance * fraction
             bought = spend / current_price
             commission = spend * COMMISSION
@@ -153,9 +151,7 @@ class TradingEnv(gym.Env):
             self.total_commission += commission
 
         elif a < -HOLD_ZONE and self.position > 0:
-            fraction = min(
-                1.0, (abs(a) - HOLD_ZONE) / (1.0 - HOLD_ZONE)
-            )
+            fraction = min(1.0, (abs(a) - HOLD_ZONE) / (1.0 - HOLD_ZONE))
             sell_qty = self.position * fraction
             revenue = sell_qty * current_price
             commission = revenue * COMMISSION
@@ -166,9 +162,7 @@ class TradingEnv(gym.Env):
                 self.position = 0.0
                 self.entry_price = 0.0
 
-        self.current_value = (
-            self.balance + self.position * current_price
-        )
+        self.current_value = self.balance + self.position * current_price
         reward = self.current_value - prev_value
 
         self.current_step += 1

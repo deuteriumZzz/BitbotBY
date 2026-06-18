@@ -20,7 +20,7 @@ import sys
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
@@ -33,11 +33,11 @@ from src.strategies import STRATEGY_REGISTRY, BaseStrategy
 
 # ── Constants ──────────────────────────────────────────────────────────────
 
-_FETCH_LIMIT = 200          # ccxt batch size (Bybit limit)
-_CSV_CACHE_TTL = 86_400     # 24 h
-_WARMUP = 50                # minimum candles before first signal
-_ATR_MULT = 1.5             # stop-loss ATR multiplier
-_RR = 2.0                   # risk/reward ratio (1:2)
+_FETCH_LIMIT = 200  # ccxt batch size (Bybit limit)
+_CSV_CACHE_TTL = 86_400  # 24 h
+_WARMUP = 50  # minimum candles before first signal
+_ATR_MULT = 1.5  # stop-loss ATR multiplier
+_RR = 2.0  # risk/reward ratio (1:2)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -48,25 +48,27 @@ logger = logging.getLogger(__name__)
 
 # ── Dataclass ──────────────────────────────────────────────────────────────
 
+
 @dataclass
 class BacktestResult:
     """Per-strategy backtest metrics."""
 
     strategy: str
     total_trades: int
-    win_rate: float         # 0.0–1.0
-    avg_profit_pct: float   # avg winning trade % (positive)
-    avg_loss_pct: float     # avg losing trade % (negative)
-    expected_value: float   # wr*avg_profit + (1-wr)*avg_loss
-    total_return_pct: float # (final - initial) / initial
-    max_drawdown_pct: float # worst peak-to-trough %
-    sharpe_ratio: float     # annualised, rf=0
+    win_rate: float  # 0.0–1.0
+    avg_profit_pct: float  # avg winning trade % (positive)
+    avg_loss_pct: float  # avg losing trade % (negative)
+    expected_value: float  # wr*avg_profit + (1-wr)*avg_loss
+    total_return_pct: float  # (final - initial) / initial
+    max_drawdown_pct: float  # worst peak-to-trough %
+    sharpe_ratio: float  # annualised, rf=0
     num_wins: int
     num_losses: int
     trades: list = field(default_factory=list, repr=False)
 
 
 # ── CSV cache helpers (no Redis, no API key required) ─────────────────────
+
 
 def _csv_cache_path(symbol: str, timeframe: str) -> str:
     safe = symbol.replace("/", "_").replace(":", "_")
@@ -83,12 +85,8 @@ def _load_csv_cache(path: str) -> Optional[pd.DataFrame]:
     try:
         df = pd.read_csv(path, index_col=0, parse_dates=True)
         if "timestamp" in df.columns:
-            df["timestamp"] = pd.to_numeric(
-                df["timestamp"], errors="coerce"
-            )
-        logger.info(
-            f"CSV cache loaded: {path} ({len(df)} rows)"
-        )
+            df["timestamp"] = pd.to_numeric(df["timestamp"], errors="coerce")
+        logger.info(f"CSV cache loaded: {path} ({len(df)} rows)")
         return df
     except Exception as e:
         logger.warning(f"CSV cache read failed: {e}")
@@ -103,6 +101,7 @@ def _save_csv_cache(df: pd.DataFrame, path: str) -> None:
 
 
 # ── OHLCV fetch (ccxt, no auth needed for public data) ────────────────────
+
 
 async def _fetch_batches(
     symbol: str,
@@ -140,8 +139,12 @@ async def _fetch_batches(
             df_batch = pd.DataFrame(
                 raw,
                 columns=[
-                    "timestamp", "open", "high",
-                    "low", "close", "volume",
+                    "timestamp",
+                    "open",
+                    "high",
+                    "low",
+                    "close",
+                    "volume",
                 ],
             )
             all_frames.append(df_batch)
@@ -185,21 +188,16 @@ async def load_data(
     cached = _load_csv_cache(cache_path)
 
     now_ms = int(datetime.now().timestamp() * 1000)
-    since_ms = int(
-        (datetime.now() - timedelta(days=months * 30))
-        .timestamp() * 1000
-    )
+    since_ms = int((datetime.now() - timedelta(days=months * 30)).timestamp() * 1000)
 
     combined: pd.DataFrame
 
     if cached is not None and not cached.empty:
         last_ts = int(cached["timestamp"].max())
-        logger.info(
-            "Cache hit — fetching incremental update "
-            f"since {last_ts}"
-        )
+        logger.info("Cache hit — fetching incremental update " f"since {last_ts}")
         new_df = await _fetch_batches(
-            symbol, timeframe,
+            symbol,
+            timeframe,
             since_ms=last_ts + 1,
             until_ms=now_ms,
         )
@@ -214,11 +212,11 @@ async def load_data(
             combined = cached
     else:
         logger.info(
-            f"No cache — fetching {months}m history "
-            f"for {symbol} {timeframe}..."
+            f"No cache — fetching {months}m history " f"for {symbol} {timeframe}..."
         )
         combined = await _fetch_batches(
-            symbol, timeframe,
+            symbol,
+            timeframe,
             since_ms=since_ms,
             until_ms=now_ms,
         )
@@ -229,29 +227,18 @@ async def load_data(
                 "historical_btc.csv",
             )
             if os.path.exists(fallback):
-                logger.warning(
-                    f"API unavailable — loading fallback "
-                    f"{fallback}"
-                )
+                logger.warning(f"API unavailable — loading fallback " f"{fallback}")
                 combined = pd.read_csv(fallback)
-                combined.columns = [
-                    c.lower() for c in combined.columns
-                ]
-                needed = {
-                    "open", "high", "low", "close", "volume"
-                }
+                combined.columns = [c.lower() for c in combined.columns]
+                needed = {"open", "high", "low", "close", "volume"}
                 if not needed.issubset(set(combined.columns)):
-                    logger.error(
-                        "Fallback CSV missing required columns"
-                    )
+                    logger.error("Fallback CSV missing required columns")
                     return pd.DataFrame()
                 if "timestamp" not in combined.columns:
                     combined["timestamp"] = range(len(combined))
 
     if combined.empty:
-        logger.error(
-            "No data available — cannot run backtest"
-        )
+        logger.error("No data available — cannot run backtest")
         return pd.DataFrame()
 
     _save_csv_cache(combined, cache_path)
@@ -271,6 +258,7 @@ async def load_data(
 
 # ── Simulation helpers ────────────────────────────────────────────────────
 
+
 def _sharpe(returns: List[float]) -> float:
     if len(returns) < 2:
         return 0.0
@@ -278,10 +266,11 @@ def _sharpe(returns: List[float]) -> float:
     std_r = statistics.stdev(returns)
     if std_r == 0.0:
         return 0.0
-    return (mean_r / std_r) * (252 ** 0.5)
+    return (mean_r / std_r) * (252**0.5)
 
 
 # ── Core walk-forward engine ──────────────────────────────────────────────
+
 
 def run_strategy(
     name: str,
@@ -319,23 +308,16 @@ def run_strategy(
             try:
                 signal = strategy.generate_signal(window)
             except Exception as exc:
-                logger.warning(
-                    f"[{name}] signal error at i={i}: {exc}"
-                )
+                logger.warning(f"[{name}] signal error at i={i}: {exc}")
                 continue
 
             action = signal.get("action", "hold")
             confidence = float(signal.get("confidence", 0.0))
 
-            if (
-                action in ("buy", "sell")
-                and confidence >= min_confidence
-            ):
+            if action in ("buy", "sell") and confidence >= min_confidence:
                 entry_price = float(window["close"].iloc[-1])
                 atr_val = (
-                    float(window["atr"].iloc[-1])
-                    if "atr" in window.columns
-                    else 0.0
+                    float(window["atr"].iloc[-1]) if "atr" in window.columns else 0.0
                 )
 
                 if atr_val > 0:
@@ -354,9 +336,7 @@ def run_strategy(
 
                 position_usdt = balance * risk_per_trade
                 quantity = position_usdt / entry_price
-                entry_comm = (
-                    quantity * entry_price * commission_rate
-                )
+                entry_comm = quantity * entry_price * commission_rate
                 balance -= entry_comm
 
                 open_trade = {
@@ -378,13 +358,11 @@ def run_strategy(
             sl = open_trade["stop_loss"]
             tp = open_trade["take_profit"]
 
-            sl_hit = (
-                (d == 1 and current_price <= sl)
-                or (d == -1 and current_price >= sl)
+            sl_hit = (d == 1 and current_price <= sl) or (
+                d == -1 and current_price >= sl
             )
-            tp_hit = (
-                (d == 1 and current_price >= tp)
-                or (d == -1 and current_price <= tp)
+            tp_hit = (d == 1 and current_price >= tp) or (
+                d == -1 and current_price <= tp
             )
 
             if sl_hit or tp_hit:
@@ -392,19 +370,13 @@ def run_strategy(
                 qty = open_trade["quantity"]
                 exit_comm = qty * exit_price * commission_rate
                 total_comm = open_trade["entry_comm"] + exit_comm
-                pnl = (
-                    (exit_price - open_trade["entry_price"])
-                    * qty * d
-                    - total_comm
-                )
+                pnl = (exit_price - open_trade["entry_price"]) * qty * d - total_comm
                 balance += qty * exit_price - exit_comm
                 balance = max(balance, 0.0)
 
                 peak_balance = max(peak_balance, balance)
                 dd = (
-                    (peak_balance - balance) / peak_balance
-                    if peak_balance > 0
-                    else 0.0
+                    (peak_balance - balance) / peak_balance if peak_balance > 0 else 0.0
                 )
                 max_drawdown = max(max_drawdown, dd)
 
@@ -412,16 +384,18 @@ def run_strategy(
                 ret = pnl / pos_usdt if pos_usdt > 0 else 0.0
                 trade_returns.append(ret)
 
-                closed_trades.append({
-                    "entry_i": open_trade["entry_i"],
-                    "exit_i": i,
-                    "action": open_trade["action"],
-                    "entry_price": open_trade["entry_price"],
-                    "exit_price": exit_price,
-                    "pnl": round(pnl, 6),
-                    "return_pct": round(ret, 6),
-                    "closed_by": "tp" if tp_hit else "sl",
-                })
+                closed_trades.append(
+                    {
+                        "entry_i": open_trade["entry_i"],
+                        "exit_i": i,
+                        "action": open_trade["action"],
+                        "entry_price": open_trade["entry_price"],
+                        "exit_price": exit_price,
+                        "pnl": round(pnl, 6),
+                        "return_pct": round(ret, 6),
+                        "closed_by": "tp" if tp_hit else "sl",
+                    }
+                )
                 open_trade = None
 
     # ── Force-close any remaining position ───────────────────────
@@ -431,61 +405,43 @@ def run_strategy(
         d = open_trade["direction"]
         exit_comm = qty * exit_price * commission_rate
         total_comm = open_trade["entry_comm"] + exit_comm
-        pnl = (
-            (exit_price - open_trade["entry_price"])
-            * qty * d
-            - total_comm
-        )
+        pnl = (exit_price - open_trade["entry_price"]) * qty * d - total_comm
         balance += qty * exit_price - exit_comm
         balance = max(balance, 0.0)
 
         peak_balance = max(peak_balance, balance)
-        dd = (
-            (peak_balance - balance) / peak_balance
-            if peak_balance > 0
-            else 0.0
-        )
+        dd = (peak_balance - balance) / peak_balance if peak_balance > 0 else 0.0
         max_drawdown = max(max_drawdown, dd)
 
         pos_usdt = open_trade["position_usdt"]
         ret = pnl / pos_usdt if pos_usdt > 0 else 0.0
         trade_returns.append(ret)
 
-        closed_trades.append({
-            "entry_i": open_trade["entry_i"],
-            "exit_i": n - 1,
-            "action": open_trade["action"],
-            "entry_price": open_trade["entry_price"],
-            "exit_price": exit_price,
-            "pnl": round(pnl, 6),
-            "return_pct": round(ret, 6),
-            "closed_by": "force",
-        })
+        closed_trades.append(
+            {
+                "entry_i": open_trade["entry_i"],
+                "exit_i": n - 1,
+                "action": open_trade["action"],
+                "entry_price": open_trade["entry_price"],
+                "exit_price": exit_price,
+                "pnl": round(pnl, 6),
+                "return_pct": round(ret, 6),
+                "closed_by": "force",
+            }
+        )
 
     # ── Aggregate metrics ─────────────────────────────────────────
     total_trades = len(closed_trades)
     wins = [t for t in closed_trades if t["pnl"] > 0]
     losses = [t for t in closed_trades if t["pnl"] <= 0]
 
-    win_rate = (
-        len(wins) / total_trades if total_trades > 0 else 0.0
-    )
-    avg_profit = (
-        statistics.mean([t["return_pct"] for t in wins])
-        if wins
-        else 0.0
-    )
-    avg_loss = (
-        statistics.mean([t["return_pct"] for t in losses])
-        if losses
-        else 0.0
-    )
+    win_rate = len(wins) / total_trades if total_trades > 0 else 0.0
+    avg_profit = statistics.mean([t["return_pct"] for t in wins]) if wins else 0.0
+    avg_loss = statistics.mean([t["return_pct"] for t in losses]) if losses else 0.0
     ev = win_rate * avg_profit + (1 - win_rate) * avg_loss
 
     total_return = (
-        (balance - initial_balance) / initial_balance
-        if initial_balance > 0
-        else 0.0
+        (balance - initial_balance) / initial_balance if initial_balance > 0 else 0.0
     )
     sharpe = _sharpe(trade_returns)
 
@@ -507,6 +463,7 @@ def run_strategy(
 
 # ── Report printer ────────────────────────────────────────────────────────
 
+
 def print_report(
     results: List[BacktestResult],
     symbol: str,
@@ -514,10 +471,7 @@ def print_report(
     months: int,
 ) -> None:
     sep = "=" * 68
-    header = (
-        f"BACKTEST RESULTS — {symbol} {timeframe} "
-        f"— {months} months"
-    )
+    header = f"BACKTEST RESULTS — {symbol} {timeframe} " f"— {months} months"
     print(f"\n{sep}")
     print(header)
     print(sep)
@@ -548,14 +502,12 @@ def print_report(
     if results:
         best = results[0]
         print(f"Best strategy: {best.strategy}  (highest EV)")
-        print(
-            f"Recommended MODE: ai with "
-            f"DEFAULT_STRATEGY={best.strategy}"
-        )
+        print(f"Recommended MODE: ai with " f"DEFAULT_STRATEGY={best.strategy}")
     print(sep)
 
 
 # ── JSON export ───────────────────────────────────────────────────────────
+
 
 def save_json(
     results: List[BacktestResult],
@@ -568,19 +520,21 @@ def save_json(
 
     summary_list = []
     for r in results:
-        summary_list.append({
-            "strategy": r.strategy,
-            "total_trades": r.total_trades,
-            "win_rate": round(r.win_rate, 4),
-            "avg_profit_pct": round(r.avg_profit_pct, 6),
-            "avg_loss_pct": round(r.avg_loss_pct, 6),
-            "expected_value": round(r.expected_value, 6),
-            "total_return_pct": round(r.total_return_pct, 6),
-            "max_drawdown_pct": round(r.max_drawdown_pct, 6),
-            "sharpe_ratio": round(r.sharpe_ratio, 4),
-            "num_wins": r.num_wins,
-            "num_losses": r.num_losses,
-        })
+        summary_list.append(
+            {
+                "strategy": r.strategy,
+                "total_trades": r.total_trades,
+                "win_rate": round(r.win_rate, 4),
+                "avg_profit_pct": round(r.avg_profit_pct, 6),
+                "avg_loss_pct": round(r.avg_loss_pct, 6),
+                "expected_value": round(r.expected_value, 6),
+                "total_return_pct": round(r.total_return_pct, 6),
+                "max_drawdown_pct": round(r.max_drawdown_pct, 6),
+                "sharpe_ratio": round(r.sharpe_ratio, 4),
+                "num_wins": r.num_wins,
+                "num_losses": r.num_losses,
+            }
+        )
 
     payload = {
         "generated_at": datetime.utcnow().isoformat() + "Z",
@@ -600,21 +554,15 @@ def save_json(
 
 # ── Entry point ───────────────────────────────────────────────────────────
 
+
 async def main() -> None:
     # ── Read env overrides ────────────────────────────────────────
     months = int(os.getenv("BT_MONTHS", "6"))
     symbol = os.getenv("BT_SYMBOL", Config.SYMBOL)
     timeframe = os.getenv("BT_TIMEFRAME", Config.TIMEFRAME)
-    min_conf = float(
-        os.getenv(
-            "BT_MIN_CONF", str(Config.MIN_SIGNAL_CONFIDENCE)
-        )
-    )
+    min_conf = float(os.getenv("BT_MIN_CONF", str(Config.MIN_SIGNAL_CONFIDENCE)))
 
-    print(
-        f"[backtest] {symbol} {timeframe} x {months}m  "
-        f"min_conf={min_conf}"
-    )
+    print(f"[backtest] {symbol} {timeframe} x {months}m  " f"min_conf={min_conf}")
 
     # ── Load data ─────────────────────────────────────────────────
     df = await load_data(symbol, timeframe, months)

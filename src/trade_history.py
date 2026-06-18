@@ -3,6 +3,7 @@ SQLite-based trade history tracker.
 Stores open/closed trades and computes win rate + expected value.
 DB path: data/trades.db
 """
+
 import asyncio
 import json
 import logging
@@ -26,22 +27,12 @@ def get_backtest_stats(strategy: str) -> Dict:
         for r in data.get("results", []):
             if r.get("strategy") == strategy:
                 return {
-                    "win_rate": float(
-                        r.get("win_rate", 0.0)
-                    ),
-                    "total_trades": int(
-                        r.get("total_trades", 0)
-                    ),
-                    "ev": float(
-                        r.get("expected_value", 0.0)
-                    ),
-                    "total_return_pct": float(
-                        r.get("total_return_pct", 0.0)
-                    ),
+                    "win_rate": float(r.get("win_rate", 0.0)),
+                    "total_trades": int(r.get("total_trades", 0)),
+                    "ev": float(r.get("expected_value", 0.0)),
+                    "total_return_pct": float(r.get("total_return_pct", 0.0)),
                 }
-    except (
-        FileNotFoundError, json.JSONDecodeError, KeyError
-    ):
+    except (FileNotFoundError, json.JSONDecodeError, KeyError):
         pass
     return {
         "win_rate": 0.0,
@@ -79,9 +70,7 @@ class TradeHistory:
 
     def __init__(self, db_path: str = _DB_PATH):
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
-        self._conn = sqlite3.connect(
-            db_path, check_same_thread=False
-        )
+        self._conn = sqlite3.connect(db_path, check_same_thread=False)
         self._lock = asyncio.Lock()
         with self._conn:
             self._conn.execute(_DDL)
@@ -109,8 +98,13 @@ class TradeHistory:
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    symbol, strategy, action, entry_price,
-                    quantity, confidence, commission,
+                    symbol,
+                    strategy,
+                    action,
+                    entry_price,
+                    quantity,
+                    confidence,
+                    commission,
                     datetime.now().isoformat(),
                 ),
             )
@@ -131,26 +125,15 @@ class TradeHistory:
                 (trade_id,),
             ).fetchone()
             if row is None:
-                logger.warning(
-                    f"trade_id={trade_id} not found"
-                )
+                logger.warning(f"trade_id={trade_id} not found")
                 return
             action, entry_price, qty, entry_comm = row
             total_comm = entry_comm + commission
             if action == "buy":
-                pnl = (
-                    (exit_price - entry_price) * qty
-                    - total_comm
-                )
+                pnl = (exit_price - entry_price) * qty - total_comm
             else:
-                pnl = (
-                    (entry_price - exit_price) * qty
-                    - total_comm
-                )
-            pnl_pct = (
-                pnl / (entry_price * qty)
-                if entry_price else 0
-            )
+                pnl = (entry_price - exit_price) * qty - total_comm
+            pnl_pct = pnl / (entry_price * qty) if entry_price else 0
             self._conn.execute(
                 """
                 UPDATE trades
@@ -160,8 +143,10 @@ class TradeHistory:
                 WHERE id=?
                 """,
                 (
-                    exit_price, commission,
-                    pnl, pnl_pct,
+                    exit_price,
+                    commission,
+                    pnl,
+                    pnl_pct,
                     datetime.now().isoformat(),
                     trade_id,
                 ),
@@ -181,11 +166,7 @@ class TradeHistory:
             if strategy
             else "WHERE status='closed'"
         )
-        params = (
-            (strategy, lookback)
-            if strategy
-            else (lookback,)
-        )
+        params = (strategy, lookback) if strategy else (lookback,)
         async with self._lock:
             row = self._conn.execute(
                 f"""
@@ -219,11 +200,7 @@ class TradeHistory:
             if strategy
             else "WHERE status='closed'"
         )
-        params = (
-            (strategy, lookback)
-            if strategy
-            else (lookback,)
-        )
+        params = (strategy, lookback) if strategy else (lookback,)
         async with self._lock:
             rows = self._conn.execute(
                 f"""
@@ -235,23 +212,14 @@ class TradeHistory:
             ).fetchall()
         if not rows:
             return 0.0
-        wins = [
-            r[0] for r in rows
-            if r[0] is not None and r[0] > 0
-        ]
-        losses = [
-            r[0] for r in rows
-            if r[0] is not None and r[0] <= 0
-        ]
+        wins = [r[0] for r in rows if r[0] is not None and r[0] > 0]
+        losses = [r[0] for r in rows if r[0] is not None and r[0] <= 0]
         n = len(rows)
         if n == 0:
             return 0.0
         wr = len(wins) / n
         avg_win = sum(wins) / len(wins) if wins else 0.0
-        avg_loss = (
-            abs(sum(losses) / len(losses))
-            if losses else 0.0
-        )
+        avg_loss = abs(sum(losses) / len(losses)) if losses else 0.0
         return wr * avg_win - (1 - wr) * avg_loss
 
     async def get_trade_count(
@@ -265,11 +233,7 @@ class TradeHistory:
             if strategy
             else "WHERE status='closed'"
         )
-        params = (
-            (strategy, lookback)
-            if strategy
-            else (lookback,)
-        )
+        params = (strategy, lookback) if strategy else (lookback,)
         async with self._lock:
             row = self._conn.execute(
                 f"SELECT COUNT(*) FROM "

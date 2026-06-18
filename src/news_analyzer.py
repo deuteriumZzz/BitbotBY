@@ -57,6 +57,7 @@ class NewsAnalyzer:
         self._enabled = bool(api_key)
         if self._enabled:
             from newsapi import NewsApiClient
+
             self.newsapi = NewsApiClient(api_key=api_key)
 
     def _cache_key(self, symbol: str) -> str:
@@ -69,9 +70,7 @@ class NewsAnalyzer:
         base = symbol.split("/")[0]
         return f"news:{base}"
 
-    def _load_cached(
-        self, symbol: str
-    ) -> tuple[float, list[str]] | None:
+    def _load_cached(self, symbol: str) -> tuple[float, list[str]] | None:
         """
         Загружает сентимент из Redis-кэша.
 
@@ -79,9 +78,7 @@ class NewsAnalyzer:
         :return: Кортеж (sentiment, headlines) или None если кэш пуст.
         """
         try:
-            raw = self.redis.redis_client.get(
-                self._cache_key(symbol)
-            )
+            raw = self.redis.redis_client.get(self._cache_key(symbol))
             if raw:
                 data = json.loads(raw.decode("utf-8"))
                 return data["sentiment"], data["headlines"]
@@ -106,22 +103,16 @@ class NewsAnalyzer:
         """
         try:
             key = self._cache_key(symbol)
-            payload = json.dumps(
-                {"sentiment": sentiment, "headlines": headlines}
-            )
+            payload = json.dumps({"sentiment": sentiment, "headlines": headlines})
             self.redis.redis_client.setex(
                 key,
                 Config.NEWS_UPDATE_INTERVAL,
                 payload.encode("utf-8"),
             )
         except Exception as e:
-            self.logger.debug(
-                f"Cache save failed for {symbol}: {e}"
-            )
+            self.logger.debug(f"Cache save failed for {symbol}: {e}")
 
-    async def get_sentiment(
-        self, symbol: str
-    ) -> Tuple[float, List[str]]:
+    async def get_sentiment(self, symbol: str) -> Tuple[float, List[str]]:
         """
         Возвращает (compound_score, headlines) для символа.
 
@@ -157,14 +148,10 @@ class NewsAnalyzer:
                 if title:
                     headlines.append(title[:100])
 
-        sentiment = (
-            sum(sentiments) / len(sentiments)
-            if sentiments else 0.0
-        )
+        sentiment = sum(sentiments) / len(sentiments) if sentiments else 0.0
         self._save_cache(symbol, sentiment, headlines[:5])
         self.logger.info(
-            f"News [{base}]: sentiment={sentiment:.3f}, "
-            f"articles={len(articles)}"
+            f"News [{base}]: sentiment={sentiment:.3f}, " f"articles={len(articles)}"
         )
         return sentiment, headlines[:5]
 
@@ -190,9 +177,7 @@ class NewsAnalyzer:
             )
             return response.get("articles", [])
         except Exception as e:
-            self.logger.warning(
-                f"NewsAPI fetch failed ({query}): {e}"
-            )
+            self.logger.warning(f"NewsAPI fetch failed ({query}): {e}")
             return []
 
     async def analyze_news_async(self) -> float:

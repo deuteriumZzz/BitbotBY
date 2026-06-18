@@ -1,14 +1,16 @@
 """Тесты для PortfolioManager — баланс, позиции, trailing stop."""
-import pytest
+
 from unittest.mock import MagicMock, patch
 
-from src.portfolio_manager import PortfolioManager
-from config import Config
+import pytest
 
+from config import Config
+from src.portfolio_manager import PortfolioManager
 
 # ---------------------------------------------------------------------------
 # Fixture
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def portfolio():
@@ -24,6 +26,7 @@ def portfolio():
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 async def test_buy_deducts_balance_and_commission(portfolio):
     """buy 0.1 BTC at 30000 → balance decreases by cost + commission."""
@@ -55,14 +58,15 @@ async def test_sell_increases_balance(portfolio):
     price = 30000.0
 
     await portfolio.update_portfolio("BTC/USDT", "buy", qty, price)
-    balance_after_buy = portfolio.current_balance
 
     ok = await portfolio.update_portfolio("BTC/USDT", "sell", qty, price)
 
     assert ok is True
-    # Revenue = qty*price - commission; balance should be back near 10000 minus 2 commissions
+    # Balance should be near initial minus 2× commissions
     total_commission = 2 * qty * price * portfolio.commission_rate
-    assert portfolio.current_balance == pytest.approx(10000.0 - total_commission, rel=1e-6)
+    assert portfolio.current_balance == pytest.approx(
+        10000.0 - total_commission, rel=1e-6
+    )
     assert "BTC/USDT" not in portfolio.positions
 
 
@@ -75,7 +79,7 @@ async def test_sell_nonexistent_position_returns_false(portfolio):
 
 
 async def test_portfolio_value_calculation(portfolio):
-    """After buying BTC at 30000, get_portfolio_value at same price = initial_balance."""
+    """After buy at 30000, get_portfolio_value at same price equals initial_balance."""
     qty = 0.1
     price = 30000.0
     await portfolio.update_portfolio("BTC/USDT", "buy", qty, price)

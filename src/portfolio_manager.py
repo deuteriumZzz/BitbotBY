@@ -1,6 +1,7 @@
 """
 Управление портфелем: отслеживание баланса, позиций и ребалансировка.
 """
+
 from __future__ import annotations
 
 import logging
@@ -55,27 +56,18 @@ class PortfolioManager:
         """
         try:
             if action == "buy":
-                commission = (
-                    quantity * price * self.commission_rate
-                )
+                commission = quantity * price * self.commission_rate
                 cost = quantity * price + commission
                 if cost <= self.current_balance:
                     self.current_balance -= cost
                     self.total_commissions += commission
-                    self.positions[symbol] = (
-                        self.positions.get(symbol, 0) + quantity
-                    )
+                    self.positions[symbol] = self.positions.get(symbol, 0) + quantity
                     await self._save_portfolio_state()
                     return True
 
             elif action == "sell":
-                if (
-                    symbol in self.positions
-                    and self.positions[symbol] >= quantity
-                ):
-                    commission = (
-                        quantity * price * self.commission_rate
-                    )
+                if symbol in self.positions and self.positions[symbol] >= quantity:
+                    commission = quantity * price * self.commission_rate
                     revenue = quantity * price - commission
                     self.current_balance += revenue
                     self.total_commissions += commission
@@ -88,14 +80,10 @@ class PortfolioManager:
             return False
 
         except Exception as e:
-            self.logger.error(
-                f"Ошибка обновления портфеля: {e}", exc_info=True
-            )
+            self.logger.error(f"Ошибка обновления портфеля: {e}", exc_info=True)
             return False
 
-    async def get_portfolio_value(
-        self, current_prices: Dict[str, float]
-    ) -> float:
+    async def get_portfolio_value(self, current_prices: Dict[str, float]) -> float:
         """
         Рассчитывает общую стоимость портфеля.
 
@@ -172,12 +160,8 @@ class PortfolioManager:
             if current_value < target_value:
                 buy_value = target_value - current_value
                 quantity = buy_value / price
-                await self.update_portfolio(
-                    symbol, "buy", quantity, price
-                )
+                await self.update_portfolio(symbol, "buy", quantity, price)
             elif current_value > target_value:
                 sell_value = current_value - target_value
                 quantity = sell_value / price
-                await self.update_portfolio(
-                    symbol, "sell", quantity, price
-                )
+                await self.update_portfolio(symbol, "sell", quantity, price)

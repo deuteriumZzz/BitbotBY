@@ -1,5 +1,4 @@
 import pytest
-from unittest.mock import MagicMock
 
 
 # Patch Redis so RiskManager doesn't need a live server
@@ -20,9 +19,7 @@ from src.risk_management import RiskManager
 
 @pytest.mark.asyncio
 async def test_position_size_basic():
-    rm = RiskManager(
-        initial_balance=10000.0, risk_per_trade=0.02
-    )
+    rm = RiskManager(initial_balance=10000.0, risk_per_trade=0.02)
     # risk = 200 USDT, price diff = 100
     size = await rm.calculate_position_size(
         current_balance=10000.0,
@@ -35,9 +32,7 @@ async def test_position_size_basic():
 @pytest.mark.asyncio
 async def test_position_size_zero_diff():
     rm = RiskManager(10000.0)
-    size = await rm.calculate_position_size(
-        10000.0, entry_price=100.0, stop_loss=100.0
-    )
+    size = await rm.calculate_position_size(10000.0, entry_price=100.0, stop_loss=100.0)
     assert size == 0
 
 

@@ -1,9 +1,5 @@
-import numpy as np
-import pandas as pd
-import pytest
-from tests.conftest import make_ohlcv
-
 from src.indicators import calculate_technical_indicators
+from tests.conftest import make_ohlcv
 
 
 def test_rsi_range():
@@ -32,9 +28,9 @@ def test_bb_width_no_zero_division():
     df["close"] = 50.0
     result = calculate_technical_indicators(df)
     assert "bb_width" in result.columns
-    finite = result["bb_width"].replace(
-        [float("inf"), float("-inf")], float("nan")
-    ).dropna()
+    finite = (
+        result["bb_width"].replace([float("inf"), float("-inf")], float("nan")).dropna()
+    )
     assert len(finite) > 0
 
 
@@ -44,16 +40,19 @@ def test_volume_ratio_no_zero_division():
     df["volume"] = 0.0
     result = calculate_technical_indicators(df)
     col = result["volume_ratio"]
-    assert not col.isin(
-        [float("inf"), float("-inf")]
-    ).any()
+    assert not col.isin([float("inf"), float("-inf")]).any()
 
 
 def test_ema_columns_exist():
     df = calculate_technical_indicators(make_ohlcv(100))
     for col in [
-        "ema_short", "ema_long", "rsi",
-        "macd", "bb_upper", "bb_lower", "atr",
+        "ema_short",
+        "ema_long",
+        "rsi",
+        "macd",
+        "bb_upper",
+        "bb_lower",
+        "atr",
     ]:
         assert col in df.columns, f"Missing column: {col}"
 
@@ -68,6 +67,6 @@ def test_no_future_leak_ffill():
     result = calculate_technical_indicators(df)
     tail = result.iloc[30:]
     numeric = tail.select_dtypes(include="number")
-    assert not numeric.isin(
-        [float("inf"), float("-inf")]
-    ).any().any(), "Infinite values found"
+    assert (
+        not numeric.isin([float("inf"), float("-inf")]).any().any()
+    ), "Infinite values found"

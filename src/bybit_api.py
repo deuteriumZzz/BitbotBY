@@ -1,6 +1,7 @@
 """
 Клиент Bybit API с поддержкой retry, кэширования через Redis и управления ордерами.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -22,11 +23,14 @@ def _is_retryable(exc: Exception) -> bool:
     :param exc: Исключение для проверки.
     :return: True если ошибка временная и допускает повтор запроса.
     """
-    return isinstance(exc, (
-        ccxt.NetworkError,
-        ccxt.RequestTimeout,
-        ccxt.ExchangeNotAvailable,
-    ))
+    return isinstance(
+        exc,
+        (
+            ccxt.NetworkError,
+            ccxt.RequestTimeout,
+            ccxt.ExchangeNotAvailable,
+        ),
+    )
 
 
 @retry(
@@ -91,25 +95,29 @@ class BybitAPI:
         try:
             exchange_class = ccxt.bybit
             if testnet:
-                self.exchange = exchange_class({
-                    "apiKey": api_key,
-                    "secret": api_secret,
-                    "enableRateLimit": True,
-                    "options": {"defaultType": "spot"},
-                    "urls": {
-                        "api": {
-                            "public": "https://api-testnet.bybit.com",
-                            "private": "https://api-testnet.bybit.com",
-                        }
-                    },
-                })
+                self.exchange = exchange_class(
+                    {
+                        "apiKey": api_key,
+                        "secret": api_secret,
+                        "enableRateLimit": True,
+                        "options": {"defaultType": "spot"},
+                        "urls": {
+                            "api": {
+                                "public": "https://api-testnet.bybit.com",
+                                "private": "https://api-testnet.bybit.com",
+                            }
+                        },
+                    }
+                )
             else:
-                self.exchange = exchange_class({
-                    "apiKey": api_key,
-                    "secret": api_secret,
-                    "enableRateLimit": True,
-                    "options": {"defaultType": "spot"},
-                })
+                self.exchange = exchange_class(
+                    {
+                        "apiKey": api_key,
+                        "secret": api_secret,
+                        "enableRateLimit": True,
+                        "options": {"defaultType": "spot"},
+                    }
+                )
             await self.exchange.load_markets()
             self.logger.info("Bybit API инициализирован успешно")
         except ccxt.AuthenticationError as e:
@@ -179,7 +187,9 @@ class BybitAPI:
             self.logger.warning(f"Временная ошибка сети при получении OHLCV: {e}")
             raise
         except Exception as e:
-            self.logger.error(f"Неожиданная ошибка при получении OHLCV: {e}", exc_info=True)
+            self.logger.error(
+                f"Неожиданная ошибка при получении OHLCV: {e}", exc_info=True
+            )
             raise
 
     async def create_order(
@@ -237,7 +247,7 @@ class BybitAPI:
                     return None
                 except (ccxt.NetworkError, ccxt.RequestTimeout) as e:
                     last_error = e
-                    wait = 2 ** attempt
+                    wait = 2**attempt
                     self.logger.warning(
                         f"Попытка {attempt + 1}/3 создания ордера не удалась: {e}. "
                         f"Повтор через {wait}с"
@@ -248,7 +258,7 @@ class BybitAPI:
                     self.logger.warning(
                         f"Попытка {attempt + 1}/3 не удалась (неожиданная ошибка): {e}"
                     )
-                    await asyncio.sleep(2 ** attempt)
+                    await asyncio.sleep(2**attempt)
             self.logger.error(
                 f"Ордер не создан после 3 попыток: {last_error}", exc_info=True
             )
@@ -273,7 +283,9 @@ class BybitAPI:
             self.logger.warning(f"Временная ошибка сети при получении баланса: {e}")
             return None
         except Exception as e:
-            self.logger.error(f"Неожиданная ошибка при получении баланса: {e}", exc_info=True)
+            self.logger.error(
+                f"Неожиданная ошибка при получении баланса: {e}", exc_info=True
+            )
             return None
 
     async def get_current_price(self, symbol: str) -> Optional[float]:
@@ -292,7 +304,9 @@ class BybitAPI:
             self.logger.critical(f"Ошибка авторизации при получении цены: {e}")
             raise
         except (ccxt.NetworkError, ccxt.RequestTimeout) as e:
-            self.logger.warning(f"Временная ошибка сети при получении цены {symbol}: {e}")
+            self.logger.warning(
+                f"Временная ошибка сети при получении цены {symbol}: {e}"
+            )
             return None
         except Exception as e:
             self.logger.error(
@@ -300,9 +314,7 @@ class BybitAPI:
             )
             return None
 
-    async def fetch_order_status(
-        self, order_id: str, symbol: str
-    ) -> Optional[dict]:
+    async def fetch_order_status(self, order_id: str, symbol: str) -> Optional[dict]:
         """
         Возвращает статус ордера по его ID.
 
@@ -315,10 +327,14 @@ class BybitAPI:
         except asyncio.CancelledError:
             raise
         except ccxt.AuthenticationError as e:
-            self.logger.critical(f"Ошибка авторизации при получении статуса ордера: {e}")
+            self.logger.critical(
+                f"Ошибка авторизации при получении статуса ордера: {e}"
+            )
             raise
         except (ccxt.NetworkError, ccxt.RequestTimeout) as e:
-            self.logger.warning(f"Временная ошибка сети при получении ордера {order_id}: {e}")
+            self.logger.warning(
+                f"Временная ошибка сети при получении ордера {order_id}: {e}"
+            )
             return None
         except Exception as e:
             self.logger.error(
@@ -344,12 +360,12 @@ class BybitAPI:
             self.logger.critical(f"Ошибка авторизации при отмене ордера: {e}")
             raise
         except (ccxt.NetworkError, ccxt.RequestTimeout) as e:
-            self.logger.warning(f"Временная ошибка сети при отмене ордера {order_id}: {e}")
+            self.logger.warning(
+                f"Временная ошибка сети при отмене ордера {order_id}: {e}"
+            )
             return False
         except Exception as e:
-            self.logger.error(
-                f"Неожиданная ошибка cancel_order: {e}", exc_info=True
-            )
+            self.logger.error(f"Неожиданная ошибка cancel_order: {e}", exc_info=True)
             return False
 
     async def close(self) -> None:

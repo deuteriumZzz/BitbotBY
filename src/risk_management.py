@@ -1,6 +1,7 @@
 """
 Управление рисками: расчёт позиций, стоп-лосса, тейк-профита и валидация сигналов.
 """
+
 from __future__ import annotations
 
 import logging
@@ -70,9 +71,7 @@ class RiskManager:
             "position_size": position_size,
             "risk_amount": risk_amount,
         }
-        self.redis.save_trading_state(
-            "risk_calculation", risk_data
-        )
+        self.redis.save_trading_state("risk_calculation", risk_data)
         return position_size
 
     async def calculate_stop_loss(
@@ -92,14 +91,14 @@ class RiskManager:
         if atr and atr > 0:
             if signal["action"] == "buy":
                 return entry_price - 1.5 * atr
-            elif signal["action"] == "sell":
+            if signal["action"] == "sell":
                 return entry_price + 1.5 * atr
             return entry_price
 
         pct = Config.STOP_LOSS_PERCENT
         if signal["action"] == "buy":
             return entry_price * (1 - pct)
-        elif signal["action"] == "sell":
+        if signal["action"] == "sell":
             return entry_price * (1 + pct)
         return entry_price
 
@@ -116,24 +115,18 @@ class RiskManager:
         rr = 2.0  # соотношение риск/прибыль 1:2
 
         if signal["action"] == "buy":
-            stop_loss = await self.calculate_stop_loss(
-                entry_price, signal
-            )
+            stop_loss = await self.calculate_stop_loss(entry_price, signal)
             risk = entry_price - stop_loss
             return entry_price + risk * rr
 
-        elif signal["action"] == "sell":
-            stop_loss = await self.calculate_stop_loss(
-                entry_price, signal
-            )
+        if signal["action"] == "sell":
+            stop_loss = await self.calculate_stop_loss(entry_price, signal)
             risk = stop_loss - entry_price
             return entry_price - risk * rr
 
         return entry_price
 
-    async def validate_signal(
-        self, signal: Dict[str, Any], market_data: Any
-    ) -> bool:
+    async def validate_signal(self, signal: Dict[str, Any], market_data: Any) -> bool:
         """
         Валидирует торговый сигнал по правилам риска.
 
@@ -152,9 +145,7 @@ class RiskManager:
 
         return True
 
-    def check_daily_loss_limit(
-        self, current_balance: float
-    ) -> bool:
+    def check_daily_loss_limit(self, current_balance: float) -> bool:
         """
         Проверяет, не превышен ли дневной лимит потерь.
 

@@ -15,8 +15,8 @@ class BaseStrategy(ABC):
     name: str = ""
     description: str = ""
     recommended_timeframes: List[str] = []
-    risk_level: str = "medium"   # low / medium / high
-    market_type: str = "any"     # trending / ranging / volatile / any
+    risk_level: str = "medium"  # low / medium / high
+    market_type: str = "any"  # trending / ranging / volatile / any
 
     @abstractmethod
     def generate_signal(self, data: pd.DataFrame) -> Dict[str, Any]:
@@ -43,9 +43,7 @@ class BaseStrategy(ABC):
             return float(val) if pd.notna(val) else default
         return default
 
-    def _prev2(
-        self, data: pd.DataFrame, col: str, default: float = 0.0
-    ) -> float:
+    def _prev2(self, data: pd.DataFrame, col: str, default: float = 0.0) -> float:
         if col in data.columns and len(data) > 2:
             val = data[col].iloc[-3]
             return float(val) if pd.notna(val) else default
@@ -55,6 +53,7 @@ class BaseStrategy(ABC):
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. EMA CROSSOVER
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class EMACrossoverStrategy(BaseStrategy):
     name = "ema_crossover"
@@ -78,33 +77,17 @@ class EMACrossoverStrategy(BaseStrategy):
 
         # Confirmed bullish: current AND prev bar ema_s > ema_l
         # AND the bar before that had ema_s <= ema_l (actual crossover)
-        bullish_cross = (
-            ema_s > ema_l
-            and ema_s_p > ema_l_p
-            and ema_s_p2 <= ema_l_p2
-        )
-        bearish_cross = (
-            ema_s < ema_l
-            and ema_s_p < ema_l_p
-            and ema_s_p2 >= ema_l_p2
-        )
+        bullish_cross = ema_s > ema_l and ema_s_p > ema_l_p and ema_s_p2 <= ema_l_p2
+        bearish_cross = ema_s < ema_l and ema_s_p < ema_l_p and ema_s_p2 >= ema_l_p2
 
         if bullish_cross:
-            return {
-                "action": "buy", "confidence": 0.82, "price": close
-            }
+            return {"action": "buy", "confidence": 0.82, "price": close}
         if bearish_cross:
-            return {
-                "action": "sell", "confidence": 0.78, "price": close
-            }
+            return {"action": "sell", "confidence": 0.78, "price": close}
         if ema_s > ema_l:
-            return {
-                "action": "buy", "confidence": 0.60, "price": close
-            }
+            return {"action": "buy", "confidence": 0.60, "price": close}
         if ema_s < ema_l:
-            return {
-                "action": "sell", "confidence": 0.58, "price": close
-            }
+            return {"action": "sell", "confidence": 0.58, "price": close}
         return {"action": "hold", "confidence": 0.50}
 
 
@@ -112,10 +95,12 @@ class EMACrossoverStrategy(BaseStrategy):
 # 2. RSI MOMENTUM
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class RSIMomentumStrategy(BaseStrategy):
     name = "rsi_momentum"
     description = (
-        "Покупка при RSI < 30 (перепроданность), продажа при RSI > 70 (перекупленность). "
+        "Покупка при RSI < 30 (перепроданность), "
+        "продажа при RSI > 70 (перекупленность). "
         "Оптимальна при боковом движении цены."
     )
     recommended_timeframes = ["15m", "1h", "4h"]
@@ -145,11 +130,13 @@ class RSIMomentumStrategy(BaseStrategy):
 # 3. MACD CROSSOVER
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class MACDCrossoverStrategy(BaseStrategy):
     name = "macd_crossover"
     description = (
         "Покупка при бычьем кроссовере MACD/Signal выше нуля, "
-        "продажа при медвежьем. Сила сигнала зависит от положения относительно нулевой линии."
+        "продажа при медвежьем. "
+        "Сила сигнала зависит от положения относительно нулевой линии."
     )
     recommended_timeframes = ["1h", "4h", "1d"]
     risk_level = "medium"
@@ -182,6 +169,7 @@ class MACDCrossoverStrategy(BaseStrategy):
 # 4. BOLLINGER BANDS
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class BollingerBandsStrategy(BaseStrategy):
     name = "bollinger_bands"
     description = (
@@ -197,7 +185,6 @@ class BollingerBandsStrategy(BaseStrategy):
         close = self._last(data, "close")
         bb_u = self._last(data, "bb_upper", close * 1.02)
         bb_l = self._last(data, "bb_lower", close * 0.98)
-        bb_m = self._last(data, "bb_middle", close)
         rsi = self._last(data, "rsi", 50)
 
         band_width = bb_u - bb_l
@@ -223,6 +210,7 @@ class BollingerBandsStrategy(BaseStrategy):
 # ─────────────────────────────────────────────────────────────────────────────
 # 5. SCALPING
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class ScalpingStrategy(BaseStrategy):
     name = "scalping"
@@ -257,6 +245,7 @@ class ScalpingStrategy(BaseStrategy):
 # ─────────────────────────────────────────────────────────────────────────────
 # 6. SWING TRADING
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class SwingTradingStrategy(BaseStrategy):
     name = "swing_trading"
@@ -298,6 +287,7 @@ class SwingTradingStrategy(BaseStrategy):
 # 7. BREAKOUT
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class BreakoutStrategy(BaseStrategy):
     name = "breakout"
     description = (
@@ -334,6 +324,7 @@ class BreakoutStrategy(BaseStrategy):
 # ─────────────────────────────────────────────────────────────────────────────
 # 8. MEAN REVERSION
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class MeanReversionStrategy(BaseStrategy):
     name = "mean_reversion"
@@ -380,10 +371,12 @@ class MeanReversionStrategy(BaseStrategy):
 # 9. TREND FOLLOWING
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TrendFollowingStrategy(BaseStrategy):
     name = "trend_following"
     description = (
-        "Открытие позиции только при подтверждении тренда: SMA20 > SMA50, EMA12 > EMA26, цена выше SMA20. "
+        "Открытие позиции только при подтверждении тренда: "
+        "SMA20 > SMA50, EMA12 > EMA26, цена выше SMA20. "
         "Консервативная стратегия с низким риском."
     )
     recommended_timeframes = ["4h", "1d"]
@@ -417,14 +410,14 @@ class TrendFollowingStrategy(BaseStrategy):
 # ─────────────────────────────────────────────────────────────────────────────
 
 STRATEGY_REGISTRY: Dict[str, Type[BaseStrategy]] = {
-    "ema_crossover":   EMACrossoverStrategy,
-    "rsi_momentum":    RSIMomentumStrategy,
-    "macd_crossover":  MACDCrossoverStrategy,
+    "ema_crossover": EMACrossoverStrategy,
+    "rsi_momentum": RSIMomentumStrategy,
+    "macd_crossover": MACDCrossoverStrategy,
     "bollinger_bands": BollingerBandsStrategy,
-    "scalping":        ScalpingStrategy,
-    "swing_trading":   SwingTradingStrategy,
-    "breakout":        BreakoutStrategy,
-    "mean_reversion":  MeanReversionStrategy,
+    "scalping": ScalpingStrategy,
+    "swing_trading": SwingTradingStrategy,
+    "breakout": BreakoutStrategy,
+    "mean_reversion": MeanReversionStrategy,
     "trend_following": TrendFollowingStrategy,
 }
 
@@ -445,6 +438,7 @@ def create_strategy(name: str) -> BaseStrategy:
 # ─────────────────────────────────────────────────────────────────────────────
 # ORCHESTRATOR
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TradingStrategy:
     """
@@ -484,16 +478,20 @@ class TradingStrategy:
             "strategy": self.strategy_name,
             "market_conditions": {
                 "price": float(data["close"].iloc[-1]),
-                "volume": float(data["volume"].iloc[-1]) if "volume" in data.columns else 0,
+                "volume": (
+                    float(data["volume"].iloc[-1]) if "volume" in data.columns else 0
+                ),
                 "volatility": float(data["close"].std()),
             },
         }
         self.redis.save_trading_state(self.strategy_name, state)
-        self.redis.publish_signal({
-            "strategy": self.strategy_name,
-            "signal": signal,
-            "timestamp": state["timestamp"],
-        })
+        self.redis.publish_signal(
+            {
+                "strategy": self.strategy_name,
+                "signal": signal,
+                "timestamp": state["timestamp"],
+            }
+        )
         return signal
 
     @staticmethod

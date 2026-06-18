@@ -2,25 +2,21 @@
 BitbotBY Web Dashboard — runs on port 8080.
 Serves live bot status, signals, and trade history.
 """
-import asyncio
+
 import json
 import logging
 import os
 import sqlite3
+import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 import uvicorn
 from fastapi import FastAPI, Response
 from fastapi.responses import HTMLResponse, JSONResponse
-from prometheus_client import (
-    CONTENT_TYPE_LATEST,
-    Gauge,
-    generate_latest,
-)
+from prometheus_client import CONTENT_TYPE_LATEST, Gauge, generate_latest
 
-import sys
 sys.path.insert(0, os.path.dirname(__file__))
 
 from config import Config
@@ -39,9 +35,11 @@ _g_trades = Gauge("bitbot_total_trades", "Всего сделок в базе")
 
 # ── Redis helper ──────────────────────────────────────
 
+
 def _get_redis():
     try:
         import redis as redis_lib
+
         r = redis_lib.Redis(
             host=os.getenv("REDIS_HOST", "localhost"),
             port=int(os.getenv("REDIS_PORT", 6379)),
@@ -118,10 +116,7 @@ def _get_stats() -> dict:
         return {
             "total_trades": total or 0,
             "closed_trades": closed or 0,
-            "win_rate": (
-                round(wins / closed * 100, 1)
-                if closed else 0
-            ),
+            "win_rate": (round(wins / closed * 100, 1) if closed else 0),
             "total_pnl": round(pnl or 0, 2),
             "total_commissions": round(comm or 0, 2),
         }
@@ -145,25 +140,24 @@ def _check_healthcheck() -> bool:
 
 # ── API endpoints ─────────────────────────────────────
 
+
 @app.get("/api/status")
 async def get_status():
     portfolio = _redis_get("portfolio_state") or {}
     alive = _check_healthcheck()
     stats = _get_stats()
-    return JSONResponse({
-        "bot_running": alive,
-        "mode": Config.MODE,
-        "paper_trading": Config.PAPER_TRADING,
-        "balance": portfolio.get(
-            "balance", Config.INITIAL_BALANCE
-        ),
-        "positions": portfolio.get("positions", {}),
-        "total_commissions": portfolio.get(
-            "total_commissions", 0
-        ),
-        "timestamp": datetime.now().isoformat(),
-        **stats,
-    })
+    return JSONResponse(
+        {
+            "bot_running": alive,
+            "mode": Config.MODE,
+            "paper_trading": Config.PAPER_TRADING,
+            "balance": portfolio.get("balance", Config.INITIAL_BALANCE),
+            "positions": portfolio.get("positions", {}),
+            "total_commissions": portfolio.get("total_commissions", 0),
+            "timestamp": datetime.now().isoformat(),
+            **stats,
+        }
+    )
 
 
 @app.get("/api/trades")

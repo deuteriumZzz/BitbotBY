@@ -1,10 +1,8 @@
-import pandas as pd
-import numpy as np
 import pytest
-from tests.conftest import make_ohlcv
 
 from src.indicators import calculate_technical_indicators
 from src.strategies import STRATEGY_REGISTRY
+from tests.conftest import make_ohlcv
 
 
 def prepared_df(n=100, trend=0.002):
@@ -20,15 +18,13 @@ def test_strategy_returns_valid_signal(name):
     signal = strategy.generate_signal(df)
     assert "action" in signal, f"{name}: missing 'action'"
     assert signal["action"] in (
-        "buy", "sell", "hold"
+        "buy",
+        "sell",
+        "hold",
     ), f"{name}: invalid action '{signal['action']}'"
-    assert "confidence" in signal, (
-        f"{name}: missing 'confidence'"
-    )
+    assert "confidence" in signal, f"{name}: missing 'confidence'"
     conf = signal["confidence"]
-    assert 0.0 <= conf <= 1.0, (
-        f"{name}: confidence {conf} out of range"
-    )
+    assert 0.0 <= conf <= 1.0, f"{name}: confidence {conf} out of range"
 
 
 @pytest.mark.parametrize("name", list(STRATEGY_REGISTRY.keys()))
@@ -54,6 +50,4 @@ def test_strategy_handles_flat_market(name):
         signal = strategy.generate_signal(df)
         assert signal["action"] in ("buy", "sell", "hold")
     except Exception as e:
-        pytest.fail(
-            f"{name} crashed on flat market: {e}"
-        )
+        pytest.fail(f"{name} crashed on flat market: {e}")

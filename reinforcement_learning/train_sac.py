@@ -3,6 +3,7 @@
 
 Сохраняет модель, нормализационную статистику и резервные копии.
 """
+
 from __future__ import annotations
 
 import json
@@ -41,9 +42,7 @@ def _backup_existing_model(path: str) -> None:
     logger.info(f"Резервная копия модели → {backup}")
 
 
-def _save_norm_stats(
-    model_path: str, stats: Dict[str, Any]
-) -> None:
+def _save_norm_stats(model_path: str, stats: Dict[str, Any]) -> None:
     """
     Сохраняет статистику нормализации среды в JSON-файл.
 
@@ -101,28 +100,21 @@ def train(
         from stable_baselines3 import SAC
         from stable_baselines3.common.monitor import Monitor
     except ImportError as e:
-        logger.error(
-            f"stable-baselines3 не установлен: {e}"
-        )
+        logger.error(f"stable-baselines3 не установлен: {e}")
         raise
 
     from reinforcement_learning.rl_env import TradingEnv
 
     os.makedirs(os.path.dirname(model_path), exist_ok=True)
 
-    logger.info(
-        f"Обучение SAC: {total_timesteps} шагов, "
-        f"данных {len(df)} свечей"
-    )
+    logger.info(f"Обучение SAC: {total_timesteps} шагов, " f"данных {len(df)} свечей")
 
     try:
         env = Monitor(TradingEnv(df))
         model = SAC("MlpPolicy", env, verbose=1)
         model.learn(total_timesteps=total_timesteps)
     except Exception as e:
-        logger.error(
-            f"Ошибка обучения SAC: {e}", exc_info=True
-        )
+        logger.error(f"Ошибка обучения SAC: {e}", exc_info=True)
         return None
 
     # Резервная копия перед перезаписью
@@ -150,17 +142,15 @@ if __name__ == "__main__":
     from src.data_loader import DataLoader
 
     async def _run() -> None:
-        import asyncio
         loader = DataLoader()
         await loader.initialize(
             api_key=os.getenv("BYBIT_API_KEY", ""),
             api_secret=os.getenv("BYBIT_API_SECRET", ""),
         )
-        df = await loader.get_paginated_history(
-            "BTC/USDT", "15m", months=6
-        )
+        df = await loader.get_paginated_history("BTC/USDT", "15m", months=6)
         await loader.close()
         train(df)
 
     import asyncio
+
     asyncio.run(_run())

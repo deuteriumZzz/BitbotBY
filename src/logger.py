@@ -3,6 +3,7 @@
 
 JSON-формат в production, человекочитаемый формат в development.
 """
+
 from __future__ import annotations
 
 import json
@@ -16,14 +17,32 @@ class JSONFormatter(logging.Formatter):
     """Форматирует лог-записи в JSON для структурированного логирования."""
 
     # Стандартные поля LogRecord — не дублируем их в extra
-    _SKIP = frozenset({
-        "name", "msg", "args", "levelname", "levelno",
-        "pathname", "filename", "module", "exc_info",
-        "exc_text", "stack_info", "lineno", "funcName",
-        "created", "msecs", "relativeCreated", "thread",
-        "threadName", "processName", "process", "message",
-        "taskName",
-    })
+    _SKIP = frozenset(
+        {
+            "name",
+            "msg",
+            "args",
+            "levelname",
+            "levelno",
+            "pathname",
+            "filename",
+            "module",
+            "exc_info",
+            "exc_text",
+            "stack_info",
+            "lineno",
+            "funcName",
+            "created",
+            "msecs",
+            "relativeCreated",
+            "thread",
+            "threadName",
+            "processName",
+            "process",
+            "message",
+            "taskName",
+        }
+    )
 
     def format(self, record: logging.LogRecord) -> str:
         """
@@ -40,9 +59,7 @@ class JSONFormatter(logging.Formatter):
             "message": record.getMessage(),
         }
         if record.exc_info:
-            data["exc_info"] = self.formatException(
-                record.exc_info
-            )
+            data["exc_info"] = self.formatException(record.exc_info)
         for key, val in record.__dict__.items():
             if key not in self._SKIP:
                 data[key] = val
@@ -64,25 +81,23 @@ def setup_logging(
         False — текстовый формат (для dev).
     """
     root = logging.getLogger()
-    root.setLevel(
-        getattr(logging, level.upper(), logging.INFO)
-    )
+    root.setLevel(getattr(logging, level.upper(), logging.INFO))
 
     handler = logging.StreamHandler(sys.stdout)
     if json_logs:
         handler.setFormatter(JSONFormatter())
     else:
-        handler.setFormatter(logging.Formatter(
-            "%(asctime)s %(levelname)-8s %(name)s — %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-        ))
+        handler.setFormatter(
+            logging.Formatter(
+                "%(asctime)s %(levelname)-8s %(name)s — %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
+            )
+        )
 
     root.handlers.clear()
     root.addHandler(handler)
 
     os.makedirs("logs", exist_ok=True)
-    fh = logging.FileHandler(
-        "logs/trading.log", encoding="utf-8"
-    )
+    fh = logging.FileHandler("logs/trading.log", encoding="utf-8")
     fh.setFormatter(JSONFormatter())
     root.addHandler(fh)
