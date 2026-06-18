@@ -213,6 +213,16 @@ class MarketScanner:
                 "7d": f"{ch_7d:+.2f}%",
             },
             "volume_ratio": round(vol_ratio, 2),
+            # Точные значения последней свечи для SAC-инференса
+            "ohlcv": {
+                "open": round(self._safe(last, "open", close), 6),
+                "high": round(self._safe(last, "high", close), 6),
+                "low": round(self._safe(last, "low", close), 6),
+                "close": round(close, 6),
+                "volume": round(self._safe(last, "volume", 0.0), 2),
+                "macd": round(macd, 6),
+                "macd_signal": round(macd_sig, 6),
+            },
             "indicators": {
                 "rsi": round(rsi, 1),
                 "macd": "bullish" if macd > macd_sig else "bearish",

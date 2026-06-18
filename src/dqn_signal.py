@@ -39,40 +39,62 @@ def _snap_to_obs(
         [open, high, low, close, volume, rsi, macd, macd_signal,
          bb_upper, bb_middle, bb_lower, balance, position, current_value]
 
+    Использует точные OHLCV-значения из snap["ohlcv"] (добавлены
+    в MarketScanner.build_snapshot()). Если поле отсутствует —
+    fallback к snap["price"] для цен и к training-mean для volume.
+
     :param snap: Снэпшот из MarketScanner.build_snapshot().
     :param balance: Свободный баланс USDT.
     :param norm_stats: Словарь {col: [mean, std]} из train_sac или None.
     :return: float32-массив shape=(OBS_DIM,).
     """
     ind = snap.get("indicators", {})
+    ohlcv = snap.get("ohlcv", {})
     price = float(snap.get("price", 0.0))
 
-    # MACD в снэпшоте может быть строкой ("bullish"/"bearish") или числом
-    raw_macd = ind.get("macd", 0)
+    open_ = float(ohlcv.get("open", price))
+    high = float(ohlcv.get("high", price))
+    low = float(ohlcv.get("low", price))
+    close = float(ohlcv.get("close", price))
+
+    # Для volume: если нет ohlcv — используем training-mean, чтобы
+    # нормализация давала 0 (нейтральный сигнал), а не выброс.
+    vol_mean = (
+        norm_stats["volume"][0]
+        if norm_stats and "volume" in norm_stats
+        else 0.0
+    )
+    volume = float(ohlcv.get("volume", vol_mean))
+
+    # MACD: предпочитаем числовое значение из ohlcv, иначе
+    # декодируем строку "bullish"/"bearish" из indicators.
+    raw_macd = ohlcv.get("macd", ind.get("macd", 0))
     if isinstance(raw_macd, str):
         macd_val = 1.0 if raw_macd == "bullish" else -1.0
     else:
         macd_val = float(raw_macd)
+
+    macd_signal_val = float(ohlcv.get("macd_signal", 0.0))
 
     bb_w = float(ind.get("bb_width", 0.04))
     bb_upper = price * (1.0 + bb_w / 2.0)
     bb_lower = price * (1.0 - bb_w / 2.0)
 
     raw = np.array([
-        price,                                # open (≈ close при инференсе)
-        price,                                # high
-        price,                                # low
-        price,                                # close
-        float(snap.get("volume_ratio", 1.0)), # volume
-        float(ind.get("rsi", 50.0)),          # rsi
-        macd_val,                             # macd
-        0.0,                                  # macd_signal (нет в снэпшоте)
-        bb_upper,                             # bb_upper
-        price,                                # bb_middle
-        bb_lower,                             # bb_lower
-        balance,                              # portfolio: balance
-        0.0,                                  # portfolio: position
-        balance,                              # portfolio: current_value
+        open_,            # open
+        high,             # high
+        low,              # low
+        close,            # close
+        volume,           # volume
+        float(ind.get("rsi", 50.0)),   # rsi
+        macd_val,         # macd
+        macd_signal_val,  # macd_signal
+        bb_upper,         # bb_upper
+        price,            # bb_middle
+        bb_lower,         # bb_lower
+        balance,          # portfolio: balance
+        0.0,              # portfolio: position
+        balance,          # portfolio: current_value
     ], dtype=np.float32)
 
     if norm_stats:
@@ -106,8 +128,7 @@ class DQNSignal:
         """
         Загружает SAC-модель и norm_stats из файловой системы.
 
-        Сначала проверяет SAC_MODEL_PATH, затем DQN_MODEL_PATH
-        (обратная совместимость). Если ни один файл не найден —
+        Проверяет SAC_MODEL_PATH из конфига. Если файл не найден —
         логирует предупреждение и оставляет loaded=False.
         """
         try:
@@ -119,15 +140,8 @@ class DQNSignal:
             )
             return
 
-        candidates = [
-            getattr(Config, "SAC_MODEL_PATH", ""),
-            getattr(Config, "DQN_MODEL_PATH", ""),
-        ]
-        path = next(
-            (p for p in candidates if p and os.path.exists(p)),
-            None,
-        )
-        if path is None:
+        path = Config.SAC_MODEL_PATH
+        if not path or not os.path.exists(path):
             self.logger.warning(
                 "SAC-модель не найдена. "
                 "Запустите: python reinforcement_learning/train_sac.py"

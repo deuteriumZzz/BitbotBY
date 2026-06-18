@@ -12,8 +12,13 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.responses import HTMLResponse, JSONResponse
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    Gauge,
+    generate_latest,
+)
 
 import sys
 sys.path.insert(0, os.path.dirname(__file__))
@@ -24,6 +29,13 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="BitbotBY Dashboard", docs_url=None)
+
+# ── Prometheus gauges ─────────────────────────────────
+_g_running = Gauge("bitbot_running", "1 если бот жив (healthcheck < 120s)")
+_g_balance = Gauge("bitbot_balance_usdt", "Свободный баланс USDT")
+_g_pnl = Gauge("bitbot_total_pnl_usdt", "Накопленный PnL в USDT")
+_g_win_rate = Gauge("bitbot_win_rate_percent", "Win rate закрытых сделок")
+_g_trades = Gauge("bitbot_total_trades", "Всего сделок в базе")
 
 # ── Redis helper ──────────────────────────────────────
 
@@ -168,6 +180,18 @@ async def get_backtest():
         return JSONResponse(json.loads(bt_path.read_text()))
     except Exception:
         return JSONResponse({"results": []})
+
+
+@app.get("/metrics")
+async def metrics():
+    portfolio = _redis_get("portfolio_state") or {}
+    stats = _get_stats()
+    _g_running.set(1 if _check_healthcheck() else 0)
+    _g_balance.set(portfolio.get("balance", Config.INITIAL_BALANCE))
+    _g_pnl.set(stats.get("total_pnl", 0))
+    _g_win_rate.set(stats.get("win_rate", 0))
+    _g_trades.set(stats.get("total_trades", 0))
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 @app.get("/", response_class=HTMLResponse)

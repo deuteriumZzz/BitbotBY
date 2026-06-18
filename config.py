@@ -81,17 +81,13 @@ class Config:
 
     # ── Mode ───────────────────────────────────────────────────────────────
     # local  → только правила (9 стратегий, без внешних API)
-    # dqn    → только обученная DQN-модель
+    # dqn    → SAC-модель (train_sac.py)
     # ai     → только Claude API
-    # hybrid → DQN + Claude должны согласиться
+    # hybrid → SAC + Claude должны согласиться
     MODE: str = os.getenv("MODE", "ai")
     # Путь к SAC-модели (создаётся train_sac.py)
     SAC_MODEL_PATH: str = os.getenv(
         "SAC_MODEL_PATH", "models/sac_model.zip"
-    )
-    # Путь к файлу весов DQN (устарело, оставлено для совместимости)
-    DQN_MODEL_PATH: str = os.getenv(
-        "DQN_MODEL_PATH", "models/dqn_model.pth"
     )
 
     # ── Market Scanner ─────────────────────────────────────────────────────
@@ -197,9 +193,6 @@ class Config:
             MODE=os.getenv("MODE", "ai"),
             SAC_MODEL_PATH=os.getenv(
                 "SAC_MODEL_PATH", "models/sac_model.zip"
-            ),
-            DQN_MODEL_PATH=os.getenv(
-                "DQN_MODEL_PATH", "models/dqn_model.pth"
             ),
             SCAN_TOP_N=int(os.getenv("SCAN_TOP_N", "20")),
             AUTO_EXECUTE=(
