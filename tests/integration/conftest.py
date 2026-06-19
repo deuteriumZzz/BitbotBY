@@ -39,9 +39,7 @@ def _make_redis_client_mock() -> MagicMock:
 @pytest.fixture(scope="session")
 def testnet_creds() -> dict:
     key = os.getenv("BYBIT_TESTNET_API_KEY") or os.getenv("BYBIT_API_KEY", "")
-    secret = (
-        os.getenv("BYBIT_TESTNET_API_SECRET") or os.getenv("BYBIT_API_SECRET", "")
-    )
+    secret = os.getenv("BYBIT_TESTNET_API_SECRET") or os.getenv("BYBIT_API_SECRET", "")
     if not key or not secret:
         pytest.skip(
             "Integration tests skipped -- set BYBIT_TESTNET_API_KEY and "
