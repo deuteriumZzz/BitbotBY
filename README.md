@@ -1,6 +1,6 @@
 # BitbotBY — AI-торговый бот для Bybit
 
-Гибридный крипто-трейдинг бот на Python: Claude AI + SAC нейросеть + кванты (CVaR, Almgren-Chriss, Kelly) + 9 стратегий.  
+Гибридный крипто-трейдинг бот на Python: **Claude / DeepSeek / OpenAI** + SAC нейросеть + кванты (CVaR, Almgren-Chriss, Kelly) + 9 стратегий.  
 Автоматически сканирует топ-20 монет по объёму, присылает сигналы в Telegram.
 
 ---
@@ -10,7 +10,7 @@
 ### Сигналы и анализ
 - **4 режима** — `local`, `ai`, `dqn`, `hybrid`
 - **9 технических стратегий** — EMA, RSI, MACD, Bollinger Bands, Scalping, Swing, Breakout, Mean Reversion, Trend Following
-- **Claude AI** — анализирует рынок, выбирает стратегию и монету для каждой сделки
+- **AI-анализ рынка** — Claude / DeepSeek / OpenAI (выбирается через `AI_PROVIDER`): анализирует снэпшоты всех монет одним batch-запросом, выбирает стратегию и возвращает reasoning на русском
 - **SAC нейросеть** (Stable-Baselines3) — RL-агент с reward = log-return + rolling Sharpe − drawdown penalty
 - **Market regime detection** — GaussianHMM (hmmlearn) определяет `trending_up` / `ranging` / `trending_down` **для каждой монеты** отдельно
 
@@ -21,10 +21,12 @@
 
 ### Риск-менеджмент
 - **SL/TP на бирже** — при открытии позиции сразу ставятся `stop_market` + `limit` ордера на Bybit; позиция защищена даже при падении бота
-- **Дневной лимит потерь** — 5% по умолчанию, проверяется каждый цикл, бот останавливается при достижении
+- **Circuit breaker** — бот автоматически останавливается после N подряд убыточных сделок
+- **Дневной лимит потерь** — 5% по умолчанию, проверяется каждый цикл
 - **Trailing stop-loss** на основе ATR
 - **Стейблкоин-фильтр** — USDC, BUSD, DAI и ещё 17 вариантов никогда не попадают в список монет
 - **Max позиций** — защита от одновременного открытия слишком многих сделок
+- **AI бюджет-гард** — лимит вызовов AI в сутки (`AI_DAILY_BUDGET`), при исчерпании — VADER fallback
 
 ### Инфраструктура
 - **Telegram сигналы** — уведомления о новых buy/sell сигналах по топ-20 монетам (без спама: только изменения)
@@ -43,7 +45,7 @@
 
 - Python 3.11+ или [Docker Desktop](https://docs.docker.com/get-docker/)
 - Redis (локально или Docker)
-- API ключи: Bybit + Anthropic Claude + Telegram Bot
+- API ключи: Bybit + один из AI-провайдеров + Telegram Bot
 
 ### 1. Клонировать и настроить
 
@@ -73,7 +75,7 @@ make up
 pip install -r requirements.txt
 
 make paper      # paper trading (MODE=local, без реальных ордеров)
-make paper-ai   # paper trading с Claude AI
+make paper-ai   # paper trading с AI
 ```
 
 ---
@@ -124,7 +126,7 @@ make backtest
 | `make retrain` | Walk-forward retraining (4м окно, 1м шаг) |
 | `make backtest` | Walk-forward бэктест (топ-20 монет) |
 | `make paper` | Paper trading (MODE=local, без ордеров) |
-| `make paper-ai` | Paper trading с Claude AI |
+| `make paper-ai` | Paper trading с AI |
 | `make live` | Живая торговля (нужны API-ключи) |
 | `make test` | Запустить тесты с покрытием |
 | `make lint` | flake8 + mypy |
@@ -137,27 +139,47 @@ make backtest
 
 ## Конфигурация (.env)
 
+### AI провайдеры
+
+| Параметр | По умолчанию | Описание |
+|----------|-------------|----------|
+| `AI_PROVIDER` | `auto` | Провайдер: `auto` / `anthropic` / `deepseek` / `openai` |
+| `ANTHROPIC_API_KEY` | — | Claude — [console.anthropic.com](https://console.anthropic.com) |
+| `AI_MODEL` | `claude-sonnet-4-6` | Модель Claude |
+| `DEEPSEEK_API_KEY` | — | DeepSeek — [platform.deepseek.com](https://platform.deepseek.com) (~10× дешевле Claude) |
+| `DEEPSEEK_MODEL` | `deepseek-chat` | Модель DeepSeek |
+| `OPENAI_API_KEY` | — | ChatGPT — [platform.openai.com](https://platform.openai.com) |
+| `OPENAI_MODEL` | `gpt-4o-mini` | Модель OpenAI |
+| `AI_DAILY_BUDGET` | `200` | Лимит AI-вызовов в сутки (UTC); сверх → VADER-фолбек |
+
+При `AI_PROVIDER=auto` берётся первый найденный ключ: Claude → DeepSeek → OpenAI → локальные стратегии.
+
+### Основные параметры
+
 | Параметр | По умолчанию | Описание |
 |----------|-------------|----------|
 | `MODE` | `ai` | Режим: `local` / `ai` / `dqn` / `hybrid` |
 | `PAPER_TRADING` | `true` | Paper trading (без реальных ордеров) |
+| `TESTNET` | `false` | Bybit testnet |
 | `BYBIT_API_KEY` | — | **Обязателен** при `PAPER_TRADING=false` |
 | `BYBIT_API_SECRET` | — | **Обязателен** при `PAPER_TRADING=false` |
-| `ANTHROPIC_API_KEY` | — | **Обязателен** при `MODE=ai` или `hybrid` |
 | `SAC_MODEL_PATH` | `models/sac_model.zip` | **Обязателен** при `MODE=dqn` или `hybrid` |
 | `TELEGRAM_BOT_TOKEN` | — | Опционально, для уведомлений |
 | `TELEGRAM_CHAT_ID` | — | Опционально, для уведомлений |
-| `TRADING_SYMBOL` | `BTC/USDT` | Основная монета (для определения режима рынка) |
+| `TRADING_SYMBOL` | `BTC/USDT` | Основная монета |
 | `TIMEFRAME` | `15m` | Таймфрейм |
 | `SCAN_TOP_N` | `20` | Топ монет для сканирования (по объёму 24ч) |
 | `RISK_PER_TRADE` | `0.02` | Риск на сделку (2% баланса) |
 | `MAX_POSITIONS` | `3` | Максимум одновременных позиций |
 | `DAILY_LOSS_LIMIT` | `0.05` | Лимит дневного убытка (5%) |
+| `CIRCUIT_BREAKER_LOSSES` | `3` | Стоп после N подряд убытков (0 = выключен) |
 | `MIN_SIGNAL_CONFIDENCE` | `0.65` | Минимальный уровень уверенности |
 | `TRAILING_STOP_ATR_MULT` | `1.0` | Trailing stop (× ATR) |
 | `AUTO_EXECUTE` | `false` | Авто-исполнение топ-1 рекомендации |
 | `AI_STRATEGY_SELECTION` | `false` | AI автовыбор стратегии |
-| `TESTNET` | `false` | Bybit testnet |
+| `DQN_WEIGHT` | `0.4` | Вес SAC в hybrid режиме |
+| `AI_WEIGHT` | `0.6` | Вес AI в hybrid режиме |
+| `DQN_SOLO_CONFIDENCE` | `0.80` | Мин. confidence SAC для соло-исполнения |
 
 При старте бот **автоматически проверяет** обязательные переменные и падает с понятной ошибкой если что-то не задано. Стейблкоины в `TRADING_SYMBOL` тоже отклоняются.
 
@@ -168,9 +190,9 @@ make backtest
 | Режим | Описание | Требования |
 |-------|----------|------------|
 | `local` | Только 9 технических стратегий | Bybit API |
-| `ai` | Claude AI анализирует рынок и выбирает стратегию | Bybit + Anthropic API |
+| `ai` | AI-провайдер анализирует рынок и выбирает стратегию | Bybit + любой AI-ключ |
 | `dqn` | Только SAC-нейросеть | Bybit API + обученная модель |
-| `hybrid` | SAC × вес + AI × вес (зависит от режима рынка) | Bybit + Anthropic API + модель |
+| `hybrid` | SAC × вес + AI × вес (адаптируется к режиму рынка) | Bybit + любой AI-ключ + модель |
 
 В режиме `hybrid` веса автоматически адаптируются под режим рынка:
 
@@ -194,7 +216,7 @@ make backtest
 📊 Цикл #42 | 14:30:05 | Баланс: $10,234.50
 
 🟢 BTC/USDT — BUY
-   Conf: 78% | hybrid(claude+sac) | Режим: trending_up
+   Conf: 78% | hybrid(ai+sac) | Режим: trending_up
    Entry: $67234.00 | SL: $65100.00 | TP: $71500.00
    "Пробой сопротивления, объём растёт..."
 
@@ -207,7 +229,7 @@ make backtest
 
 ```
 BTC/USDT  —  BUY
-Strategy: hybrid(claude+sac)
+Strategy: hybrid(ai+sac)
 Entry: $67,420   SL: $65,100   TP: $71,500
 Confidence: 78%
 Backtest: 63% win  (180 сделок)  EV: +1.24%
@@ -230,12 +252,12 @@ supervisor.py / run_bot.py
         ├── AlmgrenChriss       — оценка рыночного импакта (адаптив. к TF)
         ├── Kelly criterion     — размер позиции Half-Kelly, кэп 20%
         ├── SACSignal           — SAC-инференс (SB3), вес ~40–50% в hybrid
-        ├── AIAnalyzer          — Claude API анализ рынка, вес ~50–60% в hybrid
+        ├── AIAnalyzer          — Claude/DeepSeek/OpenAI анализ рынка, вес ~50–60% в hybrid
         ├── SignalCombiner      — финальный взвешенный сигнал по режиму рынка
-        ├── RiskManager         — SL/TP, daily limit, позиция
+        ├── RiskManager         — SL/TP, daily limit, circuit breaker
         ├── BybitAPI            — ордера (ccxt async) + exchange SL/TP + Redis lock
         ├── TelegramNotifier    — новые сигналы + Trade/Skip кнопки
-        ├── NewsAnalyzer        — Claude sentiment (VADER fallback), Redis 15 мин
+        ├── NewsAnalyzer        — AI sentiment (VADER fallback), Redis 15 мин
         └── TradeHistory        — SQLite, win rate, EV
 
 dashboard.py (FastAPI :8080)
@@ -263,10 +285,10 @@ BitbotBY/
 │   ├── indicators.py          — технические индикаторы
 │   ├── risk_management.py     — Kelly, SL/TP, daily limit
 │   ├── portfolio_manager.py   — портфель и trailing stop
-│   ├── ai_analyzer.py         — Claude API интеграция
+│   ├── ai_analyzer.py         — Claude/DeepSeek/OpenAI интеграция
 │   ├── dqn_signal.py          — SAC-инференс (SB3)
 │   ├── market_scanner.py      — сканер монет + снэпшот
-│   ├── news_analyzer.py       — новости и sentiment
+│   ├── news_analyzer.py       — новости и AI sentiment
 │   ├── bybit_api.py           — биржевой адаптер (ccxt async)
 │   ├── data_loader.py         — загрузка OHLCV
 │   ├── redis_client.py        — Redis (graceful degradation)
@@ -304,11 +326,11 @@ make test
 
 ## Перед реальной торговлей
 
-1. Заполнить `.env` — `BYBIT_API_KEY`, `BYBIT_API_SECRET`, `ANTHROPIC_API_KEY`, `TELEGRAM_BOT_TOKEN`
-2. Запустить `make paper-ai` минимум **1-2 недели** — проверить качество AI-сигналов в Telegram
+1. Заполнить `.env` — `BYBIT_API_KEY`, `BYBIT_API_SECRET`, любой AI-ключ (`ANTHROPIC_API_KEY` / `DEEPSEEK_API_KEY` / `OPENAI_API_KEY`), `TELEGRAM_BOT_TOKEN`
+2. Запустить `make paper-ai` минимум **2-4 недели** — проверить качество AI-сигналов в Telegram
 3. Запустить `make backtest` — изучить win rate и EV по монетам
 4. Если нужен `hybrid` — обучить модель: `make train`, проверить тест-метрики
-5. Выставить `DAILY_LOSS_LIMIT` по своему риск-аппетиту (по умолчанию 5%)
+5. Выставить `DAILY_LOSS_LIMIT` и `CIRCUIT_BREAKER_LOSSES` по своему риск-аппетиту
 6. Начать с минимального баланса и `RISK_PER_TRADE=0.01` (1%)
 7. Включить `PAPER_TRADING=false` только после уверенности в сигналах
 
