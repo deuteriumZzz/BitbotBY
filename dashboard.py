@@ -3,18 +3,17 @@ BitbotBY Web Dashboard — runs on port 8080.
 Serves live bot status, signals, and trade history.
 """
 
+import asyncio
 import json
 import logging
 import os
 import sqlite3
 import sys
+import urllib.parse
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
-
-import asyncio
-import urllib.parse
-import urllib.request
 
 import uvicorn
 from fastapi import FastAPI, Request, Response
