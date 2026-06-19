@@ -105,8 +105,6 @@ class TradingBot:
             await self._reconcile_positions()
             await self.telegram.start()
             await self._fit_regime_detector()
-            if Config.HEALTH_PORT > 0:
-                await start_health_server(self, port=Config.HEALTH_PORT)
             logger.info("Trading bot initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize: {e}")
@@ -869,6 +867,8 @@ class TradingBot:
 async def main():
     """Запуск торгового бота."""
     bot = TradingBot()
+    if Config.HEALTH_PORT > 0:
+        await start_health_server(bot, port=Config.HEALTH_PORT)
     try:
         await bot.initialize()
         await bot.trading_loop()
