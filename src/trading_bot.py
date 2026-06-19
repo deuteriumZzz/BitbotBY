@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
@@ -43,12 +43,12 @@ class TradingBot:
     7. Исполнение топ-1 при AUTO_EXECUTE=true.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.redis = RedisClient()
         self.api = BybitAPI()
         self.data_loader = DataLoader()
         self.portfolio_manager = PortfolioManager(Config.INITIAL_BALANCE)
-        self.strategy = None
+        self.strategy: Optional[TradingStrategy] = None
         self.risk_manager = RiskManager(
             Config.INITIAL_BALANCE,
             Config.RISK_PER_TRADE,
@@ -60,23 +60,25 @@ class TradingBot:
         self.regime_detector = RegimeDetector()
         self._current_regime: str = "unknown"
         self.portfolio_optimizer = PortfolioOptimizer()
-        self.is_running = False
-        # symbol → {qty, stop_loss, take_profit, side, ...}
-        self._monitored: dict = {}
-        self._monitored_lock = asyncio.Lock()
-        self._monitor_task: Optional[asyncio.Task] = None
+        self.is_running: bool = False
+        # symbol → {qty, stop_loss, take_profit, side, entry, ...}
+        self._monitored: Dict[str, Any] = {}
+        self._monitored_lock: asyncio.Lock = asyncio.Lock()
+        self._monitor_task: Optional[asyncio.Task[None]] = None
         self.trade_history = TradeHistory()
         self.telegram = TelegramNotifier(
             Config.TELEGRAM_BOT_TOKEN,
             Config.TELEGRAM_CHAT_ID,
         )
         self._paper_balance: float = Config.INITIAL_BALANCE
-        # symbol → last notified action ("buy"/"sell"/"hold")
-        self._last_signals: dict = {}
+        # symbol → last notified action ("buy"/"sell")
+        self._last_signals: Dict[str, str] = {}
+        # circuit breaker: consecutive closed losses counter
+        self._consecutive_losses: int = 0
         if Config.PAPER_TRADING:
             logger.warning("*** PAPER TRADING MODE — no real orders will be placed ***")
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         """
         Инициализирует API, стратегию, Redis-состояние.
 
@@ -101,7 +103,7 @@ class TradingBot:
             logger.error(f"Failed to initialize: {e}")
             raise
 
-    async def _restore_state(self):
+    async def _restore_state(self) -> None:
         state = self.redis.load_trading_state(Config.SYMBOL)
         if state:
             logger.info(f"Restored state: {state}")
@@ -115,7 +117,7 @@ class TradingBot:
     async def _fit_regime_detector(self) -> None:
         """Загружает исторические данные и обучает RegimeDetector."""
         try:
-            df = await self.data_loader.load_ohlcv(
+            df = await self.data_loader.get_market_data(
                 Config.SYMBOL, Config.TIMEFRAME, limit=2000
             )
             if df is not None and not df.empty:
@@ -201,7 +203,8 @@ class TradingBot:
         for sym, result in zip(symbols, news_results):
             if isinstance(result, BaseException):
                 logger.warning(f"News sentiment failed for {sym}: " f"{result}")
-                sent, headlines = 0.0, []
+                sent: float = 0.0
+                headlines: List[str] = []
             else:
                 sent, headlines = result
             df = market_data.get(sym)
@@ -578,6 +581,31 @@ class TradingBot:
                             f"Total PnL: "
                             f"${stats['total_pnl']:+.2f}"
                         )
+                        # ── Circuit breaker ──────────────────────────────
+                        entry_px = pos.get("entry", price)
+                        is_loss = (side == "buy" and price < entry_px) or (
+                            side == "sell" and price > entry_px
+                        )
+                        cb = Config.CIRCUIT_BREAKER_LOSSES
+                        if cb > 0:
+                            if is_loss:
+                                self._consecutive_losses += 1
+                                logger.warning(
+                                    "Circuit breaker: %d/%d consecutive losses",
+                                    self._consecutive_losses,
+                                    cb,
+                                )
+                                if self._consecutive_losses >= cb:
+                                    msg = (
+                                        f"⛔ Circuit breaker: "
+                                        f"{self._consecutive_losses} убытка подряд. "
+                                        "Торговля остановлена автоматически."
+                                    )
+                                    logger.critical(msg)
+                                    await self.telegram.notify(msg)
+                                    self.is_running = False
+                            else:
+                                self._consecutive_losses = 0
                     _error_counts.pop(sym, None)
                 except Exception as e:
                     _error_counts[sym] = _error_counts.get(sym, 0) + 1
@@ -592,7 +620,7 @@ class TradingBot:
                         _error_counts.pop(sym, None)
             await asyncio.sleep(5)
 
-    async def _update_performance_stats(self):
+    async def _update_performance_stats(self) -> None:
         try:
             prices = {}
             for sym in self.portfolio_manager.positions:
@@ -613,7 +641,7 @@ class TradingBot:
         except Exception as e:
             logger.error(f"Error updating performance stats: {e}")
 
-    async def trading_loop(self):
+    async def trading_loop(self) -> None:
         """
         Основной гибридный цикл (30 сек).
 
@@ -654,7 +682,7 @@ class TradingBot:
                     break
 
                 # Detect regime per symbol; fallback to main symbol regime
-                regimes: dict = {}
+                regimes: Dict[str, str] = {}
                 for sym, df in market_data.items():
                     if df is not None and not df.empty:
                         regimes[sym] = self.regime_detector.predict(df)
@@ -709,9 +737,13 @@ class TradingBot:
                 logger.error(f"Error in trading loop: {e}")
                 await asyncio.sleep(10)
 
-    async def analyze_market(self, symbol: str, timeframe: str):
+    async def analyze_market(
+        self, symbol: str, timeframe: str
+    ) -> Optional[Dict[str, Any]]:
         """Анализ одного символа (обратная совместимость)."""
         try:
+            if self.strategy is None:
+                return None
             data = await self.data_loader.get_market_data(symbol, timeframe, limit=100)
             data = self.data_loader.calculate_technical_indicators(data)
             signal = await self.strategy.get_signal(data)
@@ -721,7 +753,7 @@ class TradingBot:
             logger.error(f"Error analyzing {symbol}: {e}")
             return None
 
-    async def stop(self):
+    async def stop(self) -> None:
         self.is_running = False
         if self._monitor_task:
             self._monitor_task.cancel()
@@ -732,7 +764,6 @@ class TradingBot:
         await self.telegram.stop()
         await self.api.close()
         await self.data_loader.close()
-        self.redis.close()
         logger.info("Trading bot stopped")
 
 

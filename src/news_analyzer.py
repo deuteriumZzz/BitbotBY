@@ -4,10 +4,14 @@ import asyncio
 import json
 import logging
 import os
+from datetime import datetime
 from typing import List, Tuple
 
 from config import Config
 from src.redis_client import RedisClient
+
+# Максимум вызовов Claude API в сутки (UTC). Сверх лимита → VADER-фолбек.
+_CLAUDE_DAILY_BUDGET: int = int(os.getenv("CLAUDE_DAILY_BUDGET", "200"))
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +63,9 @@ class NewsAnalyzer:
         # Claude API sentiment (preferred); VADER is fallback
         self._anthropic_key = os.getenv("ANTHROPIC_API_KEY", "")
         self._use_claude = bool(self._anthropic_key)
+        # API budget guard: track daily Claude calls (resets at UTC midnight)
+        self._claude_calls_today: int = 0
+        self._claude_date: str = ""
 
     def _cache_key(self, symbol: str) -> str:
         """
@@ -168,6 +175,18 @@ class NewsAnalyzer:
         """
         if not headlines:
             return 0.0
+        # Budget guard: reset counter at UTC midnight, cap at daily limit
+        today = datetime.utcnow().date().isoformat()
+        if self._claude_date != today:
+            self._claude_date = today
+            self._claude_calls_today = 0
+        if self._claude_calls_today >= _CLAUDE_DAILY_BUDGET:
+            self.logger.warning(
+                "Claude daily budget (%d calls) exhausted — VADER fallback",
+                _CLAUDE_DAILY_BUDGET,
+            )
+            return self._score_with_vader_headlines(headlines)
+        self._claude_calls_today += 1
         try:
             import anthropic
 

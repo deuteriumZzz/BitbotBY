@@ -139,6 +139,8 @@ class Config:
     PAPER_TRADING: bool = os.getenv("PAPER_TRADING", "false").lower() == "true"
     # Trailing SL: двигать SL вслед за ценой (кратно ATR)
     TRAILING_STOP_ATR_MULT: float = float(os.getenv("TRAILING_STOP_ATR_MULT", "1.0"))
+    # Circuit breaker: остановить бота после N подряд убыточных сделок (0 = выключен)
+    CIRCUIT_BREAKER_LOSSES: int = int(os.getenv("CIRCUIT_BREAKER_LOSSES", "3"))
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -175,6 +177,7 @@ class Config:
             MAX_POSITIONS=int(os.getenv("MAX_POSITIONS", "3")),
             PAPER_TRADING=(os.getenv("PAPER_TRADING", "false").lower() == "true"),
             TRAILING_STOP_ATR_MULT=float(os.getenv("TRAILING_STOP_ATR_MULT", "1.0")),
+            CIRCUIT_BREAKER_LOSSES=int(os.getenv("CIRCUIT_BREAKER_LOSSES", "3")),
         )
 
     def validate(self) -> None:

@@ -1,5 +1,5 @@
 """
-Тесты инференса SAC: _snap_to_obs() и DQNSignal.
+Тесты инференса SAC: _snap_to_obs() и SACSignal.
 
 Проверяют:
 - форму и тип выходного вектора наблюдения
@@ -7,7 +7,7 @@
 - fallback к snap["price"] при отсутствии ohlcv
 - декодирование строкового MACD ("bullish"/"bearish")
 - нормализацию через norm_stats
-- поведение DQNSignal без модели (загрузки нет → hold)
+- поведение SACSignal без модели (загрузки нет → hold)
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 
 from reinforcement_learning.rl_env import OBS_DIM
-from src.dqn_signal import DQNSignal, _snap_to_obs
+from src.dqn_signal import SACSignal, _snap_to_obs
 
 # ── Фикстуры снэпшотов ────────────────────────────────
 
@@ -116,16 +116,16 @@ def test_portfolio_features_set_correctly():
     assert obs[13] == pytest.approx(3000.0)  # current_value
 
 
-# ── Тесты DQNSignal ───────────────────────────────────
+# ── Тесты SACSignal ───────────────────────────────────
 
 
 def test_dqn_signal_not_loaded_without_model_file():
-    sig = DQNSignal()
+    sig = SACSignal()
     assert sig.loaded is False
 
 
 def test_dqn_signal_returns_hold_when_not_loaded():
-    sig = DQNSignal()
+    sig = SACSignal()
     result = sig.get_signal(_SNAP_MINIMAL, balance=5000.0)
     assert result["action"] == "hold"
     assert result["confidence"] == 0.0
@@ -133,6 +133,6 @@ def test_dqn_signal_returns_hold_when_not_loaded():
 
 
 def test_dqn_signal_hold_with_ohlcv_snap_not_loaded():
-    sig = DQNSignal()
+    sig = SACSignal()
     result = sig.get_signal(_SNAP_WITH_OHLCV, balance=5000.0)
     assert result["action"] == "hold"

@@ -223,6 +223,3 @@ class SACSignal:
         except Exception as e:
             self.logger.error(f"Ошибка инференса SAC: {e}", exc_info=True)
             return default
-
-
-DQNSignal = SACSignal  # backward-compat alias for SignalCombiner
