@@ -62,6 +62,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: test
     if: ${{ github.event_name == 'push' }}
+    env:
+      BYBIT_TESTNET_API_KEY: ${{ secrets.BYBIT_TESTNET_API_KEY }}
+      BYBIT_TESTNET_API_SECRET: ${{ secrets.BYBIT_TESTNET_API_SECRET }}
+      PAPER_TRADING: "true"
+      TESTNET: "true"
 
     steps:
       - uses: actions/checkout@v4
@@ -76,16 +81,11 @@ jobs:
         run: pip install --upgrade pip && pip install -r requirements.txt pytest pytest-asyncio
 
       - name: Run integration tests
-        if: ${{ secrets.BYBIT_TESTNET_API_KEY != '' }}
-        env:
-          BYBIT_TESTNET_API_KEY: ${{ secrets.BYBIT_TESTNET_API_KEY }}
-          BYBIT_TESTNET_API_SECRET: ${{ secrets.BYBIT_TESTNET_API_SECRET }}
-          PAPER_TRADING: "true"
-          TESTNET: "true"
+        if: ${{ env.BYBIT_TESTNET_API_KEY != '' }}
         run: pytest tests/integration/ -m integration -v --timeout=60
 
       - name: Skip (secrets not configured)
-        if: ${{ secrets.BYBIT_TESTNET_API_KEY == '' }}
+        if: ${{ env.BYBIT_TESTNET_API_KEY == '' }}
         run: echo "⚠️ BYBIT_TESTNET_API_KEY not set — integration tests skipped. Add secrets in repo Settings → Secrets."
 
   backtest-smoke:
