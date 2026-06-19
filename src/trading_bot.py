@@ -426,6 +426,12 @@ class TradingBot:
 
         commission = quantity * entry * Config.COMMISSION_RATE
 
+        sl_price = top.get("stop_loss", 0.0)
+        tp_price = top.get("take_profit", 0.0)
+        close_side = "sell" if action == "buy" else "buy"
+        exchange_sl_id: str | None = None
+        exchange_tp_id: str | None = None
+
         if Config.PAPER_TRADING:
             # Simulate: no real order
             logger.info(
@@ -440,6 +446,10 @@ class TradingBot:
             if not order:
                 logger.error(f"Order failed for {sym}")
                 return
+            # Place SL/TP on exchange — protects position if bot crashes
+            exchange_sl_id, exchange_tp_id = await self.api.place_exchange_sl_tp(
+                sym, close_side, quantity, sl_price, tp_price
+            )
 
         # Record in trade history
         trade_id = await self.trade_history.record_open(
@@ -458,11 +468,13 @@ class TradingBot:
                 "trade_id": trade_id,
                 "qty": quantity,
                 "entry": entry,
-                "stop_loss": top.get("stop_loss", 0.0),
-                "take_profit": top.get("take_profit", 0.0),
+                "stop_loss": sl_price,
+                "take_profit": tp_price,
                 "side": action,
                 "atr": top.get("atr", 0.0),
                 "peak_price": entry,
+                "exchange_sl_id": exchange_sl_id,
+                "exchange_tp_id": exchange_tp_id,
             }
 
         await self.telegram.notify(
@@ -540,6 +552,13 @@ class TradingBot:
                         close_side = "sell" if side == "buy" else "buy"
                         if not Config.PAPER_TRADING:
                             await self.api.create_order(sym, "market", close_side, qty)
+                            # Cancel exchange SL/TP orders to avoid double-execution
+                            for oid in (
+                                pos.get("exchange_sl_id"),
+                                pos.get("exchange_tp_id"),
+                            ):
+                                if oid:
+                                    await self.api.cancel_order(oid, sym)
                         await self.portfolio_manager.update_portfolio(
                             sym, close_side, qty, price
                         )

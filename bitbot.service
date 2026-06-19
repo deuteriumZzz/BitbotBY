@@ -1,0 +1,36 @@
+# Systemd unit для BitbotBY (Linux-сервер)
+# Установка:
+#   sudo cp bitbot.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable bitbot
+#   sudo systemctl start bitbot
+#
+# Логи:
+#   sudo journalctl -u bitbot -f
+
+[Unit]
+Description=BitbotBY — Bybit Trading Bot
+After=network-online.target redis.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/bitbot
+EnvironmentFile=/opt/bitbot/.env
+ExecStart=/opt/bitbot/venv/bin/python3 run_bot.py
+
+# Авто-перезапуск при падении через 10 секунд
+Restart=always
+RestartSec=10
+
+# Ограничения памяти
+MemoryMax=512M
+
+# Логирование
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bitbot
+
+[Install]
+WantedBy=multi-user.target

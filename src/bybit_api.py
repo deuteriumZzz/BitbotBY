@@ -342,6 +342,49 @@ class BybitAPI:
             )
             return None
 
+    async def place_exchange_sl_tp(
+        self,
+        symbol: str,
+        close_side: str,
+        qty: float,
+        sl_price: float,
+        tp_price: float,
+    ) -> tuple[str | None, str | None]:
+        """
+        Ставит SL (stop-market) и TP (limit) ордера на бирже.
+        Возвращает (sl_order_id, tp_order_id) — None если не удалось.
+        Служит защитой позиции при падении бота.
+        """
+        sl_id: str | None = None
+        tp_id: str | None = None
+
+        if sl_price and sl_price > 0:
+            try:
+                sl_order = await self.exchange.create_order(
+                    symbol,
+                    "stop_market",
+                    close_side,
+                    qty,
+                    None,
+                    {"stopPrice": sl_price, "triggerPrice": sl_price},
+                )
+                sl_id = sl_order.get("id")
+                self.logger.info(f"Exchange SL placed: {symbol} @ {sl_price} id={sl_id}")
+            except Exception as e:
+                self.logger.error(f"Failed to place exchange SL for {symbol}: {e}")
+
+        if tp_price and tp_price > 0:
+            try:
+                tp_order = await self.exchange.create_order(
+                    symbol, "limit", close_side, qty, tp_price
+                )
+                tp_id = tp_order.get("id")
+                self.logger.info(f"Exchange TP placed: {symbol} @ {tp_price} id={tp_id}")
+            except Exception as e:
+                self.logger.error(f"Failed to place exchange TP for {symbol}: {e}")
+
+        return sl_id, tp_id
+
     async def cancel_order(self, order_id: str, symbol: str) -> bool:
         """
         Отменяет ордер на бирже.

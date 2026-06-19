@@ -1,32 +1,39 @@
 # BitbotBY — AI-торговый бот для Bybit
 
-Гибридный крипто-трейдинг бот на Python: Claude AI + SAC нейросеть (Stable-Baselines3) + 9 стратегий.  
-Работает в Docker, управляется через веб-интерфейс и Telegram. Мониторинг через Grafana.
+Гибридный крипто-трейдинг бот на Python: Claude AI + SAC нейросеть + кванты (CVaR, Almgren-Chriss, Kelly) + 9 стратегий.  
+Автоматически сканирует топ-20 монет по объёму, присылает сигналы в Telegram.
 
 ---
 
 ## Возможности
 
-- **4 режима торговли** — `local`, `ai`, `dqn`, `hybrid`
+### Сигналы и анализ
+- **4 режима** — `local`, `ai`, `dqn`, `hybrid`
 - **9 технических стратегий** — EMA, RSI, MACD, Bollinger Bands, Scalping, Swing, Breakout, Mean Reversion, Trend Following
-- **Claude AI** анализирует рынок и выбирает стратегию/монету для каждой сделки
-- **SAC нейросеть** (Stable-Baselines3) — RL-агент, reward = log-return + rolling Sharpe bonus − drawdown penalty
-- **Train/test split 80/20** — оценка модели на out-of-sample данных после обучения
-- **Optuna** — автоматический поиск гиперпараметров SAC (30 trials, 50k шагов/trial)
-- **Walk-forward retraining** — скользящее 4-месячное окно, шаг 1 месяц
-- **Market regime detection** — GaussianHMM (hmmlearn) определяет trending_up / ranging / trending_down
-- **Kelly criterion** — Half-Kelly (×0.5) с кэпом 20% для расчёта размера позиции
-- **Реалистичный бэктест** — bid/ask spread 0.05% + market impact 0.02%
-- **Анализ новостей** — Claude API sentiment (fallback: VADER), кэш 15 мин
-- **Telegram-подтверждения** — кнопки Trade/Skip, авто-исполнение через 60 сек
-- **Backtest** — walk-forward тест всех 9 стратегий на 6 месяцах истории
-- **Win Rate и EV** — бэктест и live статистика отображаются раздельно
+- **Claude AI** — анализирует рынок, выбирает стратегию и монету для каждой сделки
+- **SAC нейросеть** (Stable-Baselines3) — RL-агент с reward = log-return + rolling Sharpe − drawdown penalty
+- **Market regime detection** — GaussianHMM (hmmlearn) определяет `trending_up` / `ranging` / `trending_down` **для каждой монеты** отдельно
+
+### Кванты
+- **CVaR / Markowitz** — аллокация портфеля через scipy (95% CVaR, вес каждой монеты)
+- **Almgren-Chriss (2001)** — адаптивная оценка рыночного импакта, зависит от таймфрейма
+- **Kelly criterion** — Half-Kelly (×0.5), кэп 20%, fallback на `RISK_PER_TRADE` для первых 10 сделок
+
+### Риск-менеджмент
+- **SL/TP на бирже** — при открытии позиции сразу ставятся `stop_market` + `limit` ордера на Bybit; позиция защищена даже при падении бота
+- **Дневной лимит потерь** — 5% по умолчанию, проверяется каждый цикл, бот останавливается при достижении
 - **Trailing stop-loss** на основе ATR
+- **Стейблкоин-фильтр** — USDC, BUSD, DAI и ещё 17 вариантов никогда не попадают в список монет
+- **Max позиций** — защита от одновременного открытия слишком многих сделок
+
+### Инфраструктура
+- **Telegram сигналы** — уведомления о новых buy/sell сигналах по топ-20 монетам (без спама: только изменения)
+- **Telegram подтверждения** — кнопки Trade/Skip перед исполнением (при `AUTO_EXECUTE=true`)
+- **Redis graceful degradation** — если Redis недоступен, бот работает без персистентности (не падает)
+- **Systemd сервис** — авто-перезапуск при падении (`bitbot.service`)
 - **Paper trading** — полный тест без реальных денег
-- **Secrets validation** — проверка всех обязательных API-ключей при старте
 - **Веб-дашборд** — баланс, позиции, история сделок (http://localhost:8080)
 - **Grafana** — метрики в реальном времени (http://localhost:3000)
-- **Supervisor** — автоматический рестарт при сбое + Telegram алерт
 
 ---
 
@@ -35,7 +42,8 @@
 ### Требования
 
 - Python 3.11+ или [Docker Desktop](https://docs.docker.com/get-docker/)
-- API ключи: Bybit + Anthropic Claude + Telegram Bot (опционально)
+- Redis (локально или Docker)
+- API ключи: Bybit + Anthropic Claude + Telegram Bot
 
 ### 1. Клонировать и настроить
 
@@ -72,31 +80,37 @@ make paper-ai   # paper trading с Claude AI
 
 ## Обучение SAC-модели
 
-SAC-нейросеть нужна только для режимов `dqn` и `hybrid`. Если файл модели отсутствует — бот выведет ошибку при старте.
+SAC-нейросеть нужна только для режимов `dqn` и `hybrid`. Для `MODE=ai` не нужна.
 
 ```bash
 make train       # 500k шагов, ~60 мин на CPU
 make train-long  # 1M шагов, ~2 ч на CPU
 ```
 
-После обучения скрипт автоматически оценивает модель на out-of-sample тесте (последние 20% данных):
+После обучения скрипт оценивает модель на out-of-sample тесте (последние 20%):
 
 ```
 TEST SET (3400 candles) — SAC: $10832 (+8.3%) | Buy&Hold: $10650 (+6.5%) | Commissions: $47
 ```
 
-Модель сохраняется в `models/sac_model.zip`. Обучение использует 6 месяцев BTC/USDT 15m с Bybit.
+Модель сохраняется в `models/sac_model.zip`.
 
 ---
 
 ## Бэктест
 
 ```bash
-make backtest          # BTC/USDT (по умолчанию)
-make backtest-eth      # ETH/USDT
+# Автоматически берёт топ-20 монет с биржи
+BT_MONTHS=2 BT_TIMEFRAME=15m BT_TOP_N=20 python3 backtest.py
+
+# Конкретные монеты
+BT_SYMBOLS=BTC/USDT,ETH/USDT,SOL/USDT python3 backtest.py
+
+# Через make
+make backtest
 ```
 
-Результаты сохраняются в `data/backtest_results.json` и отображаются в веб-дашборде.
+Результаты сохраняются в `data/backtest_results.json`.
 
 ---
 
@@ -108,7 +122,7 @@ make backtest-eth      # ETH/USDT
 | `make train-long` | Обучить SAC-модель (1M шагов) |
 | `make tune` | Optuna поиск гиперпараметров (30 trials) |
 | `make retrain` | Walk-forward retraining (4м окно, 1м шаг) |
-| `make backtest` | Walk-forward бэктест на BTC/USDT |
+| `make backtest` | Walk-forward бэктест (топ-20 монет) |
 | `make paper` | Paper trading (MODE=local, без ордеров) |
 | `make paper-ai` | Paper trading с Claude AI |
 | `make live` | Живая торговля (нужны API-ключи) |
@@ -126,27 +140,26 @@ make backtest-eth      # ETH/USDT
 | Параметр | По умолчанию | Описание |
 |----------|-------------|----------|
 | `MODE` | `ai` | Режим: `local` / `ai` / `dqn` / `hybrid` |
-| `PAPER_TRADING` | `false` | Paper trading (без реальных ордеров) |
+| `PAPER_TRADING` | `true` | Paper trading (без реальных ордеров) |
 | `BYBIT_API_KEY` | — | **Обязателен** при `PAPER_TRADING=false` |
 | `BYBIT_API_SECRET` | — | **Обязателен** при `PAPER_TRADING=false` |
 | `ANTHROPIC_API_KEY` | — | **Обязателен** при `MODE=ai` или `hybrid` |
 | `SAC_MODEL_PATH` | `models/sac_model.zip` | **Обязателен** при `MODE=dqn` или `hybrid` |
 | `TELEGRAM_BOT_TOKEN` | — | Опционально, для уведомлений |
 | `TELEGRAM_CHAT_ID` | — | Опционально, для уведомлений |
-| `TRADING_SYMBOL` | `BTC/USDT` | Основная монета |
+| `TRADING_SYMBOL` | `BTC/USDT` | Основная монета (для определения режима рынка) |
 | `TIMEFRAME` | `15m` | Таймфрейм |
+| `SCAN_TOP_N` | `20` | Топ монет для сканирования (по объёму 24ч) |
 | `RISK_PER_TRADE` | `0.02` | Риск на сделку (2% баланса) |
 | `MAX_POSITIONS` | `3` | Максимум одновременных позиций |
-| `MIN_SIGNAL_CONFIDENCE` | `0.65` | Минимальный уровень уверенности |
 | `DAILY_LOSS_LIMIT` | `0.05` | Лимит дневного убытка (5%) |
+| `MIN_SIGNAL_CONFIDENCE` | `0.65` | Минимальный уровень уверенности |
 | `TRAILING_STOP_ATR_MULT` | `1.0` | Trailing stop (× ATR) |
+| `AUTO_EXECUTE` | `false` | Авто-исполнение топ-1 рекомендации |
 | `AI_STRATEGY_SELECTION` | `false` | AI автовыбор стратегии |
-| `SCAN_TOP_N` | `20` | Топ монет для сканирования |
-| `AUTO_EXECUTE` | `false` | Авто-исполнение без Telegram |
 | `TESTNET` | `false` | Bybit testnet |
-| `GRAFANA_PASSWORD` | `bitbot` | Пароль Grafana (admin) |
 
-При старте бот **автоматически проверяет** обязательные переменные и падает с понятной ошибкой, если что-то не задано.
+При старте бот **автоматически проверяет** обязательные переменные и падает с понятной ошибкой если что-то не задано. Стейблкоины в `TRADING_SYMBOL` тоже отклоняются.
 
 ---
 
@@ -154,10 +167,18 @@ make backtest-eth      # ETH/USDT
 
 | Режим | Описание | Требования |
 |-------|----------|------------|
-| `local` | Только 9 технических стратегий | Только Bybit API |
+| `local` | Только 9 технических стратегий | Bybit API |
 | `ai` | Claude AI анализирует рынок и выбирает стратегию | Bybit + Anthropic API |
 | `dqn` | Только SAC-нейросеть | Bybit API + обученная модель |
-| `hybrid` | SAC × 0.4 + AI × 0.6 | Bybit + Anthropic API + модель |
+| `hybrid` | SAC × вес + AI × вес (зависит от режима рынка) | Bybit + Anthropic API + модель |
+
+В режиме `hybrid` веса автоматически адаптируются под режим рынка:
+
+| Режим рынка | Вес SAC | Вес AI |
+|-------------|---------|--------|
+| `trending_up` | 50% | 50% |
+| `ranging` | 40% | 60% |
+| `trending_down` | 30% | 70% |
 
 ---
 
@@ -165,24 +186,35 @@ make backtest-eth      # ETH/USDT
 
 Создайте бота через [@BotFather](https://t.me/BotFather), получите токен и chat_id через [@userinfobot](https://t.me/userinfobot).
 
-Перед каждой сделкой бот присылает сообщение:
+### Сигналы по топ-20 (всегда, при любом AUTO_EXECUTE)
+
+Бот присылает уведомление когда появляется **новый** buy/sell сигнал (повторные не дублируются):
 
 ```
-BTC/USDT  --  BUY
+📊 Цикл #42 | 14:30:05 | Баланс: $10,234.50
 
-Strategy: ema_crossover
-Entry: $67,420.0000
-SL: $66,200.0000   TP: $69,100.0000
+🟢 BTC/USDT — BUY
+   Conf: 78% | hybrid(claude+sac) | Режим: trending_up
+   Entry: $67234.00 | SL: $65100.00 | TP: $71500.00
+   "Пробой сопротивления, объём растёт..."
 
-AI confidence: 84%
+🟢 SOL/USDT — BUY
+   Conf: 71% | ai | Режим: ranging
+   Entry: $142.50 | SL: $138.20 | TP: $150.80
+```
 
-Backtest:  63%  (180 trades)  EV: +1.24%
-Live:      71%  (12 trades)   EV: +0.98%
+### Подтверждение сделки (только при AUTO_EXECUTE=true)
+
+```
+BTC/USDT  —  BUY
+Strategy: hybrid(claude+sac)
+Entry: $67,420   SL: $65,100   TP: $71,500
+Confidence: 78%
+Backtest: 63% win  (180 сделок)  EV: +1.24%
+Live:     71% win  (12 сделок)   EV: +0.98%
 
 Auto-execute in 60s
 ```
-
-Нажмите **Trade** или **Skip**. Без ответа — сделка исполнится через 60 сек.
 
 ---
 
@@ -191,35 +223,28 @@ Auto-execute in 60s
 ```
 supervisor.py / run_bot.py
   └── TradingBot (src/trading_bot.py)
-        ├── MarketScanner      — топ монет по объёму + OHLCV снэпшот
-        ├── DataLoader         — OHLCV через ccxt, кэш CSV 24ч
-        ├── indicators.py      — RSI, MACD, BB, ATR, EMA, SMA
-        ├── 9 стратегий        — сигналы buy/sell/hold + confidence
-        ├── SACSignal          — SAC-инференс (SB3), вес 40% в hybrid
-        ├── Claude AI          — анализ рынка, вес 60% в hybrid
-        ├── RegimeDetector     — GaussianHMM: trending_up/ranging/trending_down
-        ├── NewsAnalyzer       — Claude sentiment (VADER fallback), Redis 15 мин
-        ├── SignalCombiner     — финальный взвешенный сигнал
-        ├── RiskManager        — размер позиции, SL/TP, daily limit
-        ├── TelegramNotifier   — Trade/Skip кнопки, 60с таймаут
-        ├── BybitAPI           — ордера (ccxt async) + Redis lock
-        └── TradeHistory       — SQLite, win rate, EV
+        ├── MarketScanner       — топ-N монет по объёму, фильтр стейблкоинов
+        ├── DataLoader          — OHLCV через ccxt async, кэш CSV 24ч
+        ├── RegimeDetector      — GaussianHMM: режим per-symbol
+        ├── CVaR/Markowitz      — аллокация весов портфеля (scipy)
+        ├── AlmgrenChriss       — оценка рыночного импакта (адаптив. к TF)
+        ├── Kelly criterion     — размер позиции Half-Kelly, кэп 20%
+        ├── SACSignal           — SAC-инференс (SB3), вес ~40–50% в hybrid
+        ├── AIAnalyzer          — Claude API анализ рынка, вес ~50–60% в hybrid
+        ├── SignalCombiner      — финальный взвешенный сигнал по режиму рынка
+        ├── RiskManager         — SL/TP, daily limit, позиция
+        ├── BybitAPI            — ордера (ccxt async) + exchange SL/TP + Redis lock
+        ├── TelegramNotifier    — новые сигналы + Trade/Skip кнопки
+        ├── NewsAnalyzer        — Claude sentiment (VADER fallback), Redis 15 мин
+        └── TradeHistory        — SQLite, win rate, EV
 
 dashboard.py (FastAPI :8080)
-  ├── /           — веб-интерфейс
-  └── /metrics    — Prometheus метрики
-
-docker-compose.yml
-  ├── bitbot_bot        — торговый бот
-  ├── bitbot_dashboard  — веб-интерфейс + /metrics
-  ├── bitbot_redis      — Redis (кэш, pub/sub, locks)
-  ├── bitbot_prometheus — сбор метрик (:9090)
-  └── bitbot_grafana    — дашборды (:3000)
-
 reinforcement_learning/
-  ├── rl_env.py      — TradingEnv: log-return + Sharpe bonus − drawdown penalty
-  ├── train_sac.py   — обучение SAC: 80/20 split, Optuna hyperparams, walk-forward
-  └── tune_sac.py    — Optuna поиск гиперпараметров → models/best_hyperparams.json
+  ├── rl_env.py      — TradingEnv (Gymnasium)
+  ├── train_sac.py   — обучение SAC: 80/20 split, Optuna, walk-forward
+  └── tune_sac.py    — Optuna поиск гиперпараметров
+backtest.py          — мультисимвольный walk-forward бэктест
+bitbot.service       — systemd unit (авто-перезапуск на Linux)
 ```
 
 ---
@@ -229,35 +254,37 @@ reinforcement_learning/
 ```
 BitbotBY/
 ├── src/
-│   ├── trading_bot.py        — главный цикл и оркестратор
-│   ├── strategies.py         — 9 стратегий
-│   ├── signal_combiner.py    — объединение сигналов SAC + AI
-│   ├── indicators.py         — технические индикаторы
-│   ├── risk_management.py    — управление рисками
-│   ├── portfolio_manager.py  — портфель и trailing stop
-│   ├── ai_analyzer.py        — Claude API интеграция
-│   ├── dqn_signal.py         — SAC-инференс (SB3)
-│   ├── market_scanner.py     — сканер монет + OHLCV снэпшот
-│   ├── news_analyzer.py      — новости и sentiment
-│   ├── bybit_api.py          — биржевой адаптер (ccxt async)
-│   ├── data_loader.py        — загрузка OHLCV
-│   ├── redis_client.py       — Redis клиент
-│   ├── telegram_notifier.py  — Telegram уведомления
-│   └── trade_history.py      — история сделок (SQLite)
+│   ├── trading_bot.py         — главный цикл и оркестратор
+│   ├── strategies.py          — 9 стратегий
+│   ├── signal_combiner.py     — объединение сигналов SAC + AI
+│   ├── market_impact.py       — Almgren-Chriss модель
+│   ├── portfolio_optimizer.py — CVaR / Markowitz
+│   ├── regime_detector.py     — GaussianHMM режимы рынка
+│   ├── indicators.py          — технические индикаторы
+│   ├── risk_management.py     — Kelly, SL/TP, daily limit
+│   ├── portfolio_manager.py   — портфель и trailing stop
+│   ├── ai_analyzer.py         — Claude API интеграция
+│   ├── dqn_signal.py          — SAC-инференс (SB3)
+│   ├── market_scanner.py      — сканер монет + снэпшот
+│   ├── news_analyzer.py       — новости и sentiment
+│   ├── bybit_api.py           — биржевой адаптер (ccxt async)
+│   ├── data_loader.py         — загрузка OHLCV
+│   ├── redis_client.py        — Redis (graceful degradation)
+│   ├── telegram_notifier.py   — Telegram уведомления
+│   └── trade_history.py       — история сделок (SQLite)
 ├── reinforcement_learning/
-│   ├── rl_env.py             — торговая среда (Gymnasium)
-│   └── train_sac.py          — обучение SAC-агента
-├── tests/                    — 75 тестов (pytest)
+│   ├── rl_env.py              — торговая среда (Gymnasium)
+│   └── train_sac.py           — обучение SAC-агента
+├── tests/                     — 83 теста (pytest)
 ├── monitoring/
-│   ├── prometheus.yml        — конфиг Prometheus
-│   └── grafana/              — provisioning + дашборд BitbotBY
-├── config.py                 — конфигурация (dataclass + validate)
-├── backtest.py               — walk-forward бэктест
-├── dashboard.py              — FastAPI дашборд + /metrics
-├── supervisor.py             — менеджер процессов
-├── Makefile                  — make train / backtest / paper / up
-├── mypy.ini                  — настройки type checker
-├── setup.cfg                 — flake8 + isort
+│   ├── prometheus.yml
+│   └── grafana/
+├── config.py                  — конфигурация (dataclass + validate)
+├── backtest.py                — мультисимвольный walk-forward бэктест
+├── dashboard.py               — FastAPI дашборд + /metrics
+├── supervisor.py              — менеджер процессов
+├── bitbot.service             — systemd unit для Linux-сервера
+├── Makefile
 ├── Dockerfile
 └── docker-compose.yml
 ```
@@ -271,20 +298,19 @@ make test
 # или: python3 -m pytest tests/ -v --tb=short --cov=src
 ```
 
-75 тестов: индикаторы, стратегии, риск-менеджмент, портфель, SAC-инференс, история сделок.  
-CI (GitHub Actions): black + isort + flake8 + mypy + pytest с coverage.
+83 теста: индикаторы, стратегии, риск-менеджмент, портфель, CVaR, Kelly, Almgren-Chriss, SAC-инференс, история сделок.
 
 ---
 
 ## Перед реальной торговлей
 
-1. Запустить `make paper` минимум 2-3 дня — убедиться что логика верна
-2. Запустить `make backtest` — изучить win rate и EV по каждой стратегии
-3. Если нужен `dqn`/`hybrid` — обучить модель: `make train`, проверить тест-метрики
-4. Проверить Telegram-уведомления (Trade/Skip работают)
-5. Выставить `DAILY_LOSS_LIMIT` по своему риск-аппетиту
-6. Включить `AUTO_EXECUTE=true` только после уверенности в боте
-7. Начать с минимальным балансом и `RISK_PER_TRADE=0.01` (1%)
+1. Заполнить `.env` — `BYBIT_API_KEY`, `BYBIT_API_SECRET`, `ANTHROPIC_API_KEY`, `TELEGRAM_BOT_TOKEN`
+2. Запустить `make paper-ai` минимум **1-2 недели** — проверить качество AI-сигналов в Telegram
+3. Запустить `make backtest` — изучить win rate и EV по монетам
+4. Если нужен `hybrid` — обучить модель: `make train`, проверить тест-метрики
+5. Выставить `DAILY_LOSS_LIMIT` по своему риск-аппетиту (по умолчанию 5%)
+6. Начать с минимального баланса и `RISK_PER_TRADE=0.01` (1%)
+7. Включить `PAPER_TRADING=false` только после уверенности в сигналах
 
 ---
 

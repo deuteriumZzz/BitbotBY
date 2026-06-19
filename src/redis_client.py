@@ -51,23 +51,24 @@ class RedisClient:
             decode_responses=False,
         )
         self.logger = logging.getLogger(__name__)
+        self._available: bool = False
         self._test_connection()
 
     def _test_connection(self) -> None:
-        """
-        Проверяет соединение с Redis через ping.
-
-        :raises Exception: Если подключение не удалось.
-        """
+        """Проверяет соединение с Redis. Не бросает исключение — бот работает без Redis."""
         try:
             self.redis_client.ping()
+            self._available = True
             kwargs = self.redis_client.connection_pool.connection_kwargs
             self.logger.info(
-                f"Подключено к Redis: " f"{kwargs['host']}:{kwargs['port']}"
+                f"Подключено к Redis: {kwargs['host']}:{kwargs['port']}"
             )
         except Exception as e:
-            self.logger.error(f"Не удалось подключиться к Redis: {e}")
-            raise
+            self._available = False
+            self.logger.warning(
+                f"Redis недоступен: {e}. "
+                "Бот работает без персистентности состояния."
+            )
 
     def save_market_data(self, key: str, data: pd.DataFrame) -> None:
         """
