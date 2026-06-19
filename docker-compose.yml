@@ -1,10 +1,10 @@
-version: "3.9"
-
 services:
   redis:
     image: redis:7-alpine
     container_name: bitbot_redis
     restart: unless-stopped
+    networks:
+      - bitbot_net
     volumes:
       - redis_data:/data
     healthcheck:
@@ -23,14 +23,22 @@ services:
       - REDIS_HOST=redis
       - REDIS_URL=redis://redis:6379/0
       - PYTHONPATH=/app
+      - HEALTH_PORT=8080
+    networks:
+      - bitbot_net
     volumes:
       - ./data:/app/data
       - ./models:/app/models
       - ./logs:/app/logs
-      - ./.env:/app/.env
     depends_on:
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     logging:
       driver: "json-file"
       options:
@@ -47,31 +55,71 @@ services:
       - REDIS_HOST=redis
       - REDIS_URL=redis://redis:6379/0
       - PYTHONPATH=/app
+    networks:
+      - bitbot_net
     volumes:
       - ./data:/app/data
-      - ./.env:/app/.env
     ports:
       - "8080:8080"
     depends_on:
       redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: bitbot_alertmanager
+    restart: unless-stopped
+    networks:
+      - bitbot_net
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    ports:
+      - "9093:9093"
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+    depends_on:
+      dashboard:
         condition: service_healthy
 
   prometheus:
     image: prom/prometheus:v2.51.0
     container_name: bitbot_prometheus
     restart: unless-stopped
+    networks:
+      - bitbot_net
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/rules:/etc/prometheus/rules:ro
       - prometheus_data:/prometheus
     ports:
       - "9090:9090"
     depends_on:
-      - dashboard
+      bot:
+        condition: service_healthy
+      dashboard:
+        condition: service_healthy
+      alertmanager:
+        condition: service_started
 
   grafana:
     image: grafana/grafana:10.4.2
     container_name: bitbot_grafana
     restart: unless-stopped
+    networks:
+      - bitbot_net
     volumes:
       - grafana_data:/var/lib/grafana
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
@@ -85,7 +133,12 @@ services:
     depends_on:
       - prometheus
 
+networks:
+  bitbot_net:
+    driver: bridge
+
 volumes:
   redis_data:
   prometheus_data:
   grafana_data:
+  alertmanager_data:

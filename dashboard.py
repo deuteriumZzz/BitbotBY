@@ -12,8 +12,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
+import asyncio
+import urllib.parse
+import urllib.request
+
 import uvicorn
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 from prometheus_client import CONTENT_TYPE_LATEST, Gauge, generate_latest
 
@@ -186,6 +190,58 @@ async def metrics():
     _g_win_rate.set(stats.get("win_rate", 0))
     _g_trades.set(stats.get("total_trades", 0))
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+def _send_telegram_sync(text: str) -> None:
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    chat_id = os.getenv("TELEGRAM_CHAT_ID", "")
+    if not token or not chat_id:
+        return
+    try:
+        data = urllib.parse.urlencode(
+            {"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}
+        ).encode()
+        urllib.request.urlopen(
+            f"https://api.telegram.org/bot{token}/sendMessage", data, timeout=5
+        )
+    except Exception as e:
+        logger.warning(f"Telegram alert send failed: {e}")
+
+
+@app.post("/webhook/alerts")
+async def alert_webhook(request: Request):
+    """Receives Alertmanager webhook and forwards to Telegram."""
+    payload = await request.json()
+    alerts = payload.get("alerts", [])
+    if not alerts:
+        return JSONResponse({"status": "no_alerts"})
+
+    lines = []
+    for alert in alerts:
+        status = alert.get("status", "firing")
+        name = alert.get("labels", {}).get("alertname", "unknown")
+        severity = alert.get("labels", {}).get("severity", "warning")
+        summary = alert.get("annotations", {}).get("summary", "")
+        description = alert.get("annotations", {}).get("description", "")
+
+        icon = "\U0001f534" if status == "firing" else "✅"
+        label = "CRITICAL" if severity == "critical" else "WARNING"
+        msg = f"{icon} *[{label}] {name}*"
+        if summary:
+            msg += f"\n{summary}"
+        if description:
+            msg += f"\n_{description}_"
+        lines.append(msg)
+
+    text = "\n\n".join(lines)
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(None, _send_telegram_sync, text)
+    return JSONResponse({"status": "ok", "forwarded": len(lines)})
+
+
+@app.get("/health")
+async def health():
+    return JSONResponse({"status": "ok"})
 
 
 @app.get("/", response_class=HTMLResponse)

@@ -288,6 +288,30 @@ class BybitAPI:
             )
             return None
 
+    async def fetch_positions(self) -> list:
+        """
+        Возвращает список активных позиций на бирже (для реконсиляции).
+
+        ccxt format: [{symbol, side, contracts, entryPrice, ...}]
+        Фильтрует нулевые/пустые позиции на стороне клиента.
+
+        :return: Список позиций или [] при ошибке.
+        """
+        try:
+            raw = await self.exchange.fetch_positions() or []
+            return [p for p in raw if float(p.get("contracts") or 0) > 0]
+        except asyncio.CancelledError:
+            raise
+        except ccxt.AuthenticationError as e:
+            self.logger.critical("Ошибка авторизации fetch_positions: %s", e)
+            raise
+        except (ccxt.NetworkError, ccxt.RequestTimeout) as e:
+            self.logger.warning("Временная ошибка сети fetch_positions: %s", e)
+            return []
+        except Exception as e:
+            self.logger.error("fetch_positions: %s", e, exc_info=True)
+            return []
+
     async def get_current_price(self, symbol: str) -> Optional[float]:
         """
         Получает текущую рыночную цену для заданного символа.
@@ -414,6 +438,39 @@ class BybitAPI:
         except Exception as e:
             self.logger.error(f"Неожиданная ошибка cancel_order: {e}", exc_info=True)
             return False
+
+    def round_quantity(self, symbol: str, quantity: float) -> float:
+        """
+        Округляет quantity до шага лота биржи и проверяет минимальный размер.
+
+        Использует exchange.amount_to_precision() из ccxt — тот же метод что
+        биржа применяет внутри create_order(). Предотвращает отклонение ордера
+        из-за неправильного числа знаков.
+
+        :param symbol: Торговый символ ('BTC/USDT').
+        :param quantity: Исходное количество.
+        :return: Округлённое количество, или 0.0 если меньше минимума.
+        """
+        if self.exchange is None or symbol not in (self.exchange.markets or {}):
+            return quantity
+        try:
+            rounded = float(self.exchange.amount_to_precision(symbol, quantity))
+            market = self.exchange.markets[symbol]
+            min_qty = float(
+                (market.get("limits") or {}).get("amount", {}).get("min") or 0
+            )
+            if min_qty and rounded < min_qty:
+                self.logger.warning(
+                    "round_quantity: %s qty=%.8f < min=%.8f → skip",
+                    symbol,
+                    rounded,
+                    min_qty,
+                )
+                return 0.0
+            return rounded
+        except Exception as e:
+            self.logger.warning("round_quantity failed for %s: %s", symbol, e)
+            return quantity
 
     async def close(self) -> None:
         """

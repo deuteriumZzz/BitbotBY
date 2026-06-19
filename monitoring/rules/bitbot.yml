@@ -1,0 +1,76 @@
+groups:
+  - name: bitbot
+    rules:
+
+      # -- Доступность --------------------------------------------------------
+
+      - alert: BotProcessDown
+        expr: up{job="bitbot_process"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Бот недоступен"
+          description: "Prometheus не может получить метрики с bot:8080 уже 2 минуты. Бот упал или завис."
+
+      - alert: DashboardDown
+        expr: up{job="bitbot_dashboard"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Dashboard недоступен"
+          description: "Prometheus не может получить метрики с dashboard:8080 уже 2 минуты."
+
+      # -- Торговая активность -----------------------------------------------
+
+      - alert: BotStalled
+        expr: |
+          increase(bot_cycles_total[10m]) == 0
+          and on() up{job="bitbot_process"} == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Торговый цикл завис"
+          description: "Бот отвечает на /health, но trading loop не выполнял итераций 10+ минут."
+
+      - alert: HighConsecutiveLosses
+        expr: bot_consecutive_losses >= 3
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Серия убытков: {{ $value }} подряд"
+          description: "Circuit breaker близко к срабатыванию. Проверьте стратегию и рыночные условия."
+
+      # -- Финансовые --------------------------------------------------------
+
+      - alert: LargePnLLoss
+        expr: bot_total_pnl_usdt < -500
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Крупный убыток: {{ $value | printf \"%.0f\" }} USDT"
+          description: "Накопленный PnL упал ниже -500 USDT. Рассмотрите остановку бота."
+
+      - alert: LowBalance
+        expr: bot_paper_balance_usdt < 5000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Баланс низкий: {{ $value | printf \"%.0f\" }} USDT"
+          description: "Баланс упал ниже 5000 USDT (50% от стартового). Риск недостаточности средств."
+
+      - alert: LowWinRate
+        expr: |
+          bot_win_rate < 0.35
+          and on() bot_cycles_total > 100
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Низкий win rate: {{ $value | humanizePercentage }}"
+          description: "Win rate ниже 35% на протяжении 15 минут. Стратегия может не работать в текущих условиях."

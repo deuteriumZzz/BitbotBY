@@ -27,7 +27,7 @@ import pandas as pd
 # Allow imports from project root
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from config import Config, STABLECOIN_BASES
+from config import STABLECOIN_BASES, Config
 from src.alpha_tester import AlphaTester
 from src.indicators import add_indicators
 from src.market_impact import estimate_from_df as _ac_impact
@@ -767,7 +767,8 @@ async def main() -> None:
             f"{'WinRate':>8}  {'EV':>7}  {'AvgReturn':>9}  {'MaxDD':>7}  {'Sharpe':>7}"
         )
         print(
-            f"{'----':<5} {'-'*20:<20} {'------':>6}  {'--------':>8}  {'------':>7}  {'--------':>9}  {'------':>7}  {'------':>7}"
+            f"{'----':<5} {'-'*20:<20} {'------':>6}  {'--------':>8}  {'------':>7}"
+            f"  {'--------':>9}  {'------':>7}  {'------':>7}"
         )
         for rank, r in enumerate(agg, 1):
             print(

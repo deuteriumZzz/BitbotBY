@@ -2,8 +2,21 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+rule_files:
+  - "rules/*.yml"
+
 scrape_configs:
-  - job_name: bitbot
+  - job_name: bitbot_process
+    static_configs:
+      - targets: ["bot:8080"]
+    metrics_path: /metrics
+
+  - job_name: bitbot_dashboard
     static_configs:
       - targets: ["dashboard:8080"]
     metrics_path: /metrics

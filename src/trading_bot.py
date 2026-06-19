@@ -8,7 +8,9 @@ import pandas as pd
 from config import Config
 from src.ai_analyzer import AIAnalyzer
 from src.bybit_api import BybitAPI
+from src.correlation_filter import CorrelationFilter
 from src.data_loader import DataLoader
+from src.health_server import start_health_server
 from src.market_impact import estimate_from_df as _ac_impact
 from src.market_scanner import MarketScanner
 from src.news_analyzer import NewsAnalyzer
@@ -60,6 +62,10 @@ class TradingBot:
         self.regime_detector = RegimeDetector()
         self._current_regime: str = "unknown"
         self.portfolio_optimizer = PortfolioOptimizer()
+        self.corr_filter = CorrelationFilter(
+            window=Config.CORRELATION_WINDOW,
+            max_corr=Config.MAX_CORRELATION,
+        )
         self.is_running: bool = False
         # symbol → {qty, stop_loss, take_profit, side, entry, ...}
         self._monitored: Dict[str, Any] = {}
@@ -96,12 +102,83 @@ class TradingBot:
             self.strategy = TradingStrategy(Config.DEFAULT_STRATEGY)
             await self.strategy.initialize()
             await self._restore_state()
+            await self._reconcile_positions()
             await self.telegram.start()
             await self._fit_regime_detector()
+            if Config.HEALTH_PORT > 0:
+                await start_health_server(self, port=Config.HEALTH_PORT)
             logger.info("Trading bot initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize: {e}")
             raise
+
+    async def _reconcile_positions(self) -> None:
+        """
+        Сверяет _monitored с реальными позициями биржи после перезапуска.
+
+        - Удаляет из _monitored позиции, которых больше нет на бирже.
+        - Добавляет позиции, которые есть на бирже, но потеряны при крэше бота.
+
+        Пропускается в PAPER_TRADING режиме (нечего сверять).
+        """
+        if Config.PAPER_TRADING:
+            return
+        try:
+            exchange_positions = await self.api.fetch_positions()
+        except Exception as exc:
+            logger.warning("Reconciliation skipped: %s", exc)
+            return
+
+        # ccxt symbol может быть 'BTC/USDT:USDT' — нормализуем к 'BTC/USDT'
+        active: dict = {}
+        for p in exchange_positions:
+            sym = p.get("symbol", "")
+            if ":" in sym:
+                sym = sym.split(":")[0]
+            active[sym] = p
+
+        async with self._monitored_lock:
+            stale = [s for s in self._monitored if s not in active]
+            for sym in stale:
+                logger.warning(
+                    "Reconcile: удалена устаревшая позиция %s (закрыта на бирже)",
+                    sym,
+                )
+                self._monitored.pop(sym, None)
+
+            added = []
+            for sym, pos in active.items():
+                if sym not in self._monitored:
+                    side = pos.get("side", "buy")
+                    qty = float(pos.get("contracts") or 0)
+                    entry = float(pos.get("entryPrice") or 0)
+                    self._monitored[sym] = {
+                        "trade_id": None,
+                        "qty": qty,
+                        "entry": entry,
+                        "stop_loss": 0.0,
+                        "take_profit": 0.0,
+                        "side": side,
+                        "atr": 0.0,
+                        "peak_price": entry,
+                        "exchange_sl_id": None,
+                        "exchange_tp_id": None,
+                    }
+                    added.append(sym)
+                    logger.warning(
+                        "Reconcile: восстановлена потерянная позиция %s %s %.6f @ %.4f",
+                        sym,
+                        side,
+                        qty,
+                        entry,
+                    )
+
+        logger.info(
+            "Reconciliation: удалено=%d восстановлено=%d активных=%d",
+            len(stale),
+            len(added),
+            len(active),
+        )
 
     async def _restore_state(self) -> None:
         state = self.redis.load_trading_state(Config.SYMBOL)
@@ -341,6 +418,20 @@ class TradingBot:
             if sym in self._monitored:
                 logger.info(f"{sym} already monitored, skip")
                 return
+            open_syms = list(self._monitored.keys())
+
+        # Correlation guard: block if new position is too correlated with open ones
+        if Config.MAX_CORRELATION > 0 and not self.corr_filter.is_allowed(
+            sym, open_syms
+        ):
+            max_corr = self.corr_filter.max_correlation(sym, open_syms)
+            logger.warning(
+                "Skipping %s: correlation %.2f >= MAX_CORRELATION %.2f",
+                sym,
+                max_corr,
+                Config.MAX_CORRELATION,
+            )
+            return
 
         # EV and win rate for this strategy
         strategy = top.get("strategy", Config.DEFAULT_STRATEGY)
@@ -419,6 +510,9 @@ class TradingBot:
                 entry = entry * (1.0 + impact)
             elif action == "sell":
                 entry = entry * (1.0 - impact)
+
+        # Round to exchange lot size; returns 0.0 if below minimum
+        quantity = self.api.round_quantity(sym, quantity)
 
         if quantity <= 0:
             return
@@ -660,12 +754,17 @@ class TradingBot:
 
         while self.is_running:
             cycle += 1
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             t0 = loop.time()
 
             try:
                 symbols = await self.scanner.get_top_symbols(Config.SCAN_TOP_N)
                 market_data = await self.scanner.scan_all(symbols, Config.TIMEFRAME)
+
+                # Feed latest close prices into correlation filter
+                for sym, df in market_data.items():
+                    self.corr_filter.update_from_df(sym, df)
+
                 scanned = list(market_data.keys())
                 snapshots = await self._collect_snapshots(scanned, market_data)
 
@@ -782,4 +881,11 @@ async def main():
 
 
 if __name__ == "__main__":
+    import sys
+
+    try:
+        Config().validate()
+    except ValueError as exc:
+        print(f"[CONFIG ERROR] {exc}", file=sys.stderr)
+        sys.exit(1)
     asyncio.run(main())

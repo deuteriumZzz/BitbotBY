@@ -1,0 +1,16 @@
+[run]
+source = src
+omit =
+    src/trading_bot.py
+    src/health_server.py
+    src/telegram_notifier.py
+    src/news_analyzer.py
+    src/market_scanner.py
+    src/data_loader.py
+    src/logger.py
+    src/portfolio_optimizer.py
+    src/regime_detector.py
+
+[report]
+skip_empty = true
+show_missing = true

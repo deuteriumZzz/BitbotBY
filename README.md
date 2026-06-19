@@ -31,6 +31,10 @@
 ### Инфраструктура
 - **Telegram сигналы** — уведомления о новых buy/sell сигналах по топ-20 монетам (без спама: только изменения)
 - **Telegram подтверждения** — кнопки Trade/Skip перед исполнением (при `AUTO_EXECUTE=true`)
+- **Correlation filter** — блокирует одновременные позиции с |корреляцией| выше порога (защита от удвоенной экспозиции, напр. BTC + ETH лонг)
+- **Position reconciliation** — при рестарте бот сверяет `_monitored` с реальными позициями на бирже
+- **Health server** — `GET /health` (JSON) и `GET /metrics` (Prometheus) встроены в процесс бота
+- **Alertmanager** — 6 правил алертинга (BotDown, HighConsecutiveLosses, LargePnLLoss и др.) → Telegram webhook
 - **Redis graceful degradation** — если Redis недоступен, бот работает без персистентности (не падает)
 - **Systemd сервис** — авто-перезапуск при падении (`bitbot.service`)
 - **Paper trading** — полный тест без реальных денег
@@ -68,6 +72,7 @@ make up
 | Веб-дашборд | http://localhost:8080 |
 | Grafana | http://localhost:3000 (admin / `GRAFANA_PASSWORD` из .env) |
 | Prometheus | http://localhost:9090 |
+| Alertmanager | http://localhost:9093 |
 
 ### 3. Или запустить локально
 
@@ -171,6 +176,9 @@ make backtest
 | `SCAN_TOP_N` | `20` | Топ монет для сканирования (по объёму 24ч) |
 | `RISK_PER_TRADE` | `0.02` | Риск на сделку (2% баланса) |
 | `MAX_POSITIONS` | `3` | Максимум одновременных позиций |
+| `MAX_CORRELATION` | `0.7` | Блокировать позицию если |корр.| с открытой ≥ порога (0 = выключен) |
+| `CORRELATION_WINDOW` | `50` | Окно расчёта корреляции в барах |
+| `HEALTH_PORT` | `8080` | Порт health server (0 = выключен) |
 | `DAILY_LOSS_LIMIT` | `0.05` | Лимит дневного убытка (5%) |
 | `CIRCUIT_BREAKER_LOSSES` | `3` | Стоп после N подряд убытков (0 = выключен) |
 | `MIN_SIGNAL_CONFIDENCE` | `0.65` | Минимальный уровень уверенности |
@@ -290,6 +298,8 @@ BitbotBY/
 │   ├── market_scanner.py      — сканер монет + снэпшот
 │   ├── news_analyzer.py       — новости и AI sentiment
 │   ├── bybit_api.py           — биржевой адаптер (ccxt async)
+│   ├── correlation_filter.py  — фильтр корреляции позиций
+│   ├── health_server.py       — /health + /metrics (встроен в бот)
 │   ├── data_loader.py         — загрузка OHLCV
 │   ├── redis_client.py        — Redis (graceful degradation)
 │   ├── telegram_notifier.py   — Telegram уведомления
@@ -297,15 +307,21 @@ BitbotBY/
 ├── reinforcement_learning/
 │   ├── rl_env.py              — торговая среда (Gymnasium)
 │   └── train_sac.py           — обучение SAC-агента
-├── tests/                     — 83 теста (pytest)
+├── tests/
+│   ├── integration/           — 12 integration-тестов (Bybit testnet)
+│   └── test_*.py              — 108 unit-тестов
 ├── monitoring/
 │   ├── prometheus.yml
+│   ├── alertmanager.yml
+│   ├── rules/bitbot.yml       — 6 правил алертинга
 │   └── grafana/
 ├── config.py                  — конфигурация (dataclass + validate)
 ├── backtest.py                — мультисимвольный walk-forward бэктест
-├── dashboard.py               — FastAPI дашборд + /metrics
+├── dashboard.py               — FastAPI дашборд + /metrics + /webhook/alerts
 ├── supervisor.py              — менеджер процессов
 ├── bitbot.service             — systemd unit для Linux-сервера
+├── RUNBOOK.md                 — что делать при каждом алерте
+├── .coveragerc                — исключения coverage для live-сервисов
 ├── Makefile
 ├── Dockerfile
 └── docker-compose.yml
@@ -317,22 +333,30 @@ BitbotBY/
 
 ```bash
 make test
-# или: python3 -m pytest tests/ -v --tb=short --cov=src
+# или: pytest tests/ --ignore=tests/integration -v --cov=src --cov-fail-under=50
+
+# Integration-тесты против Bybit testnet (нужны ключи)
+BYBIT_TESTNET_API_KEY=xxx BYBIT_TESTNET_API_SECRET=yyy \
+  pytest tests/integration/ -m integration -v
 ```
 
-83 теста: индикаторы, стратегии, риск-менеджмент, портфель, CVaR, Kelly, Almgren-Chriss, SAC-инференс, история сделок.
+**108 unit-тестов** — индикаторы, стратегии, риск-менеджмент, портфель, CVaR, Kelly, Almgren-Chriss, корреляция, SAC-инференс, история сделок, конфиг.  
+**12 integration-тестов** — подключение к Bybit testnet, OHLCV, баланс, create/cancel ордер, round_quantity.  
+CI падает при coverage < 50% (live-сервисы исключены из измерения).
 
 ---
 
 ## Перед реальной торговлей
 
 1. Заполнить `.env` — `BYBIT_API_KEY`, `BYBIT_API_SECRET`, любой AI-ключ (`ANTHROPIC_API_KEY` / `DEEPSEEK_API_KEY` / `OPENAI_API_KEY`), `TELEGRAM_BOT_TOKEN`
-2. Запустить `make paper-ai` минимум **2-4 недели** — проверить качество AI-сигналов в Telegram
-3. Запустить `make backtest` — изучить win rate и EV по монетам
-4. Если нужен `hybrid` — обучить модель: `make train`, проверить тест-метрики
-5. Выставить `DAILY_LOSS_LIMIT` и `CIRCUIT_BREAKER_LOSSES` по своему риск-аппетиту
-6. Начать с минимального баланса и `RISK_PER_TRADE=0.01` (1%)
-7. Включить `PAPER_TRADING=false` только после уверенности в сигналах
+2. Запустить integration-тесты против testnet: `BYBIT_TESTNET_API_KEY=xxx ... pytest tests/integration/ -m integration`
+3. Запустить `make paper-ai` на Bybit testnet минимум **1-2 недели** — проверить стабильность, логи, алерты
+4. Запустить `make backtest` — изучить win rate и EV по монетам, выбрать `ACTIVE_STRATEGY`
+5. Если нужен `hybrid` — обучить модель: `make train`, проверить тест-метрики
+6. Прочитать [RUNBOOK.md](RUNBOOK.md) — знать что делать при каждом алерте
+7. Выставить `DAILY_LOSS_LIMIT` и `CIRCUIT_BREAKER_LOSSES` по своему риск-аппетиту
+8. Начать с минимального баланса и `RISK_PER_TRADE=0.01` (1%)
+9. Включить `PAPER_TRADING=false` только после уверенности в сигналах
 
 ---
 

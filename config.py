@@ -151,6 +151,19 @@ class Config:
     # Circuit breaker: остановить бота после N подряд убыточных сделок (0 = выключен)
     CIRCUIT_BREAKER_LOSSES: int = int(os.getenv("CIRCUIT_BREAKER_LOSSES", "3"))
 
+    # ── Monitoring ────────────────────────────────────────────────────────────
+    # Порт HTTP health-сервера (GET /health, GET /metrics)
+    # 0 = выключен
+    HEALTH_PORT: int = int(os.getenv("HEALTH_PORT", "8080"))
+
+    # ── Correlation filter ─────────────────────────────────────────────────
+    # Максимальная |корреляция| log-returns между одновременными позициями.
+    # Новый сигнал блокируется если его корреляция с любой открытой позицией
+    # превышает порог. 0.0 = фильтр выключен.
+    MAX_CORRELATION: float = float(os.getenv("MAX_CORRELATION", "0.7"))
+    # Окно расчёта корреляции в свечах
+    CORRELATION_WINDOW: int = int(os.getenv("CORRELATION_WINDOW", "50"))
+
     @classmethod
     def from_env(cls) -> "Config":
         """Создаёт экземпляр Config из переменных окружения."""
@@ -192,6 +205,9 @@ class Config:
             PAPER_TRADING=(os.getenv("PAPER_TRADING", "false").lower() == "true"),
             TRAILING_STOP_ATR_MULT=float(os.getenv("TRAILING_STOP_ATR_MULT", "1.0")),
             CIRCUIT_BREAKER_LOSSES=int(os.getenv("CIRCUIT_BREAKER_LOSSES", "3")),
+            MAX_CORRELATION=float(os.getenv("MAX_CORRELATION", "0.7")),
+            CORRELATION_WINDOW=int(os.getenv("CORRELATION_WINDOW", "50")),
+            HEALTH_PORT=int(os.getenv("HEALTH_PORT", "8080")),
         )
 
     def validate(self) -> None:
