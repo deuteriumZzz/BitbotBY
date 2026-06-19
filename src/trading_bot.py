@@ -115,7 +115,7 @@ class TradingBot:
         except ccxt.AuthenticationError as e:
             if Config.PAPER_TRADING:
                 logger.warning(
-                    "API auth failed — running in paper trading mode with public data only: %s",
+                    "API auth failed — paper trading mode, public data only: %s",
                     e,
                 )
             else:

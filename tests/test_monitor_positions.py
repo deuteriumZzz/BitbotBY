@@ -251,7 +251,7 @@ class TestTrailingStop:
     async def test_trailing_stop_raises_sl_for_buy(self):
         """Rising price with ATR trailing stop should raise the buy SL."""
         bot = make_bot()
-        # entry=50000, sl=49000, atr=500 → trail = 51000 - 1×500 = 50500 > 49000 → update
+        # trail = 51000 - 1×500 = 50500 > sl(49000) → SL raised
         bot._monitored["BTC/USDT"] = _open_pos(
             side="buy", entry=50000, sl=49000, tp=55000, atr=500.0
         )
@@ -278,7 +278,7 @@ class TestTrailingStop:
     async def test_trailing_stop_lowers_sl_for_sell(self):
         """Falling price with ATR trailing stop should lower the sell SL."""
         bot = make_bot()
-        # entry=50000, sl=51000, atr=500 → trail = 49000 + 1×500 = 49500 < 51000 → update
+        # trail = 49000 + 1×500 = 49500 < sl(51000) → SL lowered
         bot._monitored["BTC/USDT"] = _open_pos(
             side="sell", entry=50000, sl=51000, tp=45000, atr=500.0
         )

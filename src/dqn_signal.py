@@ -208,7 +208,7 @@ class SACSignal:
 
         try:
             obs = _snap_to_obs(snap, balance, self._norm_stats)
-            # Detect normstats drift: too many features far outside training distribution
+            # Detect normstats drift: features far outside training distribution
             if self._norm_stats and np.any(np.abs(obs[:11]) > 3.0):
                 outliers = [_MARKET_COLS[i] for i in range(11) if abs(obs[i]) > 3.0]
                 outlier_frac = len(outliers) / len(_MARKET_COLS)
@@ -232,12 +232,11 @@ class SACSignal:
                         )
                         self.loaded = False
                     return default
-                else:
-                    self.logger.warning(
-                        "SAC obs outliers (normstats drift?) for %s: %s",
-                        snap.get("symbol", "?"),
-                        outliers,
-                    )
+                self.logger.warning(
+                    "SAC obs outliers (normstats drift?) for %s: %s",
+                    snap.get("symbol", "?"),
+                    outliers,
+                )
             self._consecutive_drifts = 0
             action, _ = self._model.predict(obs, deterministic=True)
             a = float(action[0])
