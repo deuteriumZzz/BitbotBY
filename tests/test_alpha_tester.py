@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from src.alpha_tester import AlphaTester, AlphaResult
+from src.alpha_tester import AlphaResult, AlphaTester
 
 
 @pytest.fixture

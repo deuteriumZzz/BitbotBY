@@ -53,7 +53,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class BacktestResult:
-    """Per-strategy backtest metrics."""
+    """Метрики бэктеста для одной стратегии."""
 
     strategy: str
     total_trades: int
@@ -107,13 +107,16 @@ def _save_csv_cache(df: pd.DataFrame, path: str) -> None:
 
 
 async def _fetch_top_symbols(n: int = 20) -> List[str]:
-    """Fetch top-N /USDT symbols by 24h quote volume from Bybit (no API key)."""
+    """Получает топ-N символов /USDT по объёму за 24ч с Bybit (без API-ключа)."""
     try:
         import ccxt.async_support as ccxt_async
-        exchange = ccxt_async.bybit({
-            "enableRateLimit": True,
-            "options": {"defaultType": "spot"},
-        })
+
+        exchange = ccxt_async.bybit(
+            {
+                "enableRateLimit": True,
+                "options": {"defaultType": "spot"},
+            }
+        )
         try:
             tickers = await exchange.fetch_tickers()
         finally:
@@ -126,7 +129,9 @@ async def _fetch_top_symbols(n: int = 20) -> List[str]:
             and (t.get("quoteVolume") or 0) > 0
             and sym.split("/")[0] not in STABLECOIN_BASES
         }
-        ranked = sorted(usdt.items(), key=lambda x: x[1].get("quoteVolume", 0), reverse=True)
+        ranked = sorted(
+            usdt.items(), key=lambda x: x[1].get("quoteVolume", 0), reverse=True
+        )
         symbols = [sym for sym, _ in ranked[:n]]
         logger.info("Top %d symbols: %s...", n, ", ".join(symbols[:5]))
         return symbols
@@ -144,7 +149,7 @@ async def _fetch_batches(
     since_ms: int,
     until_ms: int,
 ) -> pd.DataFrame:
-    """Download OHLCV via ccxt without an API key."""
+    """Загружает OHLCV через ccxt без API-ключа (публичные данные биржи)."""
     try:
         import ccxt.async_support as ccxt_async
     except ImportError:
@@ -387,7 +392,9 @@ def run_strategy(
 
                 quantity = position_usdt / entry_price
                 entry_comm = quantity * entry_price * commission_rate
-                balance -= position_usdt + entry_comm  # reserve capital + pay commission
+                balance -= (
+                    position_usdt + entry_comm
+                )  # reserve capital + pay commission
 
                 open_trade = {
                     "action": action,
@@ -526,7 +533,9 @@ def run_strategy(
 # ── Multi-symbol aggregation ──────────────────────────────────────────────
 
 
-def aggregate_results(results_per_symbol: dict[str, List[BacktestResult]]) -> List[BacktestResult]:
+def aggregate_results(
+    results_per_symbol: dict[str, List[BacktestResult]]
+) -> List[BacktestResult]:
     """
     Merge per-symbol BacktestResults into one aggregate result per strategy.
 
@@ -561,20 +570,22 @@ def aggregate_results(results_per_symbol: dict[str, List[BacktestResult]]) -> Li
         combined_returns = [r for p in parts for r in p.trade_returns]
         sharpe = _sharpe(combined_returns)
 
-        aggregated.append(BacktestResult(
-            strategy=strat,
-            total_trades=total_trades,
-            win_rate=win_rate,
-            avg_profit_pct=avg_profit,
-            avg_loss_pct=avg_loss,
-            expected_value=ev,
-            total_return_pct=avg_return,
-            max_drawdown_pct=max_dd,
-            sharpe_ratio=sharpe,
-            num_wins=num_wins,
-            num_losses=num_losses,
-            trade_returns=combined_returns,
-        ))
+        aggregated.append(
+            BacktestResult(
+                strategy=strat,
+                total_trades=total_trades,
+                win_rate=win_rate,
+                avg_profit_pct=avg_profit,
+                avg_loss_pct=avg_loss,
+                expected_value=ev,
+                total_return_pct=avg_return,
+                max_drawdown_pct=max_dd,
+                sharpe_ratio=sharpe,
+                num_wins=num_wins,
+                num_losses=num_losses,
+                trade_returns=combined_returns,
+            )
+        )
 
     aggregated.sort(key=lambda r: r.expected_value, reverse=True)
     return aggregated
@@ -693,7 +704,9 @@ async def main() -> None:
         symbols = await _fetch_top_symbols(top_n)
 
     multi = len(symbols) > 1
-    print(f"[backtest] {len(symbols)} symbol(s) | {timeframe} | {months}m | min_conf={min_conf}")
+    print(
+        f"[backtest] {len(symbols)} symbol(s) | {timeframe} | {months}m | min_conf={min_conf}"
+    )
     print(f"[backtest] symbols: {', '.join(symbols)}")
 
     results_per_symbol: dict[str, List[BacktestResult]] = {}
@@ -724,7 +737,9 @@ async def main() -> None:
                 min_confidence=min_conf,
             )
             sym_results.append(result)
-            print(f" done — {result.total_trades} trades, EV={result.expected_value * 100:+.2f}%")
+            print(
+                f" done — {result.total_trades} trades, EV={result.expected_value * 100:+.2f}%"
+            )
 
         sym_results.sort(key=lambda r: r.expected_value, reverse=True)
         results_per_symbol[symbol] = sym_results
@@ -751,7 +766,9 @@ async def main() -> None:
             f"{'Rank':<5} {'Strategy':<20} {'Trades':>6}  "
             f"{'WinRate':>8}  {'EV':>7}  {'AvgReturn':>9}  {'MaxDD':>7}  {'Sharpe':>7}"
         )
-        print(f"{'----':<5} {'-'*20:<20} {'------':>6}  {'--------':>8}  {'------':>7}  {'--------':>9}  {'------':>7}  {'------':>7}")
+        print(
+            f"{'----':<5} {'-'*20:<20} {'------':>6}  {'--------':>8}  {'------':>7}  {'--------':>9}  {'------':>7}  {'------':>7}"
+        )
         for rank, r in enumerate(agg, 1):
             print(
                 f"{rank:>4}  {r.strategy:<20} {r.total_trades:>6}  "
@@ -761,7 +778,9 @@ async def main() -> None:
         print(sep)
         if agg:
             best = agg[0]
-            print(f"Best strategy across all symbols: {best.strategy}  (EV={best.expected_value*100:+.2f}%)")
+            print(
+                f"Best strategy across all symbols: {best.strategy}  (EV={best.expected_value*100:+.2f}%)"
+            )
         print(sep)
 
         save_json(agg, ",".join(symbols), timeframe, months)
@@ -769,7 +788,11 @@ async def main() -> None:
         save_json(results_per_symbol[symbols[0]], symbols[0], timeframe, months)
 
     # ── Alpha significance tests (on aggregated or single result) ─
-    final_results = aggregate_results(results_per_symbol) if multi else results_per_symbol[symbols[0]]
+    final_results = (
+        aggregate_results(results_per_symbol)
+        if multi
+        else results_per_symbol[symbols[0]]
+    )
     tester = AlphaTester()
     sep = "=" * 68
     print(f"\n{sep}")
@@ -789,7 +812,6 @@ async def main() -> None:
         f"significant alpha at p<{0.05:.0%}"
     )
     print(sep)
-
 
 
 if __name__ == "__main__":

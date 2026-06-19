@@ -37,7 +37,7 @@ def mock_ai():
 @pytest.fixture
 def mock_dqn_signal():
     """Patch SACSignal inside signal_combiner for the duration of each test."""
-    with patch("src.signal_combiner.SACSignal") as MockSAC:
+    with patch("src.signal_combiner.SACSignal") as MockSAC:  # noqa: N806
         instance = MagicMock()
         instance.get_signal.return_value = {
             "action": "hold",

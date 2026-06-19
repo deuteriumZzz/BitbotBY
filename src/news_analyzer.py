@@ -137,9 +137,7 @@ class NewsAnalyzer:
             return 0.0, []
 
         headlines = [
-            (art.get("title", "") or "")[:100]
-            for art in articles
-            if art.get("title")
+            (art.get("title", "") or "")[:100] for art in articles if art.get("title")
         ]
 
         if self._use_claude:
@@ -196,7 +194,7 @@ class NewsAnalyzer:
             return self._score_with_vader_headlines(headlines)
 
     def _score_with_vader(self, articles: list) -> float:
-        """VADER fallback: score title+description for each article."""
+        """VADER-фолбек: вычисляет sentiment по заголовку и описанию каждой статьи."""
         try:
             from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
@@ -213,7 +211,7 @@ class NewsAnalyzer:
             return 0.0
 
     def _score_with_vader_headlines(self, headlines: List[str]) -> float:
-        """VADER fallback for headline-only list."""
+        """VADER-фолбек для списка только заголовков (без описаний)."""
         try:
             from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 

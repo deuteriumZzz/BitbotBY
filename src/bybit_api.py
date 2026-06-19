@@ -369,7 +369,9 @@ class BybitAPI:
                     {"stopPrice": sl_price, "triggerPrice": sl_price},
                 )
                 sl_id = sl_order.get("id")
-                self.logger.info(f"Exchange SL placed: {symbol} @ {sl_price} id={sl_id}")
+                self.logger.info(
+                    f"Exchange SL placed: {symbol} @ {sl_price} id={sl_id}"
+                )
             except Exception as e:
                 self.logger.error(f"Failed to place exchange SL for {symbol}: {e}")
 
@@ -379,7 +381,9 @@ class BybitAPI:
                     symbol, "limit", close_side, qty, tp_price
                 )
                 tp_id = tp_order.get("id")
-                self.logger.info(f"Exchange TP placed: {symbol} @ {tp_price} id={tp_id}")
+                self.logger.info(
+                    f"Exchange TP placed: {symbol} @ {tp_price} id={tp_id}"
+                )
             except Exception as e:
                 self.logger.error(f"Failed to place exchange TP for {symbol}: {e}")
 

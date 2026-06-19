@@ -15,7 +15,7 @@ from src.portfolio_manager import PortfolioManager
 @pytest.fixture
 def portfolio():
     """PortfolioManager with Redis fully mocked."""
-    with patch("src.portfolio_manager.RedisClient") as MockRedis:
+    with patch("src.portfolio_manager.RedisClient") as MockRedis:  # noqa: N806
         MockRedis.return_value = MagicMock()
         MockRedis.return_value.save_trading_state = MagicMock(return_value=True)
         MockRedis.return_value.load_trading_state = MagicMock(return_value=None)

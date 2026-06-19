@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
-from config import Config, STABLECOIN_BASES
+from config import STABLECOIN_BASES, Config
 from src.bybit_api import BybitAPI
 from src.data_loader import DataLoader
 from src.redis_client import RedisClient

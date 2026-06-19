@@ -3,11 +3,30 @@ from dataclasses import dataclass, field
 from typing import List
 
 # Stablecoins excluded from scanning and trading
-STABLECOIN_BASES: frozenset[str] = frozenset({
-    "USDC", "BUSD", "FDUSD", "TUSD", "DAI", "USDE", "PYUSD",
-    "FRAX", "LUSD", "GUSD", "USDP", "SUSD", "CUSD", "USDJ",
-    "HUSD", "EURS", "EURT", "USDD", "CRVUSD", "MKUSD",
-})
+STABLECOIN_BASES: frozenset[str] = frozenset(
+    {
+        "USDC",
+        "BUSD",
+        "FDUSD",
+        "TUSD",
+        "DAI",
+        "USDE",
+        "PYUSD",
+        "FRAX",
+        "LUSD",
+        "GUSD",
+        "USDP",
+        "SUSD",
+        "CUSD",
+        "USDJ",
+        "HUSD",
+        "EURS",
+        "EURT",
+        "USDD",
+        "CRVUSD",
+        "MKUSD",
+    }
+)
 
 
 @dataclass

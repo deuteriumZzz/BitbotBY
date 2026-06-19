@@ -1,13 +1,13 @@
 """
-Statistical significance testing for strategy alpha.
+Проверка статистической значимости альфы стратегий.
 
-Two tests per strategy:
-  1. Bootstrap Sharpe — 1 000 resamples → point estimate + 95% CI + p-value
-     (fraction of bootstrap Sharpes ≤ 0; robust to non-normality)
-  2. Wilcoxon signed-rank — non-parametric H₀: median return = 0
-     (preferred over t-test for fat-tailed crypto returns)
+Два теста на каждую стратегию:
+  1. Bootstrap Sharpe — 1 000 ресемплов → точечная оценка + 95% CI + p-value
+     (доля bootstrap-Sharpe ≤ 0; устойчив к ненормальности распределения)
+  2. Wilcoxon signed-rank — непараметрический тест H₀: медиана доходности = 0
+     (предпочтительнее t-теста для крипто-доходностей с тяжёлыми хвостами)
 
-Usage:
+Использование:
     from src.alpha_tester import AlphaTester
     result = AlphaTester().test(trade_returns, name="ema_crossover")
     print(result.summary())
@@ -29,7 +29,7 @@ _ALPHA = 0.05  # 95% confidence level
 
 @dataclass
 class AlphaResult:
-    """Statistical test results for a single strategy."""
+    """Результаты статистических тестов для одной стратегии."""
 
     name: str
     n_trades: int
@@ -50,8 +50,9 @@ class AlphaResult:
     @property
     def is_significant(self) -> bool:
         """
-        Sharpe bootstrap p < 5%. If scipy available, Wilcoxon must also pass.
-        When scipy is absent (wilcoxon_pvalue is None), bootstrap alone decides.
+        p-value bootstrap Sharpe < 5%.
+        Если scipy доступен — Wilcoxon тоже должен пройти.
+        Если scipy недоступен (wilcoxon_pvalue=None), решает только bootstrap.
         """
         if self.sharpe_pvalue >= _ALPHA:
             return False
@@ -71,9 +72,7 @@ class AlphaResult:
 
     def summary(self) -> str:
         wp = (
-            f"{self.wilcoxon_pvalue:.4f}"
-            if self.wilcoxon_pvalue is not None
-            else "n/a"
+            f"{self.wilcoxon_pvalue:.4f}" if self.wilcoxon_pvalue is not None else "n/a"
         )
         sig_mark = "✓" if self.is_significant else "✗"
         return (
@@ -88,7 +87,7 @@ class AlphaResult:
 
 
 class AlphaTester:
-    """Bootstrap Sharpe + Wilcoxon signed-rank tests on per-trade returns."""
+    """Bootstrap Sharpe и Wilcoxon signed-rank тесты на доходностях отдельных сделок."""
 
     def _bootstrap_sharpe(
         self,
@@ -96,7 +95,7 @@ class AlphaTester:
         n_bootstrap: int = _N_BOOTSTRAP,
     ) -> tuple[float, float, float, float]:
         """
-        Resample returns n_bootstrap times and compute Sharpe distribution.
+        Ресемплирует доходности n_bootstrap раз и строит распределение Sharpe.
 
         :return: (sharpe, ci_low, ci_high, p_value_sharpe_leq_0)
         """
@@ -119,14 +118,12 @@ class AlphaTester:
         p_value = float((boot <= 0).mean())
         return sharpe, ci_low, ci_high, p_value
 
-    def _wilcoxon(
-        self, returns: np.ndarray
-    ) -> tuple[Optional[float], Optional[float]]:
+    def _wilcoxon(self, returns: np.ndarray) -> tuple[Optional[float], Optional[float]]:
         """
-        Wilcoxon signed-rank test: H₀ = returns symmetric around zero.
+        Критерий знаковых рангов Вилкоксона: H₀ = доходности симметричны вокруг нуля.
 
-        :return: (statistic, p_value) or (None, None) if scipy unavailable
-                 or too few non-zero observations.
+        :return: (statistic, p_value) или (None, None) если scipy недоступен
+                 или слишком мало ненулевых наблюдений.
         """
         try:
             from scipy.stats import wilcoxon
@@ -146,11 +143,12 @@ class AlphaTester:
         name: str = "strategy",
     ) -> AlphaResult:
         """
-        Run bootstrap Sharpe + Wilcoxon on per-trade returns.
+        Запускает bootstrap Sharpe и Wilcoxon на доходностях сделок.
 
-        :param trade_returns: Fractional return per closed trade (e.g. 0.012).
-        :param name: Strategy name used in AlphaResult.summary().
-        :return: AlphaResult with all statistics populated.
+        :param trade_returns: Дробная доходность каждой закрытой сделки
+            (например, 0.012).
+        :param name: Название стратегии для AlphaResult.summary().
+        :return: AlphaResult со всеми заполненными статистиками.
         """
         arr = np.array(trade_returns, dtype=float)
         n = len(arr)

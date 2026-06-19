@@ -1,13 +1,13 @@
 """
-Telegram bot for trade confirmations.
+Telegram-бот для подтверждения сделок и отправки сигналов.
 
-Flow:
-  1. Bot sends trade proposal with /❌ inline buttons.
-  2. User has CONFIRM_TIMEOUT seconds to respond.
-  3. If no response → auto-execute (True).
-  4. If ❌ → skip trade.
+Порядок работы:
+  1. Бот отправляет предложение сделки с inline-кнопками ✅/❌.
+  2. Пользователь отвечает в течение CONFIRM_TIMEOUT секунд.
+  3. Нет ответа → авто-исполнение (True).
+  4. ❌ → пропустить сделку.
 
-Requirements: python-telegram-bot>=20.0 (async)
+Требования: python-telegram-bot>=20.0 (async)
 """
 
 import asyncio
@@ -33,9 +33,9 @@ _CONFIRM_TIMEOUT = 60  # seconds
 
 class TelegramNotifier:
     """
-    Sends Telegram alerts and waits for trade confirmation.
-    Gracefully degrades when token is missing or library
-    is not installed.
+    Отправляет Telegram-уведомления и ожидает подтверждения сделки.
+    Работает в деградированном режиме если токен отсутствует
+    или библиотека не установлена.
     """
 
     def __init__(self, token: str, chat_id: str):
@@ -48,7 +48,7 @@ class TelegramNotifier:
         self._enabled = bool(_TG_AVAILABLE and token and chat_id)
 
     async def start(self) -> None:
-        """Build and start telegram polling (background)."""
+        """Инициализирует и запускает polling Telegram в фоновом режиме."""
         if not self._enabled:
             return
         self._app = Application.builder().token(self._token).build()
@@ -59,7 +59,7 @@ class TelegramNotifier:
         logger.info("Telegram notifier started")
 
     async def stop(self) -> None:
-        """Stop the Telegram application."""
+        """Останавливает Telegram-приложение и отменяет polling."""
         if self._polling_task:
             self._polling_task.cancel()
             try:
@@ -97,9 +97,9 @@ class TelegramNotifier:
         timeout: int = _CONFIRM_TIMEOUT,
     ) -> bool:
         """
-        Send trade proposal; return True if confirmed or timed out.
-        Shows backtest and live win rates separately.
-        Returns True immediately if Telegram is disabled.
+        Отправляет предложение сделки; возвращает True если подтверждено
+        или истёк таймаут. Показывает win rate из бэктеста и лайв отдельно.
+        Возвращает True немедленно если Telegram отключён.
         """
         if not self._enabled:
             return True
@@ -189,7 +189,7 @@ class TelegramNotifier:
             return True  # fail-open: execute trade
 
     async def notify(self, text: str) -> None:
-        """Send a plain notification message."""
+        """Отправляет текстовое уведомление в Telegram-чат."""
         if not self._enabled:
             return
         try:

@@ -74,9 +74,7 @@ class TradingBot:
         # symbol → last notified action ("buy"/"sell"/"hold")
         self._last_signals: dict = {}
         if Config.PAPER_TRADING:
-            logger.warning(
-                "*** PAPER TRADING MODE — no real orders will be placed ***"
-            )
+            logger.warning("*** PAPER TRADING MODE — no real orders will be placed ***")
 
     async def initialize(self):
         """
@@ -154,13 +152,7 @@ class TradingBot:
         for sym in buy_syms:
             df = market_data.get(sym)
             if df is not None and len(df) >= 30:
-                ret = (
-                    df["close"]
-                    .astype(float)
-                    .pct_change()
-                    .dropna()
-                    .rename(sym)
-                )
+                ret = df["close"].astype(float).pct_change().dropna().rename(sym)
                 returns_list.append(ret)
                 valid.append(sym)
 
@@ -174,9 +166,7 @@ class TradingBot:
             sym = r.get("symbol", "")
             if r.get("action") == "buy" and sym in weights:
                 # Weight is portfolio share; scale to max RISK_PER_TRADE * 3
-                r["alloc_fraction"] = min(
-                    weights[sym], Config.RISK_PER_TRADE * 3
-                )
+                r["alloc_fraction"] = min(weights[sym], Config.RISK_PER_TRADE * 3)
             else:
                 r.setdefault("alloc_fraction", Config.RISK_PER_TRADE)
         return recs
@@ -398,8 +388,12 @@ class TradingBot:
             logger.info(
                 "Sizing: portfolio=%.6f kelly=%.6f final=%.6f "
                 "(win_rate=%.0f%% alloc=%.1f%% regime=%s)",
-                portfolio_qty, kelly_qty, quantity,
-                live_wr * 100, alloc_fraction * 100, self._current_regime,
+                portfolio_qty,
+                kelly_qty,
+                quantity,
+                live_wr * 100,
+                alloc_fraction * 100,
+                self._current_regime,
             )
         else:
             # No trade history yet: cap at standard RISK_PER_TRADE (conservative)
@@ -407,7 +401,9 @@ class TradingBot:
             quantity = min(portfolio_qty, conservative_qty)
             logger.info(
                 "Sizing (early trades %d/10): conservative cap=%.6f final=%.6f",
-                live_n, conservative_qty, quantity,
+                live_n,
+                conservative_qty,
+                quantity,
             )
 
         # AC model: adjust entry price for estimated market impact
@@ -669,7 +665,8 @@ class TradingBot:
                 )
 
                 recs = await self.combiner.combine(
-                    snapshots, balance,
+                    snapshots,
+                    balance,
                     regime=self._current_regime,
                     regimes=regimes,
                 )

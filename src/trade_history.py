@@ -1,7 +1,7 @@
 """
-SQLite-based trade history tracker.
-Stores open/closed trades and computes win rate + expected value.
-DB path: data/trades.db
+История сделок на основе SQLite.
+Хранит открытые/закрытые сделки и вычисляет win rate и ожидаемую ценность (EV).
+Путь к БД: data/trades.db
 """
 
 import asyncio
@@ -17,9 +17,9 @@ _BACKTEST_JSON = os.path.join("data", "backtest_results.json")
 
 def get_backtest_stats(strategy: str) -> Dict:
     """
-    Read per-strategy stats from data/backtest_results.json.
-    Returns zeros when file is missing or strategy not found.
-    Run backtest.py once to generate the file.
+    Читает статистику по стратегии из data/backtest_results.json.
+    Возвращает нули если файл не найден или стратегия отсутствует.
+    Запустите backtest.py один раз для генерации файла.
     """
     try:
         with open(_BACKTEST_JSON, encoding="utf-8") as f:
@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS trades (
 
 
 class TradeHistory:
-    """Persists trades to SQLite; computes win rate and EV."""
+    """Сохраняет сделки в SQLite и вычисляет win rate и ожидаемую ценность (EV)."""
 
     def __init__(self, db_path: str = _DB_PATH):
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
@@ -87,7 +87,7 @@ class TradeHistory:
         confidence: float,
         commission: float = 0.0,
     ) -> int:
-        """Insert an open trade; return its row id."""
+        """Записывает открытую сделку в БД; возвращает её id."""
         async with self._lock:
             cur = self._conn.execute(
                 """
@@ -117,7 +117,7 @@ class TradeHistory:
         exit_price: float,
         commission: float = 0.0,
     ) -> None:
-        """Close a trade; compute PnL."""
+        """Закрывает сделку и вычисляет PnL."""
         async with self._lock:
             row = self._conn.execute(
                 "SELECT action, entry_price, quantity, "
@@ -160,7 +160,7 @@ class TradeHistory:
         strategy: Optional[str] = None,
         lookback: int = 50,
     ) -> float:
-        """Fraction of profitable closed trades (0.0-1.0)."""
+        """Доля прибыльных закрытых сделок (0.0–1.0)."""
         where = (
             "WHERE status='closed' AND strategy=?"
             if strategy
@@ -192,8 +192,8 @@ class TradeHistory:
         lookback: int = 50,
     ) -> float:
         """
-        EV as fraction: win_rate * avg_win_pct
-                      - loss_rate * abs(avg_loss_pct)
+        Ожидаемая ценность (EV) как доля:
+        win_rate × avg_win_pct − loss_rate × |avg_loss_pct|
         """
         where = (
             "WHERE status='closed' AND strategy=?"
@@ -227,7 +227,7 @@ class TradeHistory:
         strategy: Optional[str] = None,
         lookback: int = 50,
     ) -> int:
-        """Count of closed trades used for win rate."""
+        """Количество закрытых сделок в выборке для расчёта win rate."""
         where = (
             "WHERE status='closed' AND strategy=?"
             if strategy
@@ -244,7 +244,7 @@ class TradeHistory:
         return row[0] if row else 0
 
     async def get_summary(self) -> Dict:
-        """Overall stats dict for display."""
+        """Сводная статистика по всем сделкам для отображения на дашборде."""
         async with self._lock:
             row = self._conn.execute(
                 """

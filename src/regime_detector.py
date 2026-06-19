@@ -1,14 +1,14 @@
 """
-Market regime detection via Gaussian HMM (hmmlearn).
+Определение режима рынка через Gaussian HMM (hmmlearn).
 
-3 hidden states, labeled by mean log-return:
-  - trending_up   (highest mean return)
-  - ranging       (near-zero mean)
-  - trending_down (lowest mean return)
+3 скрытых состояния, размечаются по среднему лог-доходности:
+  - trending_up   (наибольшая средняя доходность)
+  - ranging       (доходность близка к нулю)
+  - trending_down (наименьшая средняя доходность)
 
-Usage:
+Использование:
     detector = RegimeDetector()
-    detector.fit(df)                   # train on OHLCV DataFrame
+    detector.fit(df)                   # обучить на OHLCV DataFrame
     regime = detector.predict(df)      # → "trending_up" | "ranging" | "trending_down"
 """
 
@@ -28,11 +28,12 @@ _MIN_ROWS = 100
 
 class RegimeDetector:
     """
-    Detects market regime using GaussianHMM on log-return + realized volatility.
+    Определяет режим рынка через GaussianHMM
+    на лог-доходности и реализованной волатильности.
 
-    States are labeled after fitting by comparing state mean log-returns:
-    the highest-mean state is "trending_up", lowest is "trending_down",
-    middle is "ranging".
+    Состояния размечаются после обучения по среднему лог-доходности:
+    наибольшее — "trending_up", наименьшее — "trending_down",
+    среднее — "ranging".
     """
 
     def __init__(self, n_states: int = _N_STATES) -> None:
@@ -42,7 +43,10 @@ class RegimeDetector:
         self._fitted = False
 
     def _build_features(self, df: pd.DataFrame) -> Optional[np.ndarray]:
-        """Return (N, 2) array of [log_return, realized_vol] or None."""
+        """Строит матрицу признаков (N, 2): [log_return, realized_vol].
+
+        Возвращает None при нехватке данных.
+        """
         if "close" not in df.columns or len(df) < _MIN_ROWS:
             return None
         close = df["close"].astype(float).values
@@ -52,10 +56,10 @@ class RegimeDetector:
 
     def fit(self, df: pd.DataFrame) -> bool:
         """
-        Fit GaussianHMM to OHLCV data.
+        Обучает GaussianHMM на OHLCV данных.
 
-        :param df: DataFrame with 'close' column.
-        :return: True if fitting succeeded.
+        :param df: DataFrame с колонкой 'close'.
+        :return: True если обучение прошло успешно.
         """
         try:
             from hmmlearn.hmm import GaussianHMM
@@ -63,11 +67,9 @@ class RegimeDetector:
             logger.warning("hmmlearn not installed — regime detection disabled")
             return False
 
-        X = self._build_features(df)
+        X = self._build_features(df)  # noqa: N806
         if X is None:
-            logger.warning(
-                "Not enough data to fit RegimeDetector (%d rows)", len(df)
-            )
+            logger.warning("Not enough data to fit RegimeDetector (%d rows)", len(df))
             return False
 
         try:
@@ -95,15 +97,15 @@ class RegimeDetector:
 
     def predict(self, df: pd.DataFrame) -> str:
         """
-        Predict current market regime from the most recent window of df.
+        Определяет текущий режим рынка по последнему окну df.
 
-        :param df: DataFrame with 'close' column.
-        :return: One of "trending_up", "ranging", "trending_down", or "unknown".
+        :param df: DataFrame с колонкой 'close'.
+        :return: Одно из "trending_up", "ranging", "trending_down" или "unknown".
         """
         if not self._fitted or self._model is None:
             return "unknown"
 
-        X = self._build_features(df)
+        X = self._build_features(df)  # noqa: N806
         if X is None or len(X) == 0:
             return "unknown"
 
@@ -116,10 +118,10 @@ class RegimeDetector:
 
     def regime_weights(self, regime: str) -> dict[str, float]:
         """
-        Return SAC/AI weight multipliers for the given regime.
+        Возвращает множители весов SAC/AI для заданного режима рынка.
 
-        :param regime: "trending_up", "trending_down", "ranging", or "unknown".
-        :return: Dict with keys "sac_weight", "ai_weight".
+        :param regime: "trending_up", "trending_down", "ranging" или "unknown".
+        :return: Словарь с ключами "sac_weight", "ai_weight".
         """
         if regime == "trending_up":
             return {"sac_weight": 0.5, "ai_weight": 0.5}

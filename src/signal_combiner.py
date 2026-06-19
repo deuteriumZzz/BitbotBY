@@ -12,9 +12,9 @@ logger = logging.getLogger(__name__)
 
 _REGIME_WEIGHTS: dict[str, tuple[float, float]] = {
     # (sac_weight, ai_weight) per detected market regime
-    "trending_up": (0.5, 0.5),    # momentum favours SAC
+    "trending_up": (0.5, 0.5),  # momentum favours SAC
     "trending_down": (0.3, 0.7),  # uncertainty → trust AI more
-    "ranging": (0.4, 0.6),        # default balance
+    "ranging": (0.4, 0.6),  # default balance
     "unknown": (0.4, 0.6),
 }
 
@@ -202,8 +202,6 @@ class SignalCombiner:
                 )
                 results.append(rec)
             else:
-                self.logger.debug(
-                    "%s: AI=%s vs SAC=%s → hold", sym, a_action, d_action
-                )
+                self.logger.debug("%s: AI=%s vs SAC=%s → hold", sym, a_action, d_action)
 
         return results

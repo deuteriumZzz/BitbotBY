@@ -1,7 +1,7 @@
 """
-Portfolio optimization: Markowitz (max Sharpe) and CVaR (Rockafellar-Uryasev LP).
+Оптимизация портфеля: Markowitz (макс. Sharpe) и CVaR (LP по Rockafellar-Uryasev).
 
-Usage:
+Использование:
     opt = PortfolioOptimizer()
     weights = opt.allocate(symbols, returns_df, method="cvar")
     # weights → {"BTC/USDT": 0.45, "ETH/USDT": 0.35, "SOL/USDT": 0.20}
@@ -17,18 +17,19 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-_MIN_WEIGHT = 0.05   # no asset gets less than 5%
-_MAX_WEIGHT = 0.60   # single-asset cap
-_RISK_FREE = 0.0     # 0% risk-free rate for crypto
-_CVAR_ALPHA = 0.05   # 95% CVaR (worst 5% of scenarios)
+_MIN_WEIGHT = 0.05  # no asset gets less than 5%
+_MAX_WEIGHT = 0.60  # single-asset cap
+_RISK_FREE = 0.0  # 0% risk-free rate for crypto
+_CVAR_ALPHA = 0.05  # 95% CVaR (worst 5% of scenarios)
 
 
 class PortfolioOptimizer:
     """
-    Mean-variance and CVaR portfolio optimization for a set of assets.
+    Оптимизация портфеля методами mean-variance и CVaR.
 
-    Both methods return weights summing to 1, each in [_MIN_WEIGHT, _MAX_WEIGHT].
-    Falls back to equal-weight when fewer than 2 assets or scipy unavailable.
+    Оба метода возвращают веса, сумма которых равна 1, каждый в диапазоне
+    [_MIN_WEIGHT, _MAX_WEIGHT]. При менее чем 2 активах или отсутствии
+    scipy — возвращает равные веса.
     """
 
     def _equal_weights(self, symbols: List[str]) -> Dict[str, float]:
@@ -37,13 +38,13 @@ class PortfolioOptimizer:
 
     def optimize_markowitz(self, returns_df: pd.DataFrame) -> Dict[str, float]:
         """
-        Maximum-Sharpe-ratio portfolio (mean-variance efficient frontier).
+        Портфель с максимальным коэффициентом Sharpe (граница эффективности).
 
-        Solves: max (μ·w − r_f) / √(w·Σ·w)
-        via scipy.optimize.minimize (SLSQP) with sum(w)=1 and per-asset bounds.
+        Решает: max (μ·w − r_f) / √(w·Σ·w)
+        через scipy.optimize.minimize (SLSQP) при sum(w)=1 и ограничениях на веса.
 
-        :param returns_df: Per-period returns, one column per asset.
-        :return: Weight dict {symbol: weight}.
+        :param returns_df: Доходности за период, одна колонка на актив.
+        :return: Словарь весов {symbol: weight}.
         """
         symbols = list(returns_df.columns)
         n = len(symbols)
@@ -88,49 +89,47 @@ class PortfolioOptimizer:
         alpha: float = _CVAR_ALPHA,
     ) -> Dict[str, float]:
         """
-        Minimum-CVaR portfolio (Rockafellar-Uryasev 2000 LP formulation).
+        Портфель с минимальным CVaR (LP-формулировка Rockafellar-Uryasev 2000).
 
-        Variables: [w_1…w_N, VaR, u_1…u_T]
-        Minimize:  VaR + (1/((1−α)·T)) · Σu_t
-        Subject to:
-          −R_t·w − VaR − u_t ≤ 0   for all t  (loss bound)
+        Переменные: [w_1…w_N, VaR, u_1…u_T]
+        Минимизировать: VaR + (1/((1−α)·T)) · Σu_t
+        При ограничениях:
+          −R_t·w − VaR − u_t ≤ 0   для всех t  (граница потерь)
           u_t ≥ 0,  Σw = 1,  _MIN_WEIGHT ≤ w_i ≤ _MAX_WEIGHT
 
-        :param returns_df: Per-period returns DataFrame.
-        :param alpha: Tail probability (0.05 → 95% confidence CVaR).
-        :return: Weight dict {symbol: weight}.
+        :param returns_df: DataFrame доходностей за период.
+        :param alpha: Вероятность хвоста (0.05 → 95% доверительный CVaR).
+        :return: Словарь весов {symbol: weight}.
         """
         symbols = list(returns_df.columns)
         n = len(symbols)
-        T = len(returns_df)
+        T = len(returns_df)  # noqa: N806
         if n < 2 or T < 10:
             return self._equal_weights(symbols)
 
         try:
             from scipy.optimize import linprog
 
-            R = returns_df.values  # (T, N)
+            R = returns_df.values  # noqa: N806  # (T, N)
             total_vars = n + 1 + T
 
             # Objective: 0·w + 1·VaR + (1/((1-α)·T))·u
             c = np.zeros(total_vars)
             c[n] = 1.0
-            c[n + 1:] = 1.0 / ((1.0 - alpha) * T)
+            c[n + 1 :] = 1.0 / ((1.0 - alpha) * T)
 
             # Inequality: −R_t·w − VaR − u_t ≤ 0
-            A_ub = np.zeros((T, total_vars))
+            A_ub = np.zeros((T, total_vars))  # noqa: N806
             A_ub[:, :n] = -R
             A_ub[:, n] = -1.0
             A_ub[np.arange(T), n + 1 + np.arange(T)] = -1.0
 
             # Equality: Σw = 1
-            A_eq = np.zeros((1, total_vars))
+            A_eq = np.zeros((1, total_vars))  # noqa: N806
             A_eq[0, :n] = 1.0
 
             bounds = (
-                [(_MIN_WEIGHT, _MAX_WEIGHT)] * n
-                + [(None, None)]
-                + [(0.0, None)] * T
+                [(_MIN_WEIGHT, _MAX_WEIGHT)] * n + [(None, None)] + [(0.0, None)] * T
             )
 
             result = linprog(
@@ -162,12 +161,12 @@ class PortfolioOptimizer:
         method: str = "cvar",
     ) -> Dict[str, float]:
         """
-        Compute optimal portfolio weights for the given symbols.
+        Вычисляет оптимальные веса портфеля для заданных символов.
 
-        :param symbols: Asset symbols matching returns_df columns.
-        :param returns_df: Per-period returns, columns = symbols.
-        :param method: "cvar" (default) or "markowitz".
-        :return: Weight dict summing to 1.0.
+        :param symbols: Символы активов, соответствующие колонкам returns_df.
+        :param returns_df: Доходности за период, колонки = символы.
+        :param method: "cvar" (по умолчанию) или "markowitz".
+        :return: Словарь весов с суммой 1.0.
         """
         cols = [s for s in symbols if s in returns_df.columns]
         if len(cols) < 2:

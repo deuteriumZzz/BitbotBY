@@ -1,19 +1,19 @@
 """
-Almgren-Chriss (2001) adaptive market impact model.
+Адаптивная модель рыночного импакта Almgren-Chriss (2001).
 
-Replaces static bid/ask spread constants with an order-size-aware estimate:
+Заменяет статические константы bid/ask спреда оценкой с учётом размера ордера:
 
-  MI(x) = γ·σ·x/2  +  η·σ·√x        (permanent/2 + temporary)
+  MI(x) = γ·σ·x/2  +  η·σ·√x        (постоянный/2 + временный)
 
-where:
+где:
   x  = participation rate = order_size_usdt / daily_volume_usdt
-  σ  = daily price volatility (std of log-returns scaled to daily)
-  γ  = permanent impact coefficient  (default 0.1)
-  η  = temporary impact coefficient  (default 0.1)
+  σ  = дневная волатильность цены (std лог-доходностей в пересчёте на день)
+  γ  = коэффициент постоянного импакта  (по умолчанию 0.1)
+  η  = коэффициент временного импакта   (по умолчанию 0.1)
 
-For typical crypto large-cap (BTC participation rate ~0.001–0.01):
-  - static constants gave ~0.07% flat
-  - AC gives ~0.03% for small orders, ~0.15% for large block trades
+Для типичного крипто large-cap (BTC participation rate ~0.001–0.01):
+  - статические константы давали ~0.07% flat
+  - AC даёт ~0.03% для малых ордеров, ~0.15% для крупных блок-сделок
 """
 
 from __future__ import annotations
@@ -26,15 +26,22 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 # Almgren-Chriss coefficients calibrated to Bybit BTC/USDT spot
-_ETA = 0.1    # temporary impact (square-root term)
+_ETA = 0.1  # temporary impact (square-root term)
 _GAMMA = 0.1  # permanent impact (linear term)
-_MIN_IMPACT = 0.0002   # floor: 2 bp (exchange fee floor)
-_MAX_IMPACT = 0.02     # cap: 2% max assumed impact
+_MIN_IMPACT = 0.0002  # floor: 2 bp (exchange fee floor)
+_MAX_IMPACT = 0.02  # cap: 2% max assumed impact
 
 # Candles per 24 h for each supported ccxt timeframe
 _TF_CANDLES: dict[str, int] = {
-    "1m": 1440, "3m": 480, "5m": 288, "15m": 96,
-    "30m": 48, "1h": 24, "2h": 12, "4h": 6, "1d": 1,
+    "1m": 1440,
+    "3m": 480,
+    "5m": 288,
+    "15m": 96,
+    "30m": 48,
+    "1h": 24,
+    "2h": 12,
+    "4h": 6,
+    "1d": 1,
 }
 
 
@@ -50,14 +57,14 @@ def almgren_chriss_impact(
     gamma: float = _GAMMA,
 ) -> float:
     """
-    Compute one-way market impact fraction via Almgren-Chriss.
+    Вычисляет одностороннюю долю рыночного импакта по модели Almgren-Chriss.
 
-    :param order_size_usdt: Order notional in USDT.
-    :param daily_volume_usdt: Average daily traded volume in USDT.
-    :param daily_vol: Daily price volatility (std of log-returns, e.g. 0.02).
-    :param eta: Temporary impact coefficient.
-    :param gamma: Permanent impact coefficient.
-    :return: Impact as fraction of mid-price (add for buy, subtract for sell).
+    :param order_size_usdt: Номинал ордера в USDT.
+    :param daily_volume_usdt: Средний дневной объём торгов в USDT.
+    :param daily_vol: Дневная волатильность цены (std лог-доходностей, например 0.02).
+    :param eta: Коэффициент временного импакта.
+    :param gamma: Коэффициент постоянного импакта.
+    :return: Импакт как доля от mid-цены (прибавить для buy, вычесть для sell).
     """
     if daily_volume_usdt <= 0 or order_size_usdt <= 0:
         return _MIN_IMPACT
@@ -67,7 +74,7 @@ def almgren_chriss_impact(
 
     # Half-permanent + temporary (Almgren-Chriss decomposition)
     permanent = gamma * vol * x * 0.5
-    temporary = eta * vol * (x ** 0.5)
+    temporary = eta * vol * (x**0.5)
     impact = permanent + temporary
 
     return float(np.clip(impact, _MIN_IMPACT, _MAX_IMPACT))
@@ -81,15 +88,15 @@ def estimate_from_df(
     gamma: float = _GAMMA,
 ) -> float:
     """
-    Estimate Almgren-Chriss impact from an OHLCV DataFrame window.
+    Оценивает импакт Almgren-Chriss на основе окна OHLCV DataFrame.
 
-    Derives daily volume and volatility from df, then calls
+    Выводит дневной объём и волатильность из df, затем вызывает
     almgren_chriss_impact().
 
-    :param df: OHLCV DataFrame with 'close' and optionally 'volume' columns.
-    :param order_size_usdt: Order notional in USDT.
-    :param timeframe: ccxt timeframe string ("1m", "15m", "1h", etc.).
-    :return: Market impact fraction.
+    :param df: OHLCV DataFrame с колонкой 'close' и опционально 'volume'.
+    :param order_size_usdt: Номинал ордера в USDT.
+    :param timeframe: Таймфрейм ccxt ("1m", "15m", "1h" и т.д.).
+    :return: Доля рыночного импакта.
     """
     if df is None or len(df) < 2 or "close" not in df.columns:
         return _MIN_IMPACT
@@ -106,7 +113,7 @@ def estimate_from_df(
 
     log_ret = np.log(close / close.shift(1)).dropna()
     if len(log_ret) >= 5:
-        daily_vol = float(log_ret.std()) * (cpd ** 0.5)
+        daily_vol = float(log_ret.std()) * (cpd**0.5)
     else:
         daily_vol = 0.02  # 2% fallback
 
