@@ -17,27 +17,31 @@ import pytest
 # Bot factory
 # ---------------------------------------------------------------------------
 
-_BOT_PATCHES = dict(
-    RedisClient=MagicMock,
-    BybitAPI=MagicMock,
-    DataLoader=MagicMock,
-    PortfolioManager=MagicMock,
-    RiskManager=MagicMock,
-    MarketScanner=MagicMock,
-    NewsAnalyzer=MagicMock,
-    AIAnalyzer=MagicMock,
-    SignalCombiner=MagicMock,
-    RegimeDetector=MagicMock,
-    PortfolioOptimizer=MagicMock,
-    CorrelationFilter=MagicMock,
-    TradeHistory=MagicMock,
-    TelegramNotifier=MagicMock,
-    TradingStrategy=MagicMock,
-)
+_PATCH_KEYS = [
+    "RedisClient",
+    "BybitAPI",
+    "DataLoader",
+    "PortfolioManager",
+    "RiskManager",
+    "MarketScanner",
+    "NewsAnalyzer",
+    "AIAnalyzer",
+    "SignalCombiner",
+    "RegimeDetector",
+    "PortfolioOptimizer",
+    "CorrelationFilter",
+    "TradeHistory",
+    "TelegramNotifier",
+    "TradingStrategy",
+]
+
+
+def _make_patches() -> dict:
+    return {k: MagicMock() for k in _PATCH_KEYS}
 
 
 def make_bot():
-    with patch.multiple("src.trading_bot", **_BOT_PATCHES):
+    with patch.multiple("src.trading_bot", **_make_patches()):
         with patch("src.trading_bot.Config") as cfg:
             cfg.PAPER_TRADING = True
             cfg.AUTO_EXECUTE = True
