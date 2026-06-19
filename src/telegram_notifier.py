@@ -79,6 +79,10 @@ class TelegramNotifier:
         context: ContextTypes.DEFAULT_TYPE,
     ) -> None:
         query = update.callback_query
+        # C4: only the configured chat owner can approve/reject trades
+        if str(query.from_user.id) != str(self._chat_id):
+            await query.answer("Not authorized.")
+            return
         await query.answer()
         mid = query.message.message_id
         data = query.data  # "confirm" or "reject"
@@ -188,7 +192,7 @@ class TelegramNotifier:
 
         except Exception as e:
             logger.error(f"Telegram error: {e}")
-            return True  # fail-open: execute trade
+            return False  # C3: fail-closed — skip trade on Telegram errors
 
     async def notify(self, text: str) -> None:
         """Отправляет текстовое уведомление в Telegram-чат."""

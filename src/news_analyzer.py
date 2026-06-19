@@ -123,22 +123,39 @@ class NewsAnalyzer:
     def _check_budget(self) -> bool:
         """
         Проверяет дневной лимит вызовов AI (сбрасывается в UTC полночь).
+        Счётчик хранится в Redis чтобы пережить рестарты бота.
 
         :return: True если лимит не исчерпан (вызов разрешён).
         """
         today = datetime.utcnow().date().isoformat()
-        if self._ai_date != today:
-            self._ai_date = today
-            self._ai_calls_today = 0
-        if self._ai_calls_today >= _AI_DAILY_BUDGET:
-            self.logger.warning(
-                "%s daily budget (%d calls) exhausted — VADER fallback",
-                self._ai_scorer.upper(),
-                _AI_DAILY_BUDGET,
-            )
-            return False
-        self._ai_calls_today += 1
-        return True
+        redis_key = f"ai_budget:{today}"
+        try:
+            count = self.redis.redis_client.incr(redis_key)
+            # Expire at end of day — set TTL only on first increment
+            if count == 1:
+                self.redis.redis_client.expire(redis_key, 86400)
+            if count > _AI_DAILY_BUDGET:
+                self.logger.warning(
+                    "%s daily budget (%d calls) exhausted — VADER fallback",
+                    self._ai_scorer.upper(),
+                    _AI_DAILY_BUDGET,
+                )
+                return False
+            return True
+        except Exception:
+            # Redis unavailable — fall back to in-memory counter
+            if self._ai_date != today:
+                self._ai_date = today
+                self._ai_calls_today = 0
+            if self._ai_calls_today >= _AI_DAILY_BUDGET:
+                self.logger.warning(
+                    "%s daily budget (%d calls) exhausted — VADER fallback",
+                    self._ai_scorer.upper(),
+                    _AI_DAILY_BUDGET,
+                )
+                return False
+            self._ai_calls_today += 1
+            return True
 
     # ── Cache ─────────────────────────────────────────────────────────────────
 

@@ -4,6 +4,7 @@ Serves live bot status, signals, and trade history.
 """
 
 import asyncio
+import hmac
 import json
 import logging
 import os
@@ -29,6 +30,21 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="BitbotBY Dashboard", docs_url=None)
 
+# C1: Optional API-key auth — set DASHBOARD_API_KEY env var to enable.
+# /health and /metrics are exempt (Docker healthcheck & Prometheus scrape).
+_NO_AUTH_PATHS = {"/health", "/metrics"}
+
+
+@app.middleware("http")
+async def api_key_middleware(request: Request, call_next):
+    required = os.getenv("DASHBOARD_API_KEY", "")
+    if required and request.url.path not in _NO_AUTH_PATHS:
+        provided = request.headers.get("X-API-Key", "")
+        if not hmac.compare_digest(provided.encode(), required.encode()):
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    return await call_next(request)
+
+
 # ── Prometheus gauges ─────────────────────────────────
 _g_running = Gauge("bitbot_running", "1 если бот жив (healthcheck < 120s)")
 _g_balance = Gauge("bitbot_balance_usdt", "Свободный баланс USDT")
@@ -46,6 +62,7 @@ def _get_redis():
         r = redis_lib.Redis(
             host=os.getenv("REDIS_HOST", "localhost"),
             port=int(os.getenv("REDIS_PORT", 6379)),
+            password=os.getenv("REDIS_PASSWORD") or None,
             decode_responses=True,
         )
         r.ping()
@@ -134,7 +151,10 @@ def _check_healthcheck() -> bool:
     if not hc.exists():
         return False
     try:
-        ts = datetime.fromisoformat(hc.read_text().strip())
+        content = hc.read_text().strip()
+        if len(content) > 50:  # L2: guard against oversized file
+            return False
+        ts = datetime.fromisoformat(content)
         age = (datetime.now() - ts).total_seconds()
         return age < 120
     except Exception:
@@ -174,7 +194,29 @@ async def get_backtest():
     if not bt_path.exists():
         return JSONResponse({"results": [], "generated_at": None})
     try:
-        return JSONResponse(json.loads(bt_path.read_text()))
+        data = json.loads(bt_path.read_text())
+        raw_results = data.get("results", [])
+        if not isinstance(raw_results, list):
+            raise ValueError("results must be a list")
+        # M3: whitelist-validate each result row before serving
+        safe_results = []
+        for r in raw_results:
+            if not isinstance(r, dict):
+                continue
+            safe_results.append(
+                {
+                    "strategy": str(r.get("strategy", "")),
+                    "win_rate": float(r.get("win_rate", 0)),
+                    "total_trades": int(r.get("total_trades", 0)),
+                    "expected_value": float(r.get("expected_value", 0)),
+                    "total_return_pct": float(r.get("total_return_pct", 0)),
+                    "max_drawdown_pct": float(r.get("max_drawdown_pct", 0)),
+                    "sharpe_ratio": float(r.get("sharpe_ratio", 0)),
+                }
+            )
+        return JSONResponse(
+            {"results": safe_results, "generated_at": data.get("generated_at")}
+        )
     except Exception:
         return JSONResponse({"results": []})
 
@@ -207,9 +249,21 @@ def _send_telegram_sync(text: str) -> None:
         logger.warning(f"Telegram alert send failed: {e}")
 
 
+def _tg_escape(s: str) -> str:
+    """Strip Telegram Markdown special chars from untrusted content."""
+    return s.replace("*", "").replace("_", "").replace("`", "").replace("[", "")
+
+
 @app.post("/webhook/alerts")
 async def alert_webhook(request: Request):
     """Receives Alertmanager webhook and forwards to Telegram."""
+    # H3: validate shared secret if configured
+    expected = os.getenv("ALERTMANAGER_WEBHOOK_SECRET", "")
+    if expected:
+        provided = request.headers.get("X-Webhook-Secret", "")
+        if not hmac.compare_digest(provided.encode(), expected.encode()):
+            return JSONResponse({"error": "Forbidden"}, status_code=403)
+
     payload = await request.json()
     alerts = payload.get("alerts", [])
     if not alerts:
@@ -218,18 +272,21 @@ async def alert_webhook(request: Request):
     lines = []
     for alert in alerts:
         status = alert.get("status", "firing")
-        name = alert.get("labels", {}).get("alertname", "unknown")
-        severity = alert.get("labels", {}).get("severity", "warning")
-        summary = alert.get("annotations", {}).get("summary", "")
-        description = alert.get("annotations", {}).get("description", "")
+        # H3: escape all dynamic content before injecting into Telegram message
+        name = _tg_escape(str(alert.get("labels", {}).get("alertname", "unknown")))
+        severity = _tg_escape(str(alert.get("labels", {}).get("severity", "warning")))
+        summary = _tg_escape(str(alert.get("annotations", {}).get("summary", "")))
+        description = _tg_escape(
+            str(alert.get("annotations", {}).get("description", ""))
+        )
 
         icon = "\U0001f534" if status == "firing" else "✅"
         label = "CRITICAL" if severity == "critical" else "WARNING"
-        msg = f"{icon} *[{label}] {name}*"
+        msg = f"{icon} [{label}] {name}"
         if summary:
             msg += f"\n{summary}"
         if description:
-            msg += f"\n_{description}_"
+            msg += f"\n{description}"
         lines.append(msg)
 
     text = "\n\n".join(lines)
@@ -393,6 +450,10 @@ function fmt(n, d=2) {
 function pnlClass(v) {
   return v > 0 ? 'pnl-pos' : v < 0 ? 'pnl-neg' : '';
 }
+function esc(s) {
+  if (s == null) return '—';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 
 async function loadStatus() {
   try {
@@ -454,17 +515,17 @@ async function loadTrades() {
         ? t.entry_time.substring(0, 16).replace('T', ' ')
         : '—';
       return '<tr>' +
-        '<td>' + (t.symbol || '—') + '</td>' +
-        '<td><span class="badge ' + action + '">' +
-          (t.action || '—').toUpperCase() + '</span></td>' +
-        '<td>' + (t.strategy || '—') + '</td>' +
+        '<td>' + esc(t.symbol) + '</td>' +
+        '<td><span class="badge ' + esc(action) + '">' +
+          esc((t.action || '—').toUpperCase()) + '</span></td>' +
+        '<td>' + esc(t.strategy) + '</td>' +
         '<td>$' + fmt(t.entry_price, 4) + '</td>' +
         '<td>' + (t.exit_price ? '$' + fmt(t.exit_price, 4) : '—') + '</td>' +
         '<td>' + pnlStr + '</td>' +
         '<td>' + fmt((t.confidence||0)*100, 0) + '%</td>' +
-        '<td><span class="badge ' + statusCls + '">' +
-          (t.status || '—') + '</span></td>' +
-        '<td>' + entry_time + '</td>' +
+        '<td><span class="badge ' + esc(statusCls) + '">' +
+          esc(t.status) + '</span></td>' +
+        '<td>' + esc(entry_time) + '</td>' +
         '</tr>';
     }).join('');
   } catch(e) {
@@ -485,7 +546,7 @@ async function loadBacktest() {
       const ret = (r.total_return_pct||0)*100;
       const dd = (r.max_drawdown_pct||0)*100;
       return '<tr>' +
-        '<td>' + (i===0?'#1 ':'') + (r.strategy||'—') + '</td>' +
+        '<td>' + (i===0?'#1 ':'') + esc(r.strategy) + '</td>' +
         '<td>' + fmt((r.win_rate||0)*100, 1) + '%</td>' +
         '<td class="' + pnlClass(ev) + '">' +
           (ev>=0?'+':'') + fmt(ev, 2) + '%</td>' +
@@ -514,7 +575,7 @@ setInterval(refresh, 5000);
 if __name__ == "__main__":
     uvicorn.run(
         app,
-        host="0.0.0.0",
+        host="127.0.0.1",  # L3: bind to localhost only; use a reverse proxy for external access
         port=8080,
         log_level="warning",
     )

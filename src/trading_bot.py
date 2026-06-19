@@ -99,6 +99,8 @@ class TradingBot:
             Config.ANTHROPIC_API_KEY,
             Config.DEEPSEEK_API_KEY,
             Config.TELEGRAM_BOT_TOKEN,
+            getattr(Config, "OPENAI_API_KEY", ""),
+            getattr(Config, "NEWS_API_KEY", ""),
         )
 
     async def initialize(self) -> None:

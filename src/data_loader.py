@@ -7,8 +7,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import time
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Optional
 
 import ccxt.async_support as ccxt
@@ -195,18 +197,23 @@ class DataLoader:
 
     # ── Paginated history + CSV cache ─────────────────────────────
 
+    _SYMBOL_RE = re.compile(r"^[A-Z0-9]{1,20}(?:[/:][A-Z0-9]{1,20}){0,2}$")
+    _TF_RE = re.compile(r"^[0-9]{1,4}[mhdwM]$")
+
     @staticmethod
     def _csv_cache_path(symbol: str, timeframe: str) -> str:
-        """
-        Возвращает путь к CSV-кэшу для пары символ/таймфрейм.
-
-        :param symbol: Символ торговой пары.
-        :param timeframe: Таймфрейм.
-        :return: Путь к файлу вида data/cache/BTC_USDT_15m.csv.
-        """
+        """Возвращает путь к CSV-кэшу для пары символ/таймфрейм."""
+        if not DataLoader._SYMBOL_RE.match(symbol):
+            raise ValueError(f"Invalid symbol: {symbol!r}")
+        if not DataLoader._TF_RE.match(timeframe):
+            raise ValueError(f"Invalid timeframe: {timeframe!r}")
         safe = symbol.replace("/", "_").replace(":", "_")
-        os.makedirs("data/cache", exist_ok=True)
-        return f"data/cache/{safe}_{timeframe}.csv"
+        cache_dir = Path("data/cache").resolve()
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        path = (cache_dir / f"{safe}_{timeframe}.csv").resolve()
+        if not str(path).startswith(str(cache_dir)):
+            raise ValueError(f"Path traversal detected: {path}")
+        return str(path)
 
     @staticmethod
     def _load_csv_cache(path: str) -> Optional[pd.DataFrame]:

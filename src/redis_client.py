@@ -4,10 +4,11 @@
 
 from __future__ import annotations
 
+import io
 import json
 import logging
 import os
-import pickle
+import uuid
 from typing import Any, Dict, Optional
 
 import pandas as pd
@@ -52,6 +53,7 @@ class RedisClient:
         )
         self.logger = logging.getLogger(__name__)
         self._available: bool = False
+        self._lock_tokens: Dict[str, str] = {}
         self._test_connection()
 
     def _test_connection(self) -> None:
@@ -71,33 +73,21 @@ class RedisClient:
             )
 
     def save_market_data(self, key: str, data: pd.DataFrame) -> None:
-        """
-        Сохраняет рыночные данные (DataFrame) в Redis через pickle.
-
-        TTL — 5 минут.
-
-        :param key: Ключ для сохранения.
-        :param data: DataFrame с рыночными данными.
-        """
+        """Сохраняет рыночные данные (DataFrame) в Redis как JSON. TTL — 5 минут."""
         try:
-            serialized = pickle.dumps(data)
+            serialized = data.to_json(orient="split").encode()
             self.redis_client.setex(key, 300, serialized)
             self.logger.debug(f"Сохранены данные: {key}")
         except Exception as e:
             self.logger.error(f"Ошибка сохранения рыночных данных: {e}")
 
     def load_market_data(self, key: str) -> Optional[pd.DataFrame]:
-        """
-        Загружает рыночные данные из Redis.
-
-        :param key: Ключ для загрузки.
-        :return: DataFrame или None если ключ не найден.
-        """
+        """Загружает рыночные данные из Redis."""
         try:
-            data = self.redis_client.get(key)
-            if data:
+            raw = self.redis_client.get(key)
+            if raw:
                 self.logger.debug(f"Загружены данные: {key}")
-                return pickle.loads(data)
+                return pd.read_json(io.StringIO(raw.decode()), orient="split")
         except Exception as e:
             self.logger.error(f"Ошибка загрузки рыночных данных: {e}")
         return None
@@ -139,50 +129,46 @@ class RedisClient:
         strategy_name: str,
         model_data: Dict[str, Any],
     ) -> None:
-        """
-        Сохраняет данные модели в Redis через pickle.
-
-        TTL — 7 дней. Ключ: "model:{strategy_name}".
-
-        :param strategy_name: Название стратегии.
-        :param model_data: Данные модели.
-        """
+        """Сохраняет данные модели в Redis как JSON. TTL — 7 дней."""
         try:
-            serialized = pickle.dumps(model_data)
+            serialized = json.dumps(model_data, default=str).encode()
             self.redis_client.setex(f"model:{strategy_name}", 604800, serialized)
             self.logger.debug(f"Сохранена модель: {strategy_name}")
         except Exception as e:
             self.logger.error(f"Ошибка сохранения модели: {e}")
 
     def load_model(self, strategy_name: str) -> Optional[Dict[str, Any]]:
-        """
-        Загружает данные модели из Redis.
-
-        :param strategy_name: Название стратегии.
-        :return: Данные модели или None если не найдены.
-        """
+        """Загружает данные модели из Redis."""
         try:
-            model_data = self.redis_client.get(f"model:{strategy_name}")
-            if model_data:
+            raw = self.redis_client.get(f"model:{strategy_name}")
+            if raw:
                 self.logger.debug(f"Загружена модель: {strategy_name}")
-                return pickle.loads(model_data)
+                return json.loads(raw.decode())
         except Exception as e:
             self.logger.error(f"Ошибка загрузки модели: {e}")
         return None
 
+    # Lua script: delete key only if value matches token (atomic ownership check)
+    _RELEASE_SCRIPT = """
+    if redis.call('get', KEYS[1]) == ARGV[1] then
+        return redis.call('del', KEYS[1])
+    end
+    return 0
+    """
+
     def acquire_lock(self, lock_name: str, timeout: int = 10) -> bool:
         """
-        Захватывает распределённую блокировку через SET NX.
+        Захватывает распределённую блокировку через SET NX с UUID-токеном.
 
         :param lock_name: Название блокировки.
         :param timeout: TTL блокировки в секундах (по умолчанию 10).
         :return: True если блокировка захвачена, False иначе.
         """
         try:
-            result = bool(
-                self.redis_client.set(lock_name, "locked", nx=True, ex=timeout)
-            )
+            token = str(uuid.uuid4())
+            result = bool(self.redis_client.set(lock_name, token, nx=True, ex=timeout))
             if result:
+                self._lock_tokens[lock_name] = token
                 self.logger.debug(f"Блокировка захвачена: {lock_name}")
             return result
         except Exception as e:
@@ -191,12 +177,15 @@ class RedisClient:
 
     def release_lock(self, lock_name: str) -> None:
         """
-        Освобождает распределённую блокировку.
+        Освобождает блокировку только если текущий процесс является её владельцем.
 
         :param lock_name: Название блокировки.
         """
         try:
-            self.redis_client.delete(lock_name)
+            token = self._lock_tokens.pop(lock_name, None)
+            if token is None:
+                return
+            self.redis_client.eval(self._RELEASE_SCRIPT, 1, lock_name, token)
             self.logger.debug(f"Блокировка освобождена: {lock_name}")
         except Exception as e:
             self.logger.error(f"Ошибка освобождения блокировки: {e}")

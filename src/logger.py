@@ -114,10 +114,13 @@ def setup_logging(
             )
         )
 
+    secret_filter = _SecretFilter()
+    handler.addFilter(secret_filter)
     root.handlers.clear()
     root.addHandler(handler)
 
     os.makedirs("logs", exist_ok=True)
     fh = logging.FileHandler("logs/trading.log", encoding="utf-8")
     fh.setFormatter(JSONFormatter())
+    fh.addFilter(secret_filter)
     root.addHandler(fh)

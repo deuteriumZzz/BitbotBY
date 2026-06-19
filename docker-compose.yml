@@ -3,12 +3,18 @@ services:
     image: redis:7-alpine
     container_name: bitbot_redis
     restart: unless-stopped
+    command: >
+      sh -c "redis-server
+        $${REDIS_PASSWORD:+--requirepass $$REDIS_PASSWORD}"
     networks:
       - bitbot_net
     volumes:
       - redis_data:/data
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: >
+        sh -c "redis-cli $${REDIS_PASSWORD:+-a $$REDIS_PASSWORD} ping"
       interval: 5s
       timeout: 3s
       retries: 5
@@ -22,6 +28,7 @@ services:
     environment:
       - REDIS_HOST=redis
       - REDIS_URL=redis://redis:6379/0
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
       - PYTHONPATH=/app
       - HEALTH_PORT=8080
     networks:
@@ -37,8 +44,8 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 30s
+      retries: 5
+      start_period: 120s
     logging:
       driver: "json-file"
       options:
@@ -54,6 +61,7 @@ services:
     environment:
       - REDIS_HOST=redis
       - REDIS_URL=redis://redis:6379/0
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
       - PYTHONPATH=/app
     networks:
       - bitbot_net
@@ -91,6 +99,7 @@ services:
     environment:
       - REDIS_HOST=redis
       - REDIS_URL=redis://redis:6379/0
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
       - PYTHONPATH=/app
     networks:
       - bitbot_net
