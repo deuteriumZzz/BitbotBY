@@ -4,8 +4,6 @@ import json
 import logging
 from typing import Any, Dict, List, Tuple
 
-import anthropic
-
 from config import Config
 from src.strategies import get_all_strategies
 
@@ -19,23 +17,83 @@ _SYSTEM_PROMPT = (
     "with risk. Always respond with valid JSON only."
 )
 
+_DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+
+
+def _resolve_provider() -> str:
+    """
+    Определяет активного AI-провайдера согласно Config.AI_PROVIDER.
+
+    auto      → Claude → DeepSeek → OpenAI → none (первый найденный ключ)
+    anthropic → Claude
+    deepseek  → DeepSeek
+    openai    → ChatGPT
+    """
+    p = Config.AI_PROVIDER
+    if p == "anthropic":
+        return "anthropic" if Config.ANTHROPIC_API_KEY else "none"
+    if p == "deepseek":
+        return "deepseek" if Config.DEEPSEEK_API_KEY else "none"
+    if p == "openai":
+        return "openai" if Config.OPENAI_API_KEY else "none"
+    # auto
+    if Config.ANTHROPIC_API_KEY:
+        return "anthropic"
+    if Config.DEEPSEEK_API_KEY:
+        return "deepseek"
+    if Config.OPENAI_API_KEY:
+        return "openai"
+    return "none"
+
 
 class AIAnalyzer:
     """
-    Анализирует рынок через Claude API.
+    Анализирует рынок через Claude, DeepSeek или OpenAI (ChatGPT).
 
-    Принимает снэпшоты нескольких монет (цена, индикаторы, новости,
-    история), отправляет один batch-запрос в Claude, возвращает список
-    торговых рекомендаций с reasoning на русском.
+    Провайдер выбирается через AI_PROVIDER (.env):
+      auto      → Claude → DeepSeek → OpenAI (первый найденный ключ)
+      anthropic → только Claude
+      deepseek  → только DeepSeek
+      openai    → только ChatGPT
+
+    Принимает снэпшоты нескольких монет, отправляет один batch-запрос,
+    возвращает список торговых рекомендаций с reasoning на русском.
     """
 
-    def __init__(self):
-        self.enabled = bool(Config.ANTHROPIC_API_KEY)
-        if self.enabled:
-            self.client = anthropic.AsyncAnthropic(api_key=Config.ANTHROPIC_API_KEY)
-        self.model = Config.AI_MODEL
+    def __init__(self) -> None:
+        self._provider = _resolve_provider()
+        self.enabled = self._provider != "none"
         self.strategies = get_all_strategies()
         self.logger = logging.getLogger(__name__)
+
+        if self._provider == "anthropic":
+            import anthropic
+
+            self._anthropic = anthropic.AsyncAnthropic(api_key=Config.ANTHROPIC_API_KEY)
+            self._anthropic_model = Config.AI_MODEL
+            self.logger.info("AIAnalyzer → Anthropic (%s)", self._anthropic_model)
+
+        elif self._provider == "deepseek":
+            from openai import AsyncOpenAI
+
+            self._deepseek = AsyncOpenAI(
+                api_key=Config.DEEPSEEK_API_KEY,
+                base_url=_DEEPSEEK_BASE_URL,
+            )
+            self._deepseek_model = Config.DEEPSEEK_MODEL
+            self.logger.info("AIAnalyzer → DeepSeek (%s)", self._deepseek_model)
+
+        elif self._provider == "openai":
+            from openai import AsyncOpenAI
+
+            self._openai = AsyncOpenAI(api_key=Config.OPENAI_API_KEY)
+            self._openai_model = Config.OPENAI_MODEL
+            self.logger.info("AIAnalyzer → OpenAI (%s)", self._openai_model)
+
+        else:
+            self.logger.warning(
+                "AIAnalyzer: нет ключей AI — бот использует локальные стратегии"
+            )
 
     def _build_strategy_list(self) -> str:
         """
@@ -53,13 +111,9 @@ class AIAnalyzer:
             )
         return "\n".join(lines)
 
-    def _build_prompt(
-        self,
-        snapshots: List[Dict[str, Any]],
-        balance: float,
-    ) -> str:
+    def _build_prompt(self, snapshots: List[Dict[str, Any]], balance: float) -> str:
         """
-        Строит промпт для Claude API на основе снэпшотов рынка.
+        Строит промпт для AI API на основе снэпшотов рынка.
 
         :param snapshots: Список снэпшотов из MarketScanner.
         :param balance: Баланс пользователя в USDT.
@@ -88,13 +142,70 @@ class AIAnalyzer:
             f'"reasoning":"RSI перепродан (28)."}}]'
         )
 
+    def _parse_response(self, raw: str) -> List[Dict[str, Any]]:
+        """Парсит JSON-ответ AI, удаляет markdown-блоки если есть."""
+        if "```" in raw:
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+            raw = raw.split("```")[0]
+        recs = json.loads(raw.strip())
+        if not isinstance(recs, list):
+            recs = [recs]
+        required = ("symbol", "action", "strategy", "confidence")
+        return [
+            r
+            for r in recs
+            if (
+                isinstance(r, dict)
+                and all(k in r for k in required)
+                and r["confidence"] >= Config.MIN_SIGNAL_CONFIDENCE
+                and r["action"] in ("buy", "sell", "hold")
+            )
+        ]
+
+    async def _call_anthropic(self, prompt: str) -> str:
+        """Вызов Claude (Anthropic API)."""
+        message = await self._anthropic.messages.create(
+            model=self._anthropic_model,
+            max_tokens=4096,
+            system=_SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        block = message.content[0]
+        return block.text if hasattr(block, "text") else ""
+
+    async def _call_deepseek(self, prompt: str) -> str:
+        """Вызов DeepSeek (OpenAI-совместимый API)."""
+        response = await self._deepseek.chat.completions.create(
+            model=self._deepseek_model,
+            max_tokens=4096,
+            messages=[
+                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+        )
+        return response.choices[0].message.content or ""
+
+    async def _call_openai(self, prompt: str) -> str:
+        """Вызов ChatGPT (OpenAI API)."""
+        response = await self._openai.chat.completions.create(
+            model=self._openai_model,
+            max_tokens=4096,
+            messages=[
+                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+        )
+        return response.choices[0].message.content or ""
+
     async def analyze(
         self,
         snapshots: List[Dict[str, Any]],
         balance: float,
     ) -> List[Dict[str, Any]]:
         """
-        Отправляет снэпшоты в Claude API, возвращает рекомендации.
+        Отправляет снэпшоты в AI (Claude или DeepSeek), возвращает рекомендации.
 
         При отсутствии ключа или ошибке — пустой список,
         trading_bot автоматически переключается на локальные стратегии.
@@ -109,49 +220,27 @@ class AIAnalyzer:
         prompt = self._build_prompt(snapshots, balance)
 
         try:
-            message = await self.client.messages.create(
-                model=self.model,
-                max_tokens=4096,
-                system=_SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            raw = message.content[0].text.strip()
+            if self._provider == "anthropic":
+                raw = await self._call_anthropic(prompt)
+            elif self._provider == "deepseek":
+                raw = await self._call_deepseek(prompt)
+            else:
+                raw = await self._call_openai(prompt)
 
-            if "```" in raw:
-                raw = raw.split("```")[1]
-                if raw.startswith("json"):
-                    raw = raw[4:]
-                raw = raw.split("```")[0]
-
-            recs = json.loads(raw.strip())
-            if not isinstance(recs, list):
-                recs = [recs]
-
-            required_keys = ("symbol", "action", "strategy", "confidence")
-            valid = [
-                r
-                for r in recs
-                if (
-                    isinstance(r, dict)
-                    and all(k in r for k in required_keys)
-                    and r["confidence"] >= Config.MIN_SIGNAL_CONFIDENCE
-                    and r["action"] in ("buy", "sell", "hold")
-                )
-            ]
-
+            valid = self._parse_response(raw)
             self.logger.info(
-                f"AI: {len(valid)} signals " f"from {len(snapshots)} symbols"
+                "AI [%s]: %d signals from %d symbols",
+                self._provider,
+                len(valid),
+                len(snapshots),
             )
             return valid
 
         except json.JSONDecodeError as e:
-            self.logger.error(f"AI JSON parse error: {e}")
-            return []
-        except anthropic.APIError as e:
-            self.logger.error(f"Anthropic API error: {e}")
+            self.logger.error("AI JSON parse error: %s", e)
             return []
         except Exception as e:
-            self.logger.error(f"AI analysis failed: {e}")
+            self.logger.error("AI [%s] failed: %s", self._provider, e)
             return []
 
     def recommend_strategy_local(self, snapshot: Dict[str, Any]) -> Tuple[str, float]:

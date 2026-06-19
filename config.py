@@ -87,15 +87,24 @@ class Config:
     # Таймфрейм в формате ccxt: 1m, 5m, 15m, 1h, 4h, 1d
     TIMEFRAME: str = os.getenv("TIMEFRAME", "15m")
 
-    # ── AI (Claude API) ────────────────────────────────────────────────────
+    # ── AI провайдеры ─────────────────────────────────────────────────────
+    # auto      → Claude → DeepSeek → OpenAI → local (первый найденный ключ)
+    # anthropic → только Claude
+    # deepseek  → только DeepSeek
+    # openai    → только ChatGPT
+    AI_PROVIDER: str = os.getenv("AI_PROVIDER", "auto")
     ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
     AI_MODEL: str = os.getenv("AI_MODEL", "claude-sonnet-4-6")
+    DEEPSEEK_API_KEY: str = os.getenv("DEEPSEEK_API_KEY", "")
+    DEEPSEEK_MODEL: str = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
+    OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
     # ── Mode ───────────────────────────────────────────────────────────────
     # local  → только правила (9 стратегий, без внешних API)
     # dqn    → SAC-модель (train_sac.py)
-    # ai     → только Claude API
-    # hybrid → SAC + Claude должны согласиться
+    # ai     → AI-провайдер (Claude / DeepSeek / OpenAI)
+    # hybrid → SAC + AI должны согласиться; расхождение → hold
     MODE: str = os.getenv("MODE", "ai")
     # Путь к SAC-модели (создаётся train_sac.py)
     SAC_MODEL_PATH: str = os.getenv("SAC_MODEL_PATH", "models/sac_model.zip")
@@ -164,8 +173,13 @@ class Config:
                 os.getenv("AI_STRATEGY_SELECTION", "false").lower() == "true"
             ),
             MIN_SIGNAL_CONFIDENCE=float(os.getenv("MIN_SIGNAL_CONFIDENCE", "0.65")),
+            AI_PROVIDER=os.getenv("AI_PROVIDER", "auto"),
             ANTHROPIC_API_KEY=os.getenv("ANTHROPIC_API_KEY", ""),
             AI_MODEL=os.getenv("AI_MODEL", "claude-sonnet-4-6"),
+            DEEPSEEK_API_KEY=os.getenv("DEEPSEEK_API_KEY", ""),
+            DEEPSEEK_MODEL=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
+            OPENAI_API_KEY=os.getenv("OPENAI_API_KEY", ""),
+            OPENAI_MODEL=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
             MODE=os.getenv("MODE", "ai"),
             SAC_MODEL_PATH=os.getenv("SAC_MODEL_PATH", "models/sac_model.zip"),
             SCAN_TOP_N=int(os.getenv("SCAN_TOP_N", "20")),
@@ -218,12 +232,32 @@ class Config:
                     f"Set them in .env or use PAPER_TRADING=true."
                 )
 
-        # Claude API key required for AI/hybrid modes
-        if self.MODE in ("ai", "hybrid") and not self.ANTHROPIC_API_KEY:
+        # AI provider validation
+        if self.AI_PROVIDER not in ("auto", "anthropic", "deepseek", "openai"):
             raise ValueError(
-                f"ANTHROPIC_API_KEY is required for MODE={self.MODE}. "
-                f"Get it at console.anthropic.com or use MODE=local."
+                f"AI_PROVIDER={self.AI_PROVIDER!r} is invalid. "
+                "Use: auto | anthropic | deepseek | openai"
             )
+        if self.MODE in ("ai", "hybrid"):
+            has_any_key = bool(
+                self.ANTHROPIC_API_KEY or self.DEEPSEEK_API_KEY or self.OPENAI_API_KEY
+            )
+            provider_key = {
+                "anthropic": self.ANTHROPIC_API_KEY,
+                "deepseek": self.DEEPSEEK_API_KEY,
+                "openai": self.OPENAI_API_KEY,
+            }.get(self.AI_PROVIDER, "")
+            if self.AI_PROVIDER == "auto" and not has_any_key:
+                raise ValueError(
+                    "AI_PROVIDER=auto: нужен хотя бы один ключ — "
+                    "ANTHROPIC_API_KEY, DEEPSEEK_API_KEY или OPENAI_API_KEY."
+                )
+            if self.AI_PROVIDER != "auto" and not provider_key:
+                raise ValueError(
+                    f"AI_PROVIDER={self.AI_PROVIDER}: ключ не задан. "
+                    "Получить: console.anthropic.com / "
+                    "platform.deepseek.com / platform.openai.com"
+                )
 
         # SAC model file required for dqn/hybrid modes
         if self.MODE in ("dqn", "hybrid"):

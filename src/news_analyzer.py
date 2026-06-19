@@ -5,13 +5,16 @@ import json
 import logging
 import os
 from datetime import datetime
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 from config import Config
 from src.redis_client import RedisClient
 
-# Максимум вызовов Claude API в сутки (UTC). Сверх лимита → VADER-фолбек.
-_CLAUDE_DAILY_BUDGET: int = int(os.getenv("CLAUDE_DAILY_BUDGET", "200"))
+# AI_DAILY_BUDGET применяется ко всем провайдерам (Claude / DeepSeek / OpenAI).
+# CLAUDE_DAILY_BUDGET оставлен как алиас для обратной совместимости.
+_AI_DAILY_BUDGET: int = int(
+    os.getenv("AI_DAILY_BUDGET", os.getenv("CLAUDE_DAILY_BUDGET", "200"))
+)
 
 logger = logging.getLogger(__name__)
 
@@ -49,9 +52,15 @@ class NewsAnalyzer:
     (TTL=NEWS_UPDATE_INTERVAL, по умолчанию 900 сек = 15 мин).
     При отсутствии NEWS_API_KEY возвращает нейтральный сентимент
     вместо исключения.
+
+    AI-провайдер для сентимента выбирается через AI_PROVIDER (.env):
+      auto      → Claude → DeepSeek → OpenAI (первый найденный ключ)
+      anthropic → только Claude
+      deepseek  → только DeepSeek
+      openai    → только ChatGPT
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.redis = RedisClient()
         self.logger = logging.getLogger(__name__)
         news_key = os.getenv("NEWS_API_KEY", "")
@@ -60,30 +69,84 @@ class NewsAnalyzer:
             from newsapi import NewsApiClient
 
             self.newsapi = NewsApiClient(api_key=news_key)
-        # Claude API sentiment (preferred); VADER is fallback
-        self._anthropic_key = os.getenv("ANTHROPIC_API_KEY", "")
-        self._use_claude = bool(self._anthropic_key)
-        # API budget guard: track daily Claude calls (resets at UTC midnight)
-        self._claude_calls_today: int = 0
-        self._claude_date: str = ""
+
+        # Выбор AI-провайдера для сентимента
+        anthropic_key = os.getenv("ANTHROPIC_API_KEY", "")
+        deepseek_key = os.getenv("DEEPSEEK_API_KEY", "")
+        openai_key = os.getenv("OPENAI_API_KEY", "")
+        provider = os.getenv("AI_PROVIDER", "auto")
+
+        if provider == "anthropic":
+            self._ai_scorer = "claude" if anthropic_key else "vader"
+        elif provider == "deepseek":
+            self._ai_scorer = "deepseek" if deepseek_key else "vader"
+        elif provider == "openai":
+            self._ai_scorer = "openai" if openai_key else "vader"
+        else:  # auto
+            if anthropic_key:
+                self._ai_scorer = "claude"
+            elif deepseek_key:
+                self._ai_scorer = "deepseek"
+            elif openai_key:
+                self._ai_scorer = "openai"
+            else:
+                self._ai_scorer = "vader"
+
+        # Создаём клиент один раз, а не при каждом вызове
+        self._claude_client: Optional[object] = None
+        self._compat_client: Optional[object] = None  # DeepSeek / OpenAI
+
+        if self._ai_scorer == "claude":
+            import anthropic
+
+            self._claude_client = anthropic.AsyncAnthropic(api_key=anthropic_key)
+        elif self._ai_scorer == "deepseek":
+            from openai import AsyncOpenAI
+
+            self._compat_client = AsyncOpenAI(
+                api_key=deepseek_key,
+                base_url="https://api.deepseek.com",
+            )
+        elif self._ai_scorer == "openai":
+            from openai import AsyncOpenAI
+
+            self._compat_client = AsyncOpenAI(api_key=openai_key)
+
+        # Единый бюджет-гард: применяется ко всем провайдерам
+        self._ai_calls_today: int = 0
+        self._ai_date: str = ""
+
+        self.logger.info("NewsAnalyzer: AI scorer = %s", self._ai_scorer)
+
+    # ── Budget guard ──────────────────────────────────────────────────────────
+
+    def _check_budget(self) -> bool:
+        """
+        Проверяет дневной лимит вызовов AI (сбрасывается в UTC полночь).
+
+        :return: True если лимит не исчерпан (вызов разрешён).
+        """
+        today = datetime.utcnow().date().isoformat()
+        if self._ai_date != today:
+            self._ai_date = today
+            self._ai_calls_today = 0
+        if self._ai_calls_today >= _AI_DAILY_BUDGET:
+            self.logger.warning(
+                "%s daily budget (%d calls) exhausted — VADER fallback",
+                self._ai_scorer.upper(),
+                _AI_DAILY_BUDGET,
+            )
+            return False
+        self._ai_calls_today += 1
+        return True
+
+    # ── Cache ─────────────────────────────────────────────────────────────────
 
     def _cache_key(self, symbol: str) -> str:
-        """
-        Формирует ключ Redis-кэша для символа.
-
-        :param symbol: Символ ccxt ('BTC/USDT').
-        :return: Строка вида 'news:BTC'.
-        """
         base = symbol.split("/")[0]
         return f"news:{base}"
 
     def _load_cached(self, symbol: str) -> tuple[float, list[str]] | None:
-        """
-        Загружает сентимент из Redis-кэша.
-
-        :param symbol: Символ ccxt.
-        :return: Кортеж (sentiment, headlines) или None если кэш пуст.
-        """
         try:
             raw = self.redis.redis_client.get(self._cache_key(symbol))
             if raw:
@@ -99,15 +162,6 @@ class NewsAnalyzer:
         sentiment: float,
         headlines: List[str],
     ) -> None:
-        """
-        Сохраняет сентимент и заголовки в Redis-кэш.
-
-        TTL определяется Config.NEWS_UPDATE_INTERVAL (по умолчанию 900 с).
-
-        :param symbol: Символ ccxt.
-        :param sentiment: Compound-оценка VADER от -1 до 1.
-        :param headlines: Список заголовков новостей.
-        """
         try:
             key = self._cache_key(symbol)
             payload = json.dumps({"sentiment": sentiment, "headlines": headlines})
@@ -117,7 +171,9 @@ class NewsAnalyzer:
                 payload.encode("utf-8"),
             )
         except Exception as e:
-            self.logger.debug(f"Cache save failed for {symbol}: {e}")
+            self.logger.debug("Cache save failed for %s: %s", symbol, e)
+
+    # ── Public API ────────────────────────────────────────────────────────────
 
     async def get_sentiment(self, symbol: str) -> Tuple[float, List[str]]:
         """
@@ -147,71 +203,109 @@ class NewsAnalyzer:
             (art.get("title", "") or "")[:100] for art in articles if art.get("title")
         ]
 
-        if self._use_claude:
+        if self._ai_scorer == "claude":
             sentiment = await self._score_with_claude(base, headlines)
+        elif self._ai_scorer == "deepseek":
+            sentiment = await self._score_with_deepseek(base, headlines)
+        elif self._ai_scorer == "openai":
+            sentiment = await self._score_with_openai(base, headlines)
         else:
             sentiment = self._score_with_vader(articles)
 
         self._save_cache(symbol, sentiment, headlines[:5])
         self.logger.info(
-            "News [%s]: sentiment=%.3f, articles=%d (scorer=%s)",
+            "News [%s]: sentiment=%.3f, articles=%d (scorer=%s, calls_today=%d/%d)",
             base,
             sentiment,
             len(articles),
-            "claude" if self._use_claude else "vader",
+            self._ai_scorer,
+            self._ai_calls_today,
+            _AI_DAILY_BUDGET,
         )
         return sentiment, headlines[:5]
 
+    # ── AI scorers ────────────────────────────────────────────────────────────
+
+    def _build_sentiment_prompt(self, coin: str, headlines: List[str]) -> str:
+        bullet_list = "\n".join(f"- {h}" for h in headlines[:10])
+        return (
+            f"Rate the overall market sentiment for {coin} cryptocurrency "
+            f"based on these recent news headlines:\n\n{bullet_list}\n\n"
+            "Reply with ONLY a single decimal number between -1.0 (extremely "
+            "bearish) and 1.0 (extremely bullish). No explanation."
+        )
+
     async def _score_with_claude(self, coin: str, headlines: List[str]) -> float:
         """
-        Score sentiment with Claude API (haiku-tier for cost efficiency).
+        Оценивает сентимент через Claude API (haiku-tier).
 
-        Batches all headlines in one prompt, returns float -1..1.
-        Falls back to VADER if the API call fails.
-
-        :param coin: Coin ticker, e.g. "BTC".
-        :param headlines: List of news headline strings.
-        :return: Sentiment score -1.0 (very bearish) to +1.0 (very bullish).
+        Применяет дневной бюджет-гард (AI_DAILY_BUDGET).
+        Фолбек на VADER при ошибке или исчерпании лимита.
         """
-        if not headlines:
-            return 0.0
-        # Budget guard: reset counter at UTC midnight, cap at daily limit
-        today = datetime.utcnow().date().isoformat()
-        if self._claude_date != today:
-            self._claude_date = today
-            self._claude_calls_today = 0
-        if self._claude_calls_today >= _CLAUDE_DAILY_BUDGET:
-            self.logger.warning(
-                "Claude daily budget (%d calls) exhausted — VADER fallback",
-                _CLAUDE_DAILY_BUDGET,
-            )
+        if not headlines or not self._check_budget():
             return self._score_with_vader_headlines(headlines)
-        self._claude_calls_today += 1
         try:
-            import anthropic
-
-            bullet_list = "\n".join(f"- {h}" for h in headlines[:10])
-            prompt = (
-                f"Rate the overall market sentiment for {coin} cryptocurrency "
-                f"based on these recent news headlines:\n\n{bullet_list}\n\n"
-                "Reply with ONLY a single decimal number between -1.0 (extremely "
-                "bearish) and 1.0 (extremely bullish). No explanation."
-            )
-            client = anthropic.AsyncAnthropic(api_key=self._anthropic_key)
-            message = await client.messages.create(
+            client = self._claude_client
+            prompt = self._build_sentiment_prompt(coin, headlines)
+            message = await client.messages.create(  # type: ignore[union-attr]
                 model="claude-haiku-4-5-20251001",
                 max_tokens=16,
                 messages=[{"role": "user", "content": prompt}],
             )
             block = message.content[0]
             text = block.text.strip() if hasattr(block, "text") else ""
-            score = max(-1.0, min(1.0, float(text)))
-            return score
+            return max(-1.0, min(1.0, float(text)))
         except Exception as exc:
-            self.logger.warning(
-                "Claude sentiment failed, falling back to VADER: %s", exc
-            )
+            self.logger.warning("Claude sentiment failed → VADER: %s", exc)
             return self._score_with_vader_headlines(headlines)
+
+    async def _score_with_deepseek(self, coin: str, headlines: List[str]) -> float:
+        """
+        Оценивает сентимент через DeepSeek API (OpenAI-совместимый).
+
+        Применяет тот же дневной бюджет-гард (AI_DAILY_BUDGET).
+        Фолбек на VADER при ошибке или исчерпании лимита.
+        """
+        if not headlines or not self._check_budget():
+            return self._score_with_vader_headlines(headlines)
+        try:
+            prompt = self._build_sentiment_prompt(coin, headlines)
+            client = self._compat_client
+            response = await client.chat.completions.create(  # type: ignore[union-attr]
+                model=Config.DEEPSEEK_MODEL,
+                max_tokens=16,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            text = (response.choices[0].message.content or "").strip()
+            return max(-1.0, min(1.0, float(text)))
+        except Exception as exc:
+            self.logger.warning("DeepSeek sentiment failed → VADER: %s", exc)
+            return self._score_with_vader_headlines(headlines)
+
+    async def _score_with_openai(self, coin: str, headlines: List[str]) -> float:
+        """
+        Оценивает сентимент через OpenAI API (ChatGPT).
+
+        Применяет тот же дневной бюджет-гард (AI_DAILY_BUDGET).
+        Фолбек на VADER при ошибке или исчерпании лимита.
+        """
+        if not headlines or not self._check_budget():
+            return self._score_with_vader_headlines(headlines)
+        try:
+            prompt = self._build_sentiment_prompt(coin, headlines)
+            client = self._compat_client
+            response = await client.chat.completions.create(  # type: ignore[union-attr]
+                model=Config.OPENAI_MODEL,
+                max_tokens=16,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            text = (response.choices[0].message.content or "").strip()
+            return max(-1.0, min(1.0, float(text)))
+        except Exception as exc:
+            self.logger.warning("OpenAI sentiment failed → VADER: %s", exc)
+            return self._score_with_vader_headlines(headlines)
+
+    # ── VADER fallbacks ───────────────────────────────────────────────────────
 
     def _score_with_vader(self, articles: list) -> float:
         """VADER-фолбек: вычисляет sentiment по заголовку и описанию каждой статьи."""
@@ -241,6 +335,8 @@ class NewsAnalyzer:
         except Exception:
             return 0.0
 
+    # ── NewsAPI fetch ─────────────────────────────────────────────────────────
+
     async def _fetch_for_symbol(self, query: str) -> list:
         """
         Выполняет запрос к NewsAPI в thread executor.
@@ -251,7 +347,7 @@ class NewsAnalyzer:
         if not self._enabled:
             return []
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             response = await loop.run_in_executor(
                 None,
                 lambda: self.newsapi.get_everything(
@@ -263,7 +359,7 @@ class NewsAnalyzer:
             )
             return response.get("articles", [])
         except Exception as e:
-            self.logger.warning(f"NewsAPI fetch failed ({query}): {e}")
+            self.logger.warning("NewsAPI fetch failed (%s): %s", query, e)
             return []
 
     async def analyze_news_async(self) -> float:
@@ -272,7 +368,7 @@ class NewsAnalyzer:
 
         Метод сохранён для обратной совместимости.
 
-        :return: Compound-оценка VADER от -1 до 1.
+        :return: Compound-оценка от -1 до 1.
         """
         sentiment, _ = await self.get_sentiment("BTC/USDT")
         return sentiment
