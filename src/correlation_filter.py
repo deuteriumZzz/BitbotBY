@@ -116,3 +116,14 @@ class CorrelationFilter:
             )
             return False
         return True
+
+    def to_dict(self) -> dict:
+        """Сериализует историю цен для сохранения в Redis."""
+        return {sym: list(q) for sym, q in self._prices.items()}
+
+    def from_dict(self, data: dict) -> None:
+        """Восстанавливает историю цен из Redis."""
+        for sym, prices in data.items():
+            q = self._prices[sym]
+            q.clear()
+            q.extend(prices[-(self._window + 1):])

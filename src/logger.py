@@ -13,6 +13,26 @@ import sys
 from datetime import datetime
 
 
+class _SecretFilter(logging.Filter):
+    """Masks API key values in log records before they are emitted."""
+
+    _secrets: list = []
+
+    @classmethod
+    def register(cls, *values: str) -> None:
+        cls._secrets = [v for v in values if v and len(v) > 8]
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if self._secrets:
+            msg = record.getMessage()
+            for secret in self._secrets:
+                if secret in msg:
+                    msg = msg.replace(secret, "***")
+                    record.msg = msg
+                    record.args = ()
+        return True
+
+
 class JSONFormatter(logging.Formatter):
     """Форматирует лог-записи в JSON для структурированного логирования."""
 

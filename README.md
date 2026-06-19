@@ -10,9 +10,9 @@
 ### Сигналы и анализ
 - **4 режима** — `local`, `ai`, `dqn`, `hybrid`
 - **9 технических стратегий** — EMA, RSI, MACD, Bollinger Bands, Scalping, Swing, Breakout, Mean Reversion, Trend Following
-- **AI-анализ рынка** — Claude / DeepSeek / OpenAI (выбирается через `AI_PROVIDER`): анализирует снэпшоты всех монет одним batch-запросом, выбирает стратегию и возвращает reasoning на русском
+- **AI-анализ рынка** — Claude / DeepSeek / OpenAI с **автоматическим переключением** при ошибках billing/quota (HTTP 402/429)
 - **SAC нейросеть** (Stable-Baselines3) — RL-агент с reward = log-return + rolling Sharpe − drawdown penalty
-- **Market regime detection** — GaussianHMM (hmmlearn) определяет `trending_up` / `ranging` / `trending_down` **для каждой монеты** отдельно
+- **Market regime detection** — GaussianHMM с `covariance_type="diag"` определяет `trending_up` / `ranging` / `trending_down` **для каждой монеты** отдельно; **TTL-кэш 5 минут** на символ
 
 ### Кванты
 - **CVaR / Markowitz** — аллокация портфеля через scipy (95% CVaR, вес каждой монеты)
@@ -31,8 +31,10 @@
 ### Инфраструктура
 - **Telegram сигналы** — уведомления о новых buy/sell сигналах по топ-20 монетам (без спама: только изменения)
 - **Telegram подтверждения** — кнопки Trade/Skip перед исполнением (при `AUTO_EXECUTE=true`)
-- **Correlation filter** — блокирует одновременные позиции с |корреляцией| выше порога (защита от удвоенной экспозиции, напр. BTC + ETH лонг)
-- **Position reconciliation** — при рестарте бот сверяет `_monitored` с реальными позициями на бирже
+- **Silent death alert** — уведомление в Telegram если нет сделок более `SILENT_DEATH_HOURS` часов (по умолчанию 6ч)
+- **Correlation filter** — блокирует одновременные позиции с |корреляцией| выше порога; состояние сохраняется в Redis между рестартами
+- **Position reconciliation** — при рестарте бот сверяет `_monitored` с реальными позициями на бирже (включая нормализацию `BTC/USDT:USDT` → `BTC/USDT`)
+- **Secret filter** — API-ключи автоматически маскируются в логах (`***`) на уровне `logging.Filter`
 - **Health server** — `GET /health` (JSON) и `GET /metrics` (Prometheus) встроены в процесс бота
 - **Alertmanager** — 6 правил алертинга (BotDown, HighConsecutiveLosses, LargePnLLoss и др.) → Telegram webhook
 - **Redis graceful degradation** — если Redis недоступен, бот работает без персистентности (не падает)
@@ -157,7 +159,7 @@ make backtest
 | `OPENAI_MODEL` | `gpt-4o-mini` | Модель OpenAI |
 | `AI_DAILY_BUDGET` | `200` | Лимит AI-вызовов в сутки (UTC); сверх → VADER-фолбек |
 
-При `AI_PROVIDER=auto` берётся первый найденный ключ: Claude → DeepSeek → OpenAI → локальные стратегии.
+При `AI_PROVIDER=auto` все провайдеры с ключами инициализируются при старте. При billing/quota ошибке (HTTP 402/429) бот автоматически переключается на следующий: Claude → DeepSeek → OpenAI → локальные стратегии.
 
 ### Основные параметры
 
@@ -176,7 +178,7 @@ make backtest
 | `SCAN_TOP_N` | `20` | Топ монет для сканирования (по объёму 24ч) |
 | `RISK_PER_TRADE` | `0.02` | Риск на сделку (2% баланса) |
 | `MAX_POSITIONS` | `3` | Максимум одновременных позиций |
-| `MAX_CORRELATION` | `0.7` | Блокировать позицию если |корр.| с открытой ≥ порога (0 = выключен) |
+| `MAX_CORRELATION` | `0.7` | Блокировать позицию если \|корр.\| с открытой ≥ порога (0 = выключен) |
 | `CORRELATION_WINDOW` | `50` | Окно расчёта корреляции в барах |
 | `HEALTH_PORT` | `8080` | Порт health server (0 = выключен) |
 | `DAILY_LOSS_LIMIT` | `0.05` | Лимит дневного убытка (5%) |
@@ -188,6 +190,8 @@ make backtest
 | `DQN_WEIGHT` | `0.4` | Вес SAC в hybrid режиме |
 | `AI_WEIGHT` | `0.6` | Вес AI в hybrid режиме |
 | `DQN_SOLO_CONFIDENCE` | `0.80` | Мин. confidence SAC для соло-исполнения |
+| `SILENT_DEATH_HOURS` | `6` | Алерт если нет сделок N часов (только в не-local режиме) |
+| `REGIME_CACHE_TTL` | `300` | TTL кэша режимов рынка в секундах |
 
 При старте бот **автоматически проверяет** обязательные переменные и падает с понятной ошибкой если что-то не задано. Стейблкоины в `TRADING_SYMBOL` тоже отклоняются.
 
@@ -255,16 +259,17 @@ supervisor.py / run_bot.py
   └── TradingBot (src/trading_bot.py)
         ├── MarketScanner       — топ-N монет по объёму, фильтр стейблкоинов
         ├── DataLoader          — OHLCV через ccxt async, кэш CSV 24ч
-        ├── RegimeDetector      — GaussianHMM: режим per-symbol
+        ├── RegimeDetector      — GaussianHMM (diag): режим per-symbol + TTL-кэш 5 мин
         ├── CVaR/Markowitz      — аллокация весов портфеля (scipy)
         ├── AlmgrenChriss       — оценка рыночного импакта (адаптив. к TF)
         ├── Kelly criterion     — размер позиции Half-Kelly, кэп 20%
         ├── SACSignal           — SAC-инференс (SB3), вес ~40–50% в hybrid
-        ├── AIAnalyzer          — Claude/DeepSeek/OpenAI анализ рынка, вес ~50–60% в hybrid
+        ├── AIAnalyzer          — Claude/DeepSeek/OpenAI + auto-fallback при billing
         ├── SignalCombiner      — финальный взвешенный сигнал по режиму рынка
         ├── RiskManager         — SL/TP, daily limit, circuit breaker
         ├── BybitAPI            — ордера (ccxt async) + exchange SL/TP + Redis lock
-        ├── TelegramNotifier    — новые сигналы + Trade/Skip кнопки
+        ├── CorrelationFilter   — фильтр корреляции позиций + Redis persistence
+        ├── TelegramNotifier    — новые сигналы + Trade/Skip кнопки + silent death alert
         ├── NewsAnalyzer        — AI sentiment (VADER fallback), Redis 15 мин
         └── TradeHistory        — SQLite, win rate, EV
 
@@ -289,27 +294,30 @@ BitbotBY/
 │   ├── signal_combiner.py     — объединение сигналов SAC + AI
 │   ├── market_impact.py       — Almgren-Chriss модель
 │   ├── portfolio_optimizer.py — CVaR / Markowitz
-│   ├── regime_detector.py     — GaussianHMM режимы рынка
+│   ├── regime_detector.py     — GaussianHMM режимы рынка (covariance_type=diag)
 │   ├── indicators.py          — технические индикаторы
 │   ├── risk_management.py     — Kelly, SL/TP, daily limit
 │   ├── portfolio_manager.py   — портфель и trailing stop
-│   ├── ai_analyzer.py         — Claude/DeepSeek/OpenAI интеграция
-│   ├── dqn_signal.py          — SAC-инференс (SB3)
+│   ├── ai_analyzer.py         — Claude/DeepSeek/OpenAI + auto-fallback
+│   ├── dqn_signal.py          — SAC-инференс (SB3) + normstats drift detection
 │   ├── market_scanner.py      — сканер монет + снэпшот
 │   ├── news_analyzer.py       — новости и AI sentiment
 │   ├── bybit_api.py           — биржевой адаптер (ccxt async)
-│   ├── correlation_filter.py  — фильтр корреляции позиций
+│   ├── correlation_filter.py  — фильтр корреляции + to_dict/from_dict (Redis)
 │   ├── health_server.py       — /health + /metrics (встроен в бот)
 │   ├── data_loader.py         — загрузка OHLCV
 │   ├── redis_client.py        — Redis (graceful degradation)
 │   ├── telegram_notifier.py   — Telegram уведомления
+│   ├── logger.py              — JSON/text logging + _SecretFilter (маскировка ключей)
 │   └── trade_history.py       — история сделок (SQLite)
 ├── reinforcement_learning/
 │   ├── rl_env.py              — торговая среда (Gymnasium)
 │   └── train_sac.py           — обучение SAC-агента
 ├── tests/
 │   ├── integration/           — 12 integration-тестов (Bybit testnet)
-│   └── test_*.py              — 108 unit-тестов
+│   ├── test_reconciliation.py — 9 тестов синхронизации позиций при рестарте
+│   ├── test_e2e_cycle.py      — 13 тестов торгового цикла (filter + execute)
+│   └── test_*.py              — unit-тесты
 ├── monitoring/
 │   ├── prometheus.yml
 │   ├── alertmanager.yml
@@ -340,7 +348,7 @@ BYBIT_TESTNET_API_KEY=xxx BYBIT_TESTNET_API_SECRET=yyy \
   pytest tests/integration/ -m integration -v
 ```
 
-**108 unit-тестов** — индикаторы, стратегии, риск-менеджмент, портфель, CVaR, Kelly, Almgren-Chriss, корреляция, SAC-инференс, история сделок, конфиг.  
+**154 unit-теста** — индикаторы, стратегии, риск-менеджмент, портфель, CVaR, Kelly, Almgren-Chriss, корреляция, SAC-инференс, история сделок, конфиг, secret filter, AI парсинг, regime cache, reconciliation, e2e торговый цикл.  
 **12 integration-тестов** — подключение к Bybit testnet, OHLCV, баланс, create/cancel ордер, round_quantity.  
 CI падает при coverage < 50% (live-сервисы исключены из измерения).
 

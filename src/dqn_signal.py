@@ -129,6 +129,7 @@ class SACSignal:
         self._model: Any = None
         self._norm_stats: Optional[Dict[str, list]] = None
         self.loaded = False
+        self._mtime: float = 0.0
         self._try_load()
 
     def _try_load(self) -> None:
@@ -157,6 +158,7 @@ class SACSignal:
         try:
             self._model = SAC.load(path)
             self.loaded = True
+            self._mtime = os.path.getmtime(path)
             self.logger.info(f"SAC загружен из {path}")
         except Exception as e:
             self.logger.warning(f"Ошибка загрузки SAC: {e}")
@@ -201,6 +203,14 @@ class SACSignal:
 
         try:
             obs = _snap_to_obs(snap, balance, self._norm_stats)
+            # Warn if any normalized feature is far outside training distribution
+            if self._norm_stats and np.any(np.abs(obs[:11]) > 3.0):
+                outliers = [_MARKET_COLS[i] for i in range(11) if abs(obs[i]) > 3.0]
+                self.logger.warning(
+                    "SAC obs outliers (normstats drift?) for %s: %s",
+                    snap.get("symbol", "?"),
+                    outliers,
+                )
             action, _ = self._model.predict(obs, deterministic=True)
             a = float(action[0])
 
@@ -223,3 +233,20 @@ class SACSignal:
         except Exception as e:
             self.logger.error(f"Ошибка инференса SAC: {e}", exc_info=True)
             return default
+
+    # ── Вариант 1: горячая перезагрузка модели ───────────────────────────────
+
+    def reload_if_updated(self) -> bool:
+        """Перезагружает модель если файл изменился (тренер сохранил новую версию)."""
+        path = Config.SAC_MODEL_PATH
+        if not path or not os.path.exists(path):
+            return False
+        try:
+            mtime = os.path.getmtime(path)
+        except OSError:
+            return False
+        if mtime <= self._mtime:
+            return False
+        self.logger.info("SAC model updated on disk — reloading...")
+        self._try_load()
+        return True

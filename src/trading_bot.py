@@ -1,7 +1,9 @@
 import asyncio
 import logging
+import os
+import time
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import ccxt
 import pandas as pd
@@ -12,6 +14,7 @@ from src.bybit_api import BybitAPI
 from src.correlation_filter import CorrelationFilter
 from src.data_loader import DataLoader
 from src.health_server import cycles_counter, start_health_server
+from src.logger import _SecretFilter, setup_logging
 from src.market_impact import estimate_from_df as _ac_impact
 from src.market_scanner import MarketScanner
 from src.news_analyzer import NewsAnalyzer
@@ -25,10 +28,7 @@ from src.strategies import TradingStrategy
 from src.telegram_notifier import TelegramNotifier
 from src.trade_history import TradeHistory
 
-logging.basicConfig(
-    level=logging.INFO,
-    format=("%(asctime)s - %(name)s - " "%(levelname)s - %(message)s"),
-)
+setup_logging()
 logger = logging.getLogger(__name__)
 
 
@@ -82,8 +82,24 @@ class TradingBot:
         self._last_signals: Dict[str, str] = {}
         # circuit breaker: consecutive closed losses counter
         self._consecutive_losses: int = 0
+        # regime cache: symbol → (regime, timestamp) — refreshed every 5 min
+        self._regime_cache: Dict[str, Tuple[str, float]] = {}
+        _REGIME_TTL = 300  # seconds
+        self._regime_ttl: float = float(os.getenv("REGIME_CACHE_TTL", str(_REGIME_TTL)))
+        # silent-death detection: track last trade and last alert times
+        self._last_trade_at: Optional[float] = None
+        self._silent_death_alerted_at: float = 0.0
+        self._silent_death_hours: float = float(os.getenv("SILENT_DEATH_HOURS", "6"))
         if Config.PAPER_TRADING:
             logger.warning("*** PAPER TRADING MODE — no real orders will be placed ***")
+        # Register secrets for log masking
+        _SecretFilter.register(
+            Config.BYBIT_API_KEY,
+            Config.BYBIT_API_SECRET,
+            Config.ANTHROPIC_API_KEY,
+            Config.DEEPSEEK_API_KEY,
+            Config.TELEGRAM_BOT_TOKEN,
+        )
 
     async def initialize(self) -> None:
         """
@@ -127,6 +143,7 @@ class TradingBot:
             await self._reconcile_positions()
             await self.telegram.start()
             await self._fit_regime_detector()
+            self._load_corr_filter()
             logger.info("Trading bot initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize: {e}")
@@ -171,6 +188,10 @@ class TradingBot:
                 if sym not in self._monitored:
                     side = pos.get("side", "buy")
                     qty = float(pos.get("contracts") or 0)
+                    if qty <= 0:
+                        # partial fill / zero-size position — skip
+                        logger.debug("Reconcile: skip zero-qty position %s", sym)
+                        continue
                     entry = float(pos.get("entryPrice") or 0)
                     self._monitored[sym] = {
                         "trade_id": None,
@@ -210,6 +231,25 @@ class TradingBot:
                 "balance", Config.INITIAL_BALANCE
             )
             self.portfolio_manager.positions = portfolio.get("positions", {})
+
+    _CORR_REDIS_KEY = "corr_filter_prices"
+
+    def _load_corr_filter(self) -> None:
+        """Восстанавливает историю цен CorrelationFilter из Redis."""
+        try:
+            data = self.redis.load_trading_state(self._CORR_REDIS_KEY)
+            if data:
+                self.corr_filter.from_dict(data)
+                logger.info("CorrelationFilter: восстановлено %d символов из Redis", len(data))
+        except Exception as exc:
+            logger.warning("CorrelationFilter load failed: %s", exc)
+
+    def _save_corr_filter(self) -> None:
+        """Сохраняет историю цен CorrelationFilter в Redis."""
+        try:
+            self.redis.save_trading_state(self._CORR_REDIS_KEY, self.corr_filter.to_dict())
+        except Exception as exc:
+            logger.warning("CorrelationFilter save failed: %s", exc)
 
     async def _fit_regime_detector(self) -> None:
         """Загружает исторические данные и обучает RegimeDetector."""
@@ -368,6 +408,11 @@ class TradingBot:
                 print(f"       {reasoning}")
         print(sep)
 
+    @staticmethod
+    def _md_escape(text: str) -> str:
+        """Экранирует спецсимволы Telegram Markdown v1 в произвольном тексте."""
+        return text.replace("_", "\\_").replace("*", "\\*").replace("`", "\\`").replace("[", "\\[")
+
     async def _notify_new_signals(self, recs: list, balance: float, cycle: int) -> None:
         """
         Отправляет в Telegram только новые или изменившиеся buy/sell сигналы.
@@ -384,19 +429,19 @@ class TradingBot:
 
             icon = "🟢" if action == "buy" else "🔴"
             conf = r.get("confidence", 0) * 100
-            strat = r.get("strategy", "?")
+            strat = self._md_escape(str(r.get("strategy", "?")))
             entry = r.get("entry", 0)
             sl = r.get("stop_loss", 0)
             tp = r.get("take_profit", 0)
-            regime = self._current_regime
-            reasoning = r.get("reasoning", "")
+            regime = self._md_escape(str(self._current_regime))
+            reasoning = self._md_escape(str(r.get("reasoning", ""))[:120])
 
             line = f"{icon} *{sym}* — {action.upper()}\n"
             line += f"   Conf: {conf:.0f}% | {strat} | Режим: {regime}\n"
             if entry:
                 line += f"   Entry: ${entry:.4f} | SL: ${sl:.4f} | TP: ${tp:.4f}\n"
             if reasoning:
-                line += f"   _{reasoning[:120]}_"
+                line += f"   {reasoning}"
             new_lines.append(line)
             self._last_signals[sym] = action
 
@@ -587,11 +632,14 @@ class TradingBot:
                 "take_profit": tp_price,
                 "side": action,
                 "atr": top.get("atr", 0.0),
+                "snap": top.get("_snap"),
+                "balance_at_entry": balance,
                 "peak_price": entry,
                 "exchange_sl_id": exchange_sl_id,
                 "exchange_tp_id": exchange_tp_id,
             }
 
+        self._last_trade_at = time.time()
         await self.telegram.notify(
             f"Opened position *{sym}*\n"
             f"{action.upper()} {quantity:.6f} "
@@ -680,6 +728,15 @@ class TradingBot:
                         async with self._monitored_lock:
                             self._monitored.pop(sym, None)
                         logger.info(f"Position closed: {sym} " f"at {price}")
+                        # Save experience to file for next SAC retraining
+                        if pos.get("snap"):
+                            from src.experience_buffer import save as _exp_save
+                            _exp_save(
+                                snap=pos["snap"],
+                                action=side,
+                                entry_price=pos.get("entry", price),
+                                exit_price=price,
+                            )
                         if trade_id:
                             await self.trade_history.record_close(
                                 trade_id=trade_id,
@@ -790,9 +847,10 @@ class TradingBot:
                 symbols = await self.scanner.get_top_symbols(Config.SCAN_TOP_N)
                 market_data = await self.scanner.scan_all(symbols, Config.TIMEFRAME)
 
-                # Feed latest close prices into correlation filter
+                # Feed latest close prices into correlation filter and persist
                 for sym, df in market_data.items():
                     self.corr_filter.update_from_df(sym, df)
+                self._save_corr_filter()
 
                 scanned = list(market_data.keys())
                 snapshots = await self._collect_snapshots(scanned, market_data)
@@ -809,11 +867,17 @@ class TradingBot:
                     self.is_running = False
                     break
 
-                # Detect regime per symbol; fallback to main symbol regime
+                # Detect regime per symbol with TTL cache (refresh every 5 min)
+                now = time.monotonic()
                 regimes: Dict[str, str] = {}
                 for sym, df in market_data.items():
-                    if df is not None and not df.empty:
-                        regimes[sym] = self.regime_detector.predict(df)
+                    cached_regime, cached_ts = self._regime_cache.get(sym, ("unknown", float("-inf")))
+                    if now - cached_ts < self._regime_ttl:
+                        regimes[sym] = cached_regime
+                    elif df is not None and not df.empty:
+                        regime = self.regime_detector.predict(df)
+                        regimes[sym] = regime
+                        self._regime_cache[sym] = (regime, now)
                 self._current_regime = regimes.get(Config.SYMBOL, "unknown")
                 logger.info(
                     "Regimes: %s",
@@ -852,6 +916,11 @@ class TradingBot:
                                 }
                             )
 
+                # Attach snapshot to each rec so _execute_top_rec can save it
+                snap_map = {s["symbol"]: s for s in snapshots}
+                for rec in recs:
+                    rec.setdefault("_snap", snap_map.get(rec.get("symbol")))
+
                 filtered = self._filter_by_balance(recs, balance)
                 filtered.sort(
                     key=lambda x: x.get("confidence", 0),
@@ -862,6 +931,23 @@ class TradingBot:
                 await self._notify_new_signals(filtered, balance, cycle)
                 await self._execute_top_rec(filtered, market_data)
                 await self._update_performance_stats()
+
+                # Hot-reload SAC model if trainer wrote a new version
+                self.combiner.sac.reload_if_updated()
+
+                # Silent-death alert: no trades for SILENT_DEATH_HOURS in non-local mode
+                if Config.MODE != "local" and self._last_trade_at is not None:
+                    hours_idle = (time.time() - self._last_trade_at) / 3600
+                    alert_cooldown = 3600  # re-alert every hour max
+                    if (
+                        hours_idle >= self._silent_death_hours
+                        and time.time() - self._silent_death_alerted_at > alert_cooldown
+                    ):
+                        self._silent_death_alerted_at = time.time()
+                        await self.telegram.notify(
+                            f"⚠️ Бот работает, но нет сделок уже "
+                            f"{hours_idle:.0f}ч. Проверьте сигналы и баланс AI."
+                        )
 
                 cycles_counter.inc()
                 elapsed = loop.time() - t0

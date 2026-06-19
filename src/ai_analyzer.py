@@ -60,36 +60,53 @@ class AIAnalyzer:
     возвращает список торговых рекомендаций с reasoning на русском.
     """
 
+    # HTTP status codes treated as billing/quota exhaustion → try next provider
+    _BILLING_CODES: frozenset = frozenset({402, 429})
+
     def __init__(self) -> None:
         self._provider = _resolve_provider()
         self.enabled = self._provider != "none"
         self.strategies = get_all_strategies()
         self.logger = logging.getLogger(__name__)
 
-        if self._provider == "anthropic":
-            import anthropic
+        # Initialise clients for ALL providers that have keys (for fallback)
+        self._anthropic = None
+        self._deepseek = None
+        self._openai = None
 
+        if Config.ANTHROPIC_API_KEY:
+            import anthropic
             self._anthropic = anthropic.AsyncAnthropic(api_key=Config.ANTHROPIC_API_KEY)
             self._anthropic_model = Config.AI_MODEL
-            self.logger.info("AIAnalyzer → Anthropic (%s)", self._anthropic_model)
 
-        elif self._provider == "deepseek":
+        if Config.DEEPSEEK_API_KEY:
             from openai import AsyncOpenAI
-
             self._deepseek = AsyncOpenAI(
                 api_key=Config.DEEPSEEK_API_KEY,
                 base_url=_DEEPSEEK_BASE_URL,
             )
             self._deepseek_model = Config.DEEPSEEK_MODEL
-            self.logger.info("AIAnalyzer → DeepSeek (%s)", self._deepseek_model)
 
-        elif self._provider == "openai":
+        if Config.OPENAI_API_KEY:
             from openai import AsyncOpenAI
-
             self._openai = AsyncOpenAI(api_key=Config.OPENAI_API_KEY)
             self._openai_model = Config.OPENAI_MODEL
-            self.logger.info("AIAnalyzer → OpenAI (%s)", self._openai_model)
 
+        # Ordered list of available providers (primary first)
+        _all = ["anthropic", "deepseek", "openai"]
+        available = [p for p in _all if getattr(self, f"_{p}") is not None]
+        # Put the configured primary provider first
+        if self._provider in available:
+            available.remove(self._provider)
+            available.insert(0, self._provider)
+        self._provider_order: List[str] = available
+
+        if self._provider_order:
+            self.logger.info(
+                "AIAnalyzer → %s (fallback: %s)",
+                self._provider_order[0],
+                self._provider_order[1:] or "none",
+            )
         else:
             self.logger.warning(
                 "AIAnalyzer: нет ключей AI — бот использует локальные стратегии"
@@ -153,16 +170,25 @@ class AIAnalyzer:
         if not isinstance(recs, list):
             recs = [recs]
         required = ("symbol", "action", "strategy", "confidence")
-        return [
-            r
-            for r in recs
-            if (
-                isinstance(r, dict)
-                and all(k in r for k in required)
-                and r["confidence"] >= Config.MIN_SIGNAL_CONFIDENCE
-                and r["action"] in ("buy", "sell", "hold")
-            )
-        ]
+        valid = []
+        for r in recs:
+            if not isinstance(r, dict):
+                continue
+            if not all(k in r for k in required):
+                continue
+            if r.get("action") not in ("buy", "sell", "hold"):
+                continue
+            try:
+                conf = float(r["confidence"])
+            except (TypeError, ValueError):
+                continue
+            if not (0.0 <= conf <= 1.0):
+                continue
+            if conf < Config.MIN_SIGNAL_CONFIDENCE:
+                continue
+            r["confidence"] = conf
+            valid.append(r)
+        return valid
 
     async def _call_anthropic(self, prompt: str) -> str:
         """Вызов Claude (Anthropic API)."""
@@ -219,29 +245,42 @@ class AIAnalyzer:
 
         prompt = self._build_prompt(snapshots, balance)
 
-        try:
-            if self._provider == "anthropic":
-                raw = await self._call_anthropic(prompt)
-            elif self._provider == "deepseek":
-                raw = await self._call_deepseek(prompt)
-            else:
-                raw = await self._call_openai(prompt)
+        for provider in self._provider_order:
+            try:
+                if provider == "anthropic":
+                    raw = await self._call_anthropic(prompt)
+                elif provider == "deepseek":
+                    raw = await self._call_deepseek(prompt)
+                else:
+                    raw = await self._call_openai(prompt)
 
-            valid = self._parse_response(raw)
-            self.logger.info(
-                "AI [%s]: %d signals from %d symbols",
-                self._provider,
-                len(valid),
-                len(snapshots),
-            )
-            return valid
+                valid = self._parse_response(raw)
+                self.logger.info(
+                    "AI [%s]: %d signals from %d symbols",
+                    provider,
+                    len(valid),
+                    len(snapshots),
+                )
+                return valid
 
-        except json.JSONDecodeError as e:
-            self.logger.error("AI JSON parse error: %s", e)
-            return []
-        except Exception as e:
-            self.logger.error("AI [%s] failed: %s", self._provider, e)
-            return []
+            except json.JSONDecodeError as e:
+                self.logger.error("AI [%s] JSON parse error: %s", provider, e)
+                return []
+            except Exception as e:
+                # Check for billing/quota errors — try next provider
+                status = getattr(e, "status_code", None)
+                if status in self._BILLING_CODES:
+                    self.logger.warning(
+                        "AI [%s] billing/quota error (HTTP %s) — trying next provider",
+                        provider,
+                        status,
+                    )
+                    continue
+                self.logger.error("AI [%s] failed: %s", provider, e)
+                return []
+
+        self.logger.error("All AI providers exhausted (billing/quota)")
+        return []
 
     def recommend_strategy_local(self, snapshot: Dict[str, Any]) -> Tuple[str, float]:
         """

@@ -75,7 +75,7 @@ class RegimeDetector:
         try:
             model = GaussianHMM(
                 n_components=self.n_states,
-                covariance_type="full",
+                covariance_type="diag",
                 n_iter=100,
                 random_state=42,
             )

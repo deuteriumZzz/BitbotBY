@@ -121,6 +121,83 @@ def _evaluate_model(
     return env.current_value
 
 
+def _finetune_on_experiences(model: Any, norm_stats: Dict[str, Any]) -> None:
+    """
+    Дообучает модель на реальных сделках из data/experiences.jsonl.
+
+    Загружает накопленные опыты, конвертирует в obs-векторы,
+    добавляет в replay buffer модели и запускает gradient steps.
+    Пропускается если файл пуст или содержит < 50 записей.
+    """
+    from src.experience_buffer import load as _load_exp
+
+    records = _load_exp()
+    if len(records) < 50:
+        logger.info(
+            "Experiences: %d записей — пропускаем fine-tune (нужно ≥ 50)",
+            len(records),
+        )
+        return
+
+    logger.info("Fine-tune на %d реальных сделках из experiences.jsonl", len(records))
+
+    # Конвертируем каждую запись в obs-вектор (14 признаков, порядок как в TradingEnv)
+    _COLS = ["open", "high", "low", "close", "volume",
+             "rsi", "macd", "macd_signal", "bb_upper", "bb_middle", "bb_lower"]
+
+    def _to_obs(rec: Dict[str, Any]) -> np.ndarray:
+        ind = rec.get("indicators", {})
+        price = rec.get("price", rec.get("entry_price", 0.0))
+        raw = [
+            price, price, price, price,           # open/high/low/close approximated
+            rec.get("volume_ratio", 1.0) * 1000,  # volume proxy
+            ind.get("rsi", 50.0),
+            ind.get("macd", 0.0),
+            ind.get("macd_signal", 0.0),
+            ind.get("bb_upper", price * 1.02),
+            ind.get("bb_middle", price),
+            ind.get("bb_lower", price * 0.98),
+            float(rec.get("action") == "buy"),     # position flag
+            0.0,                                   # unrealised pnl (at entry = 0)
+            rec.get("pnl_pct", 0.0),              # realised pnl as reward hint
+        ]
+        obs = np.array(raw, dtype=np.float32)
+        # Apply same normalisation as training
+        for i, col in enumerate(_COLS):
+            if col in norm_stats:
+                mu, sd = norm_stats[col]
+                obs[i] = (obs[i] - mu) / (sd + 1e-8)
+        return obs
+
+    added = 0
+    for rec in records:
+        try:
+            obs = _to_obs(rec)
+            # next_obs ≈ obs (we don't have market state after close)
+            action_val = np.array(
+                [1.0 if rec["action"] == "buy" else -1.0], dtype=np.float32
+            )
+            model.replay_buffer.add(
+                obs=obs.reshape(1, -1),
+                next_obs=obs.reshape(1, -1),
+                action=action_val.reshape(1, -1),
+                reward=np.array([rec.get("pnl_pct", 0.0)], dtype=np.float32),
+                done=np.array([True]),
+                infos=[{}],
+            )
+            added += 1
+        except Exception as exc:
+            logger.debug("Skipping experience record: %s", exc)
+
+    if added < 10 or model.replay_buffer.size() < model.batch_size:
+        logger.info("Fine-tune: недостаточно данных в буфере, пропускаем")
+        return
+
+    gradient_steps = min(added * 2, 500)
+    model.train(gradient_steps=gradient_steps, batch_size=model.batch_size)
+    logger.info("Fine-tune завершён: %d gradient steps на %d опытах", gradient_steps, added)
+
+
 def train(
     df: pd.DataFrame,
     model_path: str = MODEL_PATH,
@@ -200,6 +277,10 @@ def train(
 
     # Оценка на тестовой выборке (out-of-sample)
     _evaluate_model(model, test_df)
+
+    # Fine-tune on real trade experiences collected by the bot
+    norm_stats = _compute_norm_stats(train_df)
+    _finetune_on_experiences(model, norm_stats)
 
     # Резервная копия перед перезаписью
     if save_backup:
@@ -309,14 +390,57 @@ if __name__ == "__main__":
     from src.data_loader import DataLoader
 
     async def _run() -> None:
+        from src.market_scanner import MarketScanner
+        from src.bybit_api import BybitAPI
+
+        months = int(os.getenv("BT_MONTHS", "6"))
+        timeframe = os.getenv("BT_TIMEFRAME", "15m")
+        top_n = int(os.getenv("TRAIN_TOP_N", "20"))
+
+        api = BybitAPI()
+        await api.initialize(
+            api_key=os.getenv("BYBIT_API_KEY", ""),
+            api_secret=os.getenv("BYBIT_API_SECRET", ""),
+        )
         loader = DataLoader()
         await loader.initialize(
             api_key=os.getenv("BYBIT_API_KEY", ""),
             api_secret=os.getenv("BYBIT_API_SECRET", ""),
         )
-        df = await loader.get_paginated_history("BTC/USDT", "15m", months=6)
+        scanner = MarketScanner(api, loader)
+        symbols = await scanner.get_top_symbols(top_n)
+        await api.close()
+
+        frames = []
+        for sym in symbols:
+            try:
+                df_sym = await loader.get_paginated_history(sym, timeframe, months=months)
+                if df_sym is None or df_sym.empty:
+                    continue
+                # Normalize price columns to % returns from first candle
+                # so BTC ($64k) and BILL ($0.06) live on the same scale
+                price_cols = [c for c in ("open", "high", "low", "close") if c in df_sym.columns]
+                base = df_sym[price_cols[0]].iloc[0]
+                if base > 0:
+                    for col in price_cols:
+                        df_sym[col] = df_sym[col] / base
+                frames.append(df_sym)
+                logger.info("Loaded %s: %d candles", sym, len(df_sym))
+            except Exception as exc:
+                logger.warning("Skipping %s: %s", sym, exc)
+
         await loader.close()
-        train(df)
+
+        if not frames:
+            logger.error("No data loaded — aborting")
+            return
+
+        combined = pd.concat(frames, ignore_index=True)
+        logger.info(
+            "Combined dataset: %d candles from %d symbols",
+            len(combined), len(frames),
+        )
+        train(combined)
 
     import asyncio
 

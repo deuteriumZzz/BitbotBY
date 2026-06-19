@@ -76,6 +76,36 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  trainer:
+    build: .
+    container_name: bitbot_trainer
+    restart: unless-stopped
+    command: >
+      sh -c "while true; do
+        echo '[trainer] Starting SAC retraining...';
+        python reinforcement_learning/train_sac.py;
+        echo '[trainer] Done. Sleeping 7 days...';
+        sleep 604800;
+      done"
+    env_file: .env
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_URL=redis://redis:6379/0
+      - PYTHONPATH=/app
+    networks:
+      - bitbot_net
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+    depends_on:
+      redis:
+        condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   alertmanager:
     image: prom/alertmanager:v0.27.0
     container_name: bitbot_alertmanager

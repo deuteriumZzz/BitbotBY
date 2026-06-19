@@ -1,13 +1,18 @@
 import sys
 from unittest.mock import MagicMock
 
-# Mock redis before any src imports so tests run without
-# a live Redis server.
+# Mock redis before any src imports so tests run without a live Redis server.
 _redis_mock = MagicMock()
 _redis_mock.StrictRedis = MagicMock
 _redis_mock.Redis = MagicMock
 _redis_mock.ConnectionError = ConnectionError
 sys.modules.setdefault("redis", _redis_mock)
+
+# Mock prometheus_client so tests run without the package installed locally.
+_prom_mock = MagicMock()
+_prom_mock.Counter = MagicMock(return_value=MagicMock())
+_prom_mock.Gauge = MagicMock(return_value=MagicMock())
+sys.modules.setdefault("prometheus_client", _prom_mock)
 
 import numpy as np
 import pandas as pd

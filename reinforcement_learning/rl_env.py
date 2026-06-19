@@ -13,9 +13,10 @@ import pandas as pd
 from gymnasium import spaces
 
 # Зона нечувствительности: |action| <= HOLD_ZONE → HOLD
-HOLD_ZONE = 0.3
-# Комиссия за сделку (0.1%)
-COMMISSION = 0.001
+import os as _os
+HOLD_ZONE = float(_os.getenv("SAC_HOLD_ZONE", "0.3"))
+# Комиссия за сделку (синхронизирована с COMMISSION_RATE из .env)
+COMMISSION = float(_os.getenv("COMMISSION_RATE", "0.001"))
 # Размер вектора наблюдения: 11 рыночных + 3 портфельных
 OBS_DIM = 14
 
