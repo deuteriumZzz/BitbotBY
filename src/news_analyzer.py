@@ -184,7 +184,8 @@ class NewsAnalyzer:
                 max_tokens=16,
                 messages=[{"role": "user", "content": prompt}],
             )
-            text = message.content[0].text.strip()
+            block = message.content[0]
+            text = block.text.strip() if hasattr(block, "text") else ""
             score = max(-1.0, min(1.0, float(text)))
             return score
         except Exception as exc:

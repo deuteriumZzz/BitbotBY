@@ -16,7 +16,7 @@ from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponen
 from .redis_client import RedisClient
 
 
-def _is_retryable(exc: Exception) -> bool:
+def _is_retryable(exc: BaseException) -> bool:
     """
     Определяет, является ли исключение временной сетевой ошибкой биржи.
 

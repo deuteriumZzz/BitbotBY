@@ -12,7 +12,7 @@ Telegram-бот для подтверждения сделок и отправк
 
 import asyncio
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ class TelegramNotifier:
     def __init__(self, token: str, chat_id: str):
         self._token = token
         self._chat_id = chat_id
-        self._app: Optional[object] = None
+        self._app: Optional[Any] = None
         self._polling_task: Optional[asyncio.Task] = None
         self._pending: dict = {}  # message_id → asyncio.Event
         self._decisions: dict = {}  # message_id → bool

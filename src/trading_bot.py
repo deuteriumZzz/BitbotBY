@@ -199,7 +199,7 @@ class TradingBot:
         )
         snapshots = []
         for sym, result in zip(symbols, news_results):
-            if isinstance(result, Exception):
+            if isinstance(result, BaseException):
                 logger.warning(f"News sentiment failed for {sym}: " f"{result}")
                 sent, headlines = 0.0, []
             else:
