@@ -29,7 +29,7 @@ _g_win_rate = Gauge("bot_win_rate", "Win rate по закрытым сделка
 _g_total_pnl = Gauge("bot_total_pnl_usdt", "Суммарный реализованный PnL")
 _g_consec_losses = Gauge("bot_consecutive_losses", "Убытков подряд (circuit breaker)")
 _g_ai_calls = Gauge("bot_ai_calls_today", "AI-вызовов за сутки")
-_c_cycles = Counter("bot_cycles_total", "Всего итераций торгового цикла")
+cycles_counter = Counter("bot_cycles_total", "Всего итераций торгового цикла")
 
 _bot: "TradingBot | None" = None
 app = FastAPI(docs_url=None, redoc_url=None, title="BitbotBY health")

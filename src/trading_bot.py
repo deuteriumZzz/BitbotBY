@@ -3,6 +3,7 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+import ccxt
 import pandas as pd
 
 from config import Config
@@ -10,7 +11,7 @@ from src.ai_analyzer import AIAnalyzer
 from src.bybit_api import BybitAPI
 from src.correlation_filter import CorrelationFilter
 from src.data_loader import DataLoader
-from src.health_server import start_health_server
+from src.health_server import cycles_counter, start_health_server
 from src.market_impact import estimate_from_df as _ac_impact
 from src.market_scanner import MarketScanner
 from src.news_analyzer import NewsAnalyzer
@@ -95,10 +96,31 @@ class TradingBot:
                 Config.BYBIT_API_KEY,
                 Config.BYBIT_API_SECRET,
             )
+        except ccxt.AuthenticationError as e:
+            if Config.PAPER_TRADING:
+                logger.warning(
+                    "API auth failed — running in paper trading mode with public data only: %s", e
+                )
+            else:
+                logger.error(f"Failed to initialize: {e}")
+                raise
+        try:
             await self.data_loader.initialize(
                 Config.BYBIT_API_KEY,
                 Config.BYBIT_API_SECRET,
             )
+            if not Config.PAPER_TRADING:
+                try:
+                    bal = await self.api.get_balance()
+                    real_balance = float(bal.get("free", {}).get("USDT", 0)) if bal else 0
+                    if real_balance > 0:
+                        self.risk_manager.initial_balance = real_balance
+                        self.portfolio_manager.current_balance = real_balance
+                        logger.info("Live mode: real balance synced — $%.2f", real_balance)
+                    else:
+                        logger.warning("Live mode: real balance is 0 — check Bybit account")
+                except Exception as e:
+                    logger.warning("Live mode: balance sync failed, using INITIAL_BALANCE: %s", e)
             self.strategy = TradingStrategy(Config.DEFAULT_STRATEGY)
             await self.strategy.initialize()
             await self._restore_state()
@@ -250,6 +272,8 @@ class TradingBot:
 
     async def _get_balance_usdt(self) -> float:
         """Свободный баланс USDT (fallback — PortfolioManager)."""
+        if Config.PAPER_TRADING:
+            return self._paper_balance
         try:
             bal = await self.api.get_balance()
             if bal:
@@ -749,6 +773,13 @@ class TradingBot:
             f"(interval={Config.TRADING_INTERVAL}s, "
             f"top={Config.SCAN_TOP_N}, ai={ai_status})"
         )
+        mode = "paper" if Config.PAPER_TRADING else "live"
+        await self.telegram.notify(
+            f"🤖 *BitbotBY запущен* [{mode}]\n"
+            f"Стратегия: `{Config.DEFAULT_STRATEGY}`\n"
+            f"Баланс: `${self._paper_balance:,.2f}`\n"
+            f"AI: {ai_status} | Символов: {Config.SCAN_TOP_N}"
+        )
 
         while self.is_running:
             cycle += 1
@@ -800,12 +831,21 @@ class TradingBot:
                 if not recs:
                     logger.info(f"MODE={Config.MODE}, " "no signals — local fallback")
                     for snap in snapshots:
+                        sym = snap["symbol"]
                         strat, conf = self.combiner.ai.recommend_strategy_local(snap)
                         if conf >= Config.MIN_SIGNAL_CONFIDENCE:
+                            df = market_data.get(sym)
+                            sig = {}
+                            if df is not None and not df.empty and self.strategy:
+                                try:
+                                    sig = await self.strategy.get_signal(df)
+                                except Exception:
+                                    pass
+                            action = sig.get("action", "hold")
                             recs.append(
                                 {
-                                    "symbol": snap["symbol"],
-                                    "action": "hold",
+                                    "symbol": sym,
+                                    "action": action,
                                     "strategy": strat,
                                     "confidence": conf,
                                     "reasoning": "Local analysis",
@@ -823,6 +863,7 @@ class TradingBot:
                 await self._execute_top_rec(filtered, market_data)
                 await self._update_performance_stats()
 
+                cycles_counter.inc()
                 elapsed = loop.time() - t0
                 sleep_for = max(0, Config.TRADING_INTERVAL - elapsed)
                 logger.info(
@@ -858,6 +899,13 @@ class TradingBot:
                 await self._monitor_task
             except asyncio.CancelledError:
                 pass
+        try:
+            await self.telegram.notify(
+                f"⛔ *BitbotBY остановлен*\n"
+                f"Баланс: `${self._paper_balance:,.2f}`"
+            )
+        except Exception:
+            pass
         await self.telegram.stop()
         await self.api.close()
         await self.data_loader.close()
@@ -869,15 +917,26 @@ async def main():
     bot = TradingBot()
     if Config.HEALTH_PORT > 0:
         await start_health_server(bot, port=Config.HEALTH_PORT)
-    try:
-        await bot.initialize()
-        await bot.trading_loop()
-    except KeyboardInterrupt:
-        logger.info("Received interrupt signal")
-    except Exception as e:
-        logger.error(f"Fatal error: {e}")
-    finally:
-        await bot.stop()
+
+    retry_delay = 30
+    while True:
+        try:
+            await bot.initialize()
+            await bot.trading_loop()
+            break
+        except KeyboardInterrupt:
+            logger.info("Received interrupt signal")
+            break
+        except Exception as e:
+            logger.error(f"Fatal error: {e}. Retrying in {retry_delay}s...")
+            try:
+                await bot.stop()
+            except Exception:
+                pass
+            await asyncio.sleep(retry_delay)
+            bot = TradingBot()
+
+    await bot.stop()
 
 
 if __name__ == "__main__":
