@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+# Зона нечувствительности: |action| <= HOLD_ZONE → HOLD
+import os as _os
 from collections import deque
 from typing import Any, Dict, Tuple
 
@@ -12,8 +14,6 @@ import numpy as np
 import pandas as pd
 from gymnasium import spaces
 
-# Зона нечувствительности: |action| <= HOLD_ZONE → HOLD
-import os as _os
 HOLD_ZONE = float(_os.getenv("SAC_HOLD_ZONE", "0.3"))
 # Комиссия за сделку (синхронизирована с COMMISSION_RATE из .env)
 COMMISSION = float(_os.getenv("COMMISSION_RATE", "0.001"))

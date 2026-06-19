@@ -19,6 +19,7 @@ def analyzer():
         cfg.OPENAI_MODEL = "gpt-4"
         with patch("src.ai_analyzer.get_all_strategies", return_value=[]):
             from src.ai_analyzer import AIAnalyzer
+
             return AIAnalyzer()
 
 

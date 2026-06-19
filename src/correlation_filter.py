@@ -126,4 +126,4 @@ class CorrelationFilter:
         for sym, prices in data.items():
             q = self._prices[sym]
             q.clear()
-            q.extend(prices[-(self._window + 1):])
+            q.extend(prices[-(self._window + 1) :])

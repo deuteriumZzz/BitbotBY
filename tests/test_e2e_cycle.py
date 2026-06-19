@@ -11,7 +11,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pandas as pd
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -40,7 +39,7 @@ def _make_cfg(paper: bool = True, auto: bool = True, max_pos: int = 3):
     cfg.PAPER_TRADING = paper
     cfg.AUTO_EXECUTE = auto
     cfg.MAX_POSITIONS = max_pos
-    cfg.MAX_CORRELATION = 0.0        # disable correlation guard in most tests
+    cfg.MAX_CORRELATION = 0.0  # disable correlation guard in most tests
     cfg.RISK_PER_TRADE = 0.02
     cfg.INITIAL_BALANCE = 1000.0
     cfg.COMMISSION_RATE = 0.001
@@ -80,6 +79,7 @@ def make_bot(balance: float = 1000.0):
             cfg.ANTHROPIC_API_KEY = cfg.DEEPSEEK_API_KEY = cfg.OPENAI_API_KEY = ""
             cfg.TELEGRAM_BOT_TOKEN = ""
             from src.trading_bot import TradingBot
+
             bot = TradingBot()
             bot._paper_balance = balance
             bot.trade_history.get_win_rate = AsyncMock(return_value=0.6)
@@ -93,7 +93,9 @@ def make_bot(balance: float = 1000.0):
             bot.corr_filter.is_allowed = MagicMock(return_value=True)
             bot.corr_filter.max_correlation = MagicMock(return_value=0.0)
             bot.risk_manager.calculate_kelly_size = MagicMock(return_value=0.0)
-            bot.api.round_quantity = MagicMock(side_effect=lambda sym, qty: round(qty, 6))
+            bot.api.round_quantity = MagicMock(
+                side_effect=lambda sym, qty: round(qty, 6)
+            )
             bot.api.get_current_price = AsyncMock(return_value=50000.0)
             return bot
 
@@ -120,6 +122,7 @@ def _df(entry: float = 50000.0) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 # Tests: _filter_by_balance
 # ---------------------------------------------------------------------------
+
 
 class TestFilterByBalance:
     """_filter_by_balance is pure — no Config dependency."""
@@ -158,6 +161,7 @@ class TestFilterByBalance:
 # ---------------------------------------------------------------------------
 # Tests: _execute_top_rec
 # ---------------------------------------------------------------------------
+
 
 class TestExecuteTopRec:
 
@@ -206,9 +210,14 @@ class TestExecuteTopRec:
         cfg = _make_cfg(auto=True)
 
         with patch("src.trading_bot.Config", cfg):
-            with patch("src.trade_history.get_backtest_stats", return_value={
-                "win_rate": 0.55, "total_trades": 100, "ev": 3.0,
-            }):
+            with patch(
+                "src.trade_history.get_backtest_stats",
+                return_value={
+                    "win_rate": 0.55,
+                    "total_trades": 100,
+                    "ev": 3.0,
+                },
+            ):
                 with patch("src.trading_bot._ac_impact", return_value=0.0):
                     await bot._execute_top_rec([rec], {"BTC/USDT": _df(50000.0)})
 
@@ -224,9 +233,14 @@ class TestExecuteTopRec:
         rec = _buy_rec(sym="ETH/USDT", entry=3000.0)
 
         with patch("src.trading_bot.Config", _make_cfg(auto=True)):
-            with patch("src.trade_history.get_backtest_stats", return_value={
-                "win_rate": 0.5, "total_trades": 0, "ev": 0.0,
-            }):
+            with patch(
+                "src.trade_history.get_backtest_stats",
+                return_value={
+                    "win_rate": 0.5,
+                    "total_trades": 0,
+                    "ev": 0.0,
+                },
+            ):
                 with patch("src.trading_bot._ac_impact", return_value=0.0):
                     await bot._execute_top_rec([rec], {})
 
@@ -239,9 +253,14 @@ class TestExecuteTopRec:
         rec = _buy_rec(sym="BTC/USDT", entry=50000.0)
 
         with patch("src.trading_bot.Config", _make_cfg(auto=True)):
-            with patch("src.trade_history.get_backtest_stats", return_value={
-                "win_rate": 0.55, "total_trades": 100, "ev": 3.0,
-            }):
+            with patch(
+                "src.trade_history.get_backtest_stats",
+                return_value={
+                    "win_rate": 0.55,
+                    "total_trades": 100,
+                    "ev": 3.0,
+                },
+            ):
                 with patch("src.trading_bot._ac_impact", return_value=0.0):
                     await bot._execute_top_rec([rec], {"BTC/USDT": _df()})
 

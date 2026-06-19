@@ -3,7 +3,6 @@
 import time
 from unittest.mock import MagicMock
 
-
 TTL = 300.0
 
 

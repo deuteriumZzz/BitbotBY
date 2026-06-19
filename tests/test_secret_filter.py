@@ -17,8 +17,13 @@ def reset_secrets():
 def _filtered_msg(message: str, *args) -> str:
     """Run a LogRecord through _SecretFilter and return formatted message."""
     record = logging.LogRecord(
-        name="test", level=logging.INFO, pathname="", lineno=0,
-        msg=message, args=args, exc_info=None,
+        name="test",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg=message,
+        args=args,
+        exc_info=None,
     )
     _SecretFilter().filter(record)
     return record.getMessage()
@@ -51,8 +56,13 @@ class TestSecretFilter:
 
     def test_filter_always_returns_true(self):
         record = logging.LogRecord(
-            name="test", level=logging.INFO, pathname="", lineno=0,
-            msg="hello", args=(), exc_info=None,
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="hello",
+            args=(),
+            exc_info=None,
         )
         assert _SecretFilter().filter(record) is True
 

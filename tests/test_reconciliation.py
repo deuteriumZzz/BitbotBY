@@ -9,10 +9,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _exchange_pos(
     symbol: str,
@@ -63,6 +63,7 @@ def make_bot(paper: bool = False):
             _cfg_defaults(cfg)
             cfg.PAPER_TRADING = paper
             from src.trading_bot import TradingBot
+
             bot = TradingBot()
             bot.api.fetch_positions = AsyncMock(return_value=[])
             return bot
@@ -71,6 +72,7 @@ def make_bot(paper: bool = False):
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 class TestReconcilePositions:
 
@@ -98,9 +100,11 @@ class TestReconcilePositions:
     async def test_recovers_lost_position(self):
         """Position on exchange but absent from _monitored should be restored."""
         bot = make_bot()
-        bot.api.fetch_positions = AsyncMock(return_value=[
-            _exchange_pos("BTC/USDT", side="buy", contracts=0.5, entry=45000.0)
-        ])
+        bot.api.fetch_positions = AsyncMock(
+            return_value=[
+                _exchange_pos("BTC/USDT", side="buy", contracts=0.5, entry=45000.0)
+            ]
+        )
 
         await bot._reconcile_positions()
 
@@ -115,9 +119,9 @@ class TestReconcilePositions:
     async def test_skips_zero_qty_position(self):
         """Exchange position with contracts=0 must not be added to _monitored."""
         bot = make_bot()
-        bot.api.fetch_positions = AsyncMock(return_value=[
-            _exchange_pos("ETH/USDT", contracts=0.0)
-        ])
+        bot.api.fetch_positions = AsyncMock(
+            return_value=[_exchange_pos("ETH/USDT", contracts=0.0)]
+        )
 
         await bot._reconcile_positions()
 
@@ -127,9 +131,9 @@ class TestReconcilePositions:
     async def test_normalises_colon_symbol(self):
         """ccxt may return 'BTC/USDT:USDT' — must normalise to 'BTC/USDT'."""
         bot = make_bot()
-        bot.api.fetch_positions = AsyncMock(return_value=[
-            _exchange_pos("BTC/USDT:USDT", contracts=1.0, entry=60000.0)
-        ])
+        bot.api.fetch_positions = AsyncMock(
+            return_value=[_exchange_pos("BTC/USDT:USDT", contracts=1.0, entry=60000.0)]
+        )
 
         await bot._reconcile_positions()
 
@@ -152,9 +156,9 @@ class TestReconcilePositions:
         """Removes one symbol and recovers another simultaneously."""
         bot = make_bot()
         bot._monitored["OLD/USDT"] = {"qty": 1.0, "entry": 100.0, "side": "buy"}
-        bot.api.fetch_positions = AsyncMock(return_value=[
-            _exchange_pos("NEW/USDT", contracts=2.0, entry=200.0)
-        ])
+        bot.api.fetch_positions = AsyncMock(
+            return_value=[_exchange_pos("NEW/USDT", contracts=2.0, entry=200.0)]
+        )
 
         await bot._reconcile_positions()
 
@@ -166,11 +170,14 @@ class TestReconcilePositions:
         """Position already in _monitored and on exchange must not be touched."""
         bot = make_bot()
         bot._monitored["BTC/USDT"] = {
-            "qty": 1.0, "entry": 50000.0, "side": "buy", "stop_loss": 48000.0
+            "qty": 1.0,
+            "entry": 50000.0,
+            "side": "buy",
+            "stop_loss": 48000.0,
         }
-        bot.api.fetch_positions = AsyncMock(return_value=[
-            _exchange_pos("BTC/USDT", contracts=1.0, entry=51000.0)
-        ])
+        bot.api.fetch_positions = AsyncMock(
+            return_value=[_exchange_pos("BTC/USDT", contracts=1.0, entry=51000.0)]
+        )
 
         await bot._reconcile_positions()
 
@@ -181,9 +188,9 @@ class TestReconcilePositions:
     async def test_negative_qty_skipped(self):
         """Negative contracts value must be treated as zero-size and skipped."""
         bot = make_bot()
-        bot.api.fetch_positions = AsyncMock(return_value=[
-            _exchange_pos("ADA/USDT", contracts=-0.5)
-        ])
+        bot.api.fetch_positions = AsyncMock(
+            return_value=[_exchange_pos("ADA/USDT", contracts=-0.5)]
+        )
 
         await bot._reconcile_positions()
 

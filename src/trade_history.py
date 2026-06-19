@@ -71,6 +71,8 @@ class TradeHistory:
     def __init__(self, db_path: str = _DB_PATH):
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
+        # WAL mode allows concurrent readers (dashboard) alongside the writer (bot)
+        self._conn.execute("PRAGMA journal_mode=WAL")
         self._lock = asyncio.Lock()
         with self._conn:
             self._conn.execute(_DDL)

@@ -76,11 +76,13 @@ class AIAnalyzer:
 
         if Config.ANTHROPIC_API_KEY:
             import anthropic
+
             self._anthropic = anthropic.AsyncAnthropic(api_key=Config.ANTHROPIC_API_KEY)
             self._anthropic_model = Config.AI_MODEL
 
         if Config.DEEPSEEK_API_KEY:
             from openai import AsyncOpenAI
+
             self._deepseek = AsyncOpenAI(
                 api_key=Config.DEEPSEEK_API_KEY,
                 base_url=_DEEPSEEK_BASE_URL,
@@ -89,6 +91,7 @@ class AIAnalyzer:
 
         if Config.OPENAI_API_KEY:
             from openai import AsyncOpenAI
+
             self._openai = AsyncOpenAI(api_key=Config.OPENAI_API_KEY)
             self._openai_model = Config.OPENAI_MODEL
 

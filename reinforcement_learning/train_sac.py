@@ -142,14 +142,28 @@ def _finetune_on_experiences(model: Any, norm_stats: Dict[str, Any]) -> None:
     logger.info("Fine-tune на %d реальных сделках из experiences.jsonl", len(records))
 
     # Конвертируем каждую запись в obs-вектор (14 признаков, порядок как в TradingEnv)
-    _COLS = ["open", "high", "low", "close", "volume",
-             "rsi", "macd", "macd_signal", "bb_upper", "bb_middle", "bb_lower"]
+    _COLS = [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "rsi",
+        "macd",
+        "macd_signal",
+        "bb_upper",
+        "bb_middle",
+        "bb_lower",
+    ]
 
     def _to_obs(rec: Dict[str, Any]) -> np.ndarray:
         ind = rec.get("indicators", {})
         price = rec.get("price", rec.get("entry_price", 0.0))
         raw = [
-            price, price, price, price,           # open/high/low/close approximated
+            price,
+            price,
+            price,
+            price,  # open/high/low/close approximated
             rec.get("volume_ratio", 1.0) * 1000,  # volume proxy
             ind.get("rsi", 50.0),
             ind.get("macd", 0.0),
@@ -157,9 +171,9 @@ def _finetune_on_experiences(model: Any, norm_stats: Dict[str, Any]) -> None:
             ind.get("bb_upper", price * 1.02),
             ind.get("bb_middle", price),
             ind.get("bb_lower", price * 0.98),
-            float(rec.get("action") == "buy"),     # position flag
-            0.0,                                   # unrealised pnl (at entry = 0)
-            rec.get("pnl_pct", 0.0),              # realised pnl as reward hint
+            float(rec.get("action") == "buy"),  # position flag
+            0.0,  # unrealised pnl (at entry = 0)
+            rec.get("pnl_pct", 0.0),  # realised pnl as reward hint
         ]
         obs = np.array(raw, dtype=np.float32)
         # Apply same normalisation as training
@@ -195,7 +209,9 @@ def _finetune_on_experiences(model: Any, norm_stats: Dict[str, Any]) -> None:
 
     gradient_steps = min(added * 2, 500)
     model.train(gradient_steps=gradient_steps, batch_size=model.batch_size)
-    logger.info("Fine-tune завершён: %d gradient steps на %d опытах", gradient_steps, added)
+    logger.info(
+        "Fine-tune завершён: %d gradient steps на %d опытах", gradient_steps, added
+    )
 
 
 def train(
@@ -390,8 +406,8 @@ if __name__ == "__main__":
     from src.data_loader import DataLoader
 
     async def _run() -> None:
-        from src.market_scanner import MarketScanner
         from src.bybit_api import BybitAPI
+        from src.market_scanner import MarketScanner
 
         months = int(os.getenv("BT_MONTHS", "6"))
         timeframe = os.getenv("BT_TIMEFRAME", "15m")
@@ -414,12 +430,16 @@ if __name__ == "__main__":
         frames = []
         for sym in symbols:
             try:
-                df_sym = await loader.get_paginated_history(sym, timeframe, months=months)
+                df_sym = await loader.get_paginated_history(
+                    sym, timeframe, months=months
+                )
                 if df_sym is None or df_sym.empty:
                     continue
                 # Normalize price columns to % returns from first candle
                 # so BTC ($64k) and BILL ($0.06) live on the same scale
-                price_cols = [c for c in ("open", "high", "low", "close") if c in df_sym.columns]
+                price_cols = [
+                    c for c in ("open", "high", "low", "close") if c in df_sym.columns
+                ]
                 base = df_sym[price_cols[0]].iloc[0]
                 if base > 0:
                     for col in price_cols:
@@ -438,7 +458,8 @@ if __name__ == "__main__":
         combined = pd.concat(frames, ignore_index=True)
         logger.info(
             "Combined dataset: %d candles from %d symbols",
-            len(combined), len(frames),
+            len(combined),
+            len(frames),
         )
         train(combined)
 

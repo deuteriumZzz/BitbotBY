@@ -115,7 +115,8 @@ class TradingBot:
         except ccxt.AuthenticationError as e:
             if Config.PAPER_TRADING:
                 logger.warning(
-                    "API auth failed — running in paper trading mode with public data only: %s", e
+                    "API auth failed — running in paper trading mode with public data only: %s",
+                    e,
                 )
             else:
                 logger.error(f"Failed to initialize: {e}")
@@ -128,15 +129,23 @@ class TradingBot:
             if not Config.PAPER_TRADING:
                 try:
                     bal = await self.api.get_balance()
-                    real_balance = float(bal.get("free", {}).get("USDT", 0)) if bal else 0
+                    real_balance = (
+                        float(bal.get("free", {}).get("USDT", 0)) if bal else 0
+                    )
                     if real_balance > 0:
                         self.risk_manager.initial_balance = real_balance
                         self.portfolio_manager.current_balance = real_balance
-                        logger.info("Live mode: real balance synced — $%.2f", real_balance)
+                        logger.info(
+                            "Live mode: real balance synced — $%.2f", real_balance
+                        )
                     else:
-                        logger.warning("Live mode: real balance is 0 — check Bybit account")
+                        logger.warning(
+                            "Live mode: real balance is 0 — check Bybit account"
+                        )
                 except Exception as e:
-                    logger.warning("Live mode: balance sync failed, using INITIAL_BALANCE: %s", e)
+                    logger.warning(
+                        "Live mode: balance sync failed, using INITIAL_BALANCE: %s", e
+                    )
             self.strategy = TradingStrategy(Config.DEFAULT_STRATEGY)
             await self.strategy.initialize()
             await self._restore_state()
@@ -240,14 +249,18 @@ class TradingBot:
             data = self.redis.load_trading_state(self._CORR_REDIS_KEY)
             if data:
                 self.corr_filter.from_dict(data)
-                logger.info("CorrelationFilter: восстановлено %d символов из Redis", len(data))
+                logger.info(
+                    "CorrelationFilter: восстановлено %d символов из Redis", len(data)
+                )
         except Exception as exc:
             logger.warning("CorrelationFilter load failed: %s", exc)
 
     def _save_corr_filter(self) -> None:
         """Сохраняет историю цен CorrelationFilter в Redis."""
         try:
-            self.redis.save_trading_state(self._CORR_REDIS_KEY, self.corr_filter.to_dict())
+            self.redis.save_trading_state(
+                self._CORR_REDIS_KEY, self.corr_filter.to_dict()
+            )
         except Exception as exc:
             logger.warning("CorrelationFilter save failed: %s", exc)
 
@@ -411,7 +424,12 @@ class TradingBot:
     @staticmethod
     def _md_escape(text: str) -> str:
         """Экранирует спецсимволы Telegram Markdown v1 в произвольном тексте."""
-        return text.replace("_", "\\_").replace("*", "\\*").replace("`", "\\`").replace("[", "\\[")
+        return (
+            text.replace("_", "\\_")
+            .replace("*", "\\*")
+            .replace("`", "\\`")
+            .replace("[", "\\[")
+        )
 
     async def _notify_new_signals(self, recs: list, balance: float, cycle: int) -> None:
         """
@@ -731,6 +749,7 @@ class TradingBot:
                         # Save experience to file for next SAC retraining
                         if pos.get("snap"):
                             from src.experience_buffer import save as _exp_save
+
                             _exp_save(
                                 snap=pos["snap"],
                                 action=side,
@@ -871,7 +890,9 @@ class TradingBot:
                 now = time.monotonic()
                 regimes: Dict[str, str] = {}
                 for sym, df in market_data.items():
-                    cached_regime, cached_ts = self._regime_cache.get(sym, ("unknown", float("-inf")))
+                    cached_regime, cached_ts = self._regime_cache.get(
+                        sym, ("unknown", float("-inf"))
+                    )
                     if now - cached_ts < self._regime_ttl:
                         regimes[sym] = cached_regime
                     elif df is not None and not df.empty:
@@ -987,8 +1008,7 @@ class TradingBot:
                 pass
         try:
             await self.telegram.notify(
-                f"⛔ *BitbotBY остановлен*\n"
-                f"Баланс: `${self._paper_balance:,.2f}`"
+                f"⛔ *BitbotBY остановлен*\n" f"Баланс: `${self._paper_balance:,.2f}`"
             )
         except Exception:
             pass

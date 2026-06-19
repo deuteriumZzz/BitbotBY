@@ -76,7 +76,9 @@ def save(
         _trim(path)
         logger.debug(
             "Experience saved: %s %s pnl=%.2f%%",
-            action, snap.get("symbol", ""), pnl_pct * 100,
+            action,
+            snap.get("symbol", ""),
+            pnl_pct * 100,
         )
     except OSError as e:
         logger.warning("experience_buffer.save failed: %s", e)

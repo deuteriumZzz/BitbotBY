@@ -115,6 +115,10 @@ def _snap_to_obs(
     return raw
 
 
+_MAX_OUTLIER_FRAC: float = 0.4  # fraction of market features >3σ before skipping
+_DISABLE_AFTER_DRIFTS: int = 10  # consecutive drifty calls before model is disabled
+
+
 class SACSignal:
     """
     Инференс SAC-модели (Stable-Baselines3) для одного снэпшота рынка.
@@ -130,6 +134,7 @@ class SACSignal:
         self._norm_stats: Optional[Dict[str, list]] = None
         self.loaded = False
         self._mtime: float = 0.0
+        self._consecutive_drifts: int = 0
         self._try_load()
 
     def _try_load(self) -> None:
@@ -203,14 +208,37 @@ class SACSignal:
 
         try:
             obs = _snap_to_obs(snap, balance, self._norm_stats)
-            # Warn if any normalized feature is far outside training distribution
+            # Detect normstats drift: too many features far outside training distribution
             if self._norm_stats and np.any(np.abs(obs[:11]) > 3.0):
                 outliers = [_MARKET_COLS[i] for i in range(11) if abs(obs[i]) > 3.0]
-                self.logger.warning(
-                    "SAC obs outliers (normstats drift?) for %s: %s",
-                    snap.get("symbol", "?"),
-                    outliers,
-                )
+                outlier_frac = len(outliers) / len(_MARKET_COLS)
+                if outlier_frac >= _MAX_OUTLIER_FRAC:
+                    self._consecutive_drifts += 1
+                    self.logger.warning(
+                        "SAC normstats drift for %s: %d/%d features out of range "
+                        "(consecutive=%d/%d): %s",
+                        snap.get("symbol", "?"),
+                        len(outliers),
+                        len(_MARKET_COLS),
+                        self._consecutive_drifts,
+                        _DISABLE_AFTER_DRIFTS,
+                        outliers,
+                    )
+                    if self._consecutive_drifts >= _DISABLE_AFTER_DRIFTS:
+                        self.logger.error(
+                            "SAC disabled: normstats drifted for %d consecutive calls. "
+                            "Retrain the model to restore SAC signals.",
+                            self._consecutive_drifts,
+                        )
+                        self.loaded = False
+                    return default
+                else:
+                    self.logger.warning(
+                        "SAC obs outliers (normstats drift?) for %s: %s",
+                        snap.get("symbol", "?"),
+                        outliers,
+                    )
+            self._consecutive_drifts = 0
             action, _ = self._model.predict(obs, deterministic=True)
             a = float(action[0])
 
