@@ -27,7 +27,7 @@ jobs:
           pip install \
             "black==24.10.0" isort \
             flake8 flake8-isort flake8-return pep8-naming \
-            mypy types-redis pytest-cov
+            mypy types-redis pytest-cov pytest-asyncio
 
       - name: Check formatting with black
         run: black --check src/ tests/ reinforcement_learning/ config.py dashboard.py supervisor.py
