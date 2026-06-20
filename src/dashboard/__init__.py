@@ -1,4 +1,5 @@
-"""FastAPI dashboard application — import `app` to mount or run with uvicorn."""
+"""Приложение дашборда на FastAPI — импортируй `app` для монтирования
+или запуска через uvicorn."""
 
 from __future__ import annotations
 

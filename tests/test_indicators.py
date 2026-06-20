@@ -3,7 +3,7 @@ from tests.conftest import make_ohlcv
 
 
 def test_rsi_range():
-    """RSI must always be in [0, 100]."""
+    """RSI всегда должен быть в диапазоне [0, 100]."""
     df = calculate_technical_indicators(make_ohlcv(100))
     rsi = df["rsi"].dropna()
     assert (rsi >= 0).all(), "RSI below 0"
@@ -11,7 +11,7 @@ def test_rsi_range():
 
 
 def test_rsi_flat_market_no_error():
-    """Flat market (loss=0) must not raise ZeroDivisionError."""
+    """Флэтовый рынок (loss=0) не должен вызывать ZeroDivisionError."""
     df = make_ohlcv(100, trend=0.0)
     df["close"] = 100.0
     df["open"] = 100.0
@@ -23,7 +23,7 @@ def test_rsi_flat_market_no_error():
 
 
 def test_bb_width_no_zero_division():
-    """bb_width must be finite even when prices are constant."""
+    """bb_width должен быть конечным даже при постоянных ценах."""
     df = make_ohlcv(100, trend=0.0)
     df["close"] = 50.0
     result = calculate_technical_indicators(df)
@@ -35,7 +35,7 @@ def test_bb_width_no_zero_division():
 
 
 def test_volume_ratio_no_zero_division():
-    """volume_ratio must not be inf or nan when volume=0."""
+    """volume_ratio не должен быть inf или nan при volume=0."""
     df = make_ohlcv(60)
     df["volume"] = 0.0
     result = calculate_technical_indicators(df)
@@ -54,14 +54,14 @@ def test_ema_columns_exist():
         "bb_lower",
         "atr",
     ]:
-        assert col in df.columns, f"Missing column: {col}"
+        assert col in df.columns, f"Отсутствует колонка: {col}"
 
 
 def test_no_future_leak_ffill():
     """
-    After ffill().fillna(0), there must be no infinite
-    values in tail rows (bfill was the old bug that peeked
-    at future data).
+    После ffill().fillna(0) в хвостовых строках не должно быть
+    бесконечных значений (bfill был старым багом, заглядывавшим
+    в будущие данные).
     """
     df = make_ohlcv(100)
     result = calculate_technical_indicators(df)
@@ -69,4 +69,4 @@ def test_no_future_leak_ffill():
     numeric = tail.select_dtypes(include="number")
     assert (
         not numeric.isin([float("inf"), float("-inf")]).any().any()
-    ), "Infinite values found"
+    ), "Обнаружены бесконечные значения"

@@ -129,4 +129,3 @@ class PortfolioManager:
         :return: Словарь {символ: количество}.
         """
         return self.positions.copy()
-

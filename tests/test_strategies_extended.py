@@ -2,7 +2,8 @@
 Расширенные тесты src/strategies.py.
 
 Покрывают ветки, не охваченные test_strategies.py:
-- TradingStrategy: switch_strategy, get_signal, list_strategies, get_current_strategy_info
+- TradingStrategy: switch_strategy, get_signal, list_strategies,
+  get_current_strategy_info
 - get_all_strategies, create_strategy
 - Конкретные сигналы для каждой стратегии в специфических рыночных условиях
 """
@@ -11,7 +12,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import numpy as np
 import pandas as pd
 import pytest
 
@@ -21,7 +21,6 @@ from src.strategies import (
     BollingerBandsStrategy,
     BreakoutStrategy,
     EMACrossoverStrategy,
-    MACDCrossoverStrategy,
     MeanReversionStrategy,
     RSIMomentumStrategy,
     ScalpingStrategy,
@@ -33,19 +32,19 @@ from src.strategies import (
 )
 from tests.conftest import make_ohlcv
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(autouse=True)
 def mock_redis():
     """Патч RedisClient — не требуется живой Redis."""
-    with patch("src.strategies.RedisClient") as MockRedis:
+    with patch("src.strategies.RedisClient") as mock_redis_cls:
         instance = MagicMock()
         instance.save_trading_state = MagicMock(return_value=None)
         instance.publish_signal = MagicMock(return_value=None)
-        MockRedis.return_value = instance
+        mock_redis_cls.return_value = instance
         yield instance
 
 
@@ -57,6 +56,7 @@ def df_with_indicators(n: int = 100, trend: float = 0.002) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 # create_strategy / get_all_strategies
 # ---------------------------------------------------------------------------
+
 
 class TestFactoryFunctions:
     """Тесты фабричных функций."""
@@ -89,6 +89,7 @@ class TestFactoryFunctions:
 # ---------------------------------------------------------------------------
 # BaseStrategy helpers
 # ---------------------------------------------------------------------------
+
 
 class TestBaseStrategyHelpers:
     """Тесты вспомогательных методов BaseStrategy."""
@@ -136,6 +137,7 @@ class TestBaseStrategyHelpers:
 # RSIMomentumStrategy — специфические сигналы
 # ---------------------------------------------------------------------------
 
+
 class TestRSIMomentumSignals:
     """Тесты сигналов RSIMomentumStrategy в разных рыночных условиях."""
 
@@ -162,7 +164,8 @@ class TestRSIMomentumSignals:
         assert signal["confidence"] == pytest.approx(0.78)
 
     def test_hold_signal_at_rsi_30_to_40(self):
-        """RSI 30-40 — нейтральная зона → hold (тир убран, нет торгового преимущества)."""
+        """RSI 30-40 — нейтральная зона → hold
+        (тир убран, нет торгового преимущества)."""
         strat = RSIMomentumStrategy()
         df = self._make_df_with_rsi(35.0)
         signal = strat.generate_signal(df)
@@ -185,7 +188,8 @@ class TestRSIMomentumSignals:
         assert signal["confidence"] == pytest.approx(0.78)
 
     def test_hold_signal_at_rsi_60_to_70(self):
-        """RSI 60-70 — нейтральная зона → hold (тир убран, нет торгового преимущества)."""
+        """RSI 60-70 — нейтральная зона → hold
+        (тир убран, нет торгового преимущества)."""
         strat = RSIMomentumStrategy()
         df = self._make_df_with_rsi(65.0)
         signal = strat.generate_signal(df)
@@ -202,6 +206,7 @@ class TestRSIMomentumSignals:
 # ---------------------------------------------------------------------------
 # BollingerBandsStrategy — специфические сигналы
 # ---------------------------------------------------------------------------
+
 
 class TestBollingerBandsSignals:
     """Тесты сигналов BollingerBandsStrategy."""
@@ -244,6 +249,7 @@ class TestBollingerBandsSignals:
 # BreakoutStrategy
 # ---------------------------------------------------------------------------
 
+
 class TestBreakoutStrategySignals:
     """Тесты сигналов BreakoutStrategy."""
 
@@ -282,6 +288,7 @@ class TestBreakoutStrategySignals:
 # MeanReversionStrategy
 # ---------------------------------------------------------------------------
 
+
 class TestMeanReversionSignals:
     """Тесты MeanReversionStrategy."""
 
@@ -302,7 +309,8 @@ class TestMeanReversionSignals:
         assert signal["confidence"] == pytest.approx(0.88)
 
     def test_moderate_buy_extreme_low_with_negative_momentum(self):
-        """Экстремально низкая цена + отрицательный momentum (всё ещё падает) → buy 0.72."""
+        """Экстремально низкая цена + отрицательный momentum
+        (всё ещё падает) → buy 0.72."""
         strat = MeanReversionStrategy()
         df = df_with_indicators(100)
         price = float(df["close"].iloc[-1])
@@ -343,6 +351,7 @@ class TestMeanReversionSignals:
 # ---------------------------------------------------------------------------
 # ScalpingStrategy
 # ---------------------------------------------------------------------------
+
 
 class TestScalpingSignals:
     """Тесты ScalpingStrategy."""
@@ -393,6 +402,7 @@ class TestScalpingSignals:
 # TrendFollowingStrategy
 # ---------------------------------------------------------------------------
 
+
 class TestTrendFollowingSignals:
     """Тесты TrendFollowingStrategy."""
 
@@ -430,8 +440,8 @@ class TestTrendFollowingSignals:
         df = df_with_indicators(100)
         price = float(df["close"].iloc[-1])
         # strong_down: sma_20 < sma_50 AND ema_short < ema_long AND close < sma_20
-        df["sma_20"] = price * 1.02   # sma_20 > close
-        df["sma_50"] = price * 1.05   # sma_50 > sma_20
+        df["sma_20"] = price * 1.02  # sma_20 > close
+        df["sma_50"] = price * 1.05  # sma_50 > sma_20
         df["ema_short"] = price * 0.97
         df["ema_long"] = price * 0.99
         df["rsi"] = 40.0  # в (30, 55) → confidence 0.80
@@ -442,6 +452,7 @@ class TestTrendFollowingSignals:
 # ---------------------------------------------------------------------------
 # TradingStrategy (оркестратор)
 # ---------------------------------------------------------------------------
+
 
 class TestTradingStrategyOrchestrator:
     """Тесты класса TradingStrategy (оркестратор)."""
@@ -508,11 +519,13 @@ class TestTradingStrategyOrchestrator:
 # SwingTradingStrategy
 # ---------------------------------------------------------------------------
 
+
 class TestSwingTradingSignals:
     """Тесты SwingTradingStrategy."""
 
     def test_strong_buy_signal(self):
-        """Восходящий тренд + MACD вверх + RSI в [40, 65] + цена выше BB middle → buy 0.85."""
+        """Восходящий тренд + MACD вверх + RSI в [40, 65]
+        + цена выше BB middle → buy 0.85."""
         strat = SwingTradingStrategy()
         df = df_with_indicators(100)
         price = float(df["close"].iloc[-1])

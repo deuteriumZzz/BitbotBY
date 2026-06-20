@@ -6,17 +6,17 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pandas as pd
 import pytest
 
 from src.cycle import CycleRunner
 
-
 # ---------------------------------------------------------------------------
 # Fixture
 # ---------------------------------------------------------------------------
+
 
 def make_runner(get_regime=None) -> CycleRunner:
     """Создаёт CycleRunner с замоканными зависимостями."""
@@ -27,32 +27,35 @@ def make_runner(get_regime=None) -> CycleRunner:
     telegram.notify = AsyncMock()
     regime_fn = get_regime or (lambda: "trending")
 
-    runner = CycleRunner(
+    return CycleRunner(
         news=news,
         scanner=scanner,
         portfolio_optimizer=optimizer,
         telegram=telegram,
         get_current_regime=regime_fn,
     )
-    return runner
 
 
 def make_ohlcv(n: int = 60) -> pd.DataFrame:
     """Минимальный OHLCV DataFrame для тестов."""
     import numpy as np
+
     prices = 100 + np.cumsum(np.random.randn(n) * 0.5)
-    return pd.DataFrame({
-        "close": prices,
-        "open": prices * 0.999,
-        "high": prices * 1.002,
-        "low": prices * 0.998,
-        "volume": np.random.uniform(100, 500, n),
-    })
+    return pd.DataFrame(
+        {
+            "close": prices,
+            "open": prices * 0.999,
+            "high": prices * 1.002,
+            "low": prices * 0.998,
+            "volume": np.random.uniform(100, 500, n),
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
 # collect_snapshots
 # ---------------------------------------------------------------------------
+
 
 class TestCollectSnapshots:
     """Тесты сбора снимков рыночных данных."""
@@ -89,7 +92,7 @@ class TestCollectSnapshots:
         runner._scanner.build_snapshot = MagicMock(return_value=snap)
 
         df = make_ohlcv()
-        result = await runner.collect_snapshots(["BTC/USDT"], {"BTC/USDT": df})
+        await runner.collect_snapshots(["BTC/USDT"], {"BTC/USDT": df})
         # build_snapshot вызывается с sentiment=0.0 и пустыми headlines
         runner._scanner.build_snapshot.assert_called_once()
         call_args = runner._scanner.build_snapshot.call_args[0]
@@ -138,12 +141,14 @@ class TestCollectSnapshots:
 # optimize_allocation
 # ---------------------------------------------------------------------------
 
+
 class TestOptimizeAllocation:
     """Тесты распределения позиций CVaR-оптимизатором."""
 
     def test_single_buy_uses_default_risk(self):
         """Один buy-сигнал получает alloc_fraction = RISK_PER_TRADE."""
         from config import Config
+
         runner = make_runner()
         recs = [{"symbol": "BTC/USDT", "action": "buy"}]
         result = runner.optimize_allocation(recs, {"BTC/USDT": make_ohlcv(60)})
@@ -152,6 +157,7 @@ class TestOptimizeAllocation:
     def test_sell_signal_gets_default_alloc(self):
         """sell-сигнал получает alloc_fraction = RISK_PER_TRADE."""
         from config import Config
+
         runner = make_runner()
         recs = [{"symbol": "BTC/USDT", "action": "sell"}]
         result = runner.optimize_allocation(recs, {"BTC/USDT": make_ohlcv(60)})
@@ -179,9 +185,13 @@ class TestOptimizeAllocation:
     def test_alloc_fraction_capped_at_risk_per_trade_times_3(self):
         """alloc_fraction кэпается на RISK_PER_TRADE * 3."""
         from config import Config
+
         runner = make_runner()
         runner._optimizer.allocate = MagicMock(
-            return_value={"BTC/USDT": 1.0, "ETH/USDT": 1.0}  # нереально большое значение
+            return_value={
+                "BTC/USDT": 1.0,
+                "ETH/USDT": 1.0,
+            }  # нереально большое значение
         )
         recs = [
             {"symbol": "BTC/USDT", "action": "buy"},
@@ -198,6 +208,7 @@ class TestOptimizeAllocation:
     def test_short_df_falls_back_to_default(self):
         """Если данных < 30 свечей — PortfolioOptimizer не вызывается."""
         from config import Config
+
         runner = make_runner()
         recs = [
             {"symbol": "BTC/USDT", "action": "buy"},
@@ -216,6 +227,7 @@ class TestOptimizeAllocation:
 # ---------------------------------------------------------------------------
 # print_recommendations
 # ---------------------------------------------------------------------------
+
 
 class TestPrintRecommendations:
     """Тесты вывода рекомендаций в stdout."""
@@ -248,7 +260,12 @@ class TestPrintRecommendations:
     def test_print_multiple_recs_does_not_raise(self, capsys):
         """print_recommendations выводит несколько записей без ошибок."""
         recs = [
-            {"symbol": f"SYM{i}", "action": "sell", "confidence": 0.6, "strategy": "rsi"}
+            {
+                "symbol": f"SYM{i}",
+                "action": "sell",
+                "confidence": 0.6,
+                "strategy": "rsi",
+            }
             for i in range(5)
         ]
         CycleRunner.print_recommendations(recs, balance=5000.0, cycle=10)
@@ -260,6 +277,7 @@ class TestPrintRecommendations:
 # notify_new_signals
 # ---------------------------------------------------------------------------
 
+
 class TestNotifyNewSignals:
     """Тесты Telegram-уведомлений о новых сигналах."""
 
@@ -267,7 +285,14 @@ class TestNotifyNewSignals:
     async def test_notify_calls_telegram_for_new_buy_signal(self):
         """Новый buy-сигнал отправляется в Telegram."""
         runner = make_runner()
-        recs = [{"symbol": "BTC/USDT", "action": "buy", "confidence": 0.9, "strategy": "ema"}]
+        recs = [
+            {
+                "symbol": "BTC/USDT",
+                "action": "buy",
+                "confidence": 0.9,
+                "strategy": "ema",
+            }
+        ]
         await runner.notify_new_signals(recs, balance=10000.0, cycle=1)
         runner._telegram.notify.assert_called_once()
 
@@ -283,7 +308,14 @@ class TestNotifyNewSignals:
     async def test_notify_deduplicates_repeated_signals(self):
         """Повторный идентичный сигнал не отправляется повторно."""
         runner = make_runner()
-        recs = [{"symbol": "BTC/USDT", "action": "buy", "confidence": 0.9, "strategy": "ema"}]
+        recs = [
+            {
+                "symbol": "BTC/USDT",
+                "action": "buy",
+                "confidence": 0.9,
+                "strategy": "ema",
+            }
+        ]
         await runner.notify_new_signals(recs, balance=10000.0, cycle=1)
         await runner.notify_new_signals(recs, balance=10000.0, cycle=2)
         # Второй вызов не должен дублировать сообщение
@@ -293,8 +325,22 @@ class TestNotifyNewSignals:
     async def test_notify_sends_again_after_action_change(self):
         """После смены action (buy → sell) сигнал отправляется снова."""
         runner = make_runner()
-        buy_recs = [{"symbol": "BTC/USDT", "action": "buy", "confidence": 0.9, "strategy": "ema"}]
-        sell_recs = [{"symbol": "BTC/USDT", "action": "sell", "confidence": 0.85, "strategy": "ema"}]
+        buy_recs = [
+            {
+                "symbol": "BTC/USDT",
+                "action": "buy",
+                "confidence": 0.9,
+                "strategy": "ema",
+            }
+        ]
+        sell_recs = [
+            {
+                "symbol": "BTC/USDT",
+                "action": "sell",
+                "confidence": 0.85,
+                "strategy": "ema",
+            }
+        ]
 
         await runner.notify_new_signals(buy_recs, balance=10000.0, cycle=1)
         await runner.notify_new_signals(sell_recs, balance=10000.0, cycle=2)
@@ -304,7 +350,14 @@ class TestNotifyNewSignals:
     async def test_notify_evicts_symbol_when_absent_from_recs(self):
         """Символ, исчезнувший из рекомендаций, удаляется из dedup-кэша."""
         runner = make_runner()
-        buy_recs = [{"symbol": "BTC/USDT", "action": "buy", "confidence": 0.9, "strategy": "ema"}]
+        buy_recs = [
+            {
+                "symbol": "BTC/USDT",
+                "action": "buy",
+                "confidence": 0.9,
+                "strategy": "ema",
+            }
+        ]
         await runner.notify_new_signals(buy_recs, balance=10000.0, cycle=1)
         assert "BTC/USDT" in runner._last_signals
 
@@ -316,15 +369,17 @@ class TestNotifyNewSignals:
     async def test_notify_includes_entry_sl_tp_in_message(self):
         """Сообщение включает entry, SL, TP если указаны."""
         runner = make_runner()
-        recs = [{
-            "symbol": "ETH/USDT",
-            "action": "buy",
-            "confidence": 0.88,
-            "strategy": "macd",
-            "entry": 3500.0,
-            "stop_loss": 3400.0,
-            "take_profit": 3700.0,
-        }]
+        recs = [
+            {
+                "symbol": "ETH/USDT",
+                "action": "buy",
+                "confidence": 0.88,
+                "strategy": "macd",
+                "entry": 3500.0,
+                "stop_loss": 3400.0,
+                "take_profit": 3700.0,
+            }
+        ]
         await runner.notify_new_signals(recs, balance=10000.0, cycle=3)
         message = runner._telegram.notify.call_args[0][0]
         assert "3500" in message
@@ -335,6 +390,7 @@ class TestNotifyNewSignals:
 # ---------------------------------------------------------------------------
 # md_escape
 # ---------------------------------------------------------------------------
+
 
 class TestMdEscape:
     """Тесты экранирования Markdown-символов."""

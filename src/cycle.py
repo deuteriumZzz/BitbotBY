@@ -138,9 +138,7 @@ class CycleRunner:
 
     # ── Telegram notifications ────────────────────────────────────────────────
 
-    async def notify_new_signals(
-        self, recs: list, balance: float, cycle: int
-    ) -> None:
+    async def notify_new_signals(self, recs: list, balance: float, cycle: int) -> None:
         """
         Отправляет в Telegram только новые или изменившиеся buy/sell сигналы.
 

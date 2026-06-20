@@ -2,7 +2,7 @@ import os
 from dataclasses import dataclass, field
 from typing import List
 
-# Stablecoins excluded from scanning and trading
+# Стейблкоины, исключённые из сканирования и торговли
 STABLECOIN_BASES: frozenset[str] = frozenset(
     {
         "USDC",
@@ -144,7 +144,7 @@ class Config:
         :raises ValueError: Если параметры за пределами допустимых значений
             или отсутствуют обязательные переменные окружения.
         """
-        # Reject stablecoin as main trading symbol
+        # Отклоняем стейблкоин как основной торговый символ
         base = self.SYMBOL.split("/")[0]
         if base in STABLECOIN_BASES:
             raise ValueError(
@@ -162,7 +162,7 @@ class Config:
         if self.TRADING_INTERVAL <= 0:
             raise ValueError("TRADING_INTERVAL must be positive")
 
-        # Bybit API keys required for live trading
+        # Ключи Bybit API обязательны для торговли в реальном режиме
         if not self.PAPER_TRADING:
             missing = []
             if not self.BYBIT_API_KEY:
@@ -176,7 +176,7 @@ class Config:
                     f"Set them in .env or use PAPER_TRADING=true."
                 )
 
-        # AI provider validation
+        # Валидация AI-провайдера
         if self.AI_PROVIDER not in ("auto", "anthropic", "deepseek", "openai"):
             raise ValueError(
                 f"AI_PROVIDER={self.AI_PROVIDER!r} is invalid. "
@@ -203,7 +203,7 @@ class Config:
                     "platform.deepseek.com / platform.openai.com"
                 )
 
-        # SAC model file required for dqn/hybrid modes
+        # Файл SAC-модели обязателен для режимов dqn/hybrid
         if self.MODE in ("dqn", "hybrid"):
             if not os.path.exists(self.SAC_MODEL_PATH):
                 raise ValueError(
@@ -212,5 +212,5 @@ class Config:
                 )
 
 
-# Global config instance
+# Глобальный экземпляр конфигурации
 config = Config()

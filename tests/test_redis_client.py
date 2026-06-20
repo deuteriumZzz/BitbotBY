@@ -13,26 +13,25 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pandas as pd
-import pytest
 
 # conftest.py уже мокает redis на уровне sys.modules
 from src.redis_client import RedisClient
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_client(ping_ok: bool = True) -> RedisClient:
     """Создаёт RedisClient с полностью замоканным redis.Redis."""
-    with patch("src.redis_client.redis.Redis") as MockRedis:
+    with patch("src.redis_client.redis.Redis") as mock_redis_cls:
         mock_conn = MagicMock()
         if ping_ok:
             mock_conn.ping.return_value = True
         else:
             mock_conn.ping.side_effect = ConnectionError("redis down")
         mock_conn.connection_pool.connection_kwargs = {"host": "redis", "port": 6379}
-        MockRedis.return_value = mock_conn
+        mock_redis_cls.return_value = mock_conn
         client = RedisClient(host="localhost", port=6379)
         client._mock_conn = mock_conn  # сохраняем для проверок
     return client
@@ -46,6 +45,7 @@ def _make_unavailable_client() -> RedisClient:
 # ---------------------------------------------------------------------------
 # _available=False — все методы возвращают None/False/{}
 # ---------------------------------------------------------------------------
+
 
 class TestUnavailableGuard:
     """Когда Redis недоступен, методы должны возвращать safe defaults."""
@@ -121,6 +121,7 @@ class TestUnavailableGuard:
 # save_market_data / load_market_data round-trip
 # ---------------------------------------------------------------------------
 
+
 class TestMarketDataRoundTrip:
     """Round-trip тест: сохранение и загрузка DataFrame через Redis."""
 
@@ -173,6 +174,7 @@ class TestMarketDataRoundTrip:
 # save_trading_state / load_trading_state round-trip
 # ---------------------------------------------------------------------------
 
+
 class TestTradingStateRoundTrip:
     """Round-trip для торгового состояния (dict → JSON → dict)."""
 
@@ -203,6 +205,7 @@ class TestTradingStateRoundTrip:
 # ---------------------------------------------------------------------------
 # save_model / load_model с numpy arrays
 # ---------------------------------------------------------------------------
+
 
 class TestModelRoundTrip:
     """Тест сохранения/загрузки модели с numpy arrays."""
@@ -246,6 +249,7 @@ class TestModelRoundTrip:
 # acquire_lock / release_lock
 # ---------------------------------------------------------------------------
 
+
 class TestLocking:
     """Тесты распределённых блокировок."""
 
@@ -288,7 +292,8 @@ class TestLocking:
         self.client._mock_conn.eval.assert_not_called()
 
     def test_acquire_lock_sets_available_false_on_error(self):
-        """Ошибка при acquire_lock устанавливает _available=False, но возвращает True (fail-open)."""
+        """Ошибка при acquire_lock устанавливает _available=False,
+        но возвращает True (fail-open)."""
         self.client._mock_conn.set.side_effect = Exception("redis error")
         result = self.client.acquire_lock("trade_lock")
         # fail-open: блокировку пропускаем, торговля продолжается
@@ -299,6 +304,7 @@ class TestLocking:
 # ---------------------------------------------------------------------------
 # reconnect()
 # ---------------------------------------------------------------------------
+
 
 class TestReconnect:
     """Тесты логики переподключения."""
@@ -325,6 +331,7 @@ class TestReconnect:
 # ---------------------------------------------------------------------------
 # publish_signal
 # ---------------------------------------------------------------------------
+
 
 class TestPublishSignal:
     """Тесты публикации торгового сигнала."""
@@ -353,6 +360,7 @@ class TestPublishSignal:
 # ---------------------------------------------------------------------------
 # update_performance_stats / get_performance_stats round-trip
 # ---------------------------------------------------------------------------
+
 
 class TestPerformanceStats:
     """Round-trip для статистики производительности."""

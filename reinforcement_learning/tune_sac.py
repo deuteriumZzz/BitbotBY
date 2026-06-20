@@ -1,11 +1,11 @@
 """
-Optuna hyperparameter search for the SAC trading agent.
+Поиск гиперпараметров Optuna для SAC-агента.
 
-Searches: learning_rate, batch_size, tau, gamma, net_arch.
-Saves best params to models/best_hyperparams.json.
-train_sac.py loads this file automatically if it exists.
+Подбирает: learning_rate, batch_size, tau, gamma, net_arch.
+Сохраняет лучшие параметры в models/best_hyperparams.json.
+train_sac.py загружает этот файл автоматически, если он существует.
 
-Usage:
+Использование:
     PYTHONPATH=. python3 reinforcement_learning/tune_sac.py
     make tune
 """
@@ -25,7 +25,7 @@ _TRAIN_SPLIT = 0.7
 
 
 def _net_arch(trial: object) -> list[int]:
-    """Map trial categorical → hidden layer sizes."""
+    """Преобразует категориальный параметр trial → размеры скрытых слоёв."""
     import optuna  # noqa: I001
 
     _trial: "optuna.Trial" = trial  # type: ignore[assignment]
@@ -39,11 +39,13 @@ def _net_arch(trial: object) -> list[int]:
 
 def objective(trial: object, df: object) -> float:
     """
-    Optuna objective: train SAC for _TUNE_TIMESTEPS, return negative PnL.
+    Целевая функция Optuna: обучает SAC на _TUNE_TIMESTEPS шагах,
+    возвращает отрицательный итоговый PnL.
 
-    :param trial: optuna.Trial object.
+    :param trial: объект optuna.Trial.
     :param df: OHLCV DataFrame.
-    :return: Negative final portfolio value (lower = better for minimization).
+    :return: Отрицательная итоговая стоимость портфеля
+             (меньше = лучше для минимизации).
     """
     import optuna  # noqa: I001
     import pandas as pd
@@ -79,7 +81,7 @@ def objective(trial: object, df: object) -> float:
         )
         model.learn(total_timesteps=_TUNE_TIMESTEPS)
     except Exception as exc:
-        logger.warning("Trial %d failed: %s", _trial.number, exc)
+        logger.warning("Попытка %d завершилась ошибкой: %s", _trial.number, exc)
         return 0.0
 
     env_val = TradingEnv(val_df, initial_balance=10_000.0)
@@ -105,16 +107,16 @@ def objective(trial: object, df: object) -> float:
 
 def tune(df: object, n_trials: int = _N_TRIALS) -> dict:
     """
-    Run Optuna hyperparameter search and save best params to JSON.
+    Запускает поиск гиперпараметров Optuna и сохраняет лучшие в JSON.
 
-    :param df: Full OHLCV DataFrame.
-    :param n_trials: Number of trials.
-    :return: Best hyperparameters dict.
+    :param df: Полный OHLCV DataFrame.
+    :param n_trials: Количество попыток.
+    :return: Словарь лучших гиперпараметров.
     """
     try:
         import optuna
     except ImportError:
-        logger.error("optuna not installed: pip install optuna>=3.6.0")
+        logger.error("optuna не установлен: pip install optuna>=3.6.0")
         raise
 
     optuna.logging.set_verbosity(optuna.logging.WARNING)
@@ -130,12 +132,12 @@ def tune(df: object, n_trials: int = _N_TRIALS) -> dict:
 
     best = study.best_params
     best_value = -study.best_value
-    logger.info("Best trial: $%.0f | params: %s", best_value, json.dumps(best))
+    logger.info("Лучшая попытка: $%.0f | параметры: %s", best_value, json.dumps(best))
 
     os.makedirs("models", exist_ok=True)
     with open(HYPERPARAMS_PATH, "w") as f:
         json.dump(best, f, indent=2)
-    logger.info("Best hyperparams saved → %s", HYPERPARAMS_PATH)
+    logger.info("Лучшие гиперпараметры сохранены → %s", HYPERPARAMS_PATH)
 
     return best
 

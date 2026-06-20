@@ -1,0 +1,4 @@
+# file: /Users/deuterium/Dev/BitbotBY/src/trade_history.py
+# hypothesis_version: 6.141.1
+
+[0.0, 0.5, 'buy', 'closed_trades', 'data', 'ev', 'expected_value', 'results', 'strategy', 'total_commissions', 'total_pnl', 'total_return_pct', 'total_trades', 'trades.db', 'utf-8', 'win_rate']

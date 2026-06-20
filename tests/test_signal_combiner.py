@@ -36,7 +36,7 @@ def mock_ai():
 
 @pytest.fixture
 def mock_dqn_signal():
-    """Patch SACSignal inside signal_combiner for the duration of each test."""
+    """Патчит SACSignal внутри signal_combiner на время каждого теста."""
     with patch("src.signal_combiner.SACSignal") as MockSAC:  # noqa: N806
         instance = MagicMock()
         instance.get_signal.return_value = {
@@ -50,7 +50,7 @@ def mock_dqn_signal():
 
 @pytest.fixture
 def combiner(mock_ai, mock_dqn_signal):
-    """SignalCombiner with mocked AI and SAC."""
+    """SignalCombiner с замоканными AI и SAC."""
     return SignalCombiner(ai=mock_ai)
 
 
@@ -103,7 +103,7 @@ async def test_dqn_mode_returns_buy_above_threshold(combiner, mock_dqn_signal):
 
 
 async def test_dqn_mode_skips_low_confidence(combiner, mock_dqn_signal):
-    """conf=0.3 is below MIN_SIGNAL_CONFIDENCE=0.65 → empty result."""
+    """conf=0.3 ниже MIN_SIGNAL_CONFIDENCE=0.65 → пустой результат."""
     mock_dqn_signal.get_signal.return_value = {
         "action": "buy",
         "confidence": 0.3,
@@ -116,7 +116,7 @@ async def test_dqn_mode_skips_low_confidence(combiner, mock_dqn_signal):
 
 
 async def test_hybrid_agree_buy(combiner, mock_ai, mock_dqn_signal):
-    """Both DQN and AI say buy → combined conf = 0.4*dqn + 0.6*ai."""
+    """И DQN, и AI говорят buy → итоговый conf = 0.4*dqn + 0.6*ai."""
     dqn_conf = 0.75
     ai_conf = 0.80
     mock_dqn_signal.get_signal.return_value = {
@@ -147,7 +147,7 @@ async def test_hybrid_agree_buy(combiner, mock_ai, mock_dqn_signal):
 
 
 async def test_hybrid_disagree_returns_empty(combiner, mock_ai, mock_dqn_signal):
-    """DQN=buy, AI=sell → hold (no signal)."""
+    """DQN=buy, AI=sell → hold (нет сигнала)."""
     mock_dqn_signal.get_signal.return_value = {
         "action": "buy",
         "confidence": 0.85,
@@ -173,7 +173,7 @@ async def test_hybrid_disagree_returns_empty(combiner, mock_ai, mock_dqn_signal)
 
 
 async def test_hybrid_ai_silent_high_dqn_conf(combiner, mock_ai, mock_dqn_signal):
-    """AI returns nothing, DQN conf=0.85 >= 0.80 → use DQN signal."""
+    """AI ничего не вернул, DQN conf=0.85 >= 0.80 → используем сигнал DQN."""
     mock_dqn_signal.get_signal.return_value = {
         "action": "buy",
         "confidence": 0.85,
@@ -191,7 +191,7 @@ async def test_hybrid_ai_silent_high_dqn_conf(combiner, mock_ai, mock_dqn_signal
 
 
 async def test_hybrid_ai_silent_low_dqn_conf(combiner, mock_ai, mock_dqn_signal):
-    """AI returns nothing, DQN conf=0.5 < 0.80 → skip."""
+    """AI ничего не вернул, DQN conf=0.5 < 0.80 → пропускаем."""
     mock_dqn_signal.get_signal.return_value = {
         "action": "buy",
         "confidence": 0.5,

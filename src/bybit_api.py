@@ -243,10 +243,14 @@ class BybitAPI:
                 except asyncio.CancelledError:
                     raise
                 except ccxt.AuthenticationError as e:
-                    self.logger.critical("Ошибка авторизации при создании ордера: %s", e)
+                    self.logger.critical(
+                        "Ошибка авторизации при создании ордера: %s", e
+                    )
                     raise
                 except ccxt.InsufficientFunds as e:
-                    self.logger.error("Недостаточно средств для ордера %s: %s", symbol, e)
+                    self.logger.error(
+                        "Недостаточно средств для ордера %s: %s", symbol, e
+                    )
                     return None
                 except (ccxt.NetworkError, ccxt.RequestTimeout) as e:
                     last_error = e

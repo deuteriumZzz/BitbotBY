@@ -1,14 +1,14 @@
 """
-backtest.py — Walk-forward backtesting for BitbotBY strategies.
+backtest.py — Walk-forward бэктестирование стратегий BitbotBY.
 
-Usage:
+Использование:
     python3 backtest.py
 
-Env overrides:
-    BT_MONTHS      months of history (default 6)
-    BT_SYMBOL      symbol (default Config.SYMBOL)
-    BT_TIMEFRAME   timeframe (default Config.TIMEFRAME)
-    BT_MIN_CONF    min confidence (default Config.MIN_SIGNAL_CONFIDENCE)
+Переменные окружения:
+    BT_MONTHS      месяцев истории (по умолчанию 6)
+    BT_SYMBOL      символ (по умолчанию Config.SYMBOL)
+    BT_TIMEFRAME   таймфрейм (по умолчанию Config.TIMEFRAME)
+    BT_MIN_CONF    мин. уверенность (по умолчанию Config.MIN_SIGNAL_CONFIDENCE)
 """
 
 import asyncio
@@ -24,7 +24,7 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
-# Allow imports from project root
+# Разрешаем импорты из корня проекта
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config import STABLECOIN_BASES, Config
@@ -33,13 +33,13 @@ from src.indicators import add_indicators
 from src.market_impact import estimate_from_df as _ac_impact
 from src.strategies import STRATEGY_REGISTRY, BaseStrategy
 
-# ── Constants ──────────────────────────────────────────────────────────────
+# ── Константы ──────────────────────────────────────────────────────────────
 
-_FETCH_LIMIT = 200  # ccxt batch size (Bybit limit)
-_CSV_CACHE_TTL = 86_400  # 24 h
-_WARMUP = 50  # minimum candles before first signal
-_ATR_MULT = 1.5  # stop-loss ATR multiplier
-_RR = 2.0  # risk/reward ratio (1:2)
+_FETCH_LIMIT = 200  # размер батча ccxt (лимит Bybit)
+_CSV_CACHE_TTL = 86_400  # 24 ч
+_WARMUP = 50  # минимум свечей до первого сигнала
+_ATR_MULT = 1.5  # множитель ATR для стоп-лосса
+_RR = 2.0  # соотношение риск/доход (1:2)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -48,7 +48,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-# ── Dataclass ──────────────────────────────────────────────────────────────
+# ── Датакласс ──────────────────────────────────────────────────────────────
 
 
 @dataclass
@@ -58,19 +58,19 @@ class BacktestResult:
     strategy: str
     total_trades: int
     win_rate: float  # 0.0–1.0
-    avg_profit_pct: float  # avg winning trade % (positive)
-    avg_loss_pct: float  # avg losing trade % (negative)
+    avg_profit_pct: float  # средний % выигрышной сделки (положительный)
+    avg_loss_pct: float  # средний % проигрышной сделки (отрицательный)
     expected_value: float  # wr*avg_profit + (1-wr)*avg_loss
-    total_return_pct: float  # (final - initial) / initial
-    max_drawdown_pct: float  # worst peak-to-trough %
-    sharpe_ratio: float  # annualised, rf=0
+    total_return_pct: float  # (итог - начало) / начало
+    max_drawdown_pct: float  # наихудшая просадка от пика до минимума %
+    sharpe_ratio: float  # годовой, rf=0
     num_wins: int
     num_losses: int
     trades: list = field(default_factory=list, repr=False)
     trade_returns: list = field(default_factory=list, repr=False)
 
 
-# ── CSV cache helpers (no Redis, no API key required) ─────────────────────
+# ── Вспомогательные функции CSV-кэша (без Redis, без API-ключа) ───────────
 
 
 def _csv_cache_path(symbol: str, timeframe: str) -> str:
@@ -89,10 +89,10 @@ def _load_csv_cache(path: str) -> Optional[pd.DataFrame]:
         df = pd.read_csv(path, index_col=0, parse_dates=True)
         if "timestamp" in df.columns:
             df["timestamp"] = pd.to_numeric(df["timestamp"], errors="coerce")
-        logger.info(f"CSV cache loaded: {path} ({len(df)} rows)")
+        logger.info(f"CSV-кэш загружен: {path} ({len(df)} строк)")
         return df
     except Exception as e:
-        logger.warning(f"CSV cache read failed: {e}")
+        logger.warning(f"Ошибка чтения CSV-кэша: {e}")
         return None
 
 
@@ -100,10 +100,10 @@ def _save_csv_cache(df: pd.DataFrame, path: str) -> None:
     try:
         df.to_csv(path)
     except Exception as e:
-        logger.warning(f"CSV cache save failed: {e}")
+        logger.warning(f"Ошибка сохранения CSV-кэша: {e}")
 
 
-# ── Top-N symbols by 24h volume (public API, no auth) ────────────────────
+# ── Топ-N символов по объёму за 24ч (публичный API, без авторизации) ─────
 
 
 async def _fetch_top_symbols(n: int = 20) -> List[str]:
@@ -136,11 +136,13 @@ async def _fetch_top_symbols(n: int = 20) -> List[str]:
         logger.info("Top %d symbols: %s...", n, ", ".join(symbols[:5]))
         return symbols
     except Exception as e:
-        logger.error("fetch_tickers failed: %s — falling back to Config.SYMBOLS", e)
+        logger.error(
+            "fetch_tickers завершился ошибкой: %s — возврат к Config.SYMBOLS", e
+        )
         return Config.SYMBOLS[:n]
 
 
-# ── OHLCV fetch (ccxt, no auth needed for public data) ────────────────────
+# ── Загрузка OHLCV (ccxt, публичные данные, авторизация не нужна) ─────────
 
 
 async def _fetch_batches(
@@ -153,7 +155,7 @@ async def _fetch_batches(
     try:
         import ccxt.async_support as ccxt_async
     except ImportError:
-        logger.error("ccxt not installed")
+        logger.error("ccxt не установлен")
         return pd.DataFrame()
 
     exchange = ccxt_async.bybit({"enableRateLimit": True})
@@ -170,7 +172,7 @@ async def _fetch_batches(
                     limit=_FETCH_LIMIT,
                 )
             except Exception as e:
-                logger.error(f"fetch_ohlcv error: {e}")
+                logger.error(f"Ошибка fetch_ohlcv: {e}")
                 break
 
             if not raw:
@@ -195,7 +197,7 @@ async def _fetch_batches(
             current = last_ts + 1
 
             if current >= until_ms:
-                break  # reached requested end date
+                break  # достигли запрошенной конечной даты
 
     finally:
         await exchange.close()
@@ -209,7 +211,7 @@ async def _fetch_batches(
         .sort_values("timestamp")
         .reset_index(drop=True)
     )
-    logger.info(f"Fetched {len(result)} candles total")
+    logger.info(f"Получено {len(result)} свечей всего")
     return result
 
 
@@ -219,10 +221,9 @@ async def load_data(
     months: int,
 ) -> pd.DataFrame:
     """
-    Load OHLCV data with CSV cache, then compute indicators.
+    Загружает OHLCV-данные с CSV-кэшем, затем вычисляет индикаторы.
 
-    Falls back to cached CSV or historical_btc.csv if API
-    is unavailable.
+    Использует кэш или historical_btc.csv если API недоступен.
     """
     cache_path = _csv_cache_path(symbol, timeframe)
     cached = _load_csv_cache(cache_path)
@@ -234,7 +235,7 @@ async def load_data(
 
     if cached is not None and not cached.empty:
         last_ts = int(cached["timestamp"].max())
-        logger.info("Cache hit — fetching incremental update " f"since {last_ts}")
+        logger.info("Кэш найден — получаем инкрементальное обновление " f"с {last_ts}")
         new_df = await _fetch_batches(
             symbol,
             timeframe,
@@ -252,7 +253,8 @@ async def load_data(
             combined = cached
     else:
         logger.info(
-            f"No cache — fetching {months}m history " f"for {symbol} {timeframe}..."
+            f"Кэш отсутствует — загружаем историю {months}м "
+            f"для {symbol} {timeframe}..."
         )
         combined = await _fetch_batches(
             symbol,
@@ -261,33 +263,33 @@ async def load_data(
             until_ms=now_ms,
         )
         if combined.empty:
-            # last-resort: try historical_btc.csv in project root
+            # последний резерв: пробуем historical_btc.csv в корне проекта
             fallback = os.path.join(
                 os.path.dirname(os.path.abspath(__file__)),
                 "historical_btc.csv",
             )
             if os.path.exists(fallback):
-                logger.warning(f"API unavailable — loading fallback " f"{fallback}")
+                logger.warning(f"API недоступен — загружаем резерв " f"{fallback}")
                 combined = pd.read_csv(fallback)
                 combined.columns = [c.lower() for c in combined.columns]
                 needed = {"open", "high", "low", "close", "volume"}
                 if not needed.issubset(set(combined.columns)):
-                    logger.error("Fallback CSV missing required columns")
+                    logger.error("В резервном CSV отсутствуют обязательные колонки")
                     return pd.DataFrame()
                 if "timestamp" not in combined.columns:
                     combined["timestamp"] = range(len(combined))
 
     if combined.empty:
-        logger.error("No data available — cannot run backtest")
+        logger.error("Нет данных — невозможно запустить бэктест")
         return pd.DataFrame()
 
     _save_csv_cache(combined, cache_path)
-    logger.info(f"Total candles before indicators: {len(combined)}")
+    logger.info(f"Всего свечей до расчёта индикаторов: {len(combined)}")
 
-    # Compute technical indicators
+    # Вычисляем технические индикаторы
     combined = add_indicators(combined)
 
-    # Aliases required by strategies
+    # Псевдонимы, необходимые стратегиям
     if "ema_12" in combined.columns:
         combined["ema_short"] = combined["ema_12"]
     if "ema_26" in combined.columns:
@@ -296,24 +298,24 @@ async def load_data(
     return combined
 
 
-# ── Simulation helpers ────────────────────────────────────────────────────
+# ── Вспомогательные функции симуляции ────────────────────────────────────
 
 
 def _sharpe(returns: List[float]) -> float:
-    """Per-trade Sharpe ratio (not annualised — holding periods vary per trade)."""
+    """Коэффициент Sharpe на сделку (не годовой — периоды удержания разные)."""
     if len(returns) < 2:
         return 0.0
     mean_r = statistics.mean(returns)
     std_r = statistics.stdev(returns)
     if std_r == 0.0:
         return 0.0
-    # Do NOT multiply by sqrt(252): that factor assumes daily returns.
-    # These are per-trade P&L% with variable holding time — annualising by 252
-    # overstates Sharpe ~15x for 15m strategies.
+    # НЕ умножаем на sqrt(252): этот множитель предполагает дневные доходности.
+    # Здесь P&L% на сделку с переменным временем удержания — умножение на 252
+    # завышает Sharpe ~в 15 раз для стратегий на 15м.
     return mean_r / std_r
 
 
-# ── Core walk-forward engine ──────────────────────────────────────────────
+# ── Основной движок walk-forward ──────────────────────────────────────────
 
 
 def run_strategy(
@@ -327,8 +329,8 @@ def run_strategy(
     min_confidence: float,
 ) -> BacktestResult:
     """
-    Run a single strategy over df in walk-forward fashion.
-    No look-ahead bias: signal is generated on df.iloc[:i+1].
+    Прогоняет одну стратегию по df в режиме walk-forward.
+    Без look-ahead: сигнал генерируется на df.iloc[:i+1].
     """
     balance = initial_balance
     peak_balance = initial_balance
@@ -348,7 +350,7 @@ def run_strategy(
         window = df.iloc[: i + 1]
 
         if open_trade is None:
-            # ── Try to enter ──────────────────────────────────────
+            # ── Попытка войти в позицию ───────────────────────────
             try:
                 signal = strategy.generate_signal(window)
             except Exception as exc:
@@ -359,13 +361,13 @@ def run_strategy(
             confidence = float(signal.get("confidence", 0.0))
 
             if action in ("buy", "sell") and confidence >= min_confidence:
-                # Enter on the OPEN of the next candle, not the close of the
-                # signal candle — avoids look-ahead bias (signal fires at bar
-                # close; earliest realistic fill is bar i+1 open).
+                # Входим на OPEN следующей свечи, а не на CLOSE сигнальной —
+                # исключаем look-ahead bias (сигнал срабатывает на закрытии бара;
+                # ранний реалистичный вход — открытие бара i+1).
                 if i + 1 >= n:
-                    continue  # no next bar; skip signal at end of data
+                    continue  # нет следующего бара; пропускаем сигнал в конце данных
                 next_open = float(df.iloc[i + 1]["open"])
-                # Kelly criterion after 10 closed trades (half-Kelly, capped 20%)
+                # Критерий Келли после 10 закрытых сделок (half-Kelly, ограничен 20%)
                 n_closed = len(closed_trades)
                 if n_closed >= 10:
                     wr = sum(1 for t in closed_trades if t["pnl"] > 0) / n_closed
@@ -375,7 +377,8 @@ def run_strategy(
                 else:
                     fraction = risk_per_trade
                 position_usdt = balance * fraction
-                # Almgren-Chriss adaptive impact: adapts to order size & volatility
+                # Адаптивный market impact Almgren-Chriss:
+                # зависит от размера ордера и волатильности
                 impact = _ac_impact(window, position_usdt)
                 if action == "buy":
                     entry_price = next_open * (1.0 + impact)
@@ -403,7 +406,7 @@ def run_strategy(
                 entry_comm = quantity * entry_price * commission_rate
                 balance -= (
                     position_usdt + entry_comm
-                )  # reserve capital + pay commission
+                )  # резервируем капитал + платим комиссию
 
                 open_trade = {
                     "action": action,
@@ -418,7 +421,7 @@ def run_strategy(
                 }
 
         else:
-            # ── Manage open position ──────────────────────────────
+            # ── Управление открытой позицией ──────────────────────
             current_price = float(window["close"].iloc[-1])
             d = open_trade["direction"]
             sl = open_trade["stop_loss"]
@@ -433,9 +436,9 @@ def run_strategy(
 
             if sl_hit or tp_hit:
                 exit_impact = _ac_impact(window, open_trade["position_usdt"])
-                if d == 1:  # long → sell at bid
+                if d == 1:  # лонг → продаём по bid
                     exit_price = current_price * (1.0 - exit_impact)
-                else:  # short → buy at ask
+                else:  # шорт → покупаем по ask
                     exit_price = current_price * (1.0 + exit_impact)
                 qty = open_trade["quantity"]
                 exit_comm = qty * exit_price * commission_rate
@@ -468,7 +471,7 @@ def run_strategy(
                 )
                 open_trade = None
 
-    # ── Force-close any remaining position ───────────────────────
+    # ── Принудительное закрытие оставшейся позиции ───────────────
     if open_trade is not None and n > 0:
         d = open_trade["direction"]
         mid_close = float(df["close"].iloc[-1])
@@ -506,7 +509,7 @@ def run_strategy(
             }
         )
 
-    # ── Aggregate metrics ─────────────────────────────────────────
+    # ── Агрегация метрик ─────────────────────────────────────────
     total_trades = len(closed_trades)
     wins = [t for t in closed_trades if t["pnl"] > 0]
     losses = [t for t in closed_trades if t["pnl"] <= 0]
@@ -538,21 +541,21 @@ def run_strategy(
     )
 
 
-# ── Multi-symbol aggregation ──────────────────────────────────────────────
+# ── Агрегация по нескольким символам ─────────────────────────────────────
 
 
 def aggregate_results(
     results_per_symbol: dict[str, List[BacktestResult]]
 ) -> List[BacktestResult]:
     """
-    Merge per-symbol BacktestResults into one aggregate result per strategy.
+    Объединяет BacktestResult по символам в один агрегированный результат на стратегию.
 
-    Metrics:
-      total_trades / wins / losses  → sum across symbols
-      win_rate / avg_profit / avg_loss / EV → recalculated from aggregated counts
-      total_return_pct  → average across symbols
-      max_drawdown_pct  → worst across symbols
-      sharpe_ratio      → recalculated from combined trade_returns list
+    Метрики:
+      total_trades / wins / losses  → сумма по символам
+      win_rate / avg_profit / avg_loss / EV → пересчёт из агрегированных счётчиков
+      total_return_pct  → среднее по символам
+      max_drawdown_pct  → наихудшее по символам
+      sharpe_ratio      → пересчёт из объединённого списка trade_returns
     """
     strategy_buckets: dict[str, List[BacktestResult]] = {}
     for sym_results in results_per_symbol.values():
@@ -599,7 +602,7 @@ def aggregate_results(
     return aggregated
 
 
-# ── Report printer ────────────────────────────────────────────────────────
+# ── Печать отчёта ────────────────────────────────────────────────────────
 
 
 def print_report(
@@ -639,12 +642,12 @@ def print_report(
     print(sep)
     if results:
         best = results[0]
-        print(f"Best strategy: {best.strategy}  (highest EV)")
-        print(f"Recommended MODE: ai with " f"DEFAULT_STRATEGY={best.strategy}")
+        print(f"Лучшая стратегия: {best.strategy}  (наибольший EV)")
+        print(f"Рекомендуемый MODE: ai с " f"DEFAULT_STRATEGY={best.strategy}")
     print(sep)
 
 
-# ── JSON export ───────────────────────────────────────────────────────────
+# ── Экспорт JSON ─────────────────────────────────────────────────────────
 
 
 def save_json(
@@ -685,24 +688,24 @@ def save_json(
     try:
         with open(output_path, "w", encoding="utf-8") as fh:
             json.dump(payload, fh, indent=2, ensure_ascii=False)
-        logger.info(f"Results saved to {output_path}")
+        logger.info(f"Результаты сохранены в {output_path}")
     except Exception as e:
-        logger.error(f"Failed to save JSON: {e}")
+        logger.error(f"Ошибка сохранения JSON: {e}")
 
 
-# ── Entry point ───────────────────────────────────────────────────────────
+# ── Точка входа ──────────────────────────────────────────────────────────
 
 
 async def main() -> None:
-    # ── Read env overrides ────────────────────────────────────────
+    # ── Чтение переопределений из окружения ───────────────────────
     months = int(os.getenv("BT_MONTHS", "6"))
     timeframe = os.getenv("BT_TIMEFRAME", Config.TIMEFRAME)
     min_conf = float(os.getenv("BT_MIN_CONF", str(Config.MIN_SIGNAL_CONFIDENCE)))
 
-    # Symbol resolution:
-    #   BT_SYMBOLS=A,B,C  → explicit list
-    #   BT_SYMBOL=A       → single explicit symbol
-    #   (nothing)         → auto-fetch top BT_TOP_N from Bybit by 24h volume
+    # Определение символов:
+    #   BT_SYMBOLS=A,B,C  → явный список
+    #   BT_SYMBOL=A       → один явный символ
+    #   (ничего)          → автоматически получить топ BT_TOP_N с Bybit по объёму за 24ч
     top_n = int(os.getenv("BT_TOP_N", str(Config.SCAN_TOP_N)))
     raw_syms = os.getenv("BT_SYMBOLS") or os.getenv("BT_SYMBOL")
     if raw_syms:
@@ -713,7 +716,8 @@ async def main() -> None:
 
     multi = len(symbols) > 1
     print(
-        f"[backtest] {len(symbols)} symbol(s) | {timeframe} | {months}m | min_conf={min_conf}"
+        f"[backtest] {len(symbols)} symbol(s) | {timeframe} | "
+        f"{months}m | min_conf={min_conf}"
     )
     print(f"[backtest] symbols: {', '.join(symbols)}")
 
@@ -726,10 +730,10 @@ async def main() -> None:
 
         df = await load_data(symbol, timeframe, months)
         if df.empty:
-            print(f"  ERROR: no data for {symbol} — skipping")
+            print(f"  ОШИБКА: нет данных для {symbol} — пропускаем")
             continue
 
-        print(f"[backtest] {len(df)} candles loaded")
+        print(f"[backtest] {len(df)} свечей загружено")
 
         sym_results: List[BacktestResult] = []
         for strat_name, strat_cls in STRATEGY_REGISTRY.items():
@@ -746,7 +750,8 @@ async def main() -> None:
             )
             sym_results.append(result)
             print(
-                f" done — {result.total_trades} trades, EV={result.expected_value * 100:+.2f}%"
+                f" done — {result.total_trades} trades,"
+                f" EV={result.expected_value * 100:+.2f}%"
             )
 
         sym_results.sort(key=lambda r: r.expected_value, reverse=True)
@@ -756,16 +761,16 @@ async def main() -> None:
             print_report(sym_results, symbol, timeframe, months)
 
     if not results_per_symbol:
-        print("ERROR: no results — aborting")
+        print("ОШИБКА: нет результатов — прерываем")
         return
 
-    # ── Per-symbol summary table (multi-symbol mode) ──────────────
+    # ── Сводная таблица по каждому символу (режим нескольких символов) ──────
     if multi:
         sep = "=" * 68
         for symbol, sym_results in results_per_symbol.items():
             print_report(sym_results, symbol, timeframe, months)
 
-        # ── Aggregated report across all symbols ──────────────────
+        # ── Агрегированный отчёт по всем символам ────────────────
         agg = aggregate_results(results_per_symbol)
         print(f"\n{sep}")
         print(f"AGGREGATED RESULTS — {len(symbols)} symbols — {timeframe} — {months}m")
@@ -782,13 +787,15 @@ async def main() -> None:
             print(
                 f"{rank:>4}  {r.strategy:<20} {r.total_trades:>6}  "
                 f"{r.win_rate*100:>7.1f}%  {r.expected_value*100:>+7.2f}%  "
-                f"{r.total_return_pct*100:>+8.1f}%  {r.max_drawdown_pct*100:>6.1f}%  {r.sharpe_ratio:>7.2f}"
+                f"{r.total_return_pct*100:>+8.1f}%"
+                f"  {r.max_drawdown_pct*100:>6.1f}%  {r.sharpe_ratio:>7.2f}"
             )
         print(sep)
         if agg:
             best = agg[0]
             print(
-                f"Best strategy across all symbols: {best.strategy}  (EV={best.expected_value*100:+.2f}%)"
+                f"Лучшая стратегия по всем символам: {best.strategy}"
+                f"  (EV={best.expected_value*100:+.2f}%)"
             )
         print(sep)
 
@@ -796,7 +803,7 @@ async def main() -> None:
     else:
         save_json(results_per_symbol[symbols[0]], symbols[0], timeframe, months)
 
-    # ── Alpha significance tests (on aggregated or single result) ─
+    # ── Тесты значимости альфы (агрегированные или по одному символу) ────────
     final_results = (
         aggregate_results(results_per_symbol)
         if multi
@@ -805,9 +812,9 @@ async def main() -> None:
     tester = AlphaTester()
     sep = "=" * 68
     print(f"\n{sep}")
-    print("ALPHA SIGNIFICANCE  (bootstrap Sharpe + Wilcoxon signed-rank)")
+    print("ЗНАЧИМОСТЬ АЛЬФЫ  (бутстрап Sharpe + знаковый ранговый тест Wilcoxon)")
     if multi:
-        print("(based on aggregated trade returns across all symbols)")
+        print("(на основе агрегированных доходностей сделок по всем символам)")
     print(sep)
     sig_count = 0
     for r in final_results:
@@ -817,8 +824,8 @@ async def main() -> None:
             sig_count += 1
     print(sep)
     print(
-        f"{sig_count}/{len(final_results)} strategies show statistically "
-        f"significant alpha at p<{0.05:.0%}"
+        f"{sig_count}/{len(final_results)} стратегий показывают статистически "
+        f"значимую альфу при p<{0.05:.0%}"
     )
     print(sep)
 

@@ -354,7 +354,9 @@ class DataLoader:
             except asyncio.CancelledError:
                 raise
             except ccxt.AuthenticationError as e:
-                self.logger.critical("Ошибка авторизации при пагинации %s: %s", symbol, e)
+                self.logger.critical(
+                    "Ошибка авторизации при пагинации %s: %s", symbol, e
+                )
                 raise
             except (
                 ccxt.NetworkError,

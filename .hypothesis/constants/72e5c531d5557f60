@@ -1,0 +1,4 @@
+# file: /Users/deuterium/Dev/BitbotBY/src/telegram_notifier.py
+# hypothesis_version: 6.141.1
+
+[0.0, 0.5, '?', 'Backtest: no data', 'Markdown', 'Not authorized.', 'Skip', 'Telegram error: %s', 'Trade', 'action', 'confidence', 'confirm', 'entry', 'reject', 'stop_loss', 'strategy', 'symbol', 'take_profit']

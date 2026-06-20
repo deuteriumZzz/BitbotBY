@@ -1,0 +1,4 @@
+# file: /Users/deuterium/Dev/BitbotBY/src/dashboard/data.py
+# hypothesis_version: 6.141.1
+
+[100, 120, 6379, 'DB read error: %s', 'REDIS_HOST', 'REDIS_PASSWORD', 'REDIS_PORT', 'bitbot_balance_usdt', 'bitbot_running', 'bitbot_total_trades', 'closed_trades', 'data', 'data/healthcheck.txt', 'localhost', 'total_commissions', 'total_pnl', 'total_trades', 'trades.db', 'win_rate', 'Суммарный PnL в USDT']

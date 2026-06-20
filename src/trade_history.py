@@ -298,7 +298,8 @@ class TradeHistory:
         """
         Возвращает агрегированную статистику по всем сделкам для дашборда.
 
-        :return: Словарь с total_trades, closed_trades, win_rate, total_pnl, total_commissions.
+        :return: Словарь с total_trades, closed_trades, win_rate,
+            total_pnl, total_commissions.
         """
         async with self._lock:
             row = self._conn.execute(

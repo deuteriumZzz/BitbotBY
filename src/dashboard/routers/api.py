@@ -1,4 +1,4 @@
-"""REST API routes: /api/status, /api/trades, /api/backtest."""
+"""Маршруты REST API: /api/status, /api/trades, /api/backtest."""
 
 from __future__ import annotations
 

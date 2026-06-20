@@ -132,8 +132,8 @@ class NewsAnalyzer:
         redis_key = f"ai_budget:{today}"
         try:
             count = self.redis.redis_client.incr(redis_key)
-            # Expire at end of day — set TTL only on first increment
             if count == 1:
+                # Истекает в конце дня — TTL ставится только при первом инкременте
                 self.redis.redis_client.expire(redis_key, REDIS_TTL_TRADING_STATE)
             if count > _AI_DAILY_BUDGET:
                 self.logger.warning(
@@ -142,11 +142,12 @@ class NewsAnalyzer:
                     _AI_DAILY_BUDGET,
                 )
                 return False
-            # Mirror to in-memory counter so logs always show accurate count.
+            # Синхронизируем с in-memory счётчиком, чтобы логи
+            # всегда отражали точное значение.
             self._ai_calls_today = int(count)
             return True
         except Exception:
-            # Redis unavailable — fall back to in-memory counter
+            # Redis недоступен — переходим на in-memory счётчик
             if self._ai_date != today:
                 self._ai_date = today
                 self._ai_calls_today = 0
@@ -381,4 +382,3 @@ class NewsAnalyzer:
         except Exception as e:
             self.logger.warning("NewsAPI fetch failed (%s): %s", query, e)
             return []
-

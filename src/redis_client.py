@@ -247,9 +247,7 @@ class RedisClient:
             return True
         try:
             token = str(uuid.uuid4())
-            result = bool(
-                self.redis_client.set(lock_name, token, nx=True, ex=timeout)
-            )
+            result = bool(self.redis_client.set(lock_name, token, nx=True, ex=timeout))
             if result:
                 self._lock_tokens[lock_name] = token
                 self.logger.debug("Lock acquired: %s", lock_name)
@@ -278,9 +276,7 @@ class RedisClient:
             self.logger.debug("Lock released: %s", lock_name)
         except Exception as e:
             self._available = False
-            self.logger.warning(
-                "Redis lock release failed (%s): %s", lock_name, e
-            )
+            self.logger.warning("Redis lock release failed (%s): %s", lock_name, e)
 
     def publish_signal(self, signal_data: Dict[str, Any]) -> None:
         """

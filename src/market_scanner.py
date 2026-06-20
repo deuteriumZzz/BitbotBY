@@ -93,7 +93,9 @@ class MarketScanner:
             if len(df) < _MIN_INDICATOR_ROWS:
                 self.logger.debug(
                     "Skip %s: only %d bars, need >= %d for valid indicators",
-                    symbol, len(df), _MIN_INDICATOR_ROWS,
+                    symbol,
+                    len(df),
+                    _MIN_INDICATOR_ROWS,
                 )
                 return None
             df = self.data_loader.calculate_technical_indicators(df)

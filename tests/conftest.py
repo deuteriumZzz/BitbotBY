@@ -1,14 +1,14 @@
 import sys
 from unittest.mock import MagicMock
 
-# Mock redis before any src imports so tests run without a live Redis server.
+# Мокаем redis до любых импортов из src, чтобы тесты запускались без живого Redis.
 _redis_mock = MagicMock()
 _redis_mock.StrictRedis = MagicMock
 _redis_mock.Redis = MagicMock
 _redis_mock.ConnectionError = ConnectionError
 sys.modules.setdefault("redis", _redis_mock)
 
-# Mock prometheus_client so tests run without the package installed locally.
+# Мокаем prometheus_client, чтобы тесты работали без установленного пакета.
 _prom_mock = MagicMock()
 _prom_mock.Counter = MagicMock(return_value=MagicMock())
 _prom_mock.Gauge = MagicMock(return_value=MagicMock())
@@ -24,7 +24,7 @@ def make_ohlcv(
     start_price: float = 100.0,
     trend: float = 0.001,
 ) -> pd.DataFrame:
-    """Synthetic OHLCV DataFrame for testing."""
+    """Синтетический OHLCV DataFrame для тестирования."""
     prices = [start_price]
     for _ in range(n - 1):
         prices.append(prices[-1] * (1 + trend + np.random.normal(0, 0.005)))

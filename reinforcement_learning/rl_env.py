@@ -60,7 +60,7 @@ class TradingEnv(gym.Env):
         self.current_value = initial_balance
         self.total_commission = 0.0
 
-        # Peak value for drawdown tracking; rolling returns for Sharpe
+        # Пиковое значение для отслеживания просадки; скользящие доходности для Sharpe
         self.peak_value: float = initial_balance
         self._returns: deque = deque(maxlen=50)
 
@@ -171,11 +171,11 @@ class TradingEnv(gym.Env):
 
         self.current_value = self.balance + self.position * current_price
 
-        # Log return in percent (±0.1% move → ±0.1 reward unit)
+        # Логарифмическая доходность в процентах (±0.1% движение → ±0.1 единица награды)
         log_ret = 100.0 * float(np.log(self.current_value / max(prev_value, 1e-8)))
         self._returns.append(log_ret)
 
-        # Rolling Sharpe bonus (only once ≥10 returns accumulated)
+        # Скользящий бонус Sharpe (только после накопления ≥10 доходностей)
         if len(self._returns) >= 10:
             mu = float(np.mean(self._returns))
             sd = float(np.std(self._returns)) + 1e-8
@@ -183,7 +183,7 @@ class TradingEnv(gym.Env):
         else:
             sharpe_bonus = 0.0
 
-        # Drawdown penalty (% of initial balance, factor 0.01)
+        # Штраф за просадку (% от начального баланса, коэффициент 0.01)
         self.peak_value = max(self.peak_value, self.current_value)
         drawdown_pct = (
             100.0

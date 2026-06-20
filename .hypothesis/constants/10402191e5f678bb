@@ -1,0 +1,4 @@
+# file: /Users/deuterium/Dev/BitbotBY/src/dashboard/routers/api.py
+# hypothesis_version: 6.141.1
+
+[100, '/api/backtest', '/api/status', '/api/trades', 'balance', 'bot_running', 'expected_value', 'generated_at', 'max_drawdown_pct', 'mode', 'paper_trading', 'portfolio_state', 'positions', 'results', 'sharpe_ratio', 'strategy', 'timestamp', 'total_commissions', 'total_return_pct', 'total_trades', 'win_rate']

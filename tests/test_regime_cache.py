@@ -1,4 +1,4 @@
-"""Tests for regime TTL cache logic extracted from TradingBot trading loop."""
+"""Тесты логики TTL-кэша режима, извлечённой из торгового цикла TradingBot."""
 
 import time
 from unittest.mock import MagicMock
@@ -7,7 +7,7 @@ TTL = 300.0
 
 
 def _predict(cache: dict, sym: str, predict_fn, ttl: float) -> str:
-    """Pure TTL-cache lookup — mirrors the logic in TradingBot's trading loop."""
+    """Чистый TTL-кэш поиска — зеркалирует логику торгового цикла TradingBot."""
     now = time.monotonic()
     cached_regime, cached_ts = cache.get(sym, ("unknown", float("-inf")))
     if now - cached_ts < ttl:

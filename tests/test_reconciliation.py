@@ -1,8 +1,9 @@
 """
-Tests for TradingBot._reconcile_positions.
+Тесты для TradingBot._reconcile_positions.
 
-Covers: stale removal, lost-position recovery, zero-qty skip,
-symbol normalisation, API failure handling, paper-trading bypass.
+Покрывают: удаление устаревших позиций, восстановление потерянных позиций,
+пропуск нулевых объёмов, нормализацию символов,
+обработку сбоев API, обход при paper-trading.
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -43,9 +44,9 @@ _PATCH_KEYS = [
 
 
 def _make_patches() -> dict:
-    # Use MagicMock() instances (not the class) so that calling
-    # e.g. MarketScanner(api, loader) doesn't pass Mocks as spec= args,
-    # which raises InvalidSpecError on Python 3.11+.
+    # Используем экземпляры MagicMock() (не класс), чтобы вызовы вроде
+    # MarketScanner(api, loader) не передавали Mock как spec= аргументы,
+    # что вызывает InvalidSpecError в Python 3.11+.
     return {k: MagicMock() for k in _PATCH_KEYS}
 
 
@@ -85,7 +86,7 @@ class TestReconcilePositions:
 
     @pytest.mark.asyncio
     async def test_paper_trading_skips_fetch(self):
-        """In PAPER_TRADING mode reconcile must not call fetch_positions."""
+        """В режиме PAPER_TRADING reconcile не должен вызывать fetch_positions."""
         bot = make_bot()
         with patch("src.trading_bot.Config") as cfg:
             cfg.PAPER_TRADING = True
@@ -94,7 +95,7 @@ class TestReconcilePositions:
 
     @pytest.mark.asyncio
     async def test_removes_stale_position(self):
-        """Position in _monitored absent from exchange should be removed."""
+        """Позиция в _monitored, отсутствующая на бирже, должна быть удалена."""
         bot = make_bot()
         bot._monitored["BTC/USDT"] = {"qty": 0.01, "entry": 50000.0, "side": "buy"}
         bot.api.fetch_positions = AsyncMock(return_value=[])
@@ -105,7 +106,7 @@ class TestReconcilePositions:
 
     @pytest.mark.asyncio
     async def test_recovers_lost_position(self):
-        """Position on exchange but absent from _monitored should be restored."""
+        """Позиция на бирже, отсутствующая в _monitored, должна быть восстановлена."""
         bot = make_bot()
         bot.api.fetch_positions = AsyncMock(
             return_value=[
@@ -124,7 +125,7 @@ class TestReconcilePositions:
 
     @pytest.mark.asyncio
     async def test_skips_zero_qty_position(self):
-        """Exchange position with contracts=0 must not be added to _monitored."""
+        """Позиция на бирже с contracts=0 не должна добавляться в _monitored."""
         bot = make_bot()
         bot.api.fetch_positions = AsyncMock(
             return_value=[_exchange_pos("ETH/USDT", contracts=0.0)]
@@ -136,7 +137,7 @@ class TestReconcilePositions:
 
     @pytest.mark.asyncio
     async def test_normalises_colon_symbol(self):
-        """ccxt may return 'BTC/USDT:USDT' — must normalise to 'BTC/USDT'."""
+        """ccxt может вернуть 'BTC/USDT:USDT' — должно нормализоваться до 'BTC/USDT'."""
         bot = make_bot()
         bot.api.fetch_positions = AsyncMock(
             return_value=[_exchange_pos("BTC/USDT:USDT", contracts=1.0, entry=60000.0)]
@@ -149,7 +150,7 @@ class TestReconcilePositions:
 
     @pytest.mark.asyncio
     async def test_api_failure_leaves_monitored_unchanged(self):
-        """If fetch_positions raises, _monitored must stay intact."""
+        """При исключении в fetch_positions _monitored должен остаться нетронутым."""
         bot = make_bot()
         bot._monitored["SOL/USDT"] = {"qty": 10.0, "entry": 150.0, "side": "buy"}
         bot.api.fetch_positions = AsyncMock(side_effect=Exception("network error"))
@@ -160,7 +161,7 @@ class TestReconcilePositions:
 
     @pytest.mark.asyncio
     async def test_stale_and_recovered_in_same_call(self):
-        """Removes one symbol and recovers another simultaneously."""
+        """Удаляет один символ и восстанавливает другой одновременно."""
         bot = make_bot()
         bot._monitored["OLD/USDT"] = {"qty": 1.0, "entry": 100.0, "side": "buy"}
         bot.api.fetch_positions = AsyncMock(
@@ -174,7 +175,7 @@ class TestReconcilePositions:
 
     @pytest.mark.asyncio
     async def test_existing_monitored_not_overwritten(self):
-        """Position already in _monitored and on exchange must not be touched."""
+        """Позиция в _monitored и на бирже одновременно не должна перезаписываться."""
         bot = make_bot()
         bot._monitored["BTC/USDT"] = {
             "qty": 1.0,
@@ -193,7 +194,7 @@ class TestReconcilePositions:
 
     @pytest.mark.asyncio
     async def test_negative_qty_skipped(self):
-        """Negative contracts value must be treated as zero-size and skipped."""
+        """Отрицательное значение contracts должно считаться нулевым и пропускаться."""
         bot = make_bot()
         bot.api.fetch_positions = AsyncMock(
             return_value=[_exchange_pos("ADA/USDT", contracts=-0.5)]

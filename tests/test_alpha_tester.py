@@ -1,4 +1,4 @@
-"""Tests for AlphaTester — bootstrap Sharpe + Wilcoxon significance."""
+"""Тесты для AlphaTester — бутстрап Sharpe + значимость Wilcoxon."""
 
 import numpy as np
 import pytest

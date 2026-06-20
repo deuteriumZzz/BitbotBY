@@ -1,4 +1,4 @@
-"""Tests for _SecretFilter logging filter (src/trading_bot.py)."""
+"""Тесты для фильтра логирования _SecretFilter (src/trading_bot.py)."""
 
 import logging
 
@@ -15,7 +15,8 @@ def reset_secrets():
 
 
 def _filtered_msg(message: str, *args) -> str:
-    """Run a LogRecord through _SecretFilter and return formatted message."""
+    """Пропускает LogRecord через _SecretFilter и возвращает
+    отформатированное сообщение."""
     record = logging.LogRecord(
         name="test",
         level=logging.INFO,

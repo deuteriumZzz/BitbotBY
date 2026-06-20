@@ -44,7 +44,8 @@ class BaseStrategy(ABC):
         """
         Возвращает метаданные стратегии.
 
-        :return: Словарь с name, description, recommended_timeframes, risk_level, market_type.
+        :return: Словарь с name, description, recommended_timeframes,
+            risk_level, market_type.
         """
         return {
             "name": self.name,
@@ -463,7 +464,8 @@ class MeanReversionStrategy(BaseStrategy):
         """
         Генерирует сигнал возврата к среднему.
 
-        :param data: DataFrame с индикаторами bb_upper, bb_lower, bb_middle, rsi, momentum.
+        :param data: DataFrame с индикаторами bb_upper, bb_lower,
+            bb_middle, rsi, momentum.
         :return: Сигнал с action и confidence.
         """
         close = self._last(data, "close")

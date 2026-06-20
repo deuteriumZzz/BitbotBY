@@ -1,9 +1,9 @@
 """
-E2E-style tests for the core trading cycle methods.
+E2E-тесты для ключевых методов торгового цикла.
 
-All external I/O is mocked. Tests exercise:
-  - _filter_by_balance (pure function, no I/O)
-  - _execute_top_rec (signal → order flow)
+Всё внешнее I/O замокано. Тесты проверяют:
+  - _filter_by_balance (чистая функция, без I/O)
+  - _execute_top_rec (сигнал → поток ордеров)
 """
 
 from contextlib import contextmanager
@@ -13,7 +13,7 @@ import pandas as pd
 import pytest
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Вспомогательные функции
 # ---------------------------------------------------------------------------
 
 _PATCH_KEYS = [
@@ -44,7 +44,7 @@ def _make_cfg(paper: bool = True, auto: bool = True, max_pos: int = 3):
     cfg.PAPER_TRADING = paper
     cfg.AUTO_EXECUTE = auto
     cfg.MAX_POSITIONS = max_pos
-    cfg.MAX_CORRELATION = 0.0  # disable correlation guard in most tests
+    cfg.MAX_CORRELATION = 0.0  # отключаем защиту по корреляции в большинстве тестов
     cfg.RISK_PER_TRADE = 0.02
     cfg.INITIAL_BALANCE = 1000.0
     cfg.COMMISSION_RATE = 0.001
@@ -111,7 +111,7 @@ def make_bot(balance: float = 1000.0):
 
 @contextmanager
 def _patch_cfg(cfg):
-    """Patch Config in both trading_bot and order_executor (execution moved there)."""
+    """Патчим Config в trading_bot и order_executor (исполнение перенесено туда)."""
     with patch("src.trading_bot.Config", cfg):
         with patch("src.order_executor.Config", cfg):
             yield cfg
@@ -137,23 +137,23 @@ def _df(entry: float = 50000.0) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
-# Tests: _filter_by_balance
+# Тесты: _filter_by_balance
 # ---------------------------------------------------------------------------
 
 
 class TestFilterByBalance:
-    """_filter_by_balance is pure — no Config dependency."""
+    """_filter_by_balance — чистая функция, без зависимости от Config."""
 
     def test_affordable_rec_passes(self):
         bot = make_bot(balance=1000.0)
-        # 1000 >= 50000 * 0.001 = 50 → passes
+        # 1000 >= 50000 * 0.001 = 50 → проходит
         recs = [_buy_rec(entry=50000.0)]
         result = bot._filter_by_balance(recs, balance=1000.0)
         assert len(result) == 1
 
     def test_underfunded_rec_filtered(self):
         bot = make_bot(balance=10.0)
-        # 10 < 50000 * 0.001 = 50 → filtered
+        # 10 < 50000 * 0.001 = 50 → фильтруется
         recs = [_buy_rec(entry=50000.0)]
         result = bot._filter_by_balance(recs, balance=10.0)
         assert len(result) == 0
@@ -176,7 +176,7 @@ class TestFilterByBalance:
 
 
 # ---------------------------------------------------------------------------
-# Tests: _execute_top_rec
+# Тесты: _execute_top_rec
 # ---------------------------------------------------------------------------
 
 

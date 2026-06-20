@@ -8,19 +8,18 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from src.market_impact import (
-    _MIN_IMPACT,
     _MAX_IMPACT,
+    _MIN_IMPACT,
     almgren_chriss_impact,
     estimate_from_df,
 )
 
-
 # ---------------------------------------------------------------------------
 # almgren_chriss_impact
 # ---------------------------------------------------------------------------
+
 
 class TestAlmgrenChrissImpact:
     """Тесты функции almgren_chriss_impact."""
@@ -59,7 +58,7 @@ class TestAlmgrenChrissImpact:
         """Огромный ордер → импакт не превышает MAX_IMPACT."""
         impact = almgren_chriss_impact(
             order_size_usdt=1_000_000_000,  # огромный ордер
-            daily_volume_usdt=1_000,        # мизерный объём
+            daily_volume_usdt=1_000,  # мизерный объём
             daily_vol=0.10,
         )
         assert impact == _MAX_IMPACT
@@ -67,7 +66,7 @@ class TestAlmgrenChrissImpact:
     def test_impact_floor_at_min(self):
         """Крошечный ордер → импакт не ниже MIN_IMPACT."""
         impact = almgren_chriss_impact(
-            order_size_usdt=1,              # 1 USDT
+            order_size_usdt=1,  # 1 USDT
             daily_volume_usdt=1_000_000_000,
             daily_vol=0.001,
         )
@@ -88,7 +87,9 @@ class TestAlmgrenChrissImpact:
     def test_custom_eta_gamma(self):
         """Кастомные параметры eta и gamma применяются корректно."""
         impact_default = almgren_chriss_impact(10_000, 1_000_000, 0.02)
-        impact_custom = almgren_chriss_impact(10_000, 1_000_000, 0.02, eta=0.5, gamma=0.5)
+        impact_custom = almgren_chriss_impact(
+            10_000, 1_000_000, 0.02, eta=0.5, gamma=0.5
+        )
         # Большие коэффициенты → больший импакт (при тех же условиях)
         assert impact_custom >= impact_default
 
@@ -107,19 +108,22 @@ class TestAlmgrenChrissImpact:
 # estimate_from_df
 # ---------------------------------------------------------------------------
 
+
 class TestEstimateFromDf:
     """Тесты функции estimate_from_df."""
 
     def _make_df(self, n: int = 50, price: float = 50000.0) -> pd.DataFrame:
         """Синтетический OHLCV DataFrame."""
         prices = price + np.cumsum(np.random.randn(n) * 100)
-        return pd.DataFrame({
-            "close": prices,
-            "open": prices * 0.999,
-            "high": prices * 1.002,
-            "low": prices * 0.998,
-            "volume": np.random.uniform(1000, 10000, n),
-        })
+        return pd.DataFrame(
+            {
+                "close": prices,
+                "open": prices * 0.999,
+                "high": prices * 1.002,
+                "low": prices * 0.998,
+                "volume": np.random.uniform(1000, 10000, n),
+            }
+        )
 
     def test_typical_values_in_range(self):
         """estimate_from_df с нормальными данными → результат в [MIN, MAX]."""
@@ -180,6 +184,8 @@ class TestEstimateFromDf:
 
     def test_very_few_log_returns_uses_fallback_vol(self):
         """Менее 5 лог-доходностей → используется fallback волатильность 0.02."""
-        df = pd.DataFrame({"close": [100.0, 101.0, 102.0], "volume": [1000, 1000, 1000]})
+        df = pd.DataFrame(
+            {"close": [100.0, 101.0, 102.0], "volume": [1000, 1000, 1000]}
+        )
         impact = estimate_from_df(df, order_size_usdt=10_000)
         assert _MIN_IMPACT <= impact <= _MAX_IMPACT

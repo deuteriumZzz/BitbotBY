@@ -19,10 +19,10 @@ import pytest
 
 from src.trade_history import TradeHistory, get_backtest_stats
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def db():
@@ -64,6 +64,7 @@ def backtest_json(tmp_path):
 # ---------------------------------------------------------------------------
 # get_backtest_stats
 # ---------------------------------------------------------------------------
+
 
 class TestGetBacktestStats:
     """Тесты функции get_backtest_stats."""
@@ -116,6 +117,7 @@ class TestGetBacktestStats:
 # record_open / record_close
 # ---------------------------------------------------------------------------
 
+
 class TestRecordOpenClose:
     """Тесты открытия и закрытия сделок."""
 
@@ -163,6 +165,7 @@ class TestRecordOpenClose:
 # get_win_rate
 # ---------------------------------------------------------------------------
 
+
 class TestGetWinRateExtended:
     """Расширенные тесты get_win_rate."""
 
@@ -207,6 +210,7 @@ class TestGetWinRateExtended:
 # ---------------------------------------------------------------------------
 # get_expected_value
 # ---------------------------------------------------------------------------
+
 
 class TestGetExpectedValue:
     """Тесты расчёта ожидаемого значения (EV)."""
@@ -255,6 +259,7 @@ class TestGetExpectedValue:
 # get_summary
 # ---------------------------------------------------------------------------
 
+
 class TestGetSummary:
     """Тесты агрегированной статистики get_summary."""
 
@@ -286,13 +291,21 @@ class TestGetSummary:
     async def test_summary_has_required_keys(self, db):
         """get_summary всегда содержит нужные ключи."""
         s = await db.get_summary()
-        required = {"total_trades", "closed_trades", "win_rate", "total_pnl", "total_commissions"}
+        required = {
+            "total_trades",
+            "closed_trades",
+            "win_rate",
+            "total_pnl",
+            "total_commissions",
+        }
         assert required.issubset(s.keys())
 
     @pytest.mark.asyncio
     async def test_summary_total_commissions(self, db):
         """get_summary суммирует все комиссии."""
-        tid = await db.record_open("BTC/USDT", "ema", "buy", 60000.0, 0.01, 0.8, commission=1.0)
+        tid = await db.record_open(
+            "BTC/USDT", "ema", "buy", 60000.0, 0.01, 0.8, commission=1.0
+        )
         await db.record_close(tid, exit_price=61000.0, commission=1.0)
         s = await db.get_summary()
         assert s["total_commissions"] == pytest.approx(2.0)
@@ -301,6 +314,7 @@ class TestGetSummary:
 # ---------------------------------------------------------------------------
 # get_trade_count (расширенные случаи)
 # ---------------------------------------------------------------------------
+
 
 class TestGetTradeCountExtended:
     """Расширенные тесты get_trade_count."""

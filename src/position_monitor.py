@@ -183,13 +183,13 @@ class PositionMonitor:
                 # (asyncio yield in get_current_price); skip silently if gone.
                 if sym in monitored and monitored[sym] is not None:
                     monitored[sym]["stop_loss"] = trail
-                pos = {**pos, "stop_loss": trail}  # type: ignore[assignment]
+                return {**pos, "stop_loss": trail}  # type: ignore[return-value]
         else:
             trail = price + atr * mult
             if trail < pos.get("stop_loss", float("inf")):
                 if sym in monitored and monitored[sym] is not None:
                     monitored[sym]["stop_loss"] = trail
-                pos = {**pos, "stop_loss": trail}  # type: ignore[assignment]
+                return {**pos, "stop_loss": trail}  # type: ignore[return-value]
 
         return pos
 

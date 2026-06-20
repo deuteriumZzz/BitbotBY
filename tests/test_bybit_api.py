@@ -1,19 +1,20 @@
 """Тесты BybitAPI клиента."""
+
 from __future__ import annotations
 
 import logging
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import ccxt.async_support as ccxt
 import pandas as pd
 import pytest
 
-from src.bybit_api import BybitAPI, _fetch_ohlcv_with_retry, _is_retryable
-
+from src.bybit_api import BybitAPI, _is_retryable
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def make_api_with_mock_exchange() -> BybitAPI:
     """Создаёт BybitAPI с замоканным exchange и отключённым Redis."""
@@ -42,6 +43,7 @@ _SAMPLE_OHLCV = [
 # _is_retryable
 # ---------------------------------------------------------------------------
 
+
 class TestIsRetryable:
     def test_retryable_network_error(self):
         assert _is_retryable(ccxt.NetworkError("net err")) is True
@@ -65,6 +67,7 @@ class TestIsRetryable:
 # ---------------------------------------------------------------------------
 # BybitAPI._process_ohlcv
 # ---------------------------------------------------------------------------
+
 
 class TestProcessOhlcv:
     def setup_method(self):
@@ -91,13 +94,14 @@ class TestProcessOhlcv:
 # BybitAPI.get_ohlcv
 # ---------------------------------------------------------------------------
 
+
 class TestGetOhlcv:
     def setup_method(self):
         self.api = make_api_with_mock_exchange()
 
     @pytest.mark.asyncio
     async def test_get_ohlcv_cache_hit(self):
-        """Cache hit: Redis returns a DataFrame → no exchange call."""
+        """Попадание в кэш: Redis возвращает DataFrame → exchange не вызывается."""
         cached_df = pd.DataFrame({"close": [1.0, 2.0]})
         self.api.redis.load_market_data.return_value = cached_df
 
@@ -108,7 +112,7 @@ class TestGetOhlcv:
 
     @pytest.mark.asyncio
     async def test_get_ohlcv_cache_miss_fetches_exchange(self):
-        """Cache miss: exchange.fetch_ohlcv is called and result is cached."""
+        """Промах кэша: вызывается exchange.fetch_ohlcv и результат кэшируется."""
         self.api.redis.load_market_data.return_value = None
         self.api.exchange.fetch_ohlcv.return_value = _SAMPLE_OHLCV
 
@@ -121,7 +125,7 @@ class TestGetOhlcv:
 
     @pytest.mark.asyncio
     async def test_get_ohlcv_network_error_raises(self):
-        """NetworkError from exchange propagates out."""
+        """NetworkError от exchange пробрасывается наружу."""
         self.api.redis.load_market_data.return_value = None
         self.api.exchange.fetch_ohlcv.side_effect = ccxt.NetworkError("net")
 
@@ -130,7 +134,7 @@ class TestGetOhlcv:
 
     @pytest.mark.asyncio
     async def test_get_ohlcv_auth_error_raises(self):
-        """AuthenticationError from exchange propagates out."""
+        """AuthenticationError от exchange пробрасывается наружу."""
         self.api.redis.load_market_data.return_value = None
         self.api.exchange.fetch_ohlcv.side_effect = ccxt.AuthenticationError("bad key")
 
@@ -139,7 +143,7 @@ class TestGetOhlcv:
 
     @pytest.mark.asyncio
     async def test_get_ohlcv_cache_key_format(self):
-        """Cache key is symbol:timeframe:limit."""
+        """Ключ кэша имеет формат symbol:timeframe:limit."""
         self.api.redis.load_market_data.return_value = None
         self.api.exchange.fetch_ohlcv.return_value = _SAMPLE_OHLCV
 
@@ -151,6 +155,7 @@ class TestGetOhlcv:
 # ---------------------------------------------------------------------------
 # BybitAPI.get_balance
 # ---------------------------------------------------------------------------
+
 
 class TestGetBalance:
     def setup_method(self):
@@ -175,7 +180,9 @@ class TestGetBalance:
 
     @pytest.mark.asyncio
     async def test_get_balance_auth_error_raises(self):
-        self.api.exchange.fetch_balance.side_effect = ccxt.AuthenticationError("bad key")
+        self.api.exchange.fetch_balance.side_effect = ccxt.AuthenticationError(
+            "bad key"
+        )
 
         with pytest.raises(ccxt.AuthenticationError):
             await self.api.get_balance()
@@ -192,6 +199,7 @@ class TestGetBalance:
 # ---------------------------------------------------------------------------
 # BybitAPI.fetch_positions
 # ---------------------------------------------------------------------------
+
 
 class TestFetchPositions:
     def setup_method(self):
@@ -238,7 +246,7 @@ class TestFetchPositions:
 
     @pytest.mark.asyncio
     async def test_fetch_positions_returns_none_fallback_to_empty(self):
-        """If exchange returns None, result should be []."""
+        """Если exchange возвращает None, результат должен быть []."""
         self.api.exchange.fetch_positions.return_value = None
 
         result = await self.api.fetch_positions()
@@ -249,6 +257,7 @@ class TestFetchPositions:
 # ---------------------------------------------------------------------------
 # BybitAPI.get_current_price
 # ---------------------------------------------------------------------------
+
 
 class TestGetCurrentPrice:
     def setup_method(self):
@@ -291,6 +300,7 @@ class TestGetCurrentPrice:
 # BybitAPI.cancel_order
 # ---------------------------------------------------------------------------
 
+
 class TestCancelOrder:
     def setup_method(self):
         self.api = make_api_with_mock_exchange()
@@ -332,39 +342,38 @@ class TestCancelOrder:
 # BybitAPI.round_quantity
 # ---------------------------------------------------------------------------
 
+
 class TestRoundQuantity:
     def setup_method(self):
         self.api = make_api_with_mock_exchange()
 
     def test_round_quantity_no_exchange(self):
-        """exchange=None → quantity returned unchanged."""
+        """exchange=None → количество возвращается без изменений."""
         self.api.exchange = None
         result = self.api.round_quantity("BTC/USDT", 1.23456)
         assert result == pytest.approx(1.23456)
 
     def test_round_quantity_symbol_not_in_markets(self):
-        """Symbol absent from markets → quantity unchanged."""
+        """Символ отсутствует в markets → количество без изменений."""
         self.api.exchange.markets = {}
         result = self.api.round_quantity("XYZ/USDT", 2.5)
         assert result == pytest.approx(2.5)
 
     def test_round_quantity_rounds_to_precision(self):
-        """amount_to_precision used and result returned."""
-        self.api.exchange.markets = {
-            "BTC/USDT": {"limits": {"amount": {"min": 0.001}}}
-        }
+        """amount_to_precision используется и результат возвращается."""
+        self.api.exchange.markets = {"BTC/USDT": {"limits": {"amount": {"min": 0.001}}}}
         self.api.exchange.amount_to_precision.return_value = "0.12300"
 
         result = self.api.round_quantity("BTC/USDT", 0.123456)
 
         assert result == pytest.approx(0.123)
-        self.api.exchange.amount_to_precision.assert_called_once_with("BTC/USDT", 0.123456)
+        self.api.exchange.amount_to_precision.assert_called_once_with(
+            "BTC/USDT", 0.123456
+        )
 
     def test_round_quantity_below_minimum(self):
-        """Rounded value below min_qty → 0.0 returned."""
-        self.api.exchange.markets = {
-            "BTC/USDT": {"limits": {"amount": {"min": 0.01}}}
-        }
+        """Округлённое значение ниже min_qty → возвращается 0.0."""
+        self.api.exchange.markets = {"BTC/USDT": {"limits": {"amount": {"min": 0.01}}}}
         self.api.exchange.amount_to_precision.return_value = "0.001"
 
         result = self.api.round_quantity("BTC/USDT", 0.001)
@@ -372,10 +381,8 @@ class TestRoundQuantity:
         assert result == pytest.approx(0.0)
 
     def test_round_quantity_no_min_limit(self):
-        """No min limit set → positive rounded value returned normally."""
-        self.api.exchange.markets = {
-            "BTC/USDT": {"limits": {"amount": {"min": None}}}
-        }
+        """Минимум не задан → положительное округлённое значение возвращается."""
+        self.api.exchange.markets = {"BTC/USDT": {"limits": {"amount": {"min": None}}}}
         self.api.exchange.amount_to_precision.return_value = "0.500"
 
         result = self.api.round_quantity("BTC/USDT", 0.5)
@@ -383,10 +390,8 @@ class TestRoundQuantity:
         assert result == pytest.approx(0.5)
 
     def test_round_quantity_exception_returns_original(self):
-        """Exception in amount_to_precision → original quantity returned."""
-        self.api.exchange.markets = {
-            "BTC/USDT": {"limits": {"amount": {"min": 0.001}}}
-        }
+        """Исключение в amount_to_precision → возвращается исходное количество."""
+        self.api.exchange.markets = {"BTC/USDT": {"limits": {"amount": {"min": 0.001}}}}
         self.api.exchange.amount_to_precision.side_effect = RuntimeError("bad")
 
         result = self.api.round_quantity("BTC/USDT", 1.5)
@@ -398,13 +403,14 @@ class TestRoundQuantity:
 # BybitAPI.create_order
 # ---------------------------------------------------------------------------
 
+
 class TestCreateOrder:
     def setup_method(self):
         self.api = make_api_with_mock_exchange()
 
     @pytest.mark.asyncio
     async def test_create_order_lock_fails_returns_none(self):
-        """acquire_lock returns False → create_order returns None immediately."""
+        """acquire_lock возвращает False → create_order немедленно возвращает None."""
         self.api.redis.acquire_lock.return_value = False
 
         result = await self.api.create_order("BTC/USDT", "market", "buy", 0.01)
@@ -414,7 +420,7 @@ class TestCreateOrder:
 
     @pytest.mark.asyncio
     async def test_create_order_success(self):
-        """Successful order creation returns the exchange order dict."""
+        """Успешное создание ордера возвращает словарь ордера от exchange."""
         self.api.redis.acquire_lock.return_value = True
         order = {"id": "order-1", "filled": 0.01, "status": "open"}
         self.api.exchange.create_order.return_value = order
@@ -426,7 +432,7 @@ class TestCreateOrder:
 
     @pytest.mark.asyncio
     async def test_create_order_insufficient_funds_returns_none(self):
-        """InsufficientFunds → None returned, lock released."""
+        """InsufficientFunds → возвращается None, блокировка снимается."""
         self.api.redis.acquire_lock.return_value = True
         self.api.exchange.create_order.side_effect = ccxt.InsufficientFunds("no funds")
 
@@ -437,7 +443,7 @@ class TestCreateOrder:
 
     @pytest.mark.asyncio
     async def test_create_order_auth_error_raises(self):
-        """AuthenticationError propagates out, lock still released."""
+        """AuthenticationError пробрасывается наружу, блокировка всё равно снимается."""
         self.api.redis.acquire_lock.return_value = True
         self.api.exchange.create_order.side_effect = ccxt.AuthenticationError("bad")
 
@@ -448,7 +454,7 @@ class TestCreateOrder:
 
     @pytest.mark.asyncio
     async def test_create_order_saves_state_on_success(self):
-        """Successful order → redis.save_trading_state called."""
+        """Успешный ордер → вызывается redis.save_trading_state."""
         self.api.redis.acquire_lock.return_value = True
         order = {"id": "order-99", "filled": 0.0, "status": "open"}
         self.api.exchange.create_order.return_value = order
@@ -462,13 +468,14 @@ class TestCreateOrder:
 # BybitAPI.place_exchange_sl_tp
 # ---------------------------------------------------------------------------
 
+
 class TestPlaceExchangeSlTp:
     def setup_method(self):
         self.api = make_api_with_mock_exchange()
 
     @pytest.mark.asyncio
     async def test_place_sl_tp_both_placed(self):
-        """sl_price > 0 and tp_price > 0 → both orders created, IDs returned."""
+        """sl_price > 0 и tp_price > 0 → оба ордера создаются, ID возвращаются."""
         sl_order = {"id": "sl-1"}
         tp_order = {"id": "tp-1"}
         self.api.exchange.create_order.side_effect = [sl_order, tp_order]
@@ -483,7 +490,7 @@ class TestPlaceExchangeSlTp:
 
     @pytest.mark.asyncio
     async def test_place_sl_tp_zero_prices_skip(self):
-        """sl_price=0, tp_price=0 → no orders placed, (None, None) returned."""
+        """sl_price=0, tp_price=0 → ордера не размещаются, возвращается (None, None)."""
         sl_id, tp_id = await self.api.place_exchange_sl_tp(
             "BTC/USDT", "sell", 0.01, sl_price=0, tp_price=0
         )
@@ -494,7 +501,7 @@ class TestPlaceExchangeSlTp:
 
     @pytest.mark.asyncio
     async def test_place_sl_tp_only_sl(self):
-        """Only sl_price set → only one order, tp_id is None."""
+        """Задан только sl_price → создаётся один ордер, tp_id равен None."""
         sl_order = {"id": "sl-only"}
         self.api.exchange.create_order.return_value = sl_order
 
@@ -508,7 +515,7 @@ class TestPlaceExchangeSlTp:
 
     @pytest.mark.asyncio
     async def test_place_sl_tp_exchange_error_returns_none_ids(self):
-        """Exchange error on SL/TP → logged, returns (None, None)."""
+        """Ошибка exchange при SL/TP → логируется, возвращается (None, None)."""
         self.api.exchange.create_order.side_effect = ccxt.NetworkError("net")
 
         sl_id, tp_id = await self.api.place_exchange_sl_tp(
@@ -522,6 +529,7 @@ class TestPlaceExchangeSlTp:
 # ---------------------------------------------------------------------------
 # BybitAPI.fetch_order_status
 # ---------------------------------------------------------------------------
+
 
 class TestFetchOrderStatus:
     def setup_method(self):

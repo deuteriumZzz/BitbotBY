@@ -1,4 +1,4 @@
-"""Operations routes: /metrics, /health, /webhook/alerts."""
+"""Операционные маршруты: /metrics, /health, /webhook/alerts."""
 
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ async def health() -> JSONResponse:
 
 
 def _tg_escape(s: str) -> str:
-    """Strip Telegram Markdown special chars from untrusted content."""
+    """Удаляет специальные символы Telegram Markdown из недоверенного контента."""
     return s.replace("*", "").replace("_", "").replace("`", "").replace("[", "")
 
 
@@ -64,12 +64,12 @@ def _send_telegram_sync(text: str) -> None:
             f"https://api.telegram.org/bot{token}/sendMessage", data, timeout=5
         )
     except Exception as e:
-        logger.warning("Telegram alert send failed: %s", e)
+        logger.warning("Отправка Telegram-алерта не удалась: %s", e)
 
 
 @router.post("/webhook/alerts")
 async def alert_webhook(request: Request) -> JSONResponse:
-    """Receive Alertmanager webhook and forward alerts to Telegram."""
+    """Принимает вебхук Alertmanager и пересылает алерты в Telegram."""
     expected = os.getenv("ALERTMANAGER_WEBHOOK_SECRET", "")
     if expected:
         provided = request.headers.get("X-Webhook-Secret", "")

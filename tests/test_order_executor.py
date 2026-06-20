@@ -1,4 +1,4 @@
-"""Direct unit tests for OrderExecutor."""
+"""Прямые юнит-тесты для OrderExecutor."""
 
 from __future__ import annotations
 
@@ -11,8 +11,7 @@ import pytest
 
 from src.order_executor import OrderExecutor
 
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# ── Вспомогательные функции ───────────────────────────────────────────────────
 
 
 def _make_df(n: int = 50, price: float = 100.0) -> pd.DataFrame:
@@ -44,7 +43,7 @@ def _make_cfg(paper: bool = True, max_pos: int = 5, max_corr: float = 0.0) -> Ma
 
 
 def _make_executor(monitored: dict | None = None) -> tuple[OrderExecutor, dict]:
-    """Return (executor, monitored_dict) with all dependencies mocked."""
+    """Возвращает (executor, monitored_dict) со всеми замоканными зависимостями."""
     if monitored is None:
         monitored = {}
     lock = asyncio.Lock()
@@ -106,13 +105,16 @@ _TOP_BUY = {
 _BT_STATS = {"win_rate": 0.6, "total_trades": 20, "ev": 0.01}
 
 
-# ── Guards ────────────────────────────────────────────────────────────────────
+# ── Защитные проверки ─────────────────────────────────────────────────────────
 
 
 class TestGuards:
     @pytest.mark.asyncio
     async def test_skips_when_max_positions_reached(self):
-        monitored = {f"SYM{i}/USDT": {"qty": 0.1, "side": "buy", "entry": 100.0} for i in range(3)}
+        monitored = {
+            f"SYM{i}/USDT": {"qty": 0.1, "side": "buy", "entry": 100.0}
+            for i in range(3)
+        }
         executor, _ = _make_executor(monitored=monitored)
         with patch("src.order_executor.Config", _make_cfg(max_pos=3)):
             await executor.execute(_TOP_BUY, {}, 10_000.0)
@@ -161,7 +163,7 @@ class TestGuards:
         assert "BTC/USDT" not in monitored
 
 
-# ── Paper trading ─────────────────────────────────────────────────────────────
+# ── Бумажная торговля ─────────────────────────────────────────────────────────
 
 
 class TestPaperTrading:
@@ -170,7 +172,9 @@ class TestPaperTrading:
         executor, monitored = _make_executor()
         with patch("src.order_executor.Config", _make_cfg()):
             with patch("src.order_executor._ac_impact", return_value=0.0):
-                with patch("src.trade_history.get_backtest_stats", return_value=_BT_STATS):
+                with patch(
+                    "src.trade_history.get_backtest_stats", return_value=_BT_STATS
+                ):
                     await executor.execute(_TOP_BUY, {"BTC/USDT": _make_df()}, 10_000.0)
 
         assert "BTC/USDT" in monitored
@@ -183,7 +187,9 @@ class TestPaperTrading:
         executor, _ = _make_executor()
         with patch("src.order_executor.Config", _make_cfg()):
             with patch("src.order_executor._ac_impact", return_value=0.0):
-                with patch("src.trade_history.get_backtest_stats", return_value=_BT_STATS):
+                with patch(
+                    "src.trade_history.get_backtest_stats", return_value=_BT_STATS
+                ):
                     await executor.execute(_TOP_BUY, {"BTC/USDT": _make_df()}, 10_000.0)
 
         executor._api.create_order.assert_not_called()
@@ -194,13 +200,15 @@ class TestPaperTrading:
         initial = executor._paper_balance[0]
         with patch("src.order_executor.Config", _make_cfg()):
             with patch("src.order_executor._ac_impact", return_value=0.0):
-                with patch("src.trade_history.get_backtest_stats", return_value=_BT_STATS):
+                with patch(
+                    "src.trade_history.get_backtest_stats", return_value=_BT_STATS
+                ):
                     await executor.execute(_TOP_BUY, {"BTC/USDT": _make_df()}, 10_000.0)
 
         assert executor._paper_balance[0] < initial
 
 
-# ── Position sizing ───────────────────────────────────────────────────────────
+# ── Расчёт размера позиции ────────────────────────────────────────────────────
 
 
 class TestSizing:
@@ -216,7 +224,7 @@ class TestSizing:
                 live_n=15,
                 entry=100.0,
             )
-        # portfolio_qty = 10000 * 0.01 / 100 = 1.0; kelly = 0.002 → final = 0.002
+        # portfolio_qty = 10000 * 0.01 / 100 = 1.0; kelly = 0.002 → итог = 0.002
         assert qty == pytest.approx(0.002)
 
     def test_conservative_cap_when_few_trades(self):
@@ -232,7 +240,7 @@ class TestSizing:
                 live_n=3,  # < KELLY_MIN_TRADES
                 entry=100.0,
             )
-        # conservative = 10000 * 0.01 / 100 = 1.0; portfolio = 5.0 → min = 1.0
+        # conservative = 10000 * 0.01 / 100 = 1.0; portfolio = 5.0 → мин = 1.0
         assert qty == pytest.approx(1.0)
 
     def test_zero_kelly_falls_back_to_portfolio_qty(self):
@@ -247,5 +255,5 @@ class TestSizing:
                 live_n=15,
                 entry=100.0,
             )
-        # kelly_qty = 0 → fallback to portfolio_qty = 10000 * 0.01 / 100 = 1.0
+        # kelly_qty = 0 → откат к portfolio_qty = 10000 * 0.01 / 100 = 1.0
         assert qty == pytest.approx(1.0)

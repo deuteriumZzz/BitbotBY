@@ -6,7 +6,8 @@
 - initialize(): testnet, AuthenticationError, NetworkError, общее исключение
 - get_ohlcv(): CancelledError, InsufficientFunds, NetworkError, общее исключение
 - create_order(): CancelledError, AuthenticationError, InsufficientFunds,
-                  NetworkError-retry-loop, общее исключение-retry-loop, блокировка занята
+                  NetworkError-retry-loop, общее исключение-retry-loop,
+                  блокировка занята
 - get_balance(): CancelledError, NetworkError, общее исключение
 - fetch_positions(): CancelledError, общее исключение
 - get_current_price(): CancelledError
@@ -26,10 +27,10 @@ import pytest
 
 from src.bybit_api import BybitAPI
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_api() -> BybitAPI:
     api = BybitAPI.__new__(BybitAPI)
@@ -49,6 +50,7 @@ def _make_api() -> BybitAPI:
 # ---------------------------------------------------------------------------
 # initialize
 # ---------------------------------------------------------------------------
+
 
 class TestInitialize:
     @pytest.mark.asyncio
@@ -128,13 +130,16 @@ class TestInitialize:
 # get_ohlcv error paths
 # ---------------------------------------------------------------------------
 
+
 class TestGetOhlcvErrors:
     @pytest.mark.asyncio
     async def test_cancelled_error_propagates(self):
         api = _make_api()
         api.redis.load_market_data.return_value = None
-        with patch("src.bybit_api._fetch_ohlcv_with_retry",
-                   side_effect=asyncio.CancelledError()):
+        with patch(
+            "src.bybit_api._fetch_ohlcv_with_retry",
+            side_effect=asyncio.CancelledError(),
+        ):
             with pytest.raises(asyncio.CancelledError):
                 await api.get_ohlcv("BTC/USDT")
 
@@ -142,8 +147,10 @@ class TestGetOhlcvErrors:
     async def test_insufficient_funds_raises(self):
         api = _make_api()
         api.redis.load_market_data.return_value = None
-        with patch("src.bybit_api._fetch_ohlcv_with_retry",
-                   side_effect=ccxt.InsufficientFunds("no funds")):
+        with patch(
+            "src.bybit_api._fetch_ohlcv_with_retry",
+            side_effect=ccxt.InsufficientFunds("no funds"),
+        ):
             with pytest.raises(ccxt.InsufficientFunds):
                 await api.get_ohlcv("BTC/USDT")
 
@@ -151,8 +158,10 @@ class TestGetOhlcvErrors:
     async def test_network_error_raises(self):
         api = _make_api()
         api.redis.load_market_data.return_value = None
-        with patch("src.bybit_api._fetch_ohlcv_with_retry",
-                   side_effect=ccxt.NetworkError("net")):
+        with patch(
+            "src.bybit_api._fetch_ohlcv_with_retry",
+            side_effect=ccxt.NetworkError("net"),
+        ):
             with pytest.raises(ccxt.NetworkError):
                 await api.get_ohlcv("BTC/USDT")
 
@@ -160,8 +169,9 @@ class TestGetOhlcvErrors:
     async def test_generic_exception_raises(self):
         api = _make_api()
         api.redis.load_market_data.return_value = None
-        with patch("src.bybit_api._fetch_ohlcv_with_retry",
-                   side_effect=ValueError("bad data")):
+        with patch(
+            "src.bybit_api._fetch_ohlcv_with_retry", side_effect=ValueError("bad data")
+        ):
             with pytest.raises(ValueError):
                 await api.get_ohlcv("BTC/USDT")
 
@@ -169,6 +179,7 @@ class TestGetOhlcvErrors:
 # ---------------------------------------------------------------------------
 # create_order error paths
 # ---------------------------------------------------------------------------
+
 
 class TestCreateOrderErrors:
     @pytest.mark.asyncio
@@ -231,6 +242,7 @@ class TestCreateOrderErrors:
 # get_balance error paths
 # ---------------------------------------------------------------------------
 
+
 class TestGetBalanceErrors:
     @pytest.mark.asyncio
     async def test_cancelled_error_propagates(self):
@@ -257,6 +269,7 @@ class TestGetBalanceErrors:
 # ---------------------------------------------------------------------------
 # fetch_positions error paths
 # ---------------------------------------------------------------------------
+
 
 class TestFetchPositionsErrors:
     @pytest.mark.asyncio
@@ -289,6 +302,7 @@ class TestFetchPositionsErrors:
 # get_current_price error paths
 # ---------------------------------------------------------------------------
 
+
 class TestGetCurrentPriceErrors:
     @pytest.mark.asyncio
     async def test_cancelled_error_propagates(self):
@@ -301,6 +315,7 @@ class TestGetCurrentPriceErrors:
 # ---------------------------------------------------------------------------
 # fetch_order_status error paths
 # ---------------------------------------------------------------------------
+
 
 class TestFetchOrderStatusErrors:
     @pytest.mark.asyncio
@@ -329,6 +344,7 @@ class TestFetchOrderStatusErrors:
 # cancel_order: CancelledError
 # ---------------------------------------------------------------------------
 
+
 class TestCancelOrderCancelled:
     @pytest.mark.asyncio
     async def test_cancelled_error_propagates(self):
@@ -341,6 +357,7 @@ class TestCancelOrderCancelled:
 # ---------------------------------------------------------------------------
 # close
 # ---------------------------------------------------------------------------
+
 
 class TestClose:
     @pytest.mark.asyncio

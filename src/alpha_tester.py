@@ -24,7 +24,7 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 _N_BOOTSTRAP = 1_000
-_ALPHA = 0.05  # 95% confidence level
+_ALPHA = 0.05  # 95% доверительный уровень
 
 
 @dataclass
@@ -34,11 +34,12 @@ class AlphaResult:
     name: str
     n_trades: int
 
-    # Bootstrap Sharpe (per-trade, not annualised — honest for variable holding periods)
+    # Bootstrap Sharpe (по-сделочный, без аннуализации —
+    # корректно при переменных периодах удержания)
     sharpe: float
     sharpe_ci_low: float
     sharpe_ci_high: float
-    sharpe_pvalue: float  # P(Sharpe ≤ 0) under bootstrap distribution
+    sharpe_pvalue: float  # P(Sharpe ≤ 0) по bootstrap-распределению
 
     # Wilcoxon signed-rank
     wilcoxon_stat: Optional[float]
@@ -59,7 +60,7 @@ class AlphaResult:
         if self.sharpe_pvalue >= _ALPHA:
             return False
         if self.wilcoxon_pvalue is None:
-            return True  # scipy unavailable — bootstrap Sharpe is sufficient
+            return True  # scipy недоступен — достаточно bootstrap Sharpe
         return self.wilcoxon_pvalue < _ALPHA
 
     @property

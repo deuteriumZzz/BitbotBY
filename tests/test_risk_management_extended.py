@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import pytest
 
+from src.risk_management import RiskManager
+
 # mock_redis автоматически применяется через conftest autouse
 
 
@@ -24,13 +26,10 @@ def mock_redis(monkeypatch):
         "src.redis_client.RedisClient.save_trading_state", lambda *a, **kw: None
     )
 
-
-from src.risk_management import RiskManager
-
-
 # ---------------------------------------------------------------------------
 # calculate_kelly_size
 # ---------------------------------------------------------------------------
+
 
 class TestCalculateKellySize:
     """Тесты критерия Келли (Half-Kelly)."""
@@ -136,6 +135,7 @@ class TestCalculateKellySize:
 # calculate_stop_loss
 # ---------------------------------------------------------------------------
 
+
 class TestCalculateStopLossExtended:
     """Дополнительные тесты для calculate_stop_loss (непокрытые ветки)."""
 
@@ -165,6 +165,7 @@ class TestCalculateStopLossExtended:
 # calculate_take_profit
 # ---------------------------------------------------------------------------
 
+
 class TestCalculateTakeProfitExtended:
     """Тесты calculate_take_profit для всех веток."""
 
@@ -174,7 +175,7 @@ class TestCalculateTakeProfitExtended:
         rm = RiskManager(10000.0)
         tp = await rm.calculate_take_profit(100.0, {"action": "buy", "atr": 2.0})
         sl = 100.0 - 1.5 * 2.0  # = 97.0
-        risk = 100.0 - sl         # = 3.0
+        risk = 100.0 - sl  # = 3.0
         expected = 100.0 + risk * 2  # = 106.0
         assert tp == pytest.approx(expected)
 
@@ -184,7 +185,7 @@ class TestCalculateTakeProfitExtended:
         rm = RiskManager(10000.0)
         tp = await rm.calculate_take_profit(100.0, {"action": "sell", "atr": 2.0})
         sl = 100.0 + 1.5 * 2.0  # = 103.0
-        risk = sl - 100.0         # = 3.0
+        risk = sl - 100.0  # = 3.0
         expected = 100.0 - risk * 2  # = 94.0
         assert tp == pytest.approx(expected)
 
@@ -199,6 +200,7 @@ class TestCalculateTakeProfitExtended:
 # ---------------------------------------------------------------------------
 # validate_signal
 # ---------------------------------------------------------------------------
+
 
 class TestValidateSignalExtended:
     """Расширенные тесты validate_signal."""
@@ -243,6 +245,7 @@ class TestValidateSignalExtended:
 # check_daily_loss_limit (дополнительные случаи)
 # ---------------------------------------------------------------------------
 
+
 class TestCheckDailyLossLimitExtended:
     """Дополнительные граничные случаи для check_daily_loss_limit."""
 
@@ -274,6 +277,7 @@ class TestCheckDailyLossLimitExtended:
 # calculate_position_size (дополнительные случаи)
 # ---------------------------------------------------------------------------
 
+
 class TestCalculatePositionSizeExtended:
     """Дополнительные тесты calculate_position_size."""
 
@@ -291,5 +295,5 @@ class TestCalculatePositionSizeExtended:
         """Более узкий стоп → больший размер позиции."""
         rm = RiskManager(10000.0, risk_per_trade=0.02)
         size_tight = await rm.calculate_position_size(10000.0, 100.0, 99.0)  # 1 diff
-        size_wide = await rm.calculate_position_size(10000.0, 100.0, 90.0)   # 10 diff
+        size_wide = await rm.calculate_position_size(10000.0, 100.0, 90.0)  # 10 diff
         assert size_tight > size_wide

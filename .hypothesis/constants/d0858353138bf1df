@@ -1,0 +1,4 @@
+# file: /Users/deuterium/Dev/BitbotBY/src/data_loader.py
+# hypothesis_version: 6.141.1
+
+[100, 120, 200, 240, 360, 480, 720, 1000, 1440, 4320, 10080, 43200, 86400, '/', '12h', '15m', '1M', '1d', '1h', '1m', '1w', '2h', '30m', '3d', '4h', '5m', '6h', '8h', ':', '^[0-9]{1,4}[mhdwM]$', '_', 'amount', 'close', 'closing', 'coerce', 'data/cache', 'date', 'ema_12', 'ema_26', 'ema_long', 'ema_short', 'high', 'highest', 'last', 'low', 'lowest', 'open', 'opening', 'time', 'timestamp', 'vol', 'volume', 'Первая строка: %s', 'Пример данных:\n%s', 'Размер DataFrame: %s', 'Размер данных: %s', 'Сырые колонки: %s']

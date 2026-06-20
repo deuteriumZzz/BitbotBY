@@ -171,26 +171,34 @@ class OrderExecutor:
                 if sl_price and sl_price >= entry:
                     logger.error(
                         "Invalid SL for buy %s: entry=%.4f sl=%.4f — skipping",
-                        sym, entry, sl_price,
+                        sym,
+                        entry,
+                        sl_price,
                     )
                     return
                 if tp_price and tp_price <= entry:
                     logger.error(
                         "Invalid TP for buy %s: entry=%.4f tp=%.4f — skipping",
-                        sym, entry, tp_price,
+                        sym,
+                        entry,
+                        tp_price,
                     )
                     return
             elif action == "sell":
                 if sl_price and sl_price <= entry:
                     logger.error(
                         "Invalid SL for sell %s: entry=%.4f sl=%.4f — skipping",
-                        sym, entry, sl_price,
+                        sym,
+                        entry,
+                        sl_price,
                     )
                     return
                 if tp_price and tp_price >= entry:
                     logger.error(
                         "Invalid TP for sell %s: entry=%.4f tp=%.4f — skipping",
-                        sym, entry, tp_price,
+                        sym,
+                        entry,
+                        tp_price,
                     )
                     return
 
@@ -219,14 +227,18 @@ class OrderExecutor:
                     logger.error(
                         "Post-impact SL invalid for buy %s: adj_entry=%.4f sl=%.4f"
                         " — skipping",
-                        sym, entry, sl_price,
+                        sym,
+                        entry,
+                        sl_price,
                     )
                     return
                 if tp_price and tp_price <= entry:
                     logger.error(
                         "Post-impact TP invalid for buy %s: adj_entry=%.4f tp=%.4f"
                         " — skipping",
-                        sym, entry, tp_price,
+                        sym,
+                        entry,
+                        tp_price,
                     )
                     return
             elif action == "sell":
@@ -234,14 +246,18 @@ class OrderExecutor:
                     logger.error(
                         "Post-impact SL invalid for sell %s: adj_entry=%.4f sl=%.4f"
                         " — skipping",
-                        sym, entry, sl_price,
+                        sym,
+                        entry,
+                        sl_price,
                     )
                     return
                 if tp_price and tp_price >= entry:
                     logger.error(
                         "Post-impact TP invalid for sell %s: adj_entry=%.4f tp=%.4f"
                         " — skipping",
-                        sym, entry, tp_price,
+                        sym,
+                        entry,
+                        tp_price,
                     )
                     return
 

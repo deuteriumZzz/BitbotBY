@@ -10,7 +10,7 @@ import logging
 import os
 import time
 from datetime import datetime
-from typing import Any, Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 import ccxt
 import pandas as pd
@@ -19,12 +19,10 @@ from config import Config
 from src.ai_analyzer import AIAnalyzer
 from src.bybit_api import BybitAPI
 from src.constants import REDIS_TTL_MARKET_DATA, SILENT_DEATH_ALERT_COOLDOWN
-
-_SECONDS_PER_HOUR: int = 3_600
 from src.correlation_filter import CorrelationFilter
 from src.cycle import CycleRunner
 from src.data_loader import DataLoader
-from src.health_server import cycles_counter, start_health_server
+from src.health_server import cycles_counter
 from src.logger import _SecretFilter, setup_logging
 from src.market_scanner import MarketScanner
 from src.news_analyzer import NewsAnalyzer
@@ -40,6 +38,8 @@ from src.strategies import TradingStrategy
 from src.telegram_notifier import TelegramNotifier
 from src.trade_history import TradeHistory
 from src.types import PositionRecord
+
+_SECONDS_PER_HOUR: int = 3_600
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -81,8 +81,8 @@ class TradingBot:
             max_corr=Config.MAX_CORRELATION,
         )
         self.is_running: bool = False
-        # Explicit schema via TypedDict — replaces Dict[str, Any] to catch missing
-        # fields at construction time (mypy) rather than as KeyErrors in the monitor.
+        # Явная схема через TypedDict — заменяет Dict[str, Any], чтобы ловить
+        # отсутствующие поля при создании (mypy), а не как KeyError в мониторе.
         self._monitored: Dict[str, PositionRecord] = {}
         self._monitored_lock: asyncio.Lock = asyncio.Lock()
         self._monitor_task: Optional[asyncio.Task[None]] = None
@@ -92,18 +92,18 @@ class TradingBot:
             Config.TELEGRAM_CHAT_ID,
         )
         self._paper_balance: float = Config.INITIAL_BALANCE
-        # regime cache: symbol → (regime, timestamp) — refreshed every 5 min
+        # кэш режимов: символ → (режим, timestamp) — обновляется каждые 5 мин
         self._regime_cache: Dict[str, Tuple[str, float]] = {}
         self._regime_ttl: float = float(
             os.getenv("REGIME_CACHE_TTL", str(REDIS_TTL_MARKET_DATA))
         )
-        # silent-death detection: track last trade and last alert times
+        # детектор «тихой смерти»: фиксируем время последней сделки и последнего алерта
         self._last_trade_at: Optional[float] = None
         self._silent_death_alerted_at: float = 0.0
         self._silent_death_hours: float = float(os.getenv("SILENT_DEATH_HOURS", "6"))
         if Config.PAPER_TRADING:
             logger.warning("*** PAPER TRADING MODE — no real orders will be placed ***")
-        # Register secrets for log masking
+        # Регистрируем секреты для маскировки в логах
         _SecretFilter.register(
             Config.BYBIT_API_KEY,
             Config.BYBIT_API_SECRET,
@@ -114,9 +114,9 @@ class TradingBot:
             getattr(Config, "NEWS_API_KEY", ""),
         )
 
-        # Monitoring and execution are separate objects so each concern has its
-        # own state (circuit-breaker counter, sizing logic) and can be tested
-        # without constructing the whole TradingBot.
+        # Мониторинг и исполнение — отдельные объекты: каждый отвечает за своё
+        # (счётчик circuit-breaker, логика размера позиции) и тестируется
+        # независимо от всего TradingBot.
         self._position_monitor = PositionMonitor(
             api=self.api,
             trade_history=self.trade_history,
@@ -132,8 +132,8 @@ class TradingBot:
             risk_manager=self.risk_manager,
             portfolio_optimizer=self.portfolio_optimizer,
             corr_filter=self.corr_filter,
-            # Lambdas defer dict/lock lookup to call time so that code which
-            # replaces bot._monitored (including tests) is always visible.
+            # Лямбды откладывают поиск dict/lock до момента вызова, чтобы код,
+            # заменяющий bot._monitored (в том числе в тестах), всегда был виден.
             get_monitored=lambda: self._monitored,
             get_lock=lambda: self._monitored_lock,
             get_paper_balance=lambda: self._paper_balance,
@@ -250,13 +250,14 @@ class TradingBot:
                     side = pos.get("side", "buy")
                     qty = float(pos.get("contracts") or 0)
                     if qty <= 0:
-                        # partial fill / zero-size position — skip
+                        # частичное исполнение / позиция с нулевым размером — пропускаем
                         logger.debug("Reconcile: skip zero-qty position %s", sym)
                         continue
                     entry = float(pos.get("entryPrice") or 0)
 
-                    # Биржа возвращает SL/TP для фьючерсных позиций (поля stopLoss/takeProfit).
-                    # На спотовом рынке эти поля отсутствуют → пытаемся из info-словаря.
+                    # Биржа возвращает SL/TP для фьючерсных позиций
+                    # (поля stopLoss/takeProfit). На спотовом рынке эти поля
+                    # отсутствуют — пытаемся достать из info-словаря.
                     sl = float(
                         pos.get("stopLoss")
                         or (pos.get("info") or {}).get("stopLoss")
@@ -268,8 +269,9 @@ class TradingBot:
                         or 0
                     )
 
-                    # Запасной SL по процентному отступу от входа, если биржа не вернула.
-                    # Без SL позиция не будет отслеживаться (_check_and_close игнорирует sl=0).
+                    # Запасной SL по процентному отступу от входа,
+                    # если биржа не вернула. Без SL позиция не будет
+                    # отслеживаться (_check_and_close игнорирует sl=0).
                     if not sl and entry > 0:
                         sl_pct = getattr(Config, "STOP_LOSS_PERCENT", 0.02)
                         sl = (
@@ -373,8 +375,8 @@ class TradingBot:
         self.portfolio_manager.current_balance = value
 
     async def _get_balance_usdt(self) -> float:
-        """Free USDT balance; falls back to PortfolioManager if exchange is unreachable.
-        """
+        """Свободный баланс в USDT; использует PortfolioManager как запасной
+        источник при недоступности биржи."""
         if Config.PAPER_TRADING:
             # Используем portfolio_manager как единый источник истины:
             # он обновляется и при открытии (_set_paper_balance) и при закрытии.
@@ -388,9 +390,9 @@ class TradingBot:
         return self.portfolio_manager.current_balance
 
     def _filter_by_balance(self, recs: list, balance: float) -> list:
-        """Keep only recommendations whose minimum lot fits within balance.
+        """Оставляет только рекомендации, минимальный лот которых укладывается в баланс.
 
-        Min lot = entry * 0.001 (smallest tradable notional on Bybit).
+        Минимальный лот = entry * 0.001 (наименьший торгуемый номинал на Bybit).
         """
         result = []
         for r in recs:
@@ -415,15 +417,15 @@ class TradingBot:
         filtered: list,
         market_data: dict,
     ) -> None:
-        """Execute the top recommendation — delegated to OrderExecutor."""
+        """Исполняет лучшую рекомендацию — делегирует OrderExecutor."""
         if not filtered or not Config.AUTO_EXECUTE:
             return
         balance = await self._get_balance_usdt()
         await self._executor.execute(filtered[0], market_data, balance)
 
     async def _monitor_positions(self) -> None:
-        """Background SL/TP/trailing/circuit-breaker loop — delegated to PositionMonitor.
-        """
+        """Фоновый цикл SL/TP/трейлинг/circuit-breaker —
+        делегирует PositionMonitor."""
         await self._position_monitor.run(
             is_running=lambda: self.is_running,
             monitored=self._monitored,
@@ -454,7 +456,8 @@ class TradingBot:
     async def _scan_and_update_correlations(
         self, symbols: list
     ) -> Dict[str, pd.DataFrame]:
-        """Сканирует рыночные данные, обновляет корреляционный фильтр и сохраняет в Redis.
+        """Сканирует рыночные данные, обновляет корреляционный фильтр
+        и сохраняет в Redis.
 
         :param symbols: Список символов для сканирования.
         :return: Словарь {символ: DataFrame с OHLCV+индикаторами}.
@@ -527,8 +530,9 @@ class TradingBot:
                         try:
                             sig = await self.strategy.get_signal(df)
                         except (ValueError, KeyError):
-                            # Strategy may raise on missing indicators;
-                            # safe to skip — no signal is the right fallback.
+                            # Стратегия может выбросить исключение при
+                            # отсутствии индикаторов; безопасно пропустить —
+                            # отсутствие сигнала здесь правильный фолбек.
                             pass
                     action = sig.get("action", "hold")
                     recs.append(
@@ -543,7 +547,8 @@ class TradingBot:
         return recs
 
     async def _check_silent_death(self) -> None:
-        """Отправляет Telegram-алерт если бот не совершал сделок дольше порогового времени.
+        """Отправляет Telegram-алерт если бот не совершал сделок
+        дольше порогового времени.
 
         Пропускается в режиме 'local' и когда сделок ещё не было.
         """
@@ -640,9 +645,10 @@ class TradingBot:
                 await asyncio.sleep(sleep_for)
 
             except Exception as e:
-                # Top-level catch: keeps the loop alive through transient failures
-                # (network blips, exchange maintenance). Specific sub-errors are
-                # caught closer to their source; this handles the unexpected remainder.
+                # Перехват верхнего уровня: удерживает цикл живым при
+                # временных сбоях (обрывы сети, техобслуживание биржи).
+                # Специфические ошибки перехватываются ближе к источнику;
+                # здесь обрабатывается всё остальное непредвиденное.
                 logger.error("Error in trading loop: %s", e)
                 await asyncio.sleep(10)
 
@@ -664,5 +670,3 @@ class TradingBot:
         await self.api.close()
         await self.data_loader.close()
         logger.info("Trading bot stopped")
-
-

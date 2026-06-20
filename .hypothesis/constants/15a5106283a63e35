@@ -1,0 +1,4 @@
+# file: /Users/deuterium/Dev/BitbotBY/src/trading_bot.py
+# hypothesis_version: 6.141.1
+
+[0.0, 0.001, 0.02, 1.0, 100, 2000, 3600, '-inf', '6', ':', 'Local analysis', 'NEWS_API_KEY', 'OPENAI_API_KEY', 'REGIME_CACHE_TTL', 'Regimes: %s', 'Restored state: %s', 'SILENT_DEATH_HOURS', 'STOP_LOSS_PERCENT', 'Trading bot stopped', 'USDT', '_last_trade_at', '_snap', 'action', 'affordable', 'atr', 'balance', 'buy', 'confidence', 'contracts', 'corr_filter_prices', 'current_balance', 'entry', 'entryPrice', 'exchange_sl_id', 'exchange_tp_id', 'free', 'hold', 'info', 'is_running', 'live', 'local', 'off', 'on', 'paper', 'peak_price', 'portfolio_state', 'portfolio_value', 'positions', 'profit_loss', 'qty', 'reasoning', 'side', 'stopLoss', 'stop_loss', 'strategy', 'symbol', 'takeProfit', 'take_profit', 'timestamp', 'trade_id', 'unknown']

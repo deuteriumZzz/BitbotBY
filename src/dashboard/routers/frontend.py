@@ -1,4 +1,4 @@
-"""Frontend route: serves the single-page HTML dashboard."""
+"""Маршрут фронтенда: отдаёт одностраничный HTML-дашборд."""
 
 from __future__ import annotations
 

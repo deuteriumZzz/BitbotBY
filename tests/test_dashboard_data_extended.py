@@ -26,10 +26,10 @@ from src.dashboard.data import (
     redis_get,
 )
 
-
 # ---------------------------------------------------------------------------
 # get_redis
 # ---------------------------------------------------------------------------
+
 
 class TestGetRedis:
     def test_returns_client_when_ping_succeeds(self):
@@ -63,6 +63,7 @@ class TestGetRedis:
 # ---------------------------------------------------------------------------
 # redis_get
 # ---------------------------------------------------------------------------
+
 
 class TestRedisGet:
     def test_returns_dict_on_hit(self):
@@ -102,6 +103,7 @@ class TestRedisGet:
 # get_trades: exception и успешный путь через реальную БД
 # ---------------------------------------------------------------------------
 
+
 class TestGetTradesException:
     def test_returns_empty_on_db_error(self, tmp_path):
         fake_db = tmp_path / "trades.db"
@@ -120,7 +122,8 @@ class TestGetTradesException:
     def test_returns_rows_from_real_db(self, tmp_path):
         db = tmp_path / "trades.db"
         conn = sqlite3.connect(str(db))
-        conn.execute("""
+        conn.execute(
+            """
             CREATE TABLE trades (
                 id INTEGER PRIMARY KEY,
                 symbol TEXT, strategy TEXT, action TEXT,
@@ -129,7 +132,8 @@ class TestGetTradesException:
                 confidence REAL, commission REAL,
                 entry_time TEXT, exit_time TEXT, status TEXT
             )
-        """)
+        """
+        )
         conn.execute(
             "INSERT INTO trades VALUES "
             "(1,'BTC/USDT','ema','buy',60000,61000,0.1,100,0.016,0.8,5,"
@@ -150,6 +154,7 @@ class TestGetTradesException:
 # get_stats: exception и корректный расчёт
 # ---------------------------------------------------------------------------
 
+
 class TestGetStatsException:
     def test_returns_empty_on_db_error(self, tmp_path):
         fake_db = tmp_path / "trades.db"
@@ -168,7 +173,8 @@ class TestGetStatsException:
     def test_win_rate_computed_correctly(self, tmp_path):
         db = tmp_path / "trades.db"
         conn = sqlite3.connect(str(db))
-        conn.execute("""
+        conn.execute(
+            """
             CREATE TABLE trades (
                 id INTEGER PRIMARY KEY,
                 symbol TEXT, strategy TEXT, action TEXT,
@@ -177,14 +183,17 @@ class TestGetStatsException:
                 confidence REAL, commission REAL,
                 entry_time TEXT, exit_time TEXT, status TEXT
             )
-        """)
-        conn.execute(
-            "INSERT INTO trades VALUES "
-            "(1,'BTC/USDT','ema','buy',60000,61000,0.1,100,0.016,0.8,5,'t1','t2','closed')"
+        """
         )
         conn.execute(
             "INSERT INTO trades VALUES "
-            "(2,'ETH/USDT','ema','buy',3000,2900,0.5,-50,-0.033,0.6,3,'t3','t4','closed')"
+            "(1,'BTC/USDT','ema','buy',60000,61000,0.1,100,"
+            "0.016,0.8,5,'t1','t2','closed')"
+        )
+        conn.execute(
+            "INSERT INTO trades VALUES "
+            "(2,'ETH/USDT','ema','buy',3000,2900,0.5,-50,"
+            "-0.033,0.6,3,'t3','t4','closed')"
         )
         conn.commit()
         conn.close()
@@ -201,6 +210,7 @@ class TestGetStatsException:
 # ---------------------------------------------------------------------------
 # check_healthcheck
 # ---------------------------------------------------------------------------
+
 
 class TestCheckHealthcheck:
     def test_returns_false_when_no_file(self, tmp_path):

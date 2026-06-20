@@ -1,17 +1,18 @@
 """Тесты AIAnalyzer и вспомогательных функций."""
+
 import json
 import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_config(**kwargs):
-    """Return a MagicMock that looks like Config with given attribute values."""
+    """Возвращает MagicMock, имитирующий Config с заданными атрибутами."""
     cfg = MagicMock()
     cfg.AI_PROVIDER = kwargs.get("AI_PROVIDER", "auto")
     cfg.ANTHROPIC_API_KEY = kwargs.get("ANTHROPIC_API_KEY", "")
@@ -27,41 +28,48 @@ def _make_config(**kwargs):
 def _make_strategy(name: str) -> dict:
     return {
         "name": name,
-        "description": f"Strategy {name} description that is longer than sixty chars for testing",
+        "description": (
+            f"Strategy {name} description that is longer than sixty chars for testing"
+        ),
         "risk_level": "medium",
         "market_type": "trending",
     }
 
 
 # ---------------------------------------------------------------------------
-# Fixture: minimal no-key analyzer (reuses pattern from test_ai_parse_response)
+# Фикстура: минимальный анализатор без ключей (паттерн из test_ai_parse_response)
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def no_key_analyzer():
-    """AIAnalyzer instance with no API keys — enabled=False."""
+    """Экземпляр AIAnalyzer без API-ключей — enabled=False."""
     cfg = _make_config(AI_PROVIDER="auto")
-    with patch("src.ai_analyzer.Config", cfg), \
-         patch("src.ai_analyzer.get_all_strategies", return_value=[]):
+    with patch("src.ai_analyzer.Config", cfg), patch(
+        "src.ai_analyzer.get_all_strategies", return_value=[]
+    ):
         from src.ai_analyzer import AIAnalyzer
+
         return AIAnalyzer()
 
 
 @pytest.fixture
 def anthropic_analyzer():
-    """AIAnalyzer instance with only Anthropic key."""
+    """Экземпляр AIAnalyzer только с ключом Anthropic."""
     cfg = _make_config(AI_PROVIDER="anthropic", ANTHROPIC_API_KEY="test_key")
-    with patch("src.ai_analyzer.Config", cfg), \
-         patch("src.ai_analyzer.get_all_strategies", return_value=[_make_strategy("ema_crossover")]), \
-         patch.dict("sys.modules", {"anthropic": MagicMock()}):
+    with patch("src.ai_analyzer.Config", cfg), patch(
+        "src.ai_analyzer.get_all_strategies",
+        return_value=[_make_strategy("ema_crossover")],
+    ), patch.dict("sys.modules", {"anthropic": MagicMock()}):
         from src.ai_analyzer import AIAnalyzer
-        # Patch the anthropic module import inside __init__
+
+        # Патчим импорт модуля anthropic внутри __init__
         with patch("anthropic.AsyncAnthropic", MagicMock(return_value=MagicMock())):
             return AIAnalyzer()
 
 
 # ---------------------------------------------------------------------------
-# _resolve_provider()
+# _resolve_provider()  — определение провайдера
 # ---------------------------------------------------------------------------
 
 
@@ -70,6 +78,7 @@ class TestResolveProvider:
         cfg = _make_config(**kwargs)
         with patch("src.ai_analyzer.Config", cfg):
             from src.ai_analyzer import _resolve_provider
+
             return _resolve_provider()
 
     def test_resolve_anthropic_with_key(self):
@@ -134,7 +143,7 @@ class TestResolveProvider:
 
 
 # ---------------------------------------------------------------------------
-# AIAnalyzer.__init__()
+# AIAnalyzer.__init__()  — инициализация
 # ---------------------------------------------------------------------------
 
 
@@ -143,13 +152,17 @@ class TestAIAnalyzerInit:
         cfg = _make_config(**kwargs)
         mock_openai_module = MagicMock()
         mock_anthropic_module = MagicMock()
-        with patch("src.ai_analyzer.Config", cfg), \
-             patch("src.ai_analyzer.get_all_strategies", return_value=[]), \
-             patch.dict("sys.modules", {
-                 "anthropic": mock_anthropic_module,
-                 "openai": mock_openai_module,
-             }):
+        with patch("src.ai_analyzer.Config", cfg), patch(
+            "src.ai_analyzer.get_all_strategies", return_value=[]
+        ), patch.dict(
+            "sys.modules",
+            {
+                "anthropic": mock_anthropic_module,
+                "openai": mock_openai_module,
+            },
+        ):
             from src.ai_analyzer import AIAnalyzer
+
             return AIAnalyzer()
 
     def test_init_no_keys_disabled(self):
@@ -185,7 +198,7 @@ class TestAIAnalyzerInit:
 
 
 # ---------------------------------------------------------------------------
-# AIAnalyzer._build_strategy_list()
+# AIAnalyzer._build_strategy_list()  — формирование списка стратегий
 # ---------------------------------------------------------------------------
 
 
@@ -215,7 +228,7 @@ class TestBuildStrategyList:
 
 
 # ---------------------------------------------------------------------------
-# AIAnalyzer._build_prompt()
+# AIAnalyzer._build_prompt()  — построение промпта
 # ---------------------------------------------------------------------------
 
 
@@ -236,6 +249,7 @@ class TestBuildPrompt:
         cfg = _make_config(MIN_SIGNAL_CONFIDENCE=0.75)
         with patch("src.ai_analyzer.Config", cfg):
             from src.ai_analyzer import AIAnalyzer
+
             ai = AIAnalyzer.__new__(AIAnalyzer)
             ai.strategies = []
             ai.logger = logging.getLogger("test")
@@ -249,7 +263,7 @@ class TestBuildPrompt:
 
 
 # ---------------------------------------------------------------------------
-# AIAnalyzer._parse_response() — additional cases not in test_ai_parse_response
+# AIAnalyzer._parse_response() — дополнительные случаи, не в test_ai_parse_response
 # ---------------------------------------------------------------------------
 
 
@@ -292,14 +306,14 @@ class TestParseResponseAdditional:
             "strategy": "rsi_momentum",
             "confidence": 0.9,
         }
-        # Single dict instead of list
+        # Одиночный dict вместо списка
         result = no_key_analyzer._parse_response(json.dumps(rec))
         assert len(result) == 1
         assert result[0]["action"] == "sell"
 
 
 # ---------------------------------------------------------------------------
-# AIAnalyzer.analyze()
+# AIAnalyzer.analyze()  — основной метод анализа
 # ---------------------------------------------------------------------------
 
 
@@ -336,15 +350,19 @@ class TestAnalyze:
         cfg = _make_config(MIN_SIGNAL_CONFIDENCE=0.65)
         with patch("src.ai_analyzer.Config", cfg):
             ai = self._make_ai(provider_order=["anthropic"])
-            valid_response = json.dumps([{
-                "symbol": "BTC/USDT",
-                "action": "buy",
-                "strategy": "ema_crossover",
-                "confidence": 0.9,
-                "entry": 50000,
-                "stop_loss": 48000,
-                "take_profit": 55000,
-            }])
+            valid_response = json.dumps(
+                [
+                    {
+                        "symbol": "BTC/USDT",
+                        "action": "buy",
+                        "strategy": "ema_crossover",
+                        "confidence": 0.9,
+                        "entry": 50000,
+                        "stop_loss": 48000,
+                        "take_profit": 55000,
+                    }
+                ]
+            )
             ai._call_anthropic = AsyncMock(return_value=valid_response)
             ai._build_prompt = MagicMock(return_value="prompt")
             result = await ai.analyze([{"symbol": "BTC/USDT"}], 10000)
@@ -368,12 +386,16 @@ class TestAnalyze:
             billing_error = Exception("Too Many Requests")
             billing_error.status_code = 429
             ai._call_anthropic = AsyncMock(side_effect=billing_error)
-            valid_response = json.dumps([{
-                "symbol": "ETH/USDT",
-                "action": "sell",
-                "strategy": "rsi_momentum",
-                "confidence": 0.85,
-            }])
+            valid_response = json.dumps(
+                [
+                    {
+                        "symbol": "ETH/USDT",
+                        "action": "sell",
+                        "strategy": "rsi_momentum",
+                        "confidence": 0.85,
+                    }
+                ]
+            )
             ai._call_deepseek = AsyncMock(return_value=valid_response)
             ai._build_prompt = MagicMock(return_value="prompt")
             result = await ai.analyze([{"symbol": "ETH/USDT"}], 5000)
@@ -383,9 +405,9 @@ class TestAnalyze:
     @pytest.mark.asyncio
     async def test_analyze_returns_empty_when_all_providers_fail(self):
         ai = self._make_ai(provider_order=["anthropic", "deepseek"])
-        billing_error_1 = Exception("Billing error")
+        billing_error_1 = Exception("Ошибка биллинга")
         billing_error_1.status_code = 429
-        billing_error_2 = Exception("Quota exceeded")
+        billing_error_2 = Exception("Квота исчерпана")
         billing_error_2.status_code = 429
         ai._call_anthropic = AsyncMock(side_effect=billing_error_1)
         ai._call_deepseek = AsyncMock(side_effect=billing_error_2)
@@ -396,8 +418,8 @@ class TestAnalyze:
     @pytest.mark.asyncio
     async def test_analyze_returns_empty_on_unexpected_error(self):
         ai = self._make_ai(provider_order=["anthropic"])
-        unexpected_error = Exception("Network timeout")
-        # No status_code — treated as generic error
+        unexpected_error = Exception("Таймаут сети")
+        # Нет status_code — обрабатывается как общая ошибка
         ai._call_anthropic = AsyncMock(side_effect=unexpected_error)
         ai._build_prompt = MagicMock(return_value="prompt")
         result = await ai.analyze([{"symbol": "BTC/USDT"}], 10000)
@@ -405,15 +427,17 @@ class TestAnalyze:
 
 
 def _get_analyzer_class():
-    """Import AIAnalyzer class — cached after first call."""
-    with patch("src.ai_analyzer.Config", _make_config()), \
-         patch("src.ai_analyzer.get_all_strategies", return_value=[]):
+    """Импортирует класс AIAnalyzer — кэшируется после первого вызова."""
+    with patch("src.ai_analyzer.Config", _make_config()), patch(
+        "src.ai_analyzer.get_all_strategies", return_value=[]
+    ):
         from src.ai_analyzer import AIAnalyzer
+
         return AIAnalyzer
 
 
 # ---------------------------------------------------------------------------
-# AIAnalyzer.recommend_strategy_local()
+# AIAnalyzer.recommend_strategy_local()  — локальная рекомендация стратегии
 # ---------------------------------------------------------------------------
 
 
@@ -423,7 +447,7 @@ class TestRecommendStrategyLocal:
         self.ai = no_key_analyzer
 
     def _snap(self, **kwargs):
-        """Build a minimal snapshot with given indicator overrides."""
+        """Строит минимальный снапшот с заданными переопределениями индикаторов."""
         indicators = {
             "rsi": kwargs.pop("rsi", 50),
             "bb_width": kwargs.pop("bb_width", 0.04),

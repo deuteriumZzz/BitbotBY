@@ -1,11 +1,9 @@
 """Тесты модуля experience_buffer."""
+
 import json
 import os
 
-import pytest
-
 from src import experience_buffer as eb
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -62,15 +60,24 @@ class TestSave:
         path = str(tmp_path / "exp.jsonl")
         eb.save(_SNAP, "buy", entry_price=100.0, exit_price=110.0, path=path)
         eb.save(_SNAP, "sell", entry_price=110.0, exit_price=105.0, path=path)
-        lines = [l for l in open(path).readlines() if l.strip()]
+        lines = [line for line in open(path).readlines() if line.strip()]
         assert len(lines) == 2
 
     def test_save_record_has_required_keys(self, tmp_path):
         path = str(tmp_path / "exp.jsonl")
         eb.save(_SNAP, "buy", entry_price=100.0, exit_price=110.0, path=path)
         record = json.loads(open(path).readline())
-        for key in ("ts", "symbol", "action", "entry_price", "exit_price",
-                    "pnl_pct", "indicators", "volume_ratio", "price"):
+        for key in (
+            "ts",
+            "symbol",
+            "action",
+            "entry_price",
+            "exit_price",
+            "pnl_pct",
+            "indicators",
+            "volume_ratio",
+            "price",
+        ):
             assert key in record, f"Missing key: {key}"
 
     def test_save_record_values(self, tmp_path):

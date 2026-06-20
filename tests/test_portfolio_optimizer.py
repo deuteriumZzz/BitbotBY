@@ -1,4 +1,4 @@
-"""Unit tests for PortfolioOptimizer (Markowitz + CVaR)."""
+"""Юнит-тесты для PortfolioOptimizer (Markowitz + CVaR)."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from src.portfolio_optimizer import PortfolioOptimizer
 
 
 def _returns_df(n: int = 60, seed: int = 0) -> pd.DataFrame:
-    """Synthetic daily log-returns for BTC, ETH, SOL."""
+    """Синтетические дневные лог-доходности для BTC, ETH, SOL."""
     rng = np.random.default_rng(seed)
     data = {
         "BTC/USDT": rng.normal(0.001, 0.02, n),
@@ -35,8 +35,8 @@ class TestEqualWeights:
             assert abs(v - 0.5) < 1e-6
 
     def test_unknown_symbol_falls_back_to_equal_weights(self):
-        # Only 1 valid column → < 2 → falls back to _equal_weights(symbols),
-        # which includes all input symbols (even ones not in the DataFrame).
+        # Только 1 валидная колонка → < 2 → откат к _equal_weights(symbols),
+        # включая все входные символы (даже отсутствующие в DataFrame).
         opt = PortfolioOptimizer()
         df = _returns_df()
         weights = opt.allocate(["BTC/USDT", "UNKNOWN/USDT"], df)
@@ -92,7 +92,7 @@ class TestCVaR:
         assert set(weights.keys()) == set(df.columns)
 
     def test_high_volatility_asset_gets_lower_weight(self):
-        """CVaR should underweight the asset with 4x higher volatility."""
+        """CVaR должен занижать вес актива с волатильностью в 4 раза выше."""
         rng = np.random.default_rng(42)
         df = pd.DataFrame(
             {

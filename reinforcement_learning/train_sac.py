@@ -107,10 +107,10 @@ def _evaluate_model(
     )
     bh_pct = (bh_final / initial_balance - 1.0) * 100.0
     logger.info(
-        "TEST SET (%d candles) — "
+        "ТЕСТОВАЯ ВЫБОРКА (%d свечей) — "
         "SAC: $%.2f (%+.1f%%) | "
         "Buy&Hold: $%.2f (%+.1f%%) | "
-        "Commissions: $%.2f",
+        "Комиссии: $%.2f",
         len(test_df),
         env.current_value,
         pnl_pct,
@@ -141,8 +141,8 @@ def _finetune_on_experiences(model: Any, norm_stats: Dict[str, Any]) -> None:
 
     logger.info("Fine-tune на %d реальных сделках из experiences.jsonl", len(records))
 
-    # Конвертируем каждую запись в obs-вектор (14 признаков, порядок как в TradingEnv)
-    _COLS = [
+    # Преобразуем каждую запись в obs-вектор (14 признаков, порядок как в TradingEnv)
+    _cols = [
         "open",
         "high",
         "low",
@@ -163,21 +163,21 @@ def _finetune_on_experiences(model: Any, norm_stats: Dict[str, Any]) -> None:
             price,
             price,
             price,
-            price,  # open/high/low/close approximated
-            rec.get("volume_ratio", 1.0) * 1000,  # volume proxy
+            price,  # open/high/low/close приближённые значения
+            rec.get("volume_ratio", 1.0) * 1000,  # прокси для объёма
             ind.get("rsi", 50.0),
             ind.get("macd", 0.0),
             ind.get("macd_signal", 0.0),
             ind.get("bb_upper", price * 1.02),
             ind.get("bb_middle", price),
             ind.get("bb_lower", price * 0.98),
-            float(rec.get("action") == "buy"),  # position flag
-            0.0,  # unrealised pnl (at entry = 0)
-            rec.get("pnl_pct", 0.0),  # realised pnl as reward hint
+            float(rec.get("action") == "buy"),  # флаг позиции
+            0.0,  # нереализованный PnL (при входе = 0)
+            rec.get("pnl_pct", 0.0),  # реализованный PnL как подсказка награды
         ]
         obs = np.array(raw, dtype=np.float32)
-        # Apply same normalisation as training
-        for i, col in enumerate(_COLS):
+        # Применяем ту же нормализацию, что и при обучении
+        for i, col in enumerate(_cols):
             if col in norm_stats:
                 mu, sd = norm_stats[col]
                 obs[i] = (obs[i] - mu) / (sd + 1e-8)
@@ -201,7 +201,7 @@ def _finetune_on_experiences(model: Any, norm_stats: Dict[str, Any]) -> None:
             )
             added += 1
         except Exception as exc:
-            logger.debug("Skipping experience record: %s", exc)
+            logger.debug("Пропускаем запись опыта: %s", exc)
 
     if added < 10 or model.replay_buffer.size() < model.batch_size:
         logger.info("Fine-tune: недостаточно данных в буфере, пропускаем")
@@ -251,7 +251,7 @@ def train(
 
     os.makedirs(os.path.dirname(model_path), exist_ok=True)
 
-    # Train / test split — строго по времени, без перемешивания
+    # Разделение train/test — строго по времени, без перемешивания
     split_idx = int(len(df) * train_split)
     train_df = df.iloc[:split_idx].reset_index(drop=True)
     test_df = df.iloc[split_idx:].reset_index(drop=True)
@@ -265,7 +265,7 @@ def train(
     )
     logger.info("Обучение SAC: %d шагов", total_timesteps)
 
-    # Load Optuna best hyperparams if available
+    # Загружаем лучшие гиперпараметры Optuna, если файл существует
     hp_path = "models/best_hyperparams.json"
     policy_kwargs: dict = {}
     sac_kwargs: dict = {"verbose": 1}
@@ -294,7 +294,7 @@ def train(
     # Оценка на тестовой выборке (out-of-sample)
     _evaluate_model(model, test_df)
 
-    # Fine-tune on real trade experiences collected by the bot
+    # Дообучение на реальных сделках, накопленных ботом
     norm_stats = _compute_norm_stats(train_df)
     _finetune_on_experiences(model, norm_stats)
 
@@ -435,8 +435,8 @@ if __name__ == "__main__":
                 )
                 if df_sym is None or df_sym.empty:
                     continue
-                # Normalize price columns to % returns from first candle
-                # so BTC ($64k) and BILL ($0.06) live on the same scale
+                # Нормализуем ценовые колонки к % доходности от первой свечи,
+                # чтобы BTC ($64k) и малые монеты ($0.06) были в одном масштабе
                 price_cols = [
                     c for c in ("open", "high", "low", "close") if c in df_sym.columns
                 ]
@@ -445,19 +445,19 @@ if __name__ == "__main__":
                     for col in price_cols:
                         df_sym[col] = df_sym[col] / base
                 frames.append(df_sym)
-                logger.info("Loaded %s: %d candles", sym, len(df_sym))
+                logger.info("Загружено %s: %d свечей", sym, len(df_sym))
             except Exception as exc:
-                logger.warning("Skipping %s: %s", sym, exc)
+                logger.warning("Пропускаем %s: %s", sym, exc)
 
         await loader.close()
 
         if not frames:
-            logger.error("No data loaded — aborting")
+            logger.error("Данные не загружены — прерываем")
             return
 
         combined = pd.concat(frames, ignore_index=True)
         logger.info(
-            "Combined dataset: %d candles from %d symbols",
+            "Объединённый датасет: %d свечей из %d символов",
             len(combined),
             len(frames),
         )

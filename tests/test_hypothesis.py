@@ -136,11 +136,7 @@ if HYPOTHESIS_AVAILABLE:
         assume(not np.isnan(daily_volume))
         assume(not np.isnan(daily_vol))
 
-        from src.market_impact import (
-            _MAX_IMPACT,
-            _MIN_IMPACT,
-            almgren_chriss_impact,
-        )
+        from src.market_impact import _MAX_IMPACT, _MIN_IMPACT, almgren_chriss_impact
 
         impact = almgren_chriss_impact(order_size, daily_volume, daily_vol)
         assert _MIN_IMPACT <= impact <= _MAX_IMPACT, (
@@ -174,7 +170,13 @@ if HYPOTHESIS_AVAILABLE:
             assert result is False
 
     @given(n_recs=st.integers(min_value=0, max_value=20))
-    @settings(max_examples=30, suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture])
+    @settings(
+        max_examples=30,
+        suppress_health_check=[
+            HealthCheck.too_slow,
+            HealthCheck.function_scoped_fixture,
+        ],
+    )
     def test_print_recommendations_never_raises(n_recs, capsys):
         """print_recommendations никогда не бросает исключение."""
         from src.cycle import CycleRunner
