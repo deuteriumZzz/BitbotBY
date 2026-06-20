@@ -311,12 +311,11 @@ def train(
     if save_backup:
         _backup_existing_model(model_path)
 
-    # Сохранение модели (norm_stats считаем на train-данных)
+    # Сохранение модели (norm_stats уже вычислен выше на train-данных)
     save_path = model_path.replace(".zip", "")
     model.save(save_path)
     logger.info(f"Модель SAC сохранена → {save_path}.zip")
 
-    norm_stats = _compute_norm_stats(train_df)
     _save_norm_stats(model_path, norm_stats)
 
     return model_path

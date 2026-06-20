@@ -154,8 +154,10 @@ class NewsAnalyzer:
         try:
             count = self.redis.redis_client.incr(redis_key)
             if count == 1:
-                # Истекает в конце дня — TTL ставится только при первом инкременте
-                self.redis.redis_client.expire(redis_key, REDIS_TTL_TRADING_STATE)
+                # TTL до конца текущего UTC-дня (не фиксированные 86400 сек от момента создания)
+                _now = datetime.utcnow()
+                _seconds_until_midnight = 86400 - (_now.hour * 3600 + _now.minute * 60 + _now.second)
+                self.redis.redis_client.expire(redis_key, max(1, _seconds_until_midnight))
             if count > _AI_DAILY_BUDGET:
                 self.logger.warning(
                     "%s daily budget (%d calls) exhausted — VADER fallback",

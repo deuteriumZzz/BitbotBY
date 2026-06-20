@@ -167,23 +167,28 @@ class TradingEnv(gym.Env):
             return self._get_observation(), 0.0, True, False, {}
 
         a = float(action[0])
+        # Observation was built from close[current_step] — that's what the agent "saw".
+        # Execute at open[current_step + 1] to avoid look-ahead bias.
+        exec_step = min(self.current_step + 1, len(self.data) - 1)
+        exec_price = float(self.data.iloc[exec_step]["open"])
+        # current_price tracks the mark-to-market value (last close the agent observed).
         current_price = float(self.data.iloc[self.current_step]["close"])
         prev_value = self.current_value
 
         if a > HOLD_ZONE and self.balance > 0:
             fraction = min(1.0, (a - HOLD_ZONE) / (1.0 - HOLD_ZONE))
             spend = self.balance * fraction
-            bought = spend / current_price
+            bought = spend / exec_price
             commission = spend * COMMISSION
             self.balance -= spend + commission
             self.position += bought
-            self.entry_price = current_price
+            self.entry_price = exec_price
             self.total_commission += commission
 
         elif a < -HOLD_ZONE and self.position > 0:
             fraction = min(1.0, (abs(a) - HOLD_ZONE) / (1.0 - HOLD_ZONE))
             sell_qty = self.position * fraction
-            revenue = sell_qty * current_price
+            revenue = sell_qty * exec_price
             commission = revenue * COMMISSION
             self.balance += revenue - commission
             self.position -= sell_qty

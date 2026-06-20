@@ -1,0 +1,4 @@
+# file: /Users/deuterium/Dev/BitbotBY/reinforcement_learning/rl_env.py
+# hypothesis_version: 6.141.1
+
+[-1.0, 0.0, 1e-08, 0.01, 0.1, 0.98, 1.0, 1.02, 3.0, 5.0, 20.0, 50.0, 100.0, 1000.0, 10000.0, '0.001', '0.3', 'COMMISSION_RATE', 'SAC_HOLD_ZONE', 'balance', 'basis_pct', 'bb_lower', 'bb_middle', 'bb_upper', 'close', 'fear_greed', 'funding_rate', 'google_trends', 'high', 'human', 'iv_skew', 'low', 'macd', 'macd_signal', 'ob_imbalance', 'open', 'pcr', 'position', 'price', 'rsi', 'step', 'value', 'volume']

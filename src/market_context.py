@@ -286,12 +286,6 @@ class MarketContext:
             oi_growing = oi_now > oi_prev
 
             oi_drop_pct = (oi_prev - oi_now) / oi_prev if oi_prev > 0 else 0
-            if oi_drop_pct > 0.02:
-                liquidation_pressure = "long_liquidation"
-            elif oi_drop_pct < -0.02:
-                liquidation_pressure = "short_squeeze"
-            else:
-                liquidation_pressure = "neutral"
 
             # Для определения направления цены сравниваем с предыдущим кэшем
             cached = self._cache.get(symbol)
@@ -301,6 +295,13 @@ class MarketContext:
                 prev_price = current_price
 
             price_falling = current_price < prev_price * 0.9995
+
+            if oi_drop_pct > 0.02 and price_falling:
+                liquidation_pressure = "long_liquidation"   # OI упал + цена падает = лонги ликвидируются
+            elif oi_drop_pct > 0.02 and not price_falling:
+                liquidation_pressure = "short_squeeze"      # OI упал + цена растёт = шорты закрываются
+            else:
+                liquidation_pressure = "neutral"
 
             if oi_growing and price_falling:
                 signal = "oi_bearish"

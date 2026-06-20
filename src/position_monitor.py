@@ -61,6 +61,8 @@ class PositionMonitor:
         self._current_signals: dict = {}
         self._current_market_ctx: dict = {}
         self._current_regime: str = "unknown"
+        # Keeps strong references to fire-and-forget tasks so GC can't destroy them.
+        self._background_tasks: set = set()
 
     async def run(
         self,
@@ -438,7 +440,9 @@ class PositionMonitor:
                     " Trading halted automatically."
                 )
                 logger.critical(msg)
-                asyncio.create_task(self._telegram.notify(msg))
+                _t = asyncio.create_task(self._telegram.notify(msg))
+                self._background_tasks.add(_t)
+                _t.add_done_callback(self._background_tasks.discard)
                 self._set_running(False)
         else:
             self._consecutive_losses = 0

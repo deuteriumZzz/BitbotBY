@@ -19,6 +19,7 @@ from config import Config
 from src.ai_analyzer import AIAnalyzer
 from src.bybit_api import BybitAPI
 from src.constants import REDIS_TTL_MARKET_DATA, SILENT_DEATH_ALERT_COOLDOWN
+from src.market_context import MarketContext
 from src.correlation_filter import CorrelationFilter
 from src.cycle import CycleRunner
 from src.data_loader import DataLoader
@@ -148,6 +149,7 @@ class TradingBot:
             telegram=self.telegram,
             get_current_regime=lambda: self._current_regime,
         )
+        self._market_context = MarketContext()
 
     async def initialize(self) -> None:
         """
@@ -626,10 +628,8 @@ class TradingBot:
                     for sym, df in market_data.items()
                     if df is not None and not df.empty
                 }
-                from src.market_context import MarketContext as _MC  # noqa: PLC0415
-                _mc_inst = _MC()
                 try:
-                    _market_ctx_map = await _mc_inst.get_context_for_symbols(
+                    _market_ctx_map = await self._market_context.get_context_for_symbols(
                         list(market_data.keys()), _prices
                     )
                 except Exception as _mc_exc:
