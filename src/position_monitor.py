@@ -31,7 +31,8 @@ logger = logging.getLogger(__name__)
 
 class PositionMonitor:
     """
-    Следит за открытыми позициями каждые 5 с; закрывает при срабатывании SL/TP/трейлинга.
+    Следит за открытыми позициями каждые 5 с;
+    закрывает при срабатывании SL/TP/трейлинга.
 
     Хранит счётчик _consecutive_losses для circuit breaker — изоляция от TradingBot
     позволяет сбрасывать счётчик в тестах без перестройки всего бота.
@@ -75,6 +76,9 @@ class PositionMonitor:
             async with lock:
                 snapshot = list(monitored.items())
             for sym, pos in snapshot:
+                # None — placeholder OrderExecutor'а пока ожидается подтверждение.
+                if pos is None:
+                    continue
                 try:
                     price = await self._api.get_current_price(sym)
                     if not price:
@@ -235,16 +239,40 @@ class PositionMonitor:
         # Default exit commission — overridden with actual fee in live mode.
         exit_commission = qty * price * Config.COMMISSION_RATE
         if not Config.PAPER_TRADING:
-            close_order = await self._api.create_order(sym, "market", close_side, qty)
-            # Cancel exchange-side conditional orders to prevent double-execution
+            # Шаг 1: сначала отменяем биржевые условные ордера, чтобы избежать
+            # двойного закрытия (race condition между SL биржи и программным закрытием).
             for oid in (pos.get("exchange_sl_id"), pos.get("exchange_tp_id")):
                 if oid:
                     await self._api.cancel_order(oid, sym)
-            # Use actual exchange fee when available — varies by user tier.
-            if close_order:
-                fee_cost = float((close_order.get("fee") or {}).get("cost") or 0)
-                if fee_cost > 0:
-                    exit_commission = fee_cost
+
+            # Шаг 2: программное закрытие позиции (lock_suffix="close" не конкурирует
+            # с order_open:{sym} при открытии новой позиции).
+            close_order = await self._api.create_order(
+                sym, "market", close_side, qty, lock_suffix="close"
+            )
+
+            if close_order is None:
+                # Закрытие не удалось после всех повторов — восстанавливаем биржевую
+                # защиту (SL/TP) и оставляем позицию в мониторе для повторной попытки.
+                logger.critical(
+                    "Программное закрытие %s не удалось — восстанавливаем"
+                    " биржевые SL/TP, позиция остаётся в мониторе",
+                    sym,
+                )
+                if sl or tp:
+                    re_sl_id, re_tp_id = await self._api.place_exchange_sl_tp(
+                        sym, close_side, qty, sl, tp
+                    )
+                    async with lock:
+                        if sym in monitored and monitored[sym] is not None:
+                            monitored[sym]["exchange_sl_id"] = re_sl_id
+                            monitored[sym]["exchange_tp_id"] = re_tp_id
+                return False
+
+            # Используем реальную комиссию из ответа биржи (зависит от уровня аккаунта).
+            fee_cost = float((close_order.get("fee") or {}).get("cost") or 0)
+            if fee_cost > 0:
+                exit_commission = fee_cost
 
         await self._portfolio_manager.update_portfolio(sym, close_side, qty, price)
         async with lock:
@@ -264,11 +292,22 @@ class PositionMonitor:
 
         trade_id = pos.get("trade_id")
         if trade_id:
-            await self._trade_history.record_close(
-                trade_id=trade_id,
-                exit_price=price,
-                commission=exit_commission,
-            )
+            try:
+                await self._trade_history.record_close(
+                    trade_id=trade_id,
+                    exit_price=price,
+                    commission=exit_commission,
+                )
+            except Exception as exc:
+                # Позиция уже удалена из монитора и закрыта на бирже.
+                # Логируем потерю записи для ручной сверки — повторная попытка
+                # закрыть ту же позицию хуже, чем потеря одной строки в истории.
+                logger.error(
+                    "record_close для trade %s не удалась: %s"
+                    " — нужна ручная сверка trade_history",
+                    trade_id,
+                    exc,
+                )
 
         stats = await self._trade_history.get_summary()
         await self._telegram.notify(

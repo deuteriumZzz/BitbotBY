@@ -433,7 +433,6 @@ def run_strategy(
 
             if sl_hit or tp_hit:
                 exit_impact = _ac_impact(window, open_trade["position_usdt"])
-                d = open_trade["direction"]
                 if d == 1:  # long → sell at bid
                     exit_price = current_price * (1.0 - exit_impact)
                 else:  # short → buy at ask

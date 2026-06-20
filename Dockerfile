@@ -24,4 +24,4 @@ ENV PYTHONPATH=/app
 
 EXPOSE 8080
 
-CMD ["python", "run_bot.py"]
+CMD ["python", "supervisor.py"]

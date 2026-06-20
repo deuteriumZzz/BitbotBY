@@ -34,14 +34,15 @@ class Config:
     """Конфигурация торгового бота. Все параметры читаются из env."""
 
     # ── Redis ──────────────────────────────────────────────────────────────
-    REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
     REDIS_HOST: str = os.getenv("REDIS_HOST", "localhost")
     REDIS_PORT: int = int(os.getenv("REDIS_PORT", 6379))
-    REDIS_DB: int = int(os.getenv("REDIS_DB", 0))
 
     # ── Bybit API ──────────────────────────────────────────────────────────
     BYBIT_API_KEY: str = os.getenv("BYBIT_API_KEY", "")
     BYBIT_API_SECRET: str = os.getenv("BYBIT_API_SECRET", "")
+    # "spot" — споровой рынок (по умолчанию)
+    # "linear" — бессрочные фьючерсы (нужен reduceOnly для SL/TP)
+    MARKET_TYPE: str = os.getenv("MARKET_TYPE", "spot")
 
     # ── Trading ────────────────────────────────────────────────────────────
     INITIAL_BALANCE: float = float(os.getenv("INITIAL_BALANCE", "10000.0"))
@@ -53,24 +54,7 @@ class Config:
     STOP_LOSS_PERCENT: float = float(os.getenv("STOP_LOSS_PERCENT", "0.05"))
 
     # ── Strategy ───────────────────────────────────────────────────────────
-    ENABLED_STRATEGIES: List[str] = field(
-        default_factory=lambda: [
-            "ema_crossover",
-            "rsi_momentum",
-            "macd_crossover",
-            "bollinger_bands",
-            "scalping",
-            "swing_trading",
-            "breakout",
-            "mean_reversion",
-            "trend_following",
-        ]
-    )
     DEFAULT_STRATEGY: str = os.getenv("ACTIVE_STRATEGY", "ema_crossover")
-    # True → AI выбирает стратегию автоматически
-    AI_STRATEGY_SELECTION: bool = (
-        os.getenv("AI_STRATEGY_SELECTION", "false").lower() == "true"
-    )
     # Минимальный confidence для исполнения сигнала (0.0–1.0)
     MIN_SIGNAL_CONFIDENCE: float = float(os.getenv("MIN_SIGNAL_CONFIDENCE", "0.65"))
 
@@ -78,9 +62,6 @@ class Config:
     DATA_DIR: str = "data"
     SYMBOLS: List[str] = field(
         default_factory=lambda: ["BTC/USDT", "ETH/USDT", "ADA/USDT"]
-    )
-    TRADING_SYMBOLS: List[str] = field(
-        default_factory=lambda: ["BTCUSDT", "ETHUSDT", "ADAUSDT"]
     )
     # Основной символ в формате ccxt spot: BTC/USDT
     SYMBOL: str = os.getenv("TRADING_SYMBOL", "BTC/USDT")
@@ -134,13 +115,6 @@ class Config:
     # True → использовать Bybit testnet
     TESTNET: bool = os.getenv("TESTNET", "false").lower() == "true"
 
-    # ── Signal Combiner weights ────────────────────────────────────────────
-    # Вес SAC сигнала в hybrid режиме (DQN_WEIGHT + AI_WEIGHT = 1.0)
-    DQN_WEIGHT: float = float(os.getenv("DQN_WEIGHT", "0.4"))
-    AI_WEIGHT: float = float(os.getenv("AI_WEIGHT", "0.6"))
-    # Минимальный confidence SAC для соло-исполнения (без AI)
-    DQN_SOLO_CONFIDENCE: float = float(os.getenv("DQN_SOLO_CONFIDENCE", "0.80"))
-
     # ── Position Management ────────────────────────────────────────────────
     # Максимум одновременных открытых позиций
     MAX_POSITIONS: int = int(os.getenv("MAX_POSITIONS", "3"))
@@ -154,7 +128,7 @@ class Config:
     # ── Monitoring ────────────────────────────────────────────────────────────
     # Порт HTTP health-сервера (GET /health, GET /metrics)
     # 0 = выключен
-    HEALTH_PORT: int = int(os.getenv("HEALTH_PORT", "8080"))
+    HEALTH_PORT: int = int(os.getenv("HEALTH_PORT", "8081"))
 
     # ── Correlation filter ─────────────────────────────────────────────────
     # Максимальная |корреляция| log-returns между одновременными позициями.
@@ -163,52 +137,6 @@ class Config:
     MAX_CORRELATION: float = float(os.getenv("MAX_CORRELATION", "0.7"))
     # Окно расчёта корреляции в свечах
     CORRELATION_WINDOW: int = int(os.getenv("CORRELATION_WINDOW", "50"))
-
-    @classmethod
-    def from_env(cls) -> "Config":
-        """Создаёт экземпляр Config из переменных окружения."""
-        return cls(
-            REDIS_URL=os.getenv("REDIS_URL", "redis://localhost:6379/0"),
-            REDIS_HOST=os.getenv("REDIS_HOST", "localhost"),
-            REDIS_PORT=int(os.getenv("REDIS_PORT", 6379)),
-            REDIS_DB=int(os.getenv("REDIS_DB", 0)),
-            BYBIT_API_KEY=os.getenv("BYBIT_API_KEY", ""),
-            BYBIT_API_SECRET=os.getenv("BYBIT_API_SECRET", ""),
-            INITIAL_BALANCE=float(os.getenv("INITIAL_BALANCE", "10000.0")),
-            RISK_PER_TRADE=float(os.getenv("RISK_PER_TRADE", "0.02")),
-            COMMISSION_RATE=float(os.getenv("COMMISSION_RATE", "0.001")),
-            TRADING_INTERVAL=int(os.getenv("TRADING_INTERVAL", "30")),
-            SYMBOL=os.getenv("TRADING_SYMBOL", "BTC/USDT"),
-            TIMEFRAME=os.getenv("TIMEFRAME", "15m"),
-            NEWS_API_KEY=os.getenv("NEWS_API_KEY", ""),
-            DEFAULT_STRATEGY=os.getenv("ACTIVE_STRATEGY", "ema_crossover"),
-            AI_STRATEGY_SELECTION=(
-                os.getenv("AI_STRATEGY_SELECTION", "false").lower() == "true"
-            ),
-            MIN_SIGNAL_CONFIDENCE=float(os.getenv("MIN_SIGNAL_CONFIDENCE", "0.65")),
-            AI_PROVIDER=os.getenv("AI_PROVIDER", "auto"),
-            ANTHROPIC_API_KEY=os.getenv("ANTHROPIC_API_KEY", ""),
-            AI_MODEL=os.getenv("AI_MODEL", "claude-sonnet-4-6"),
-            DEEPSEEK_API_KEY=os.getenv("DEEPSEEK_API_KEY", ""),
-            DEEPSEEK_MODEL=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
-            OPENAI_API_KEY=os.getenv("OPENAI_API_KEY", ""),
-            OPENAI_MODEL=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
-            MODE=os.getenv("MODE", "ai"),
-            SAC_MODEL_PATH=os.getenv("SAC_MODEL_PATH", "models/sac_model.zip"),
-            SCAN_TOP_N=int(os.getenv("SCAN_TOP_N", "20")),
-            AUTO_EXECUTE=(os.getenv("AUTO_EXECUTE", "false").lower() == "true"),
-            NEWS_UPDATE_INTERVAL=int(os.getenv("NEWS_UPDATE_INTERVAL", "900")),
-            TELEGRAM_BOT_TOKEN=os.getenv("TELEGRAM_BOT_TOKEN", ""),
-            TELEGRAM_CHAT_ID=os.getenv("TELEGRAM_CHAT_ID", ""),
-            TELEGRAM_CONFIRM_TIMEOUT=int(os.getenv("TELEGRAM_CONFIRM_TIMEOUT", "60")),
-            MAX_POSITIONS=int(os.getenv("MAX_POSITIONS", "3")),
-            PAPER_TRADING=(os.getenv("PAPER_TRADING", "false").lower() == "true"),
-            TRAILING_STOP_ATR_MULT=float(os.getenv("TRAILING_STOP_ATR_MULT", "1.0")),
-            CIRCUIT_BREAKER_LOSSES=int(os.getenv("CIRCUIT_BREAKER_LOSSES", "3")),
-            MAX_CORRELATION=float(os.getenv("MAX_CORRELATION", "0.7")),
-            CORRELATION_WINDOW=int(os.getenv("CORRELATION_WINDOW", "50")),
-            HEALTH_PORT=int(os.getenv("HEALTH_PORT", "8080")),
-        )
 
     def validate(self) -> None:
         """Валидирует конфигурацию и обязательные секреты.
@@ -285,4 +213,4 @@ class Config:
 
 
 # Global config instance
-config = Config.from_env()
+config = Config()

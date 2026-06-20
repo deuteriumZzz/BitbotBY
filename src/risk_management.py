@@ -182,6 +182,9 @@ class RiskManager:
             return 0.0
 
         b = reward / risk  # reward-to-risk ratio
+        if b == 0:
+            # TP совпадает с entry — деление на ноль; сделка смысла не имеет.
+            return 0.0
         p = max(0.0, min(1.0, win_rate))
         q = 1.0 - p
 

@@ -38,7 +38,7 @@
 - **Health server** — `GET /health` (JSON) и `GET /metrics` (Prometheus) встроены в процесс бота
 - **Alertmanager** — 6 правил алертинга (BotDown, HighConsecutiveLosses, LargePnLLoss и др.) → Telegram webhook
 - **Redis graceful degradation** — если Redis недоступен, бот работает без персистентности (не падает)
-- **Systemd сервис** — авто-перезапуск при падении (`bitbot.service`)
+- **SIGTERM / SIGINT** — супервизор ловит оба сигнала и завершает работу чисто (`docker stop` работает корректно)
 - **Paper trading** — полный тест без реальных денег
 - **Веб-дашборд** — баланс, позиции, история сделок (http://localhost:8080)
 - **Grafana** — метрики в реальном времени (http://localhost:3000)
@@ -167,6 +167,7 @@ make backtest
 |----------|-------------|----------|
 | `MODE` | `ai` | Режим: `local` / `ai` / `dqn` / `hybrid` |
 | `PAPER_TRADING` | `true` | Paper trading (без реальных ордеров) |
+| `MARKET_TYPE` | `spot` | Тип рынка: `spot` или `linear` (фьючерсы) |
 | `TESTNET` | `false` | Bybit testnet |
 | `BYBIT_API_KEY` | — | **Обязателен** при `PAPER_TRADING=false` |
 | `BYBIT_API_SECRET` | — | **Обязателен** при `PAPER_TRADING=false` |
@@ -180,16 +181,12 @@ make backtest
 | `MAX_POSITIONS` | `3` | Максимум одновременных позиций |
 | `MAX_CORRELATION` | `0.7` | Блокировать позицию если \|корр.\| с открытой ≥ порога (0 = выключен) |
 | `CORRELATION_WINDOW` | `50` | Окно расчёта корреляции в барах |
-| `HEALTH_PORT` | `8080` | Порт health server (0 = выключен) |
+| `HEALTH_PORT` | `8081` | Порт health server бота (0 = выключен; в docker явно задан 8080) |
 | `DAILY_LOSS_LIMIT` | `0.05` | Лимит дневного убытка (5%) |
 | `CIRCUIT_BREAKER_LOSSES` | `3` | Стоп после N подряд убытков (0 = выключен) |
 | `MIN_SIGNAL_CONFIDENCE` | `0.65` | Минимальный уровень уверенности |
 | `TRAILING_STOP_ATR_MULT` | `1.0` | Trailing stop (× ATR) |
 | `AUTO_EXECUTE` | `false` | Авто-исполнение топ-1 рекомендации |
-| `AI_STRATEGY_SELECTION` | `false` | AI автовыбор стратегии |
-| `DQN_WEIGHT` | `0.4` | Вес SAC в hybrid режиме |
-| `AI_WEIGHT` | `0.6` | Вес AI в hybrid режиме |
-| `DQN_SOLO_CONFIDENCE` | `0.80` | Мин. confidence SAC для соло-исполнения |
 | `SILENT_DEATH_HOURS` | `6` | Алерт если нет сделок N часов (только в не-local режиме) |
 | `REGIME_CACHE_TTL` | `300` | TTL кэша режимов рынка в секундах |
 
@@ -250,32 +247,45 @@ Live:     71% win  (12 сделок)   EV: +0.98%
 Auto-execute in 60s
 ```
 
+---
+
 ## Архитектура
 
 ```
-supervisor.py / run_bot.py
-  └── TradingBot (src/trading_bot.py)
+supervisor.py                          ← единственная точка входа
+  └── TradingBot (src/trading_bot.py)  ← оркестратор
+        │
         ├── MarketScanner       — топ-N монет по объёму, фильтр стейблкоинов
         ├── DataLoader          — OHLCV через ccxt async, кэш CSV 24ч
         ├── RegimeDetector      — GaussianHMM (diag): режим per-symbol + TTL-кэш 5 мин
-        ├── CVaR/Markowitz      — аллокация весов портфеля (scipy)
-        ├── AlmgrenChriss       — оценка рыночного импакта (адаптив. к TF)
-        ├── Kelly criterion     — размер позиции Half-Kelly, кэп 20%
-        ├── SACSignal           — SAC-инференс (SB3), вес ~40–50% в hybrid
-        ├── AIAnalyzer          — Claude/DeepSeek/OpenAI + auto-fallback при billing
+        ├── PortfolioOptimizer  — CVaR / Markowitz аллокация (scipy)
+        ├── CorrelationFilter   — блокировка коррелированных позиций + Redis persistence
+        ├── NewsAnalyzer        — NewsAPI + AI sentiment (VADER fallback), Redis 15 мин
+        │
         ├── SignalCombiner      — финальный взвешенный сигнал по режиму рынка
-        ├── RiskManager         — SL/TP, daily limit, circuit breaker
-        ├── BybitAPI            — ордера (ccxt async) + exchange SL/TP + Redis lock
-        ├── CorrelationFilter   — фильтр корреляции позиций + Redis persistence
-        ├── TelegramNotifier    — новые сигналы + Trade/Skip кнопки + silent death alert
-        ├── NewsAnalyzer        — AI sentiment (VADER fallback), Redis 15 мин
-        └── TradeHistory        — SQLite, win rate, EV
+        │     ├── SACSignal     — inference SAC-модели (Stable-Baselines3)
+        │     └── AIAnalyzer    — Claude/DeepSeek/OpenAI + auto-fallback при billing
+        │
+        ├── OrderExecutor       — размер позиции (CVaR → Half-Kelly → AC) + ордер
+        ├── PositionMonitor     — фоновый контроль SL/TP/trailing/circuit breaker
+        ├── RiskManager         — Kelly, daily loss limit, валидация
+        ├── BybitAPI            — ордера (ccxt async), exchange SL/TP, Redis lock
+        ├── TelegramNotifier    — новые сигналы, Trade/Skip, silent death alert
+        ├── TradeHistory        — SQLite: win rate, EV, история
+        ├── PortfolioManager    — баланс, позиции, комиссии
+        └── HealthServer        — GET /health (JSON) + GET /metrics (Prometheus)
 
-dashboard.py (FastAPI :8080)
+dashboard.py → src/dashboard/ (FastAPI :8080)
+  ├── /api/status, /api/trades, /api/backtest  — данные из Redis/SQLite
+  ├── /metrics                                  — Prometheus для Grafana
+  ├── /health                                   — healthcheck для docker
+  └── /webhook/alerts                           — Alertmanager → Telegram
+
 reinforcement_learning/
   ├── rl_env.py      — TradingEnv (Gymnasium)
   ├── train_sac.py   — обучение SAC: 80/20 split, Optuna, walk-forward
   └── tune_sac.py    — Optuna поиск гиперпараметров
+
 backtest.py          — мультисимвольный walk-forward бэктест
 bitbot.service       — systemd unit (авто-перезапуск на Linux)
 ```
@@ -286,51 +296,72 @@ bitbot.service       — systemd unit (авто-перезапуск на Linux)
 
 ```
 BitbotBY/
+├── supervisor.py              — точка входа (SIGTERM, retry, health server)
+├── config.py                  — конфигурация (dataclass + env + validate)
+├── dashboard.py               — запуск FastAPI дашборда
+├── backtest.py                — walk-forward бэктест
+├── Makefile                   — 14 команд
+├── Dockerfile
+├── docker-compose.yml         — bot + dashboard + trainer + prometheus + grafana + alertmanager
+│
 ├── src/
-│   ├── trading_bot.py         — главный цикл и оркестратор
-│   ├── strategies.py          — 9 стратегий
-│   ├── signal_combiner.py     — объединение сигналов SAC + AI
-│   ├── market_impact.py       — Almgren-Chriss модель
-│   ├── portfolio_optimizer.py — CVaR / Markowitz
-│   ├── regime_detector.py     — GaussianHMM режимы рынка (covariance_type=diag)
-│   ├── indicators.py          — технические индикаторы
-│   ├── risk_management.py     — Kelly, SL/TP, daily limit
-│   ├── portfolio_manager.py   — портфель и trailing stop
-│   ├── ai_analyzer.py         — Claude/DeepSeek/OpenAI + auto-fallback
-│   ├── dqn_signal.py          — SAC-инференс (SB3) + normstats drift detection
-│   ├── market_scanner.py      — сканер монет + снэпшот
-│   ├── news_analyzer.py       — новости и AI sentiment
-│   ├── bybit_api.py           — биржевой адаптер (ccxt async)
-│   ├── correlation_filter.py  — фильтр корреляции + to_dict/from_dict (Redis)
-│   ├── health_server.py       — /health + /metrics (встроен в бот)
-│   ├── data_loader.py         — загрузка OHLCV
-│   ├── redis_client.py        — Redis (graceful degradation)
-│   ├── telegram_notifier.py   — Telegram уведомления
-│   ├── logger.py              — JSON/text logging + _SecretFilter (маскировка ключей)
-│   └── trade_history.py       — история сделок (SQLite)
+│   ├── trading_bot.py         — главный оркестратор (цикл, инициализация)
+│   ├── cycle.py               — вспомогательные задачи одной итерации
+│   ├── strategies.py          — 9 торговых стратегий
+│   ├── signal_combiner.py     — комбинирование SAC + AI сигналов
+│   ├── ai_analyzer.py         — Claude / DeepSeek / OpenAI + auto-fallback
+│   ├── dqn_signal.py          — inference SAC (SB3) + drift detection
+│   ├── risk_management.py     — Kelly criterion, SL/TP, daily limit
+│   ├── portfolio_optimizer.py — CVaR (LP, Rockafellar-Uryasev) / Markowitz
+│   ├── portfolio_manager.py   — баланс, позиции, trailing stop
+│   ├── regime_detector.py     — GaussianHMM (covariance_type=diag)
+│   ├── correlation_filter.py  — фильтр корреляции + Redis persistence
+│   ├── order_executor.py      — размер позиции + размещение ордера
+│   ├── position_monitor.py    — фоновый монитор SL/TP/circuit breaker
+│   ├── market_scanner.py      — параллельный сканер топ-N монет
+│   ├── bybit_api.py           — CCXT async (spot + linear) + Redis lock
+│   ├── data_loader.py         — OHLCV + кэш + технические индикаторы
+│   ├── indicators.py          — EMA, RSI, MACD, BB, SMA, ATR, momentum
+│   ├── news_analyzer.py       — NewsAPI + AI/VADER sentiment, Redis 15 мин
+│   ├── trade_history.py       — SQLite логирование, win rate, EV
+│   ├── telegram_notifier.py   — Telegram уведомления и подтверждения
+│   ├── redis_client.py        — Redis обёртка (graceful degradation)
+│   ├── health_server.py       — /health + /metrics (встроен в процесс бота)
+│   ├── market_impact.py       — Almgren-Chriss рыночный импакт
+│   ├── alpha_tester.py        — статистический анализ alpha стратегий
+│   ├── experience_buffer.py   — replay buffer для SAC
+│   ├── constants.py           — глобальные константы
+│   ├── types.py               — TypedDict и Enum
+│   └── logger.py              — JSON/text logging + _SecretFilter
+│
+│   └── dashboard/
+│       ├── data.py            — слой доступа к Redis/SQLite
+│       ├── index.html         — фронтенд
+│       └── routers/
+│           ├── api.py         — /api/* маршруты
+│           ├── ops.py         — /metrics, /health, /webhook/alerts
+│           └── frontend.py    — статика
+│
 ├── reinforcement_learning/
 │   ├── rl_env.py              — торговая среда (Gymnasium)
-│   └── train_sac.py           — обучение SAC-агента
-├── tests/
-│   ├── integration/           — 12 integration-тестов (Bybit testnet)
-│   ├── test_reconciliation.py — 9 тестов синхронизации позиций при рестарте
-│   ├── test_e2e_cycle.py      — 13 тестов торгового цикла (filter + execute)
-│   └── test_*.py              — unit-тесты
+│   ├── train_sac.py           — обучение SAC-агента
+│   └── tune_sac.py            — Optuna hyperparameter search
+│
+├── tests/                     — 593 тест, coverage 93%
+│   ├── conftest.py
+│   └── test_*.py
+│
 ├── monitoring/
 │   ├── prometheus.yml
 │   ├── alertmanager.yml
 │   ├── rules/bitbot.yml       — 6 правил алертинга
 │   └── grafana/
-├── config.py                  — конфигурация (dataclass + validate)
-├── backtest.py                — мультисимвольный walk-forward бэктест
-├── dashboard.py               — FastAPI дашборд + /metrics + /webhook/alerts
-├── supervisor.py              — менеджер процессов
-├── bitbot.service             — systemd unit для Linux-сервера
+│
 ├── RUNBOOK.md                 — что делать при каждом алерте
-├── .coveragerc                — исключения coverage для live-сервисов
-├── Makefile
-├── Dockerfile
-└── docker-compose.yml
+└── data/
+    ├── backtest_results.json
+    ├── cache/                 — CSV кэш OHLCV (TTL 24ч)
+    └── trades.db              — SQLite история сделок
 ```
 
 ---

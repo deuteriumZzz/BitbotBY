@@ -96,10 +96,10 @@ class DataLoader:
         """
         try:
             data = await self.api.get_ohlcv(symbol, timeframe, limit)
-            self.logger.info("Сырые колонки: %s", data.columns.tolist())
-            self.logger.info("Размер данных: %s", data.shape)
+            self.logger.debug("Сырые колонки: %s", data.columns.tolist())
+            self.logger.debug("Размер данных: %s", data.shape)
             if not data.empty:
-                self.logger.info("Первая строка: %s", data.iloc[0].to_dict())
+                self.logger.debug("Первая строка: %s", data.iloc[0].to_dict())
             data = self._standardize_column_names(data)
             return data
         except asyncio.CancelledError:

@@ -69,14 +69,19 @@ class PortfolioManager:
                     return True
 
             elif action == "sell":
-                if symbol in self.positions and self.positions[symbol] >= quantity:
+                held = self.positions.get(symbol, 0.0)
+                # В paper-режиме позиция не регистрировалась через update_portfolio
+                # при открытии (OrderExecutor использует _set_paper_balance напрямую),
+                # поэтому пропускаем проверку holdings и доверяем вызывающему коду.
+                if Config.PAPER_TRADING or held >= quantity:
                     commission = quantity * price * self.commission_rate
                     revenue = quantity * price - commission
                     self.current_balance += revenue
                     self.total_commissions += commission
-                    self.positions[symbol] -= quantity
-                    if self.positions[symbol] <= 0:
-                        del self.positions[symbol]
+                    if held > 0:
+                        self.positions[symbol] = held - quantity
+                        if self.positions[symbol] <= 0:
+                            del self.positions[symbol]
                     await self._save_portfolio_state()
                     return True
 
@@ -125,46 +130,3 @@ class PortfolioManager:
         """
         return self.positions.copy()
 
-    async def get_position_size(self, symbol: str) -> float:
-        """
-        Возвращает текущий размер позиции для символа.
-
-        :param symbol: Символ актива.
-        :return: Количество актива в позиции (0.0 если позиции нет).
-        """
-        return self.positions.get(symbol, 0.0)
-
-    async def rebalance_portfolio(
-        self,
-        target_allocations: Dict[str, float],
-        current_prices: Dict[str, float],
-    ) -> None:
-        """
-        Ребалансирует портфель к целевым аллокациям.
-
-        Рассчитывает отклонение каждой позиции от цели и выполняет
-        покупку или продажу для выравнивания. Аллокации должны
-        суммироваться к 1.0 (100%).
-
-        :param target_allocations: Целевые доли по символам (сумма = 1.0).
-        :param current_prices: Текущие цены активов.
-        """
-        total_value = await self.get_portfolio_value(current_prices)
-
-        for symbol, target_alloc in target_allocations.items():
-            price = current_prices.get(symbol)
-            if price is None or price <= 0:
-                continue
-
-            target_value = total_value * target_alloc
-            position_size = await self.get_position_size(symbol)
-            current_value = position_size * price
-
-            if current_value < target_value:
-                buy_value = target_value - current_value
-                quantity = buy_value / price
-                await self.update_portfolio(symbol, "buy", quantity, price)
-            elif current_value > target_value:
-                sell_value = current_value - target_value
-                quantity = sell_value / price
-                await self.update_portfolio(symbol, "sell", quantity, price)

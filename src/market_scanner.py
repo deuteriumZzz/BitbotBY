@@ -22,8 +22,6 @@ from src.bybit_api import BybitAPI
 from src.data_loader import DataLoader
 from src.redis_client import RedisClient
 
-logger = logging.getLogger(__name__)
-
 # SMA-50 is the slowest indicator — need at least this many bars before
 # calculate_technical_indicators() produces meaningful (non-zero) values.
 _MIN_INDICATOR_ROWS = 50

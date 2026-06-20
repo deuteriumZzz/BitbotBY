@@ -89,6 +89,8 @@ def make_bot(balance: float = 1000.0):
 
             bot = TradingBot()
             bot._paper_balance = balance
+            # current_balance — единый регистр paper-баланса после рефакторинга
+            bot.portfolio_manager.current_balance = balance
             bot.trade_history.get_win_rate = AsyncMock(return_value=0.6)
             bot.trade_history.get_trade_count = AsyncMock(return_value=0)
             bot.trade_history.get_expected_value = AsyncMock(return_value=5.0)

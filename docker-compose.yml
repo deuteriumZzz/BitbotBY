@@ -23,11 +23,10 @@ services:
     build: .
     container_name: bitbot_bot
     restart: unless-stopped
-    command: python run_bot.py
+    command: python supervisor.py
     env_file: .env
     environment:
       - REDIS_HOST=redis
-      - REDIS_URL=redis://redis:6379/0
       - REDIS_PASSWORD=${REDIS_PASSWORD:-}
       - PYTHONPATH=/app
       - HEALTH_PORT=8080

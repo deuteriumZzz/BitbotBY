@@ -16,6 +16,8 @@ import ccxt.async_support as ccxt
 import pandas as pd
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
+from config import Config
+
 from .redis_client import RedisClient
 
 
@@ -100,7 +102,7 @@ class BybitAPI:
                         "apiKey": api_key,
                         "secret": api_secret,
                         "enableRateLimit": True,
-                        "options": {"defaultType": "spot"},
+                        "options": {"defaultType": Config.MARKET_TYPE},
                         "urls": {
                             "api": {
                                 "public": "https://api-testnet.bybit.com",
@@ -115,7 +117,7 @@ class BybitAPI:
                         "apiKey": api_key,
                         "secret": api_secret,
                         "enableRateLimit": True,
-                        "options": {"defaultType": "spot"},
+                        "options": {"defaultType": Config.MARKET_TYPE},
                     }
                 )
             await self.exchange.load_markets()
@@ -199,6 +201,7 @@ class BybitAPI:
         side: str,
         amount: float,
         price: Optional[float] = None,
+        lock_suffix: str = "trade",
     ) -> Optional[dict]:
         """
         Создаёт ордер с Redis-блокировкой для предотвращения конфликтов.
@@ -212,7 +215,7 @@ class BybitAPI:
         :param price: Цена (для лимитных ордеров).
         :return: Словарь с данными ордера или None при неудаче.
         """
-        lock_name = f"order_lock:{symbol}"
+        lock_name = f"order_{lock_suffix}:{symbol}"
         if not self.redis.acquire_lock(lock_name):
             self.logger.warning("Не удалось захватить блокировку для %s", symbol)
             return None
@@ -394,6 +397,10 @@ class BybitAPI:
         sl_id: str | None = None
         tp_id: str | None = None
 
+        # На фьючерсном рынке ордера закрытия должны иметь reduceOnly=True,
+        # чтобы не открыть новую позицию если основная уже закрыта.
+        extra: dict = {"reduceOnly": True} if Config.MARKET_TYPE != "spot" else {}
+
         if sl_price and sl_price > 0:
             try:
                 sl_order = await self.exchange.create_order(
@@ -402,7 +409,7 @@ class BybitAPI:
                     close_side,
                     qty,
                     None,
-                    {"stopPrice": sl_price, "triggerPrice": sl_price},
+                    {"stopPrice": sl_price, "triggerPrice": sl_price, **extra},
                 )
                 sl_id = sl_order.get("id")
                 self.logger.info(
@@ -414,7 +421,7 @@ class BybitAPI:
         if tp_price and tp_price > 0:
             try:
                 tp_order = await self.exchange.create_order(
-                    symbol, "limit", close_side, qty, tp_price
+                    symbol, "limit", close_side, qty, tp_price, extra
                 )
                 tp_id = tp_order.get("id")
                 self.logger.info(

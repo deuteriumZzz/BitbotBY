@@ -382,13 +382,3 @@ class NewsAnalyzer:
             self.logger.warning("NewsAPI fetch failed (%s): %s", query, e)
             return []
 
-    async def analyze_news_async(self) -> float:
-        """
-        Возвращает общий сентимент по крипторынку через BTC/USDT.
-
-        Метод сохранён для обратной совместимости.
-
-        :return: Compound-оценка от -1 до 1.
-        """
-        sentiment, _ = await self.get_sentiment("BTC/USDT")
-        return sentiment

@@ -38,28 +38,28 @@ backtest-eth:
 # ── Paper trading (no real orders) ────────────────────────────────────────────
 paper:
 	@echo ">>> Starting bot in PAPER TRADING mode (MODE=local, no real orders)..."
-	PAPER_TRADING=true MODE=local PYTHONPATH=. python3 run_bot.py
+	PAPER_TRADING=true MODE=local PYTHONPATH=. python3 supervisor.py
 
 paper-ai:
 	@echo ">>> Starting bot in PAPER TRADING + AI mode..."
-	PAPER_TRADING=true MODE=ai PYTHONPATH=. python3 run_bot.py
+	PAPER_TRADING=true MODE=ai PYTHONPATH=. python3 supervisor.py
 
 # ── Live trading ───────────────────────────────────────────────────────────────
 live:
 	@echo ">>> Starting bot in LIVE mode. Ensure .env is configured!"
-	PYTHONPATH=. python3 run_bot.py
+	PYTHONPATH=. python3 supervisor.py
 
 # ── Tests & Lint ───────────────────────────────────────────────────────────────
 test:
 	PYTHONPATH=. python3 -m pytest tests/ -v --tb=short --cov=src --cov-report=term-missing
 
 lint:
-	python3 -m flake8 src/ tests/ reinforcement_learning/ config.py dashboard.py supervisor.py run_bot.py
+	python3 -m flake8 src/ tests/ reinforcement_learning/ config.py dashboard.py supervisor.py supervisor.py
 	python3 -m mypy src/
 
 fmt:
-	python3 -m black src/ tests/ reinforcement_learning/ config.py dashboard.py supervisor.py run_bot.py
-	python3 -m isort --profile black src/ tests/ reinforcement_learning/ config.py dashboard.py supervisor.py run_bot.py
+	python3 -m black src/ tests/ reinforcement_learning/ config.py dashboard.py supervisor.py supervisor.py
+	python3 -m isort --profile black src/ tests/ reinforcement_learning/ config.py dashboard.py supervisor.py supervisor.py
 
 # ── Docker ─────────────────────────────────────────────────────────────────────
 up:

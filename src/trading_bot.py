@@ -137,7 +137,7 @@ class TradingBot:
             get_monitored=lambda: self._monitored,
             get_lock=lambda: self._monitored_lock,
             get_paper_balance=lambda: self._paper_balance,
-            set_paper_balance=lambda v: setattr(self, "_paper_balance", v),
+            set_paper_balance=self._set_paper_balance,
             set_last_trade_at=lambda v: setattr(self, "_last_trade_at", v),
             get_current_regime=lambda: self._current_regime,
         )
@@ -159,6 +159,7 @@ class TradingBot:
             await self.api.initialize(
                 Config.BYBIT_API_KEY,
                 Config.BYBIT_API_SECRET,
+                testnet=Config.TESTNET,
             )
         except ccxt.AuthenticationError as e:
             if Config.PAPER_TRADING:
@@ -182,6 +183,9 @@ class TradingBot:
                     )
                     if real_balance > 0:
                         self.risk_manager.initial_balance = real_balance
+                        # Обновляем базу дня, чтобы дневной лимит убытка
+                        # считался от реального баланса, а не от INITIAL_BALANCE.
+                        self.risk_manager._day_start_balance = real_balance
                         self.portfolio_manager.current_balance = real_balance
                         logger.info(
                             "Live mode: real balance synced — $%.2f", real_balance
@@ -250,12 +254,43 @@ class TradingBot:
                         logger.debug("Reconcile: skip zero-qty position %s", sym)
                         continue
                     entry = float(pos.get("entryPrice") or 0)
+
+                    # Биржа возвращает SL/TP для фьючерсных позиций (поля stopLoss/takeProfit).
+                    # На спотовом рынке эти поля отсутствуют → пытаемся из info-словаря.
+                    sl = float(
+                        pos.get("stopLoss")
+                        or (pos.get("info") or {}).get("stopLoss")
+                        or 0
+                    )
+                    tp = float(
+                        pos.get("takeProfit")
+                        or (pos.get("info") or {}).get("takeProfit")
+                        or 0
+                    )
+
+                    # Запасной SL по процентному отступу от входа, если биржа не вернула.
+                    # Без SL позиция не будет отслеживаться (_check_and_close игнорирует sl=0).
+                    if not sl and entry > 0:
+                        sl_pct = getattr(Config, "STOP_LOSS_PERCENT", 0.02)
+                        sl = (
+                            entry * (1.0 - sl_pct)
+                            if side == "buy"
+                            else entry * (1.0 + sl_pct)
+                        )
+                        logger.warning(
+                            "Reconcile %s: SL не найден на бирже — запасной %.4f"
+                            " (%.0f%% от входа)",
+                            sym,
+                            sl,
+                            sl_pct * 100,
+                        )
+
                     self._monitored[sym] = {
                         "trade_id": None,
                         "qty": qty,
                         "entry": entry,
-                        "stop_loss": 0.0,
-                        "take_profit": 0.0,
+                        "stop_loss": sl,
+                        "take_profit": tp,
                         "side": side,
                         "atr": 0.0,
                         "peak_price": entry,
@@ -264,11 +299,14 @@ class TradingBot:
                     }
                     added.append(sym)
                     logger.warning(
-                        "Reconcile: восстановлена потерянная позиция %s %s %.6f @ %.4f",
+                        "Reconcile: восстановлена потерянная позиция %s %s %.6f @ %.4f"
+                        " sl=%.4f tp=%.4f",
                         sym,
                         side,
                         qty,
                         entry,
+                        sl,
+                        tp,
                     )
 
         logger.info(
@@ -324,11 +362,23 @@ class TradingBot:
         except Exception as exc:
             logger.warning("RegimeDetector fit skipped: %s", exc)
 
+    def _set_paper_balance(self, value: float) -> None:
+        """Синхронизирует оба регистра бумажного баланса.
+
+        OrderExecutor уменьшает баланс при открытии позиции через этот метод.
+        PositionMonitor восстанавливает его через portfolio_manager.update_portfolio.
+        Оба должны смотреть в один источник истины — portfolio_manager.current_balance.
+        """
+        self._paper_balance = value
+        self.portfolio_manager.current_balance = value
+
     async def _get_balance_usdt(self) -> float:
         """Free USDT balance; falls back to PortfolioManager if exchange is unreachable.
         """
         if Config.PAPER_TRADING:
-            return self._paper_balance
+            # Используем portfolio_manager как единый источник истины:
+            # он обновляется и при открытии (_set_paper_balance) и при закрытии.
+            return self.portfolio_manager.current_balance
         try:
             bal = await self.api.get_balance()
             if bal:
@@ -596,22 +646,6 @@ class TradingBot:
                 logger.error("Error in trading loop: %s", e)
                 await asyncio.sleep(10)
 
-    async def analyze_market(
-        self, symbol: str, timeframe: str
-    ) -> Optional[Dict[str, Any]]:
-        """Single-symbol analysis kept for backward compatibility with tests/CLI."""
-        try:
-            if self.strategy is None:
-                return None
-            data = await self.data_loader.get_market_data(symbol, timeframe, limit=100)
-            data = self.data_loader.calculate_technical_indicators(data)
-            signal = await self.strategy.get_signal(data)
-            logger.info("Signal for %s: %s", symbol, signal)
-            return signal
-        except (ccxt.NetworkError, ccxt.ExchangeError, ValueError) as e:
-            logger.error("Error analyzing %s: %s", symbol, e)
-            return None
-
     async def stop(self) -> None:
         self.is_running = False
         if self._monitor_task:
@@ -632,39 +666,3 @@ class TradingBot:
         logger.info("Trading bot stopped")
 
 
-async def main():
-    """Запуск торгового бота."""
-    bot = TradingBot()
-    if Config.HEALTH_PORT > 0:
-        await start_health_server(bot, port=Config.HEALTH_PORT)
-
-    retry_delay = 30
-    while True:
-        try:
-            await bot.initialize()
-            await bot.trading_loop()
-            break
-        except KeyboardInterrupt:
-            logger.info("Received interrupt signal")
-            break
-        except Exception as e:
-            logger.error("Fatal error: %s. Retrying in %ds...", e, retry_delay)
-            try:
-                await bot.stop()
-            except Exception:
-                pass
-            await asyncio.sleep(retry_delay)
-            bot = TradingBot()
-
-    await bot.stop()
-
-
-if __name__ == "__main__":
-    import sys
-
-    try:
-        Config().validate()
-    except ValueError as exc:
-        print(f"[CONFIG ERROR] {exc}", file=sys.stderr)
-        sys.exit(1)
-    asyncio.run(main())

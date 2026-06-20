@@ -165,20 +165,32 @@ class OrderExecutor:
             sl_price = top.get("stop_loss", 0.0)
             tp_price = top.get("take_profit", 0.0)
 
-            # Validate SL/TP direction to catch bad AI output before order.
-            if sl_price and tp_price:
-                if action == "buy" and (sl_price >= entry or tp_price <= entry):
+            # Валидируем каждый уровень независимо — инвертированный SL опасен
+            # даже при отсутствии TP, и наоборот.
+            if action == "buy":
+                if sl_price and sl_price >= entry:
                     logger.error(
-                        "Invalid SL/TP for buy %s: entry=%.4f sl=%.4f tp=%.4f"
-                        " — skipping",
-                        sym, entry, sl_price, tp_price,
+                        "Invalid SL for buy %s: entry=%.4f sl=%.4f — skipping",
+                        sym, entry, sl_price,
                     )
                     return
-                if action == "sell" and (sl_price <= entry or tp_price >= entry):
+                if tp_price and tp_price <= entry:
                     logger.error(
-                        "Invalid SL/TP for sell %s: entry=%.4f sl=%.4f tp=%.4f"
-                        " — skipping",
-                        sym, entry, sl_price, tp_price,
+                        "Invalid TP for buy %s: entry=%.4f tp=%.4f — skipping",
+                        sym, entry, tp_price,
+                    )
+                    return
+            elif action == "sell":
+                if sl_price and sl_price <= entry:
+                    logger.error(
+                        "Invalid SL for sell %s: entry=%.4f sl=%.4f — skipping",
+                        sym, entry, sl_price,
+                    )
+                    return
+                if tp_price and tp_price >= entry:
+                    logger.error(
+                        "Invalid TP for sell %s: entry=%.4f tp=%.4f — skipping",
+                        sym, entry, tp_price,
                     )
                     return
 
@@ -199,6 +211,39 @@ class OrderExecutor:
                     if action == "buy"
                     else entry * (1.0 - impact)
                 )
+
+            # После Almgren-Chriss entry мог сдвинуться достаточно, чтобы
+            # инвалидировать SL/TP которые прошли валидацию до поправки.
+            if action == "buy":
+                if sl_price and sl_price >= entry:
+                    logger.error(
+                        "Post-impact SL invalid for buy %s: adj_entry=%.4f sl=%.4f"
+                        " — skipping",
+                        sym, entry, sl_price,
+                    )
+                    return
+                if tp_price and tp_price <= entry:
+                    logger.error(
+                        "Post-impact TP invalid for buy %s: adj_entry=%.4f tp=%.4f"
+                        " — skipping",
+                        sym, entry, tp_price,
+                    )
+                    return
+            elif action == "sell":
+                if sl_price and sl_price <= entry:
+                    logger.error(
+                        "Post-impact SL invalid for sell %s: adj_entry=%.4f sl=%.4f"
+                        " — skipping",
+                        sym, entry, sl_price,
+                    )
+                    return
+                if tp_price and tp_price >= entry:
+                    logger.error(
+                        "Post-impact TP invalid for sell %s: adj_entry=%.4f tp=%.4f"
+                        " — skipping",
+                        sym, entry, tp_price,
+                    )
+                    return
 
             quantity = self._api.round_quantity(sym, quantity)
             if quantity <= 0:
