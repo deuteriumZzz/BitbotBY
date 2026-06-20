@@ -37,6 +37,7 @@ from src.risk_management import RiskManager
 from src.signal_combiner import SignalCombiner
 from src.strategies import TradingStrategy
 from src.telegram_notifier import TelegramNotifier
+from src.macro_calendar import MacroCalendar
 from src.trade_history import TradeHistory
 from src.types import PositionRecord
 
@@ -150,6 +151,8 @@ class TradingBot:
             get_current_regime=lambda: self._current_regime,
         )
         self._market_context = MarketContext()
+        # УЛУЧШЕНИЕ 7: макро-событийный blackout фильтр
+        self._macro_calendar = MacroCalendar()
 
     async def initialize(self) -> None:
         """
@@ -422,6 +425,11 @@ class TradingBot:
         """Исполняет лучшую рекомендацию — делегирует OrderExecutor."""
         if not filtered or not Config.AUTO_EXECUTE:
             return
+        # УЛУЧШЕНИЕ 7: пропускаем исполнение во время макро-событийного blackout
+        if Config.MACRO_BLACKOUT_ENABLED:
+            if await self._macro_calendar.is_blackout():
+                logger.warning("Macro blackout active — skipping execution")
+                return
         balance = await self._get_balance_usdt()
         await self._executor.execute(filtered[0], market_data, balance)
 

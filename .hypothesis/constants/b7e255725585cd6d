@@ -1,0 +1,4 @@
+# file: /Users/deuterium/Dev/BitbotBY/src/order_executor.py
+# hypothesis_version: 6.141.1
+
+[0.0, 1.0, 999.0, 100, '-', 'BybitAPI', 'CorrelationFilter', 'PortfolioOptimizer', 'RiskManager', 'TelegramNotifier', 'TradeHistory', '_snap', 'action', 'alloc_fraction', 'ask', 'atr', 'balance_at_entry', 'bid', 'buy', 'confidence', 'cost', 'entry', 'ev', 'exchange_sl_id', 'exchange_tp_id', 'fee', 'market', 'partial_tp_triggered', 'peak_price', 'qty', 'quoteVolume', 'sell', 'side', 'snap', 'spot', 'stop_loss', 'strategy', 'symbol', 'take_profit', 'total_trades', 'trade_id', 'win_rate']

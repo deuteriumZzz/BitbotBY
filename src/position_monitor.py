@@ -5,6 +5,9 @@
 позициями» от основного торгового цикла. TradingBot делегирует
 _monitor_positions() сюда; публичная сигнатура метода не изменилась,
 поэтому существующие тесты проходят.
+
+УЛУЧШЕНИЕ 3: частичная фиксация прибыли (Partial TP) — при достижении
+60% пути до TP закрывается 50% позиции и SL переносится на breakeven.
 """
 
 from __future__ import annotations
@@ -90,6 +93,8 @@ class PositionMonitor:
                     if not price:
                         continue
                     pos = self._apply_trailing_stop(sym, pos, price, monitored)
+                    # УЛУЧШЕНИЕ 3: частичная фиксация прибыли
+                    pos = await self._check_partial_tp(sym, pos, price, monitored, lock)
                     try:
                         should_exit, reason = self._check_dynamic_exit(sym, pos)
                         if should_exit:
@@ -231,6 +236,91 @@ class PositionMonitor:
             )
 
     # ── Helpers ───────────────────────────────────────────────────────────────
+
+    # ── Partial TP (УЛУЧШЕНИЕ 3) ─────────────────────────────────────────────
+
+    async def _check_partial_tp(
+        self,
+        sym: str,
+        pos: PositionRecord,
+        price: float,
+        monitored: Dict[str, PositionRecord],
+        lock: asyncio.Lock,
+    ) -> PositionRecord:
+        """Частичная фиксация прибыли при достижении PARTIAL_TP_TRIGGER пути к TP.
+
+        При срабатывании:
+          - закрывается PARTIAL_TP_FRACTION позиции (paper: только обновление qty)
+          - SL переносится на breakeven (entry price)
+          - выставляется флаг partial_tp_triggered = True
+
+        :return: Обновлённая запись позиции.
+        """
+        try:
+            enabled = bool(Config.PARTIAL_TP_ENABLED)
+            trigger = float(Config.PARTIAL_TP_TRIGGER)
+            fraction = float(Config.PARTIAL_TP_FRACTION)
+        except (TypeError, ValueError):
+            return pos
+        if not enabled:
+            return pos
+        if pos.get("partial_tp_triggered", False):
+            return pos
+
+        side = pos.get("side", "buy")
+        entry = pos.get("entry", 0.0)
+        tp = pos.get("take_profit", 0.0)
+        qty = pos.get("qty", 0.0)
+
+        if not tp or not entry or not qty:
+            return pos
+
+        # Вычисляем прогресс цены к TP
+        if side == "buy":
+            progress = (price - entry) / (tp - entry) if tp > entry else 0.0
+        else:
+            progress = (entry - price) / (entry - tp) if entry > tp else 0.0
+
+        if progress < trigger:
+            return pos
+
+        partial_qty = qty * fraction
+        new_qty = qty * (1.0 - fraction)
+
+        if not Config.PAPER_TRADING:
+            close_side = "sell" if side == "buy" else "buy"
+            try:
+                await self._api.create_order(
+                    sym, "market", close_side, partial_qty, lock_suffix="partial_tp"
+                )
+            except Exception as exc:
+                logger.error("Partial TP order failed for %s: %s", sym, exc)
+                return pos
+
+        async with lock:
+            if sym in monitored and monitored[sym] is not None:
+                monitored[sym]["qty"] = new_qty
+                monitored[sym]["stop_loss"] = entry  # breakeven
+                monitored[sym]["partial_tp_triggered"] = True
+
+        logger.info(
+            "Partial TP triggered for %s: closed %.1f%% (%.6f units),"
+            " SL moved to breakeven %.4f",
+            sym,
+            fraction * 100,
+            partial_qty,
+            entry,
+        )
+        await self._telegram.notify(
+            f"Partial TP *{sym}*: closed {fraction:.0%},"
+            f" SL → breakeven ${entry:.4f}"
+        )
+        return {  # type: ignore[return-value]
+            **pos,
+            "qty": new_qty,
+            "stop_loss": entry,
+            "partial_tp_triggered": True,
+        }
 
     def _apply_trailing_stop(
         self,

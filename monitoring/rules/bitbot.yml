@@ -74,3 +74,13 @@ groups:
         annotations:
           summary: "Низкий win rate: {{ $value | humanizePercentage }}"
           description: "Win rate ниже 35% на протяжении 15 минут. Стратегия может не работать в текущих условиях."
+
+      # УЛУЧШЕНИЕ 8: алерт на просадку баланса от исторического пика
+      - alert: HighDrawdown
+        expr: (bitbot_peak_balance - bitbot_balance) / bitbot_peak_balance > 0.10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Drawdown exceeds 10%"
+          description: "Bot balance has dropped more than 10% from peak. Current drawdown: {{ $value | humanizePercentage }}"

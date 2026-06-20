@@ -140,6 +140,44 @@ class Config:
     # Окно расчёта корреляции в свечах
     CORRELATION_WINDOW: int = int(os.getenv("CORRELATION_WINDOW", "50"))
 
+    # ── Partial TP (УЛУЧШЕНИЕ 3) ───────────────────────────────────────────
+    # Частичная фиксация прибыли: закрыть PARTIAL_TP_FRACTION позиции при
+    # достижении PARTIAL_TP_TRIGGER цели и перенести SL на breakeven.
+    PARTIAL_TP_ENABLED: bool = os.getenv("PARTIAL_TP_ENABLED", "true").lower() == "true"
+    # Доля пути до TP при которой срабатывает частичная фиксация (0.6 = 60%)
+    PARTIAL_TP_TRIGGER: float = float(os.getenv("PARTIAL_TP_TRIGGER", "0.6"))
+    # Доля позиции для закрытия при срабатывании (0.5 = 50%)
+    PARTIAL_TP_FRACTION: float = float(os.getenv("PARTIAL_TP_FRACTION", "0.5"))
+
+    # ── Trading hours filter (УЛУЧШЕНИЕ 4) ────────────────────────────────
+    # Торговые часы UTC. Пустая строка = круглосуточно.
+    # Формат "8-22": торговать только с 8:00 до 22:00 UTC.
+    TRADING_HOURS: str = os.getenv("TRADING_HOURS", "")
+
+    # ── Liquidity filter (УЛУЧШЕНИЕ 5) ────────────────────────────────────
+    # Минимальный 24h объём в USDT для допуска к торговле
+    MIN_VOLUME_USDT: float = float(os.getenv("MIN_VOLUME_USDT", "1000000"))
+    # Максимальный допустимый спред (ask-bid)/mid в процентах
+    MAX_SPREAD_PCT: float = float(os.getenv("MAX_SPREAD_PCT", "0.3"))
+
+    # ── Drawdown scaling (УЛУЧШЕНИЕ 6) ────────────────────────────────────
+    # Уменьшать размер позиции при просадке от пика баланса
+    DRAWDOWN_SCALE_ENABLED: bool = (
+        os.getenv("DRAWDOWN_SCALE_ENABLED", "true").lower() == "true"
+    )
+    # Порог просадки для активации масштабирования (0.10 = 10%)
+    DRAWDOWN_SCALE_THRESHOLD: float = float(os.getenv("DRAWDOWN_SCALE_THRESHOLD", "0.10"))
+    # Множитель размера позиции при просадке (0.5 = 50% от расчётного)
+    DRAWDOWN_SCALE_FACTOR: float = float(os.getenv("DRAWDOWN_SCALE_FACTOR", "0.5"))
+
+    # ── Macro blackout (УЛУЧШЕНИЕ 7) ──────────────────────────────────────
+    # Ключ Finnhub API для получения экономического календаря
+    FINNHUB_API_KEY: str = os.getenv("FINNHUB_API_KEY", "")
+    # Блокировать торговлю за 30 мин до / после крупных макро-событий
+    MACRO_BLACKOUT_ENABLED: bool = (
+        os.getenv("MACRO_BLACKOUT_ENABLED", "true").lower() == "true"
+    )
+
     def validate(self) -> None:
         """Валидирует конфигурацию и обязательные секреты.
 

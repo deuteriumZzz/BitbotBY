@@ -1,0 +1,4 @@
+# file: /Users/deuterium/Dev/BitbotBY/src/macro_calendar.py
+# hypothesis_version: 6.141.1
+
+[0.0, 3600.0, 200, '%Y-%m-%d', '%Y-%m-%d %H:%M:%S', '00:00:00', 'FINNHUB_API_KEY', '_ts', 'consumer price index', 'cpi', 'date', 'economicCalendar', 'event', 'federal reserve', 'fomc', 'gdp', 'high', 'impact', 'nfp', 'non-farm', 'nonfarm', 'pce', 'time', 'unknown']

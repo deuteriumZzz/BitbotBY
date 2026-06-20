@@ -3,6 +3,11 @@ SQLite-backed история сделок: открытие/закрытие, wi
 
 Сохраняет все сделки в локальную SQLite БД с WAL-режимом для безопасного
 параллельного чтения дашбордом. Поддерживает расчёт win rate, EV и сводную статистику.
+
+УЛУЧШЕНИЕ 1: все SQLite-операции выполняются через run_in_executor,
+чтобы не блокировать asyncio event loop.
+УЛУЧШЕНИЕ 2: pnl_pct считается от маржи (entry_price * qty / leverage),
+а не от notional, что даёт корректные данные для Kelly criterion при плече.
 """
 
 import asyncio
@@ -75,6 +80,7 @@ class TradeHistory:
     Хранилище сделок на SQLite с расчётом win rate и EV (expected value).
 
     WAL-режим позволяет дашборду читать данные одновременно с записью бота.
+    Все DB-операции выполняются через run_in_executor чтобы не блокировать event loop.
     """
 
     def __init__(self, db_path: str = _DB_PATH):
@@ -90,6 +96,16 @@ class TradeHistory:
         self._lock = asyncio.Lock()
         with self._conn:
             self._conn.execute(_DDL)
+
+    # ── Executor helper ───────────────────────────────────────────────────────
+
+    async def _run_db(self, func):
+        """Запускает синхронную SQLite-операцию в thread pool executor.
+
+        Предотвращает блокировку asyncio event loop при операциях с диском.
+        """
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, func)
 
     # ── Write ─────────────────────────────────────────────
 
@@ -115,48 +131,62 @@ class TradeHistory:
         :param commission: Комиссия при открытии.
         :return: ID новой записи в таблице.
         """
+        now_iso = datetime.now().isoformat()
         async with self._lock:
-            cur = self._conn.execute(
-                """
-                INSERT INTO trades
-                  (symbol, strategy, action, entry_price,
-                   quantity, confidence, commission,
-                   entry_time)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    symbol,
-                    strategy,
-                    action,
-                    entry_price,
-                    quantity,
-                    confidence,
-                    commission,
-                    datetime.now().isoformat(),
-                ),
-            )
-            self._conn.commit()
-            return cur.lastrowid
+            def _write():
+                cur = self._conn.execute(
+                    """
+                    INSERT INTO trades
+                      (symbol, strategy, action, entry_price,
+                       quantity, confidence, commission,
+                       entry_time)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        symbol,
+                        strategy,
+                        action,
+                        entry_price,
+                        quantity,
+                        confidence,
+                        commission,
+                        now_iso,
+                    ),
+                )
+                self._conn.commit()
+                return cur.lastrowid
+
+            return await self._run_db(_write)
 
     async def record_close(
         self,
         trade_id: int,
         exit_price: float,
         commission: float = 0.0,
+        leverage: int = 1,
     ) -> None:
         """
         Закрывает сделку и рассчитывает PnL из данных входа.
 
+        PnL% считается от маржи (entry_price * qty / leverage), а не от
+        notional, чтобы Kelly criterion получал корректные данные при плече.
+
         :param trade_id: ID записи в таблице.
         :param exit_price: Цена выхода.
         :param commission: Комиссия при закрытии.
+        :param leverage: Плечо позиции (1 = без плеча).
         """
+        now_iso = datetime.now().isoformat()
+
         async with self._lock:
-            row = self._conn.execute(
-                "SELECT action, entry_price, quantity, "
-                "commission FROM trades WHERE id = ?",
-                (trade_id,),
-            ).fetchone()
+            def _read():
+                return self._conn.execute(
+                    "SELECT action, entry_price, quantity, "
+                    "commission FROM trades WHERE id = ?",
+                    (trade_id,),
+                ).fetchone()
+
+            row = await self._run_db(_read)
             if row is None:
                 logger.warning("trade_id=%s not found", trade_id)
                 return
@@ -166,25 +196,33 @@ class TradeHistory:
                 pnl = (exit_price - entry_price) * qty - total_comm
             else:
                 pnl = (entry_price - exit_price) * qty - total_comm
-            pnl_pct = pnl / (entry_price * qty) if entry_price else 0
-            self._conn.execute(
-                """
-                UPDATE trades
-                SET exit_price=?, commission=commission+?,
-                    pnl=?, pnl_pct=?, exit_time=?,
-                    status='closed'
-                WHERE id=?
-                """,
-                (
-                    exit_price,
-                    commission,
-                    pnl,
-                    pnl_pct,
-                    datetime.now().isoformat(),
-                    trade_id,
-                ),
-            )
-            self._conn.commit()
+            # УЛУЧШЕНИЕ 2: pnl_pct от маржи, а не от notional.
+            # Маржа = notional / leverage → при leverage=3 результат корректен.
+            lev = max(1, int(leverage))
+            margin = entry_price * qty / lev
+            pnl_pct = pnl / margin if margin > 0 else 0.0
+
+            def _write():
+                self._conn.execute(
+                    """
+                    UPDATE trades
+                    SET exit_price=?, commission=commission+?,
+                        pnl=?, pnl_pct=?, exit_time=?,
+                        status='closed'
+                    WHERE id=?
+                    """,
+                    (
+                        exit_price,
+                        commission,
+                        pnl,
+                        pnl_pct,
+                        now_iso,
+                        trade_id,
+                    ),
+                )
+                self._conn.commit()
+
+            await self._run_db(_write)
 
     # ── Read ──────────────────────────────────────────────
 
@@ -209,21 +247,22 @@ class TradeHistory:
             else "WHERE status='closed'"
         )
         params = (strategy, lookback) if strategy else (lookback,)
+        sql = f"""
+            SELECT
+              COUNT(*) AS total,
+              SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END)
+                  AS wins
+            FROM (
+              SELECT pnl, strategy FROM trades
+              {where}
+              ORDER BY id DESC LIMIT ?
+            )
+            """
         async with self._lock:
-            row = self._conn.execute(
-                f"""
-                SELECT
-                  COUNT(*) AS total,
-                  SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END)
-                      AS wins
-                FROM (
-                  SELECT pnl, strategy FROM trades
-                  {where}
-                  ORDER BY id DESC LIMIT ?
-                )
-                """,
-                params,
-            ).fetchone()
+            def _read():
+                return self._conn.execute(sql, params).fetchone()
+
+            row = await self._run_db(_read)
         if not row or not row[0]:
             return 0.5  # default assumption: 50%
         return row[1] / row[0]
@@ -246,15 +285,16 @@ class TradeHistory:
             else "WHERE status='closed'"
         )
         params = (strategy, lookback) if strategy else (lookback,)
+        sql = f"""
+            SELECT pnl_pct FROM trades
+            {where}
+            ORDER BY id DESC LIMIT ?
+            """
         async with self._lock:
-            rows = self._conn.execute(
-                f"""
-                SELECT pnl_pct FROM trades
-                {where}
-                ORDER BY id DESC LIMIT ?
-                """,
-                params,
-            ).fetchall()
+            def _read():
+                return self._conn.execute(sql, params).fetchall()
+
+            rows = await self._run_db(_read)
         if not rows:
             return 0.0
         wins = [r[0] for r in rows if r[0] is not None and r[0] > 0]
@@ -285,13 +325,16 @@ class TradeHistory:
             else "WHERE status='closed'"
         )
         params = (strategy, lookback) if strategy else (lookback,)
+        sql = (
+            f"SELECT COUNT(*) FROM "
+            f"(SELECT id FROM trades {where} "
+            f"ORDER BY id DESC LIMIT ?)"
+        )
         async with self._lock:
-            row = self._conn.execute(
-                f"SELECT COUNT(*) FROM "
-                f"(SELECT id FROM trades {where} "
-                f"ORDER BY id DESC LIMIT ?)",
-                params,
-            ).fetchone()
+            def _read():
+                return self._conn.execute(sql, params).fetchone()
+
+            row = await self._run_db(_read)
         return row[0] if row else 0
 
     async def get_summary(self) -> Dict:
@@ -301,21 +344,23 @@ class TradeHistory:
         :return: Словарь с total_trades, closed_trades, win_rate,
             total_pnl, total_commissions.
         """
+        sql = """
+            SELECT
+              COUNT(*) AS total,
+              SUM(CASE WHEN status='closed' AND pnl>0
+                  THEN 1 ELSE 0 END) AS wins,
+              SUM(CASE WHEN status='closed'
+                  THEN 1 ELSE 0 END) AS closed,
+              SUM(CASE WHEN status='closed'
+                  THEN pnl ELSE 0 END) AS total_pnl,
+              SUM(commission) AS total_comm
+            FROM trades
+            """
         async with self._lock:
-            row = self._conn.execute(
-                """
-                SELECT
-                  COUNT(*) AS total,
-                  SUM(CASE WHEN status='closed' AND pnl>0
-                      THEN 1 ELSE 0 END) AS wins,
-                  SUM(CASE WHEN status='closed'
-                      THEN 1 ELSE 0 END) AS closed,
-                  SUM(CASE WHEN status='closed'
-                      THEN pnl ELSE 0 END) AS total_pnl,
-                  SUM(commission) AS total_comm
-                FROM trades
-                """
-            ).fetchone()
+            def _read():
+                return self._conn.execute(sql).fetchone()
+
+            row = await self._run_db(_read)
         total, wins, closed, total_pnl, total_comm = row
         win_rate = (wins / closed) if closed else 0.0
         return {

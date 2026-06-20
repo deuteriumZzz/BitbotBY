@@ -9,12 +9,18 @@
   2. Half-Kelly cap при ≥10 живых сделках.
   3. Консервативный RISK_PER_TRADE cap при <10 живых сделках.
   4. Поправка на рыночный импакт Almgren-Chriss.
-  5. Округление до лота биржи через api.round_quantity.
+  5. Масштабирование при просадке от пика (УЛУЧШЕНИЕ 6).
+  6. Округление до лота биржи через api.round_quantity.
+
+УЛУЧШЕНИЕ 4: фильтр по времени суток (TRADING_HOURS UTC).
+УЛУЧШЕНИЕ 5: фильтр по ликвидности (спред и 24h объём).
+УЛУЧШЕНИЕ 6: уменьшение размера позиции при просадке от пика баланса.
 """
 
 from __future__ import annotations
 
 import asyncio
+import datetime
 import logging
 import time
 from typing import TYPE_CHECKING, Callable, Dict, Optional
@@ -70,6 +76,8 @@ class OrderExecutor:
         self._set_paper_balance = set_paper_balance
         self._set_last_trade_at = set_last_trade_at
         self._get_current_regime = get_current_regime
+        # УЛУЧШЕНИЕ 6: отслеживание пика баланса для масштабирования при просадке
+        self._peak_balance: float = 0.0
 
     async def execute(
         self,
@@ -94,6 +102,21 @@ class OrderExecutor:
         action = top.get("action")
         if action not in ("buy", "sell"):
             return
+
+        # УЛУЧШЕНИЕ 4: фильтр по времени суток (UTC)
+        if Config.TRADING_HOURS:
+            hour = datetime.datetime.utcnow().hour
+            try:
+                start_h, end_h = map(int, Config.TRADING_HOURS.split("-"))
+                if not (start_h <= hour < end_h):
+                    logger.info(
+                        "Outside trading hours (%s UTC), skipping %s",
+                        Config.TRADING_HOURS,
+                        sym,
+                    )
+                    return
+            except ValueError:
+                pass  # неверный формат — игнорируем
 
         # Guard: max positions and duplicate — reserve the slot immediately under
         # lock so a second concurrent cycle can't open the same symbol while
@@ -162,6 +185,10 @@ class OrderExecutor:
             if not entry:
                 return
 
+            # УЛУЧШЕНИЕ 5: фильтр по ликвидности (спред + объём)
+            if not await self._check_liquidity(sym, entry):
+                return
+
             sl_price = top.get("stop_loss", 0.0)
             tp_price = top.get("take_profit", 0.0)
 
@@ -203,6 +230,11 @@ class OrderExecutor:
                     return
 
             quantity = self._size_position(top, balance, live_wr, live_n, entry)
+
+            # УЛУЧШЕНИЕ 6: масштабирование при просадке от пика баланса
+            scale = self._drawdown_scale(balance)
+            if scale < 1.0:
+                quantity *= scale
 
             # Almgren-Chriss market impact: shift effective entry price for large
             # orders relative to ADV.
@@ -271,6 +303,12 @@ class OrderExecutor:
             exchange_sl_id: Optional[str] = None
             exchange_tp_id: Optional[str] = None
 
+            # Determine leverage for pnl_pct calculation in record_close
+            try:
+                dynamic_lev = max(1, int(Config.LEVERAGE))
+            except (TypeError, ValueError):
+                dynamic_lev = 1
+
             if Config.PAPER_TRADING:
                 logger.info(
                     "[PAPER] %s %.6f %s @ %.4f", action.upper(), quantity, sym, entry
@@ -285,11 +323,7 @@ class OrderExecutor:
                         self._set_paper_balance(bal + quantity * entry - commission)
                     else:
                         # LINEAR SHORT: резервируем маржу (entry / leverage)
-                        try:
-                            lev = max(1, int(Config.LEVERAGE))
-                        except (TypeError, ValueError):
-                            lev = 1
-                        margin = quantity * entry / lev
+                        margin = quantity * entry / dynamic_lev
                         self._set_paper_balance(bal - margin - commission)
             else:
                 order = await self._api.create_order(sym, "market", action, quantity)
@@ -329,6 +363,7 @@ class OrderExecutor:
                 "peak_price": entry,
                 "exchange_sl_id": exchange_sl_id,
                 "exchange_tp_id": exchange_tp_id,
+                "partial_tp_triggered": False,
             }
             async with lock:
                 monitored[sym] = pos
@@ -351,6 +386,76 @@ class OrderExecutor:
                 async with lock:
                     if monitored.get(sym) is None:
                         monitored.pop(sym, None)
+
+    # ── Liquidity filter (УЛУЧШЕНИЕ 5) ───────────────────────────────────────
+
+    async def _check_liquidity(self, sym: str, price: float) -> bool:
+        """Возвращает True если ликвидность достаточная для входа.
+
+        Проверяет спред (ask-bid)/mid и 24h volume в USDT.
+        При ошибке получения данных возвращает True (не блокируем торговлю).
+        """
+        try:
+            ticker = await self._api.exchange.fetch_ticker(sym)
+            bid = ticker.get("bid") or price
+            ask = ticker.get("ask") or price
+            volume_usdt = ticker.get("quoteVolume") or 0.0
+
+            mid = (bid + ask) / 2
+            spread_pct = (ask - bid) / mid * 100 if mid > 0 else 999.0
+
+            if spread_pct > Config.MAX_SPREAD_PCT:
+                logger.info(
+                    "Liquidity filter: %s spread=%.3f%% > %.3f%% — skip",
+                    sym,
+                    spread_pct,
+                    Config.MAX_SPREAD_PCT,
+                )
+                return False
+            if volume_usdt < Config.MIN_VOLUME_USDT:
+                logger.info(
+                    "Liquidity filter: %s volume=$%.0f < $%.0f — skip",
+                    sym,
+                    volume_usdt,
+                    Config.MIN_VOLUME_USDT,
+                )
+                return False
+            return True
+        except Exception as e:
+            logger.debug("Liquidity check failed for %s: %s — allowing", sym, e)
+            return True  # при ошибке — не блокируем
+
+    # ── Drawdown scaling (УЛУЧШЕНИЕ 6) ───────────────────────────────────────
+
+    def _drawdown_scale(self, balance: float) -> float:
+        """Возвращает множитель размера позиции [DRAWDOWN_SCALE_FACTOR, 1.0].
+
+        При просадке >= DRAWDOWN_SCALE_THRESHOLD от пика возвращает
+        DRAWDOWN_SCALE_FACTOR (по умолчанию 0.5). Иначе — 1.0.
+        Пик обновляется каждый раз когда баланс растёт.
+        """
+        try:
+            enabled = bool(Config.DRAWDOWN_SCALE_ENABLED)
+            threshold = float(Config.DRAWDOWN_SCALE_THRESHOLD)
+            factor = float(Config.DRAWDOWN_SCALE_FACTOR)
+        except (TypeError, ValueError):
+            return 1.0
+        if not enabled:
+            return 1.0
+        if balance > self._peak_balance:
+            self._peak_balance = balance
+        if self._peak_balance <= 0:
+            return 1.0
+        drawdown = (self._peak_balance - balance) / self._peak_balance
+        if drawdown >= threshold:
+            logger.warning(
+                "Drawdown %.1f%% from peak $%.2f — scaling position size to %.0f%%",
+                drawdown * 100,
+                self._peak_balance,
+                factor * 100,
+            )
+            return factor
+        return 1.0
 
     # ── Sizing helpers ────────────────────────────────────────────────────────
 

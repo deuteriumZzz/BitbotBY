@@ -48,3 +48,6 @@ class PositionRecord(TypedDict, total=False):
     # чтобы предотвратить двойное исполнение.
     exchange_sl_id: Optional[str]
     exchange_tp_id: Optional[str]
+
+    # УЛУЧШЕНИЕ 3: флаг частичного тейк-профита — True после первого закрытия 50%
+    partial_tp_triggered: bool
