@@ -96,6 +96,11 @@ Base от confidence:  ≥0.85 → max;  ≥0.75 → 75%;  ≥0.65 → 50%
 
 - **Circuit breaker** — автостоп после N подряд убыточных сделок
 - **Дневной лимит потерь** — 5% по умолчанию, проверяется каждый цикл
+- **Drawdown scaling** — при просадке ≥10% от пика размер позиций автоматически снижается до 50%
+- **Partial TP** — при достижении 60% пути к TP закрывает 50% позиции, SL переносится на breakeven
+- **Фильтр ликвидности** — проверяет спред (<0.3%) и объём (>$1M) перед входом
+- **Фильтр времени суток** — опционально ограничить торговлю часами с высокой ликвидностью
+- **Macro blackout** — приостанавливает новые позиции за 30 мин до/после FOMC, CPI, NFP
 - **Корреляционный фильтр** — блокирует одновременные позиции с |корреляцией| выше порога
 - **Стейблкоин-фильтр** — USDC, BUSD, DAI и ещё 17 стейблкоинов никогда не попадают в сканирование
 - **AI бюджет-гард** — лимит вызовов AI в сутки (UTC), при исчерпании — VADER fallback
@@ -108,7 +113,7 @@ Base от confidence:  ≥0.85 → max;  ≥0.75 → 75%;  ≥0.65 → 50%
 - **Redis persistence** — circuit breaker, корреляции, кэш переживают рестарт
 - **Secret filter** — API-ключи маскируются в логах (`***`)
 - **Health server** — `GET /health` (JSON) и `GET /metrics` (Prometheus)
-- **Alertmanager** — 6 правил алертинга → Telegram webhook
+- **Alertmanager** — 7 правил алертинга (включая `HighDrawdown`) → Telegram webhook
 - **SIGTERM / SIGINT** — чистое завершение, `docker stop` работает корректно
 - **Веб-дашборд** — баланс, позиции, история сделок (http://localhost:8080)
 - **Grafana** — метрики в реальном времени (http://localhost:3000)
@@ -274,6 +279,22 @@ Walk-forward с holdout 20% — показывает IN-SAMPLE и OUT-SAMPLE Sha
 | `TELEGRAM_CONFIRM_TIMEOUT` | `60` | Секунд ждать Trade/Skip |
 | `SILENT_DEATH_HOURS` | `6` | Алерт если нет сделок N часов |
 
+### Управление позициями
+
+| Параметр | По умолчанию | Описание |
+|----------|-------------|----------|
+| `PARTIAL_TP_ENABLED` | `true` | Частичная фиксация прибыли |
+| `PARTIAL_TP_TRIGGER` | `0.6` | Закрыть часть при достижении 60% пути до TP |
+| `PARTIAL_TP_FRACTION` | `0.5` | Закрыть 50% позиции на Partial TP |
+| `TRADING_HOURS` | `` | Торговые часы UTC (пример: `8-22`); пусто = круглосуточно |
+| `MIN_VOLUME_USDT` | `1000000` | Минимальный 24h объём в USDT ($1M) |
+| `MAX_SPREAD_PCT` | `0.3` | Максимальный спред в % (0.3%) |
+| `DRAWDOWN_SCALE_ENABLED` | `true` | Снижать размер позиций при просадке |
+| `DRAWDOWN_SCALE_THRESHOLD` | `0.10` | Порог просадки от пика (10%) |
+| `DRAWDOWN_SCALE_FACTOR` | `0.5` | Множитель размера при просадке (50%) |
+| `MACRO_BLACKOUT_ENABLED` | `true` | Пауза торговли во время FOMC/CPI/NFP |
+| `FINNHUB_API_KEY` | — | Finnhub API для макро-календаря (бесплатно: finnhub.io) |
+
 ### Внешние сигналы (опционально)
 
 | Параметр | Описание |
@@ -322,9 +343,11 @@ supervisor.py
         ├── NewsAnalyzer        — NewsAPI + RSS (CoinDesk/CoinTelegraph) + VADER
         ├── TwitterAnalyzer     — Twitter API v2 VADER, топ-10 монет
         ├── FundingArbDetector  — delta-neutral арбитраж алерты
+        ├── MacroCalendar       — blackout за 30 мин до/после FOMC/CPI/NFP
         ├── SignalCombiner      — SAC + AI + контекстные сигналы → топ-1
         ├── OrderExecutor       — CVaR→Kelly→AC + лимитный ордер + dynamic leverage
-        ├── PositionMonitor     — SL/TP/trailing + dynamic condition-based exits
+        │     liquidity filter · time-of-day filter · drawdown scaling
+        ├── PositionMonitor     — SL/TP/trailing + partial TP + dynamic exits
         ├── BybitAPI            — ccxt async, linear+spot, exchange SL/TP
         ├── TelegramNotifier    — сигналы, Trade/Skip, silent death, funding arb
         ├── TradeHistory        — SQLite: win rate, EV
@@ -348,7 +371,7 @@ make test
 # pytest tests/ -v --cov=src --cov-fail-under=50
 ```
 
-**593 unit-теста** — индикаторы, стратегии, риск-менеджмент, CVaR, Kelly, Almgren-Chriss, корреляция, SAC-инференс, dynamic leverage, dynamic exits, position monitor, e2e торговый цикл.  
+**593 unit-теста** — индикаторы, стратегии, риск-менеджмент, CVaR, Kelly, Almgren-Chriss, корреляция, SAC-инференс, dynamic leverage, partial TP, drawdown scaling, liquidity filter, dynamic exits, position monitor, e2e торговый цикл.  
 Coverage: **93%**.
 
 ---
