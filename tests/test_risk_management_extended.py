@@ -26,6 +26,7 @@ def mock_redis(monkeypatch):
         "src.redis_client.RedisClient.save_trading_state", lambda *a, **kw: None
     )
 
+
 # ---------------------------------------------------------------------------
 # calculate_kelly_size
 # ---------------------------------------------------------------------------
