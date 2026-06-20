@@ -40,9 +40,11 @@ class Config:
     # ── Bybit API ──────────────────────────────────────────────────────────
     BYBIT_API_KEY: str = os.getenv("BYBIT_API_KEY", "")
     BYBIT_API_SECRET: str = os.getenv("BYBIT_API_SECRET", "")
-    # "spot" — споровой рынок (по умолчанию)
+    # "spot"   — споровой рынок (только лонги)
     # "linear" — бессрочные фьючерсы (нужен reduceOnly для SL/TP)
-    MARKET_TYPE: str = os.getenv("MARKET_TYPE", "spot")
+    MARKET_TYPE: str = os.getenv("MARKET_TYPE", "linear")
+    # Плечо для фьючерсной торговли (1 = без плеча, 3 = 3x)
+    LEVERAGE: int = int(os.getenv("LEVERAGE", "3"))
 
     # ── Trading ────────────────────────────────────────────────────────────
     INITIAL_BALANCE: float = float(os.getenv("INITIAL_BALANCE", "10000.0"))

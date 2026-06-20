@@ -277,9 +277,20 @@ class OrderExecutor:
                 )
                 bal = self._get_paper_balance()
                 if action == "buy":
+                    # Открытие LONG: тратим деньги
                     self._set_paper_balance(bal - quantity * entry - commission)
                 else:
-                    self._set_paper_balance(bal + quantity * entry - commission)
+                    if Config.MARKET_TYPE == "spot":
+                        # SPOT продажа: получаем деньги (закрытие лонга)
+                        self._set_paper_balance(bal + quantity * entry - commission)
+                    else:
+                        # LINEAR SHORT: резервируем маржу (entry / leverage)
+                        try:
+                            lev = max(1, int(Config.LEVERAGE))
+                        except (TypeError, ValueError):
+                            lev = 1
+                        margin = quantity * entry / lev
+                        self._set_paper_balance(bal - margin - commission)
             else:
                 order = await self._api.create_order(sym, "market", action, quantity)
                 if not order:

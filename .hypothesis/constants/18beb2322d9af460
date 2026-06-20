@@ -1,0 +1,4 @@
+# file: /Users/deuterium/Dev/BitbotBY/src/twitter_analyzer.py
+# hypothesis_version: 6.141.1
+
+[0.0, 900.0, 200, 429, '/', 'ADA', 'AVAX', 'Authorization', 'BNB', 'BTC', 'DOT', 'ETH', 'LINK', 'MATIC', 'SOL', 'TWITTER_BEARER_TOKEN', 'XRP', 'compound', 'data', 'max_results', 'query', 'text', 'tweet.fields']

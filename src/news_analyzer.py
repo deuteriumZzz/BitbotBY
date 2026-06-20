@@ -4,8 +4,9 @@ import asyncio
 import json
 import logging
 import os
-from datetime import datetime
-from typing import List, Optional, Tuple
+import time
+from datetime import datetime, timezone
+from typing import Dict, List, Optional, Tuple
 
 from config import Config
 from src.constants import REDIS_TTL_TRADING_STATE
@@ -43,6 +44,23 @@ _COIN_QUERIES = {
     "OP": "Optimism OR OP token",
     "ARB": "Arbitrum OR ARB",
 }
+
+
+_RSS_FEEDS: Dict[str, List[str]] = {
+    "BTC": [
+        "https://www.coindesk.com/arc/outboundfeeds/rss/",
+        "https://cointelegraph.com/rss",
+    ],
+    "ETH": [
+        "https://www.coindesk.com/arc/outboundfeeds/rss/",
+        "https://cointelegraph.com/rss",
+    ],
+    "_default": [
+        "https://cointelegraph.com/rss",
+    ],
+}
+
+_RSS_CACHE_TTL: int = 900  # 15 минут
 
 
 class NewsAnalyzer:
@@ -116,6 +134,9 @@ class NewsAnalyzer:
         # Единый бюджет-гард: применяется ко всем провайдерам
         self._ai_calls_today: int = 0
         self._ai_date: str = ""
+
+        # RSS-кэш: symbol_base → (headlines, timestamp)
+        self._rss_cache: Dict[str, Tuple[List[str], float]] = {}
 
         self.logger.info("NewsAnalyzer: AI scorer = %s", self._ai_scorer)
 
@@ -194,6 +215,56 @@ class NewsAnalyzer:
         except Exception as e:
             self.logger.debug("Cache save failed for %s: %s", symbol, e)
 
+    # ── RSS fallback ──────────────────────────────────────────────────────────
+
+    async def _fetch_rss_headlines(self, symbol: str, limit: int = 10) -> List[str]:
+        base = symbol.split("/")[0].upper()
+        now = time.monotonic()
+        cached = self._rss_cache.get(base)
+        if cached is not None and (now - cached[1]) < _RSS_CACHE_TTL:
+            return cached[0]
+
+        feeds = _RSS_FEEDS.get(base, _RSS_FEEDS["_default"])
+        ticker_lower = base.lower()
+        cutoff = datetime.now(tz=timezone.utc).timestamp() - 86_400
+
+        def _parse_feeds() -> List[str]:
+            try:
+                import feedparser
+            except ImportError:
+                return []
+            results: List[str] = []
+            for url in feeds:
+                try:
+                    feed = feedparser.parse(url)
+                    for entry in feed.entries:
+                        title: str = entry.get("title", "") or ""
+                        if not title:
+                            continue
+                        pub = entry.get("published_parsed")
+                        if pub is not None:
+                            import calendar
+                            ts = float(calendar.timegm(pub))
+                            if ts < cutoff:
+                                continue
+                        if ticker_lower in title.lower() or base in title:
+                            results.append(title[:120])
+                        if len(results) >= limit:
+                            break
+                except Exception:
+                    continue
+            return results
+
+        try:
+            loop = asyncio.get_running_loop()
+            headlines = await loop.run_in_executor(None, _parse_feeds)
+        except Exception as exc:
+            self.logger.warning("RSS fetch failed for %s: %s", base, exc)
+            headlines = []
+
+        self._rss_cache[base] = (headlines, now)
+        return headlines
+
     # ── Public API ────────────────────────────────────────────────────────────
 
     async def get_sentiment(self, symbol: str) -> Tuple[float, List[str]]:
@@ -210,19 +281,22 @@ class NewsAnalyzer:
         if cached is not None:
             return cached
 
-        if not self._enabled:
-            return 0.0, []
-
         base = symbol.split("/")[0]
         query = _COIN_QUERIES.get(base, f"{base} cryptocurrency")
 
-        articles = await self._fetch_for_symbol(query)
-        if not articles:
-            return 0.0, []
+        articles: list = []
+        if self._enabled:
+            articles = await self._fetch_for_symbol(query)
 
-        headlines = [
-            (art.get("title", "") or "")[:100] for art in articles if art.get("title")
-        ]
+        if articles:
+            headlines = [
+                (art.get("title", "") or "")[:100] for art in articles if art.get("title")
+            ]
+        else:
+            headlines = await self._fetch_rss_headlines(symbol)
+
+        if not headlines:
+            return 0.0, []
 
         if self._ai_scorer == "claude":
             sentiment = await self._score_with_claude(base, headlines)

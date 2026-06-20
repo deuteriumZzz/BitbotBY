@@ -52,6 +52,7 @@ def _make_executor(monitored: dict | None = None) -> tuple[OrderExecutor, dict]:
     api.round_quantity = MagicMock(side_effect=lambda sym, qty: round(qty, 6))
     api.create_order = AsyncMock(return_value={"id": "ORDER123"})
     api.place_exchange_sl_tp = AsyncMock(return_value=("SL_ID", "TP_ID"))
+    api.set_leverage = AsyncMock(return_value=True)
 
     trade_history = MagicMock()
     trade_history.get_win_rate = AsyncMock(return_value=0.6)

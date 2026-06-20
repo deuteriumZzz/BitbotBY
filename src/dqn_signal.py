@@ -1,7 +1,7 @@
 """
 Инференс SAC-сигналов (SB3) для торгового бота.
 
-Конвертирует снэпшот рынка в вектор наблюдения (OBS_DIM=14),
+Конвертирует снэпшот рынка в вектор наблюдения (OBS_DIM=21),
 выполняет детерминированный инференс SAC и возвращает
 {action, confidence, source="sac"}.
 """
@@ -46,7 +46,9 @@ def _snap_to_obs(
 
     Структура obs совпадает с TradingEnv._get_observation():
         [open, high, low, close, volume, rsi, macd, macd_signal,
-         bb_upper, bb_middle, bb_lower, balance, position, current_value]
+         bb_upper, bb_middle, bb_lower, balance, position, current_value,
+         funding_rate_norm, ob_imbalance, pcr_norm, fear_greed_norm,
+         iv_skew_norm, basis_norm, google_trends_norm]
 
     Использует точные OHLCV-значения из snap["ohlcv"] (добавлены
     в MarketScanner.build_snapshot()). Если поле отсутствует —
@@ -85,26 +87,45 @@ def _snap_to_obs(
     bb_upper = price * (1.0 + bb_w / 2.0)
     bb_lower = price * (1.0 - bb_w / 2.0)
 
+    # Новые фичи (индексы 14-20) из market_context снэпшота
+    ctx = snap.get("market_context", {})
+    funding_raw = float(ctx.get("funding_rate", 0.0))
+    ob_imb = float(ctx.get("ob_imbalance", 0.0))
+    pcr_raw = float(ctx.get("pcr", 1.0))
+    fg_raw = float(ctx.get("fear_greed", 50.0))
+    iv_raw = float(ctx.get("iv_skew", 0.0))
+    basis_raw = float(ctx.get("basis_pct", 0.0))
+    gt_raw = float(ctx.get("google_trends", 50.0))
+
     raw = np.array(
         [
-            open_,  # open
-            high,  # high
-            low,  # low
-            close,  # close
-            volume,  # volume
-            float(ind.get("rsi", 50.0)),  # rsi
-            macd_val,  # macd
-            macd_signal_val,  # macd_signal
-            bb_upper,  # bb_upper
-            price,  # bb_middle
-            bb_lower,  # bb_lower
-            balance,  # portfolio: balance
-            0.0,  # portfolio: position
-            balance,  # portfolio: current_value
+            open_,  # [0]  open
+            high,  # [1]  high
+            low,  # [2]  low
+            close,  # [3]  close
+            volume,  # [4]  volume
+            float(ind.get("rsi", 50.0)),  # [5]  rsi
+            macd_val,  # [6]  macd
+            macd_signal_val,  # [7]  macd_signal
+            bb_upper,  # [8]  bb_upper
+            price,  # [9]  bb_middle
+            bb_lower,  # [10] bb_lower
+            balance,  # [11] portfolio: balance
+            0.0,  # [12] portfolio: position
+            balance,  # [13] portfolio: current_value
+            funding_raw * 1000.0,  # [14] funding_rate_norm
+            float(np.clip(ob_imb, -1.0, 1.0)),  # [15] ob_imbalance
+            float(np.clip(pcr_raw / 3.0, 0.0, 1.0)),  # [16] pcr_norm
+            fg_raw / 100.0,  # [17] fear_greed_norm
+            float(np.clip(iv_raw / 20.0, -1.0, 1.0)),  # [18] iv_skew_norm
+            float(np.clip(basis_raw / 5.0, -1.0, 1.0)),  # [19] basis_norm
+            gt_raw / 100.0,  # [20] google_trends_norm
         ],
         dtype=np.float32,
     )
 
+    # Нормализация только для первых 11 элементов (OHLCV + индикаторы)
+    # Индексы 11-20 не нормализуются: портфельные и контекстные уже в нужном масштабе
     if norm_stats:
         for i, col in enumerate(_MARKET_COLS):
             if col in norm_stats:

@@ -1,0 +1,4 @@
+# file: /Users/deuterium/Dev/BitbotBY/src/signal_combiner.py
+# hypothesis_version: 6.141.1
+
+[-0.6, -0.3, 0.0, 0.02, 0.05, 0.08, 0.1, 0.12, 0.15, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.95, 1.5, 3.0, '?', 'action', 'ai', 'atr', 'backwardation', 'basis_signal', 'buy', 'confidence', 'dqn', 'entry', 'extreme_fear', 'extreme_greed', 'fear_greed_signal', 'fear_puts', 'funding_signal', 'google_trends_signal', 'greed_calls', 'greed_premium', 'hold', 'hybrid', 'liquidation_pressure', 'local', 'long_liquidation', 'long_overheated', 'neutral', 'oi_bearish', 'oi_neutral', 'oi_signal', 'pcr_signal', 'price', 'ranging', 'reasoning', 'retail_absent', 'retail_fomo', 'sac', 'sell', 'short_overheated', 'short_squeeze', 'stop_loss', 'strategy', 'symbol', 'take_profit', 'trending_down', 'trending_up', 'unknown']

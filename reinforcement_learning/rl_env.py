@@ -17,8 +17,8 @@ from gymnasium import spaces
 HOLD_ZONE = float(_os.getenv("SAC_HOLD_ZONE", "0.3"))
 # Комиссия за сделку (синхронизирована с COMMISSION_RATE из .env)
 COMMISSION = float(_os.getenv("COMMISSION_RATE", "0.001"))
-# Размер вектора наблюдения: 11 рыночных + 3 портфельных
-OBS_DIM = 14
+# Размер вектора наблюдения: 11 рыночных + 3 портфельных + 7 контекстных
+OBS_DIM = 21
 
 
 class TradingEnv(gym.Env):
@@ -30,9 +30,11 @@ class TradingEnv(gym.Env):
         action < -HOLD_ZONE → SELL (fraction of position)
         else                → HOLD
 
-    Пространство наблюдений Box(-inf, inf, shape=(14,)):
+    Пространство наблюдений Box(-inf, inf, shape=(21,)):
         [open, high, low, close, volume, rsi, macd, macd_signal,
-         bb_upper, bb_middle, bb_lower, balance, position, current_value]
+         bb_upper, bb_middle, bb_lower, balance, position, current_value,
+         funding_rate_norm, ob_imbalance, pcr_norm, fear_greed_norm,
+         iv_skew_norm, basis_norm, google_trends_norm]
     """
 
     def __init__(
@@ -84,6 +86,26 @@ class TradingEnv(gym.Env):
 
         row = self.data.iloc[self.current_step]
         price = float(row["close"])
+
+        # Новые фичи (индексы 14-20) — если колонка отсутствует → нейтральный дефолт
+        funding_raw = float(row.get("funding_rate", 0.0))
+        ob_imb = float(row.get("ob_imbalance", 0.0))
+        pcr_raw = float(row.get("pcr", 1.0))
+        fg_raw = float(row.get("fear_greed", 50.0))
+        iv_raw = float(row.get("iv_skew", 0.0))
+        basis_raw = float(row.get("basis_pct", 0.0))
+        gt_raw = float(row.get("google_trends", 50.0))
+
+        new_features = [
+            funding_raw * 1000.0,                          # [14] funding_rate_norm
+            float(np.clip(ob_imb, -1.0, 1.0)),            # [15] ob_imbalance
+            float(np.clip(pcr_raw / 3.0, 0.0, 1.0)),      # [16] pcr_norm
+            fg_raw / 100.0,                                 # [17] fear_greed_norm
+            float(np.clip(iv_raw / 20.0, -1.0, 1.0)),     # [18] iv_skew_norm
+            float(np.clip(basis_raw / 5.0, -1.0, 1.0)),   # [19] basis_norm
+            gt_raw / 100.0,                                 # [20] google_trends_norm
+        ]
+
         return np.array(
             [
                 float(row["open"]),
@@ -100,6 +122,7 @@ class TradingEnv(gym.Env):
                 self.balance,
                 self.position,
                 self.current_value,
+                *new_features,
             ],
             dtype=np.float32,
         )

@@ -105,6 +105,7 @@ def make_bot(balance: float = 1000.0):
             bot.api.round_quantity = MagicMock(
                 side_effect=lambda sym, qty: round(qty, 6)
             )
+            bot.api.set_leverage = AsyncMock(return_value=True)
             bot.api.get_current_price = AsyncMock(return_value=50000.0)
             return bot
 

@@ -541,6 +541,68 @@ def run_strategy(
     )
 
 
+# ── Walk-forward с hold-out test set ─────────────────────────────────────
+
+
+def run_strategy_with_holdout(
+    name: str,
+    strategy_cls: type,
+    df: pd.DataFrame,
+    initial_balance: float,
+    risk_per_trade: float,
+    commission_rate: float,
+    stop_loss_pct: float,
+    min_confidence: float,
+    holdout_ratio: float = 0.2,
+) -> BacktestResult:
+    """
+    Прогоняет стратегию с честным hold-out test set.
+
+    holdout_ratio=0.0 → поведение идентично run_strategy().
+    holdout_ratio=0.2 → последние 20% данных выделяются как out-of-sample тест;
+    walk-forward оптимизация проходит только на оставшихся 80%.
+    """
+    if holdout_ratio <= 0.0 or len(df) < _WARMUP * 2:
+        return run_strategy(
+            name, strategy_cls(), df, initial_balance, risk_per_trade,
+            commission_rate, stop_loss_pct, min_confidence,
+        )
+
+    n = len(df)
+    holdout_start = int(n * (1 - holdout_ratio))
+    train_df = df.iloc[:holdout_start].copy()
+    test_df = df.iloc[holdout_start:].copy()
+
+    train_result = run_strategy(
+        name, strategy_cls(), train_df, initial_balance, risk_per_trade,
+        commission_rate, stop_loss_pct, min_confidence,
+    )
+    test_result = run_strategy(
+        name, strategy_cls(), test_df, initial_balance, risk_per_trade,
+        commission_rate, stop_loss_pct, min_confidence,
+    )
+
+    overfit_ratio = train_result.sharpe_ratio / max(test_result.sharpe_ratio, 0.01)
+    print(
+        f"\n  IN-SAMPLE  (train {100-int(holdout_ratio*100)}%): "
+        f"Sharpe={train_result.sharpe_ratio:.2f}  "
+        f"WinRate={train_result.win_rate:.1%}  "
+        f"Return={train_result.total_return_pct:.1%}"
+    )
+    print(
+        f"  OUT-SAMPLE (test  {int(holdout_ratio*100)}%): "
+        f"Sharpe={test_result.sharpe_ratio:.2f}  "
+        f"WinRate={test_result.win_rate:.1%}  "
+        f"Return={test_result.total_return_pct:.1%}"
+    )
+    print(f"  Overfit ratio: {overfit_ratio:.1f}x", end="")
+    if overfit_ratio > 2.0:
+        print("  ⚠ OVERFITTED", end="")
+    print()
+
+    return test_result
+
+
 # ── Агрегация по нескольким символам ─────────────────────────────────────
 
 
@@ -699,6 +761,7 @@ def save_json(
 async def main() -> None:
     # ── Чтение переопределений из окружения ───────────────────────
     months = int(os.getenv("BT_MONTHS", "6"))
+    holdout_ratio = float(os.getenv("BT_HOLDOUT_RATIO", str(Config.BACKTEST_HOLDOUT_RATIO)))
     timeframe = os.getenv("BT_TIMEFRAME", Config.TIMEFRAME)
     min_conf = float(os.getenv("BT_MIN_CONF", str(Config.MIN_SIGNAL_CONFIDENCE)))
 
@@ -738,15 +801,16 @@ async def main() -> None:
         sym_results: List[BacktestResult] = []
         for strat_name, strat_cls in STRATEGY_REGISTRY.items():
             print(f"\n[{strat_name}] ", end="", flush=True)
-            result = run_strategy(
+            result = run_strategy_with_holdout(
                 name=strat_name,
-                strategy=strat_cls(),
+                strategy_cls=strat_cls,
                 df=df,
                 initial_balance=Config.INITIAL_BALANCE,
                 risk_per_trade=Config.RISK_PER_TRADE,
                 commission_rate=Config.COMMISSION_RATE,
                 stop_loss_pct=Config.STOP_LOSS_PERCENT,
                 min_confidence=min_conf,
+                holdout_ratio=holdout_ratio,
             )
             sym_results.append(result)
             print(

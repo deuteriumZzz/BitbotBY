@@ -78,6 +78,7 @@ class BybitAPI:
         self.exchange: Optional[ccxt.Exchange] = None
         self.redis = RedisClient()
         self.logger = logging.getLogger(__name__)
+        self._leverage_cache: dict[str, int] = {}  # {symbol: last_set_leverage}
 
     async def initialize(
         self, api_key: str, api_secret: str, testnet: bool = False
@@ -494,6 +495,32 @@ class BybitAPI:
         except Exception as e:
             self.logger.warning("round_quantity failed for %s: %s", symbol, e)
             return quantity
+
+    async def set_leverage(self, symbol: str, leverage: int) -> bool:
+        """
+        Устанавливает плечо для фьючерсного символа.
+        Для спота — no-op. Для paper trading — no-op.
+        Кэш per-symbol: если плечо уже выставлено в это значение — пропускаем.
+
+        :param symbol: Торговый символ.
+        :param leverage: Плечо (1 = без плеча).
+        :return: True всегда (исключение не роняет бота).
+        """
+        if Config.MARKET_TYPE == "spot":
+            return True
+        if Config.PAPER_TRADING:
+            return True
+        if self._leverage_cache.get(symbol) == leverage:
+            return True
+        try:
+            await self.exchange.set_leverage(leverage, symbol)
+            self.logger.debug("Leverage set to %dx for %s", leverage, symbol)
+            self._leverage_cache[symbol] = leverage
+        except Exception as e:
+            # Leverage already at this value — not an error
+            self.logger.debug("set_leverage %s: %s", symbol, e)
+            self._leverage_cache[symbol] = leverage
+        return True
 
     async def close(self) -> None:
         """Закрывает соединение с биржей."""

@@ -618,6 +618,29 @@ class TradingBot:
                     snapshots, balance, regimes, market_data
                 )
 
+                # БАГ 1: строим signals_map из реальных рекомендаций (после combine),
+                # а не из снэпшотов, где top_signal/market_context не существуют.
+                _signals_map = {r["symbol"]: r for r in recs if r.get("symbol")}
+                _prices = {
+                    sym: df["close"].iloc[-1]
+                    for sym, df in market_data.items()
+                    if df is not None and not df.empty
+                }
+                from src.market_context import MarketContext as _MC  # noqa: PLC0415
+                _mc_inst = _MC()
+                try:
+                    _market_ctx_map = await _mc_inst.get_context_for_symbols(
+                        list(market_data.keys()), _prices
+                    )
+                except Exception as _mc_exc:
+                    logger.warning("MarketContext fetch failed: %s", _mc_exc)
+                    _market_ctx_map = {}
+                self._position_monitor.update_market_state(
+                    signals=_signals_map,
+                    market_ctx=_market_ctx_map,
+                    regime=self._current_regime,
+                )
+
                 snap_map = {s["symbol"]: s for s in snapshots}
                 for rec in recs:
                     rec.setdefault("_snap", snap_map.get(rec.get("symbol")))

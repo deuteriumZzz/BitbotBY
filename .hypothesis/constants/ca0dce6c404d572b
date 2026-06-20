@@ -1,0 +1,4 @@
+# file: /Users/deuterium/Dev/BitbotBY/src/market_context.py
+# hypothesis_version: 6.141.1
+
+[-0.0005, 0.0, 0.001, 0.9995, 300.0, '/', '_prev_price', 'data', 'extreme_fear', 'extreme_greed', 'fear_greed', 'fear_greed_signal', 'fundingRate', 'funding_rate', 'funding_signal', 'list', 'long_overheated', 'neutral', 'oi_bearish', 'oi_bullish', 'oi_neutral', 'oi_signal', 'openInterest', 'result', 'short_overheated', 'value']

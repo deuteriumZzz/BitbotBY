@@ -141,8 +141,9 @@ def _finetune_on_experiences(model: Any, norm_stats: Dict[str, Any]) -> None:
 
     logger.info("Fine-tune на %d реальных сделках из experiences.jsonl", len(records))
 
-    # Преобразуем каждую запись в obs-вектор (14 признаков, порядок как в TradingEnv)
-    _cols = [
+    # Преобразуем каждую запись в obs-вектор (21 признак, порядок как в TradingEnv)
+    # Колонки для нормализации — только первые 11 (OHLCV + индикаторы)
+    _market_cols = [
         "open",
         "high",
         "low",
@@ -174,10 +175,18 @@ def _finetune_on_experiences(model: Any, norm_stats: Dict[str, Any]) -> None:
             float(rec.get("action") == "buy"),  # флаг позиции
             0.0,  # нереализованный PnL (при входе = 0)
             rec.get("pnl_pct", 0.0),  # реализованный PnL как подсказка награды
+            # Новые фичи (14-20) — уже нормализованы, не нормализовать повторно
+            ind.get("funding_rate", 0.0) * 1000.0,
+            ind.get("ob_imbalance", 0.0),
+            min(max(ind.get("pcr", 1.0) / 3.0, 0.0), 1.0),
+            ind.get("fear_greed", 50.0) / 100.0,
+            min(max(ind.get("iv_skew", 0.0) / 20.0, -1.0), 1.0),
+            min(max(ind.get("basis_pct", 0.0) / 5.0, -1.0), 1.0),
+            ind.get("google_trends", 50.0) / 100.0,
         ]
         obs = np.array(raw, dtype=np.float32)
-        # Применяем ту же нормализацию, что и при обучении
-        for i, col in enumerate(_cols):
+        # Нормализация только для первых 11 элементов (OHLCV + индикаторы)
+        for i, col in enumerate(_market_cols):
             if col in norm_stats:
                 mu, sd = norm_stats[col]
                 obs[i] = (obs[i] - mu) / (sd + 1e-8)

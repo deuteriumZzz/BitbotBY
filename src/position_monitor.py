@@ -57,6 +57,10 @@ class PositionMonitor:
         self._redis = redis
         # Load persisted counter so circuit breaker survives bot restarts.
         self._consecutive_losses: int = self._load_cb_state()
+        # State for dynamic exits — updated each trading cycle via update_market_state().
+        self._current_signals: dict = {}
+        self._current_market_ctx: dict = {}
+        self._current_regime: str = "unknown"
 
     async def run(
         self,
@@ -84,6 +88,16 @@ class PositionMonitor:
                     if not price:
                         continue
                     pos = self._apply_trailing_stop(sym, pos, price, monitored)
+                    try:
+                        should_exit, reason = self._check_dynamic_exit(sym, pos)
+                        if should_exit:
+                            logger.warning(
+                                "Dynamic exit %s [%s]: %s", sym, pos.get("side"), reason
+                            )
+                            await self._check_and_close(sym, pos, price, monitored, lock)
+                            continue
+                    except Exception as _dyn_exc:
+                        logger.error("Dynamic exit check failed for %s: %s", sym, _dyn_exc)
                     await self._check_and_close(sym, pos, price, monitored, lock)
                     error_counts.pop(sym, None)
                 except (ccxt.NetworkError, ccxt.RequestTimeout) as exc:
@@ -129,6 +143,73 @@ class PositionMonitor:
                             monitored.pop(sym, None)
                         error_counts.pop(sym, None)
             await asyncio.sleep(5)
+
+    # ── Dynamic exit state ────────────────────────────────────────────────────
+
+    def update_market_state(
+        self,
+        signals: dict,
+        market_ctx: dict,
+        regime: str,
+    ) -> None:
+        """Обновляет рыночное состояние для динамических выходов.
+
+        Вызывается trading_bot каждый цикл после генерации рекомендаций.
+        """
+        self._current_signals = signals
+        self._current_market_ctx = market_ctx
+        self._current_regime = regime
+
+    def _check_dynamic_exit(self, sym: str, record: PositionRecord) -> tuple:
+        """Проверяет условия досрочного закрытия позиции.
+
+        :return: (should_exit: bool, reason: str).
+        """
+        if not self._current_signals and not self._current_market_ctx:
+            return False, ""
+
+        side = record.get("side", "buy")
+        ctx = self._current_market_ctx.get(sym, {})
+        signal = self._current_signals.get(sym, {})
+
+        # 1. Разворот сигнала с высокой уверенностью
+        sig_action = signal.get("action", "")
+        sig_conf = float(signal.get("confidence", 0.0))
+        if sig_action and sig_conf >= 0.72:
+            if side == "buy" and sig_action == "sell":
+                return True, f"signal_reversal SELL conf={sig_conf:.2f}"
+            if side == "sell" and sig_action == "buy":
+                return True, f"signal_reversal BUY conf={sig_conf:.2f}"
+
+        # 2. Смена режима против позиции
+        regime = self._current_regime
+        if side == "buy" and regime == "trending_down":
+            return True, "regime_flip trending_down vs LONG"
+        if side == "sell" and regime == "trending_up":
+            return True, "regime_flip trending_up vs SHORT"
+
+        # 3. Funding развернулся против позиции
+        funding_signal = ctx.get("funding_signal", "neutral")
+        if side == "sell" and funding_signal == "short_overheated":
+            return True, "funding short_overheated — short squeeze risk"
+        if side == "buy" and funding_signal == "long_overheated":
+            return True, "funding long_overheated — long liquidation risk"
+
+        # 4. Экстремальный Fear&Greed
+        fear_greed = int(ctx.get("fear_greed", 50))
+        if side == "sell" and fear_greed <= 10:
+            return True, f"fear_greed={fear_greed} extreme_fear — take SHORT profit"
+        if side == "buy" and fear_greed >= 92:
+            return True, f"fear_greed={fear_greed} extreme_greed — take LONG profit"
+
+        # 5. Ликвидационный каскад против позиции
+        liq = ctx.get("liquidation_pressure", "neutral")
+        if side == "buy" and liq == "long_liquidation":
+            return True, "long_liquidation cascade — exit LONG"
+        if side == "sell" and liq == "short_squeeze":
+            return True, "short_squeeze cascade — exit SHORT"
+
+        return False, ""
 
     # ── Circuit-breaker persistence ───────────────────────────────────────────
 
