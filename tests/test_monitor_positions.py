@@ -107,7 +107,11 @@ async def _run_once(bot, price: float, paper: bool = True, cfg_overrides: dict =
     bot.api.get_current_price = _price
     bot.is_running = True
 
-    with patch("src.trading_bot.Config") as cfg:
+    # Patch both modules: trading_bot checks AUTO_EXECUTE, position_monitor checks
+    # PAPER_TRADING / TRAILING_STOP_ATR_MULT / CIRCUIT_BREAKER_LOSSES / COMMISSION_RATE.
+    with patch("src.trading_bot.Config") as cfg, patch(
+        "src.position_monitor.Config", cfg
+    ):
         cfg.PAPER_TRADING = paper
         cfg.COMMISSION_RATE = 0.001
         cfg.TRAILING_STOP_ATR_MULT = cfg_overrides.get("TRAILING_STOP_ATR_MULT", 0.0)
@@ -267,7 +271,9 @@ class TestTrailingStop:
         bot.api.get_current_price = _price
         bot.is_running = True
 
-        with patch("src.trading_bot.Config") as cfg:
+        with patch("src.trading_bot.Config") as cfg, patch(
+            "src.position_monitor.Config", cfg
+        ):
             cfg.PAPER_TRADING = True
             cfg.COMMISSION_RATE = 0.001
             cfg.TRAILING_STOP_ATR_MULT = 1.0
@@ -294,7 +300,9 @@ class TestTrailingStop:
         bot.api.get_current_price = _price
         bot.is_running = True
 
-        with patch("src.trading_bot.Config") as cfg:
+        with patch("src.trading_bot.Config") as cfg, patch(
+            "src.position_monitor.Config", cfg
+        ):
             cfg.PAPER_TRADING = True
             cfg.COMMISSION_RATE = 0.001
             cfg.TRAILING_STOP_ATR_MULT = 1.0
@@ -332,7 +340,8 @@ class TestCircuitBreaker:
     async def test_circuit_breaker_triggers_on_nth_loss(self):
         """N consecutive losses should trigger Telegram alert."""
         bot = make_bot()
-        bot._consecutive_losses = 2  # already at N-1
+        # Counter lives on PositionMonitor (extracted from TradingBot)
+        bot._position_monitor._consecutive_losses = 2  # already at N-1
 
         bot._monitored["BTC/USDT"] = _open_pos(
             side="buy", entry=50000, sl=49000, tp=55000
@@ -348,7 +357,8 @@ class TestCircuitBreaker:
     async def test_win_resets_consecutive_losses(self):
         """A profitable close (TP hit) must reset _consecutive_losses to 0."""
         bot = make_bot()
-        bot._consecutive_losses = 2
+        # Counter lives on PositionMonitor (extracted from TradingBot)
+        bot._position_monitor._consecutive_losses = 2
         bot._monitored["BTC/USDT"] = _open_pos(
             side="buy", entry=50000, sl=49000, tp=52000
         )
@@ -356,4 +366,4 @@ class TestCircuitBreaker:
         # Price 53000 > TP 52000 → profit → losses reset
         await _run_once(bot, price=53000.0, cfg_overrides={"CIRCUIT_BREAKER_LOSSES": 3})
 
-        assert bot._consecutive_losses == 0
+        assert bot._position_monitor._consecutive_losses == 0

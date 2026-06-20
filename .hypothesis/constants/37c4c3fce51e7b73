@@ -1,0 +1,4 @@
+# file: /Users/deuterium/Dev/BitbotBY/src/indicators.py
+# hypothesis_version: 6.141.1
+
+[0.0, 1.0, 2.0, 100, 'atr', 'bb_lower', 'bb_middle', 'bb_upper', 'bb_width', 'close', 'ema_12', 'ema_26', 'ema_long', 'ema_short', 'high', 'low', 'macd', 'macd_hist', 'macd_signal', 'momentum', 'nan', 'rsi', 'sma_20', 'sma_50', 'volatility', 'volume', 'volume_ratio', 'volume_sma']

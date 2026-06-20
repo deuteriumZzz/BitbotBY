@@ -6,6 +6,7 @@ All external I/O is mocked. Tests exercise:
   - _execute_top_rec (signal → order flow)
 """
 
+from contextlib import contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pandas as pd
@@ -63,7 +64,9 @@ def _make_cfg(paper: bool = True, auto: bool = True, max_pos: int = 3):
 
 def make_bot(balance: float = 1000.0):
     with patch.multiple("src.trading_bot", **_make_patches()):
-        with patch("src.trading_bot.Config") as cfg:
+        with patch("src.trading_bot.Config") as cfg, patch(
+            "src.order_executor.Config", cfg
+        ):
             cfg.PAPER_TRADING = True
             cfg.AUTO_EXECUTE = True
             cfg.MAX_POSITIONS = 3
@@ -102,6 +105,14 @@ def make_bot(balance: float = 1000.0):
             )
             bot.api.get_current_price = AsyncMock(return_value=50000.0)
             return bot
+
+
+@contextmanager
+def _patch_cfg(cfg):
+    """Patch Config in both trading_bot and order_executor (execution moved there)."""
+    with patch("src.trading_bot.Config", cfg):
+        with patch("src.order_executor.Config", cfg):
+            yield cfg
 
 
 def _buy_rec(sym: str = "BTC/USDT", entry: float = 50000.0, conf: float = 0.85) -> dict:
@@ -172,14 +183,14 @@ class TestExecuteTopRec:
     @pytest.mark.asyncio
     async def test_empty_filtered_does_nothing(self):
         bot = make_bot()
-        with patch("src.trading_bot.Config", _make_cfg(auto=True)):
+        with _patch_cfg(_make_cfg(auto=True)):
             await bot._execute_top_rec([], {})
         assert bot._monitored == {}
 
     @pytest.mark.asyncio
     async def test_auto_execute_false_skips(self):
         bot = make_bot()
-        with patch("src.trading_bot.Config", _make_cfg(auto=False)):
+        with _patch_cfg(_make_cfg(auto=False)):
             await bot._execute_top_rec([_buy_rec()], {})
         assert bot._monitored == {}
 
@@ -187,7 +198,7 @@ class TestExecuteTopRec:
     async def test_hold_action_skipped(self):
         bot = make_bot()
         rec = {**_buy_rec(), "action": "hold"}
-        with patch("src.trading_bot.Config", _make_cfg(auto=True)):
+        with _patch_cfg(_make_cfg(auto=True)):
             await bot._execute_top_rec([rec], {})
         assert bot._monitored == {}
 
@@ -195,7 +206,7 @@ class TestExecuteTopRec:
     async def test_max_positions_guard(self):
         bot = make_bot()
         bot._monitored = {"A/USDT": {}, "B/USDT": {}, "C/USDT": {}}
-        with patch("src.trading_bot.Config", _make_cfg(auto=True, max_pos=3)):
+        with _patch_cfg(_make_cfg(auto=True, max_pos=3)):
             await bot._execute_top_rec([_buy_rec(sym="D/USDT")], {})
         assert "D/USDT" not in bot._monitored
 
@@ -203,7 +214,7 @@ class TestExecuteTopRec:
     async def test_duplicate_symbol_guard(self):
         bot = make_bot()
         bot._monitored["BTC/USDT"] = {"qty": 0.01, "side": "buy"}
-        with patch("src.trading_bot.Config", _make_cfg(auto=True)):
+        with _patch_cfg(_make_cfg(auto=True)):
             await bot._execute_top_rec([_buy_rec(sym="BTC/USDT")], {})
         assert len(bot._monitored) == 1
 
@@ -211,18 +222,13 @@ class TestExecuteTopRec:
     async def test_paper_buy_opens_position(self):
         bot = make_bot(balance=1000.0)
         rec = _buy_rec(sym="BTC/USDT", entry=50000.0)
-        cfg = _make_cfg(auto=True)
 
-        with patch("src.trading_bot.Config", cfg):
+        with _patch_cfg(_make_cfg(auto=True)):
             with patch(
                 "src.trade_history.get_backtest_stats",
-                return_value={
-                    "win_rate": 0.55,
-                    "total_trades": 100,
-                    "ev": 3.0,
-                },
+                return_value={"win_rate": 0.55, "total_trades": 100, "ev": 3.0},
             ):
-                with patch("src.trading_bot._ac_impact", return_value=0.0):
+                with patch("src.order_executor._ac_impact", return_value=0.0):
                     await bot._execute_top_rec([rec], {"BTC/USDT": _df(50000.0)})
 
         assert "BTC/USDT" in bot._monitored
@@ -236,16 +242,12 @@ class TestExecuteTopRec:
         bot.telegram.ask_confirm = AsyncMock(return_value=False)
         rec = _buy_rec(sym="ETH/USDT", entry=3000.0)
 
-        with patch("src.trading_bot.Config", _make_cfg(auto=True)):
+        with _patch_cfg(_make_cfg(auto=True)):
             with patch(
                 "src.trade_history.get_backtest_stats",
-                return_value={
-                    "win_rate": 0.5,
-                    "total_trades": 0,
-                    "ev": 0.0,
-                },
+                return_value={"win_rate": 0.5, "total_trades": 0, "ev": 0.0},
             ):
-                with patch("src.trading_bot._ac_impact", return_value=0.0):
+                with patch("src.order_executor._ac_impact", return_value=0.0):
                     await bot._execute_top_rec([rec], {})
 
         assert "ETH/USDT" not in bot._monitored
@@ -256,16 +258,12 @@ class TestExecuteTopRec:
         assert bot._last_trade_at is None
         rec = _buy_rec(sym="BTC/USDT", entry=50000.0)
 
-        with patch("src.trading_bot.Config", _make_cfg(auto=True)):
+        with _patch_cfg(_make_cfg(auto=True)):
             with patch(
                 "src.trade_history.get_backtest_stats",
-                return_value={
-                    "win_rate": 0.55,
-                    "total_trades": 100,
-                    "ev": 3.0,
-                },
+                return_value={"win_rate": 0.55, "total_trades": 100, "ev": 3.0},
             ):
-                with patch("src.trading_bot._ac_impact", return_value=0.0):
+                with patch("src.order_executor._ac_impact", return_value=0.0):
                     await bot._execute_top_rec([rec], {"BTC/USDT": _df()})
 
         assert bot._last_trade_at is not None

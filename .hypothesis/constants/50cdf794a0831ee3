@@ -1,0 +1,4 @@
+# file: /Users/deuterium/Dev/BitbotBY/src/logger.py
+# hypothesis_version: 6.141.1
+
+[1024, '%Y-%m-%d %H:%M:%S', '***', 'INFO', 'Z', 'args', 'created', 'exc_info', 'exc_text', 'filename', 'funcName', 'level', 'levelname', 'levelno', 'lineno', 'logger', 'logs', 'logs/trading.log', 'message', 'module', 'msecs', 'msg', 'name', 'pathname', 'process', 'processName', 'relativeCreated', 'stack_info', 'taskName', 'thread', 'threadName', 'time', 'utf-8']

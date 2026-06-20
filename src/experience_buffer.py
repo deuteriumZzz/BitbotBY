@@ -109,7 +109,12 @@ def load(path: str = _DEFAULT_PATH) -> list:
 
 
 def count(path: str = _DEFAULT_PATH) -> int:
-    """Возвращает количество сохранённых опытов."""
+    """
+    Возвращает количество сохранённых опытов.
+
+    :param path: Путь к файлу JSONL.
+    :return: Количество непустых строк в файле.
+    """
     if not os.path.exists(path):
         return 0
     try:

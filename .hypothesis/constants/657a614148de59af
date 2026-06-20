@@ -1,0 +1,4 @@
+# file: /Users/deuterium/Dev/BitbotBY/src/signal_combiner.py
+# hypothesis_version: 6.141.1
+
+[0.02, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 1.5, 3.0, 'action', 'ai', 'atr', 'buy', 'confidence', 'dqn', 'entry', 'hold', 'hybrid', 'local', 'price', 'ranging', 'reasoning', 'sac', 'stop_loss', 'strategy', 'symbol', 'take_profit', 'trending_down', 'trending_up', 'unknown']

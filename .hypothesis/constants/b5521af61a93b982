@@ -1,0 +1,4 @@
+# file: /Users/deuterium/Dev/BitbotBY/src/redis_client.py
+# hypothesis_version: 6.141.1
+
+[6379, 'Loaded model: %s', 'Lock acquired: %s', 'Lock released: %s', 'REDIS_HOST', 'REDIS_PASSWORD', 'REDIS_PORT', 'Saved model: %s', 'Signal published', 'host', 'performance_stats', 'port', 'redis', 'split', 'tolist', 'trading_signals', 'utf-8']

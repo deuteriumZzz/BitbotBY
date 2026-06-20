@@ -1,0 +1,4 @@
+# file: /Users/deuterium/Dev/BitbotBY/src/bybit_api.py
+# hypothesis_version: 6.141.1
+
+[0.0, 100, '1h', 'amount', 'api', 'apiKey', 'close', 'contracts', 'defaultType', 'enableRateLimit', 'fetch_positions: %s', 'filled', 'high', 'id', 'last', 'limit', 'limits', 'low', 'min', 'ms', 'open', 'options', 'price', 'private', 'public', 'secret', 'side', 'spot', 'status', 'stopPrice', 'stop_market', 'symbol', 'timestamp', 'triggerPrice', 'type', 'urls', 'volume', 'Кэш Redis: %s', 'Ордер создан: %s']

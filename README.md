@@ -250,8 +250,6 @@ Live:     71% win  (12 сделок)   EV: +0.98%
 Auto-execute in 60s
 ```
 
----
-
 ## Архитектура
 
 ```
@@ -348,9 +346,9 @@ BYBIT_TESTNET_API_KEY=xxx BYBIT_TESTNET_API_SECRET=yyy \
   pytest tests/integration/ -m integration -v
 ```
 
-**154 unit-теста** — индикаторы, стратегии, риск-менеджмент, портфель, CVaR, Kelly, Almgren-Chriss, корреляция, SAC-инференс, история сделок, конфиг, secret filter, AI парсинг, regime cache, reconciliation, e2e торговый цикл.  
+**593 unit-теста** — индикаторы, стратегии, риск-менеджмент, портфель, CVaR, Kelly, Almgren-Chriss, корреляция, SAC-инференс, история сделок, конфиг, secret filter, AI парсинг, regime cache, reconciliation, e2e торговый цикл, OrderExecutor, PositionMonitor, BybitAPI, дашборд.  
 **12 integration-тестов** — подключение к Bybit testnet, OHLCV, баланс, create/cancel ордер, round_quantity.  
-CI падает при coverage < 50% (live-сервисы исключены из измерения).
+Coverage: **93%**. CI падает при coverage < 50% (live-сервисы исключены из измерения).
 
 ---
 

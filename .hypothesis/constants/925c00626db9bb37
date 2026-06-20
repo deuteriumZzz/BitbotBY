@@ -1,0 +1,4 @@
+# file: /Users/deuterium/Dev/BitbotBY/src/market_impact.py
+# hypothesis_version: 6.141.1
+
+[1e-06, 0.0002, 0.02, 0.1, 0.5, 288, 480, 1440, 10000, '15m', '1d', '1h', '1m', '2h', '30m', '3m', '4h', '5m', 'close', 'volume']

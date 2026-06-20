@@ -50,6 +50,8 @@ class AlphaResult:
     @property
     def is_significant(self) -> bool:
         """
+        Возвращает True если альфа статистически значима.
+
         p-value bootstrap Sharpe < 5%.
         Если scipy доступен — Wilcoxon тоже должен пройти.
         Если scipy недоступен (wilcoxon_pvalue=None), решает только bootstrap.
@@ -62,6 +64,7 @@ class AlphaResult:
 
     @property
     def verdict(self) -> str:
+        """Возвращает текстовый вердикт о значимости альфы стратегии."""
         if self.n_trades < 10:
             return "INSUFFICIENT DATA"
         if self.is_significant:
@@ -71,6 +74,7 @@ class AlphaResult:
         return "NOT SIGNIFICANT"
 
     def summary(self) -> str:
+        """Возвращает форматированную строку с результатами тестов."""
         wp = (
             f"{self.wilcoxon_pvalue:.4f}" if self.wilcoxon_pvalue is not None else "n/a"
         )
@@ -97,6 +101,8 @@ class AlphaTester:
         """
         Ресемплирует доходности n_bootstrap раз и строит распределение Sharpe.
 
+        :param returns: Массив доходностей сделок.
+        :param n_bootstrap: Количество bootstrap-итераций.
         :return: (sharpe, ci_low, ci_high, p_value_sharpe_leq_0)
         """
         n = len(returns)
@@ -122,6 +128,7 @@ class AlphaTester:
         """
         Критерий знаковых рангов Вилкоксона: H₀ = доходности симметричны вокруг нуля.
 
+        :param returns: Массив доходностей сделок.
         :return: (statistic, p_value) или (None, None) если scipy недоступен
                  или слишком мало ненулевых наблюдений.
         """

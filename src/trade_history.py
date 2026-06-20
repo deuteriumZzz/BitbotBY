@@ -1,7 +1,8 @@
 """
-История сделок на основе SQLite.
-Хранит открытые/закрытые сделки и вычисляет win rate и ожидаемую ценность (EV).
-Путь к БД: data/trades.db
+SQLite-backed история сделок: открытие/закрытие, win-rate и EV.
+
+Сохраняет все сделки в локальную SQLite БД с WAL-режимом для безопасного
+параллельного чтения дашбордом. Поддерживает расчёт win rate, EV и сводную статистику.
 """
 
 import asyncio
@@ -17,9 +18,13 @@ _BACKTEST_JSON = os.path.join("data", "backtest_results.json")
 
 def get_backtest_stats(strategy: str) -> Dict:
     """
-    Читает статистику по стратегии из data/backtest_results.json.
-    Возвращает нули если файл не найден или стратегия отсутствует.
+    Возвращает статистику бэктеста для стратегии из data/backtest_results.json.
+
+    Возвращает нулевой словарь если файл отсутствует или стратегия не найдена.
     Запустите backtest.py один раз для генерации файла.
+
+    :param strategy: Название стратегии.
+    :return: Словарь с win_rate, total_trades, ev, total_return_pct.
     """
     try:
         with open(_BACKTEST_JSON, encoding="utf-8") as f:
@@ -66,9 +71,18 @@ CREATE TABLE IF NOT EXISTS trades (
 
 
 class TradeHistory:
-    """Сохраняет сделки в SQLite и вычисляет win rate и ожидаемую ценность (EV)."""
+    """
+    Хранилище сделок на SQLite с расчётом win rate и EV (expected value).
+
+    WAL-режим позволяет дашборду читать данные одновременно с записью бота.
+    """
 
     def __init__(self, db_path: str = _DB_PATH):
+        """
+        Инициализирует хранилище, создаёт таблицу если не существует.
+
+        :param db_path: Путь к файлу SQLite БД.
+        """
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
         # WAL mode allows concurrent readers (dashboard) alongside the writer (bot)
@@ -89,7 +103,18 @@ class TradeHistory:
         confidence: float,
         commission: float = 0.0,
     ) -> int:
-        """Записывает открытую сделку в БД; возвращает её id."""
+        """
+        Записывает открытие сделки в БД.
+
+        :param symbol: Символ торговой пары.
+        :param strategy: Название стратегии.
+        :param action: Направление ("buy" или "sell").
+        :param entry_price: Цена входа.
+        :param quantity: Количество актива.
+        :param confidence: Уверенность сигнала [0, 1].
+        :param commission: Комиссия при открытии.
+        :return: ID новой записи в таблице.
+        """
         async with self._lock:
             cur = self._conn.execute(
                 """
@@ -119,7 +144,13 @@ class TradeHistory:
         exit_price: float,
         commission: float = 0.0,
     ) -> None:
-        """Закрывает сделку и вычисляет PnL."""
+        """
+        Закрывает сделку и рассчитывает PnL из данных входа.
+
+        :param trade_id: ID записи в таблице.
+        :param exit_price: Цена выхода.
+        :param commission: Комиссия при закрытии.
+        """
         async with self._lock:
             row = self._conn.execute(
                 "SELECT action, entry_price, quantity, "
@@ -127,7 +158,7 @@ class TradeHistory:
                 (trade_id,),
             ).fetchone()
             if row is None:
-                logger.warning(f"trade_id={trade_id} not found")
+                logger.warning("trade_id=%s not found", trade_id)
                 return
             action, entry_price, qty, entry_comm = row
             total_comm = entry_comm + commission
@@ -162,7 +193,16 @@ class TradeHistory:
         strategy: Optional[str] = None,
         lookback: int = 50,
     ) -> float:
-        """Доля прибыльных закрытых сделок (0.0–1.0)."""
+        """
+        Возвращает долю прибыльных закрытых сделок [0.0–1.0].
+
+        По умолчанию 0.5 при отсутствии данных.
+
+        :param strategy: Фильтр по названию стратегии (None = все стратегии).
+        :param lookback: Количество последних сделок для расчёта.
+        :return: Win rate от 0.0 до 1.0.
+
+        """
         where = (
             "WHERE status='closed' AND strategy=?"
             if strategy
@@ -194,8 +234,11 @@ class TradeHistory:
         lookback: int = 50,
     ) -> float:
         """
-        Ожидаемая ценность (EV) как доля:
-        win_rate × avg_win_pct − loss_rate × |avg_loss_pct|
+        Возвращает EV как долю: win_rate × avg_win_pct − loss_rate × |avg_loss_pct|.
+
+        :param strategy: Фильтр по названию стратегии (None = все стратегии).
+        :param lookback: Количество последних сделок для расчёта.
+        :return: Expected value (может быть отрицательным).
         """
         where = (
             "WHERE status='closed' AND strategy=?"
@@ -229,7 +272,13 @@ class TradeHistory:
         strategy: Optional[str] = None,
         lookback: int = 50,
     ) -> int:
-        """Количество закрытых сделок в выборке для расчёта win rate."""
+        """
+        Возвращает количество закрытых сделок в окне lookback.
+
+        :param strategy: Фильтр по названию стратегии.
+        :param lookback: Максимальное количество учитываемых сделок.
+        :return: Количество закрытых сделок.
+        """
         where = (
             "WHERE status='closed' AND strategy=?"
             if strategy
@@ -246,7 +295,11 @@ class TradeHistory:
         return row[0] if row else 0
 
     async def get_summary(self) -> Dict:
-        """Сводная статистика по всем сделкам для отображения на дашборде."""
+        """
+        Возвращает агрегированную статистику по всем сделкам для дашборда.
+
+        :return: Словарь с total_trades, closed_trades, win_rate, total_pnl, total_commissions.
+        """
         async with self._lock:
             row = self._conn.execute(
                 """

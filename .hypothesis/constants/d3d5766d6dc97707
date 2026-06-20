@@ -1,0 +1,4 @@
+# file: /Users/deuterium/Dev/BitbotBY/src/constants.py
+# hypothesis_version: 6.141.1
+
+[300, 3600, 86400, 604800]

@@ -1,0 +1,4 @@
+# file: /Users/deuterium/Dev/BitbotBY/src/health_server.py
+# hypothesis_version: 6.141.1
+
+[0.0, 8080, '/health', '/metrics', '0.0.0.0', 'AI-вызовов за сутки', 'BitbotBY health', 'Paper-баланс USDT', 'TradingBot', 'TradingBot | None', '_ai_scorer', 'ai_calls_today', 'ai_scorer', 'bot_ai_calls_today', 'bot_cycles_total', 'bot_open_positions', 'bot_total_pnl_usdt', 'bot_win_rate', 'closed_trades', 'consecutive_losses', 'current_regime', 'is_running', 'none', 'ok', 'open_positions', 'paper_balance_usdt', 'status', 'stopped', 'symbols', 'timestamp', 'total_pnl', 'total_pnl_usdt', 'unknown', 'warning', 'win_rate', 'Открытых позиций']

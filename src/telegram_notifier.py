@@ -36,6 +36,7 @@ _CONFIRM_TIMEOUT = 60  # seconds
 class TelegramNotifier:
     """
     Отправляет Telegram-уведомления и ожидает подтверждения сделки.
+
     Работает в деградированном режиме если токен отсутствует
     или библиотека не установлена.
     """
@@ -78,6 +79,12 @@ class TelegramNotifier:
         update: Update,
         context: ContextTypes.DEFAULT_TYPE,
     ) -> None:
+        """
+        Обрабатывает нажатие inline-кнопки подтверждения/отклонения сделки.
+
+        Проверяет авторизацию пользователя по chat_id и устанавливает
+        решение в словаре _decisions.
+        """
         query = update.callback_query
         # C4: only the configured chat owner can approve/reject trades
         if str(query.from_user.id) != str(self._chat_id):
@@ -103,9 +110,20 @@ class TelegramNotifier:
         timeout: int = _CONFIRM_TIMEOUT,
     ) -> bool:
         """
-        Отправляет предложение сделки; возвращает True если подтверждено
-        или истёк таймаут. Показывает win rate из бэктеста и лайв отдельно.
+        Отправляет предложение сделки; возвращает True если подтверждено или истёк таймаут.
+
+        Показывает win rate из бэктеста и лайв отдельно.
         Возвращает True немедленно если Telegram отключён.
+
+        :param rec: Рекомендация с ключами symbol, action, confidence, entry, sl, tp.
+        :param live_win_rate: Win rate по живым сделкам.
+        :param live_trades: Количество живых сделок.
+        :param live_ev: Expected value по живым сделкам.
+        :param bt_win_rate: Win rate по бэктесту.
+        :param bt_trades: Количество сделок в бэктесте.
+        :param bt_ev: Expected value по бэктесту.
+        :param timeout: Таймаут ожидания в секундах.
+        :return: True если сделка подтверждена или автоподтверждена по таймауту.
         """
         if not self._enabled:
             return True
@@ -179,7 +197,7 @@ class TelegramNotifier:
             try:
                 await asyncio.wait_for(event.wait(), timeout=timeout)
             except asyncio.TimeoutError:
-                logger.info(f"Telegram timeout for {symbol} " "-> auto-confirm")
+                logger.info("Telegram timeout for %s -> auto-confirm", symbol)
                 await bot.edit_message_reply_markup(
                     chat_id=self._chat_id,
                     message_id=mid,
@@ -191,11 +209,15 @@ class TelegramNotifier:
             return decision
 
         except Exception as e:
-            logger.error(f"Telegram error: {e}")
+            logger.error("Telegram error: %s", e)
             return False  # C3: fail-closed — skip trade on Telegram errors
 
     async def notify(self, text: str) -> None:
-        """Отправляет текстовое уведомление в Telegram-чат."""
+        """
+        Отправляет текстовое уведомление в Telegram-чат.
+
+        :param text: Текст уведомления (поддерживает Markdown).
+        """
         if not self._enabled:
             return
         try:
@@ -205,4 +227,4 @@ class TelegramNotifier:
                 parse_mode="Markdown",
             )
         except Exception as e:
-            logger.error(f"Telegram notify error: {e}")
+            logger.error("Telegram notify error: %s", e)

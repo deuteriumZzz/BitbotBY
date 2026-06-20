@@ -300,13 +300,17 @@ async def load_data(
 
 
 def _sharpe(returns: List[float]) -> float:
+    """Per-trade Sharpe ratio (not annualised — holding periods vary per trade)."""
     if len(returns) < 2:
         return 0.0
     mean_r = statistics.mean(returns)
     std_r = statistics.stdev(returns)
     if std_r == 0.0:
         return 0.0
-    return (mean_r / std_r) * (252**0.5)
+    # Do NOT multiply by sqrt(252): that factor assumes daily returns.
+    # These are per-trade P&L% with variable holding time — annualising by 252
+    # overstates Sharpe ~15x for 15m strategies.
+    return mean_r / std_r
 
 
 # ── Core walk-forward engine ──────────────────────────────────────────────
@@ -355,7 +359,12 @@ def run_strategy(
             confidence = float(signal.get("confidence", 0.0))
 
             if action in ("buy", "sell") and confidence >= min_confidence:
-                mid = float(window["close"].iloc[-1])
+                # Enter on the OPEN of the next candle, not the close of the
+                # signal candle — avoids look-ahead bias (signal fires at bar
+                # close; earliest realistic fill is bar i+1 open).
+                if i + 1 >= n:
+                    continue  # no next bar; skip signal at end of data
+                next_open = float(df.iloc[i + 1]["open"])
                 # Kelly criterion after 10 closed trades (half-Kelly, capped 20%)
                 n_closed = len(closed_trades)
                 if n_closed >= 10:
@@ -369,9 +378,9 @@ def run_strategy(
                 # Almgren-Chriss adaptive impact: adapts to order size & volatility
                 impact = _ac_impact(window, position_usdt)
                 if action == "buy":
-                    entry_price = mid * (1.0 + impact)
+                    entry_price = next_open * (1.0 + impact)
                 else:
-                    entry_price = mid * (1.0 - impact)
+                    entry_price = next_open * (1.0 - impact)
                 atr_val = (
                     float(window["atr"].iloc[-1]) if "atr" in window.columns else 0.0
                 )

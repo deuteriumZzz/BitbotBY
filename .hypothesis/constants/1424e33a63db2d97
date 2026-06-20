@@ -1,0 +1,4 @@
+# file: /Users/deuterium/Dev/BitbotBY/src/portfolio_optimizer.py
+# hypothesis_version: 6.141.1
+
+[-1.0, 0.0, 1e-12, 1e-09, 0.05, 0.6, 1.0, 500, 'Portfolio [%s]: %s', 'SLSQP', 'cvar', 'eq', 'ftol', 'fun', 'highs', 'markowitz', 'maxiter', 'type']

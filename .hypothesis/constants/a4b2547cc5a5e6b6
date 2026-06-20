@@ -1,0 +1,4 @@
+# file: /Users/deuterium/Dev/BitbotBY/src/dashboard/routers/ops.py
+# hypothesis_version: 6.141.1
+
+[403, '*', '/health', '/metrics', '/webhook/alerts', 'CRITICAL', 'Forbidden', 'Markdown', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID', 'WARNING', 'X-Webhook-Secret', '[', '_', '`', 'alertname', 'alerts', 'annotations', 'balance', 'chat_id', 'critical', 'description', 'error', 'firing', 'forwarded', 'labels', 'no_alerts', 'ok', 'parse_mode', 'portfolio_state', 'severity', 'status', 'summary', 'text', 'total_pnl', 'total_trades', 'unknown', 'warning', 'win_rate', '✅', '🔴']

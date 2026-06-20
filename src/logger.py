@@ -2,27 +2,40 @@
 Настройка структурированного логирования для торгового бота.
 
 JSON-формат в production, человекочитаемый формат в development.
+Поддерживает фильтрацию API-ключей через _SecretFilter.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import logging.handlers
 import os
 import sys
 from datetime import datetime
 
 
 class _SecretFilter(logging.Filter):
-    """Masks API key values in log records before they are emitted."""
+    """Маскирует значения API-ключей в лог-записях перед отправкой."""
 
     _secrets: list = []
 
     @classmethod
     def register(cls, *values: str) -> None:
+        """
+        Регистрирует секретные значения для маскировки в логах.
+
+        :param values: Строки длиннее 8 символов, которые нужно скрыть.
+        """
         cls._secrets = [v for v in values if v and len(v) > 8]
 
     def filter(self, record: logging.LogRecord) -> bool:
+        """
+        Заменяет секретные значения на *** в сообщении лога.
+
+        :param record: Запись лога.
+        :return: Всегда True (запись разрешена, но может быть изменена).
+        """
         if self._secrets:
             msg = record.getMessage()
             for secret in self._secrets:
@@ -120,7 +133,13 @@ def setup_logging(
     root.addHandler(handler)
 
     os.makedirs("logs", exist_ok=True)
-    fh = logging.FileHandler("logs/trading.log", encoding="utf-8")
+    # Rotate at 10 MB, keep 5 backups → max ~50 MB on disk.
+    fh = logging.handlers.RotatingFileHandler(
+        "logs/trading.log",
+        maxBytes=10 * 1024 * 1024,
+        backupCount=5,
+        encoding="utf-8",
+    )
     fh.setFormatter(JSONFormatter())
     fh.addFilter(secret_filter)
     root.addHandler(fh)

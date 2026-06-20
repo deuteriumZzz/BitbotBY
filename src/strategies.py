@@ -1,3 +1,11 @@
+"""
+Торговые стратегии и оркестратор стратегий.
+
+Содержит базовый класс BaseStrategy, конкретные реализации (EMA Crossover,
+RSI Momentum, MACD, Bollinger Bands, Scalping, Swing, Breakout, Mean Reversion,
+Trend Following), реестр STRATEGY_REGISTRY и класс TradingStrategy-оркестратор.
+"""
+
 import logging
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Type
@@ -10,7 +18,12 @@ logger = logging.getLogger(__name__)
 
 
 class BaseStrategy(ABC):
-    """Базовый класс для всех торговых стратегий."""
+    """
+    Базовый абстрактный класс для всех торговых стратегий.
+
+    Определяет интерфейс generate_signal() и вспомогательные методы
+    для безопасного доступа к значениям DataFrame.
+    """
 
     name: str = ""
     description: str = ""
@@ -20,9 +33,19 @@ class BaseStrategy(ABC):
 
     @abstractmethod
     def generate_signal(self, data: pd.DataFrame) -> Dict[str, Any]:
-        pass
+        """
+        Генерирует торговый сигнал на основе рыночных данных.
+
+        :param data: DataFrame с OHLCV и техническими индикаторами.
+        :return: Словарь с ключами action, confidence и опционально price.
+        """
 
     def get_info(self) -> Dict[str, Any]:
+        """
+        Возвращает метаданные стратегии.
+
+        :return: Словарь с name, description, recommended_timeframes, risk_level, market_type.
+        """
         return {
             "name": self.name,
             "description": self.description,
@@ -32,18 +55,21 @@ class BaseStrategy(ABC):
         }
 
     def _last(self, data: pd.DataFrame, col: str, default: float = 0.0) -> float:
+        """Возвращает последнее значение колонки или default."""
         if col in data.columns and len(data) > 0:
             val = data[col].iloc[-1]
             return float(val) if pd.notna(val) else default
         return default
 
     def _prev(self, data: pd.DataFrame, col: str, default: float = 0.0) -> float:
+        """Возвращает предпоследнее значение колонки или default."""
         if col in data.columns and len(data) > 1:
             val = data[col].iloc[-2]
             return float(val) if pd.notna(val) else default
         return default
 
     def _prev2(self, data: pd.DataFrame, col: str, default: float = 0.0) -> float:
+        """Возвращает третье с конца значение колонки или default."""
         if col in data.columns and len(data) > 2:
             val = data[col].iloc[-3]
             return float(val) if pd.notna(val) else default
@@ -56,6 +82,13 @@ class BaseStrategy(ABC):
 
 
 class EMACrossoverStrategy(BaseStrategy):
+    """
+    Стратегия на пересечении EMA 12 и EMA 26.
+
+    Покупка при бычьем кроссовере, продажа при медвежьем.
+    Подходит для трендовых рынков.
+    """
+
     name = "ema_crossover"
     description = (
         "Торговля на пересечении EMA 12 и EMA 26. "
@@ -67,6 +100,12 @@ class EMACrossoverStrategy(BaseStrategy):
     market_type = "trending"
 
     def generate_signal(self, data: pd.DataFrame) -> Dict[str, Any]:
+        """
+        Генерирует сигнал на основе пересечения EMA 12/26.
+
+        :param data: DataFrame с индикаторами ema_short, ema_long.
+        :return: Сигнал с action и confidence.
+        """
         close = self._last(data, "close")
         ema_s = self._last(data, "ema_short", close)
         ema_l = self._last(data, "ema_long", close)
@@ -97,6 +136,14 @@ class EMACrossoverStrategy(BaseStrategy):
 
 
 class RSIMomentumStrategy(BaseStrategy):
+    """
+    Стратегия RSI Momentum на перепроданности/перекупленности.
+
+    Покупка при RSI < 30 (перепроданность),
+    продажа при RSI > 70 (перекупленность).
+    Оптимальна при боковом движении цены.
+    """
+
     name = "rsi_momentum"
     description = (
         "Покупка при RSI < 30 (перепроданность), "
@@ -108,6 +155,12 @@ class RSIMomentumStrategy(BaseStrategy):
     market_type = "ranging"
 
     def generate_signal(self, data: pd.DataFrame) -> Dict[str, Any]:
+        """
+        Генерирует сигнал на основе значения RSI.
+
+        :param data: DataFrame с индикатором rsi.
+        :return: Сигнал с action и confidence.
+        """
         close = self._last(data, "close")
         rsi = self._last(data, "rsi", 50)
 
@@ -115,14 +168,11 @@ class RSIMomentumStrategy(BaseStrategy):
             return {"action": "buy", "confidence": 0.90, "price": close}
         if rsi < 30:
             return {"action": "buy", "confidence": 0.78, "price": close}
-        if rsi < 40:
-            return {"action": "buy", "confidence": 0.57, "price": close}
+        # RSI 30-70 is neutral territory — no directional edge, skip.
         if rsi > 75:
             return {"action": "sell", "confidence": 0.90, "price": close}
         if rsi > 70:
             return {"action": "sell", "confidence": 0.78, "price": close}
-        if rsi > 60:
-            return {"action": "sell", "confidence": 0.57, "price": close}
         return {"action": "hold", "confidence": 0.50}
 
 
@@ -132,6 +182,13 @@ class RSIMomentumStrategy(BaseStrategy):
 
 
 class MACDCrossoverStrategy(BaseStrategy):
+    """
+    Стратегия на пересечении MACD и сигнальной линии.
+
+    Покупка при бычьем кроссовере MACD/Signal выше нуля,
+    продажа при медвежьем.
+    """
+
     name = "macd_crossover"
     description = (
         "Покупка при бычьем кроссовере MACD/Signal выше нуля, "
@@ -143,6 +200,12 @@ class MACDCrossoverStrategy(BaseStrategy):
     market_type = "trending"
 
     def generate_signal(self, data: pd.DataFrame) -> Dict[str, Any]:
+        """
+        Генерирует сигнал на основе пересечения MACD/Signal.
+
+        :param data: DataFrame с индикаторами macd, macd_signal.
+        :return: Сигнал с action и confidence.
+        """
         close = self._last(data, "close")
         macd = self._last(data, "macd")
         sig = self._last(data, "macd_signal")
@@ -171,6 +234,13 @@ class MACDCrossoverStrategy(BaseStrategy):
 
 
 class BollingerBandsStrategy(BaseStrategy):
+    """
+    Стратегия Bollinger Bands с подтверждением RSI.
+
+    Покупка при касании нижней BB + RSI < 40,
+    продажа при касании верхней BB + RSI > 60.
+    """
+
     name = "bollinger_bands"
     description = (
         "Покупка при касании нижней BB + RSI < 40, "
@@ -182,6 +252,12 @@ class BollingerBandsStrategy(BaseStrategy):
     market_type = "volatile"
 
     def generate_signal(self, data: pd.DataFrame) -> Dict[str, Any]:
+        """
+        Генерирует сигнал на основе положения цены относительно полос Боллинджера.
+
+        :param data: DataFrame с индикаторами bb_upper, bb_lower, rsi.
+        :return: Сигнал с action и confidence.
+        """
         close = self._last(data, "close")
         bb_u = self._last(data, "bb_upper", close * 1.02)
         bb_l = self._last(data, "bb_lower", close * 0.98)
@@ -213,6 +289,13 @@ class BollingerBandsStrategy(BaseStrategy):
 
 
 class ScalpingStrategy(BaseStrategy):
+    """
+    Стратегия скальпинга с использованием RSI, EMA и объёма.
+
+    Работает на 1m–15m, требует высокого volume_ratio (>1.5).
+    Высокий риск, высокая частота сделок.
+    """
+
     name = "scalping"
     description = (
         "Микросделки с использованием RSI, EMA и объёма. "
@@ -224,6 +307,12 @@ class ScalpingStrategy(BaseStrategy):
     market_type = "volatile"
 
     def generate_signal(self, data: pd.DataFrame) -> Dict[str, Any]:
+        """
+        Генерирует скальпинговый сигнал на основе RSI, EMA и объёма.
+
+        :param data: DataFrame с индикаторами rsi, ema_short, volume_ratio, macd.
+        :return: Сигнал с action и confidence.
+        """
         close = self._last(data, "close")
         rsi = self._last(data, "rsi", 50)
         ema_s = self._last(data, "ema_short", close)
@@ -248,6 +337,13 @@ class ScalpingStrategy(BaseStrategy):
 
 
 class SwingTradingStrategy(BaseStrategy):
+    """
+    Стратегия свинг-трейдинга на поворотных точках тренда.
+
+    Требует подтверждения от EMA, MACD, RSI и средней линии Боллинджера.
+    Лучший таймфрейм: 4h–1d.
+    """
+
     name = "swing_trading"
     description = (
         "Открытие позиций на поворотных точках тренда. "
@@ -259,6 +355,12 @@ class SwingTradingStrategy(BaseStrategy):
     market_type = "trending"
 
     def generate_signal(self, data: pd.DataFrame) -> Dict[str, Any]:
+        """
+        Генерирует свинг-сигнал с множественным подтверждением.
+
+        :param data: DataFrame с индикаторами ema_short, ema_long, macd, rsi, bb_middle.
+        :return: Сигнал с action и confidence.
+        """
         close = self._last(data, "close")
         rsi = self._last(data, "rsi", 50)
         ema_s = self._last(data, "ema_short", close)
@@ -289,6 +391,13 @@ class SwingTradingStrategy(BaseStrategy):
 
 
 class BreakoutStrategy(BaseStrategy):
+    """
+    Стратегия прорыва уровней поддержки/сопротивления.
+
+    Покупка при пробое 20-свечного максимума с высоким объёмом,
+    продажа при пробое минимума.
+    """
+
     name = "breakout"
     description = (
         "Покупка при пробое 20-свечного максимума с высоким объёмом, "
@@ -300,6 +409,12 @@ class BreakoutStrategy(BaseStrategy):
     market_type = "volatile"
 
     def generate_signal(self, data: pd.DataFrame) -> Dict[str, Any]:
+        """
+        Генерирует сигнал прорыва исторических уровней.
+
+        :param data: DataFrame с OHLCV и volume_ratio.
+        :return: Сигнал с action и confidence.
+        """
         if len(data) < 21:
             return {"action": "hold", "confidence": 0.50}
 
@@ -327,6 +442,13 @@ class BreakoutStrategy(BaseStrategy):
 
 
 class MeanReversionStrategy(BaseStrategy):
+    """
+    Стратегия возврата к среднему по Bollinger Bands.
+
+    Требует экстремального отклонения (BB + RSI + momentum).
+    Работает на боковых рынках с чёткими уровнями.
+    """
+
     name = "mean_reversion"
     description = (
         "Торговля на возврате цены к средней линии Боллинджера. "
@@ -338,6 +460,12 @@ class MeanReversionStrategy(BaseStrategy):
     market_type = "ranging"
 
     def generate_signal(self, data: pd.DataFrame) -> Dict[str, Any]:
+        """
+        Генерирует сигнал возврата к среднему.
+
+        :param data: DataFrame с индикаторами bb_upper, bb_lower, bb_middle, rsi, momentum.
+        :return: Сигнал с action и confidence.
+        """
         close = self._last(data, "close")
         rsi = self._last(data, "rsi", 50)
         bb_u = self._last(data, "bb_upper", close * 1.02)
@@ -348,13 +476,16 @@ class MeanReversionStrategy(BaseStrategy):
         extreme_low = close < bb_l and rsi < 30
         extreme_high = close > bb_u and rsi > 70
 
-        if extreme_low and mom < 0:
+        # Mean-reversion is strongest when momentum is already turning around:
+        # extreme_low + mom > 0 means price bouncing up from oversold → high confidence.
+        # extreme_low + mom < 0 means still falling → enter with lower confidence.
+        if extreme_low and mom > 0:
             return {"action": "buy", "confidence": 0.88, "price": close}
         if extreme_low:
             return {"action": "buy", "confidence": 0.72, "price": close}
         if close < bb_l:
             return {"action": "buy", "confidence": 0.62, "price": close}
-        if extreme_high and mom > 0:
+        if extreme_high and mom < 0:
             return {"action": "sell", "confidence": 0.88, "price": close}
         if extreme_high:
             return {"action": "sell", "confidence": 0.72, "price": close}
@@ -373,6 +504,13 @@ class MeanReversionStrategy(BaseStrategy):
 
 
 class TrendFollowingStrategy(BaseStrategy):
+    """
+    Консервативная стратегия следования тренду через SMA/EMA.
+
+    Открытие позиции только при подтверждении тренда:
+    SMA20 > SMA50, EMA12 > EMA26, цена выше SMA20.
+    """
+
     name = "trend_following"
     description = (
         "Открытие позиции только при подтверждении тренда: "
@@ -384,6 +522,12 @@ class TrendFollowingStrategy(BaseStrategy):
     market_type = "trending"
 
     def generate_signal(self, data: pd.DataFrame) -> Dict[str, Any]:
+        """
+        Генерирует сигнал следования тренду.
+
+        :param data: DataFrame с индикаторами ema_short, ema_long, sma_20, sma_50, rsi.
+        :return: Сигнал с action и confidence.
+        """
         close = self._last(data, "close")
         ema_s = self._last(data, "ema_short", close)
         ema_l = self._last(data, "ema_long", close)
@@ -428,7 +572,13 @@ def get_all_strategies() -> List[Dict[str, Any]]:
 
 
 def create_strategy(name: str) -> BaseStrategy:
-    """Создаёт экземпляр стратегии по имени."""
+    """
+    Создаёт экземпляр стратегии по имени.
+
+    :param name: Название стратегии из STRATEGY_REGISTRY.
+    :return: Экземпляр стратегии.
+    :raises ValueError: Если стратегия с таким именем не найдена.
+    """
     if name not in STRATEGY_REGISTRY:
         available = list(STRATEGY_REGISTRY.keys())
         raise ValueError(f"Неизвестная стратегия '{name}'. Доступные: {available}")
@@ -456,20 +606,31 @@ class TradingStrategy:
         self.logger = logging.getLogger(__name__)
 
     async def initialize(self):
+        """Инициализирует оркестратор и логирует информацию об активной стратегии."""
         self.logger.info(
-            f"Strategy initialized: {self.strategy_name} | "
-            f"risk={self.strategy.risk_level} | "
-            f"timeframes={self.strategy.recommended_timeframes}"
+            "Strategy initialized: %s | risk=%s | timeframes=%s",
+            self.strategy_name,
+            self.strategy.risk_level,
+            self.strategy.recommended_timeframes,
         )
 
     def switch_strategy(self, new_name: str):
-        """Переключает активную стратегию без перезапуска бота."""
+        """
+        Переключает активную стратегию без перезапуска бота.
+
+        :param new_name: Название новой стратегии.
+        """
         self.strategy = create_strategy(new_name)
         self.strategy_name = new_name
-        self.logger.info(f"Switched strategy → {new_name}")
+        self.logger.info("Switched strategy → %s", new_name)
 
     async def get_signal(self, data: pd.DataFrame) -> Dict[str, Any]:
-        """Генерирует торговый сигнал и сохраняет состояние в Redis."""
+        """
+        Генерирует торговый сигнал и сохраняет состояние в Redis.
+
+        :param data: DataFrame с OHLCV и индикаторами.
+        :return: Сигнал с ключами action, confidence и опционально price.
+        """
         signal = self.strategy.generate_signal(data)
 
         state = {

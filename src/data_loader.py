@@ -1,5 +1,8 @@
 """
 Загрузчик рыночных данных с пагинацией, кэшированием в CSV и расчётом индикаторов.
+
+Получает данные OHLCV из Bybit API через BybitAPI, кэширует их в Redis и CSV,
+стандартизирует названия колонок и рассчитывает технические индикаторы.
 """
 
 from __future__ import annotations
@@ -62,9 +65,7 @@ class DataLoader:
     """
 
     def __init__(self) -> None:
-        """
-        Инициализирует DataLoader с экземплярами RedisClient и BybitAPI.
-        """
+        """Инициализирует DataLoader с экземплярами RedisClient и BybitAPI."""
         self.redis = RedisClient()
         self.api = BybitAPI()
         self.logger = logging.getLogger(__name__)
@@ -95,10 +96,10 @@ class DataLoader:
         """
         try:
             data = await self.api.get_ohlcv(symbol, timeframe, limit)
-            self.logger.info(f"Сырые колонки: {data.columns.tolist()}")
-            self.logger.info(f"Размер данных: {data.shape}")
+            self.logger.info("Сырые колонки: %s", data.columns.tolist())
+            self.logger.info("Размер данных: %s", data.shape)
             if not data.empty:
-                self.logger.info(f"Первая строка: {data.iloc[0].to_dict()}")
+                self.logger.info("Первая строка: %s", data.iloc[0].to_dict())
             data = self._standardize_column_names(data)
             return data
         except asyncio.CancelledError:
@@ -107,7 +108,8 @@ class DataLoader:
             raise
         except Exception as e:
             self.logger.error(
-                f"Ошибка загрузки рыночных данных: {e}",
+                "Ошибка загрузки рыночных данных: %s",
+                e,
                 exc_info=True,
             )
             raise
@@ -157,7 +159,7 @@ class DataLoader:
 
         if column_mapping:
             df = df.rename(columns=column_mapping)
-            self.logger.info(f"Стандартизированные колонки: {df.columns.tolist()}")
+            self.logger.info("Стандартизированные колонки: %s", df.columns.tolist())
         return df
 
     async def get_historical_data(
@@ -281,8 +283,9 @@ class DataLoader:
         if cached is not None and not cached.empty:
             last_ts = int(cached["timestamp"].max())
             self.logger.info(
-                f"CSV-кэш найден для {symbol} {timeframe}. "
-                "Загружаем только новые свечи."
+                "CSV-кэш найден для %s %s. Загружаем только новые свечи.",
+                symbol,
+                timeframe,
             )
             new_df = await self._fetch_batches(
                 symbol, timeframe, since_ms=last_ts + 1, until_ms=now_ms
@@ -298,20 +301,26 @@ class DataLoader:
                 combined = cached
         else:
             self.logger.info(
-                f"Загружаем историю {months}м для {symbol} {timeframe} (пагинация)..."
+                "Загружаем историю %dм для %s %s (пагинация)...",
+                months,
+                symbol,
+                timeframe,
             )
             combined = await self._fetch_batches(
                 symbol, timeframe, since_ms=since_ms, until_ms=now_ms
             )
 
         if combined.empty:
-            self.logger.warning(f"Данные для {symbol} не получены")
+            self.logger.warning("Данные для %s не получены", symbol)
             return combined
 
         self._save_csv_cache(combined, cache_path)
         self.logger.info(
-            f"История: {len(combined)} свечей для {symbol} ({timeframe}), "
-            f"сохранено в {cache_path}"
+            "История: %d свечей для %s (%s), сохранено в %s",
+            len(combined),
+            symbol,
+            timeframe,
+            cache_path,
         )
         return self.calculate_technical_indicators(combined)
 
@@ -345,18 +354,18 @@ class DataLoader:
             except asyncio.CancelledError:
                 raise
             except ccxt.AuthenticationError as e:
-                self.logger.critical(f"Ошибка авторизации при пагинации {symbol}: {e}")
+                self.logger.critical("Ошибка авторизации при пагинации %s: %s", symbol, e)
                 raise
             except (
                 ccxt.NetworkError,
                 ccxt.RequestTimeout,
                 ccxt.ExchangeNotAvailable,
             ) as e:
-                self.logger.error(f"Сетевая ошибка при загрузке батча {symbol}: {e}")
+                self.logger.error("Сетевая ошибка при загрузке батча %s: %s", symbol, e)
                 break
             except Exception as e:
                 self.logger.error(
-                    f"Неожиданная ошибка fetch_ohlcv {symbol}: {e}", exc_info=True
+                    "Неожиданная ошибка fetch_ohlcv %s: %s", symbol, e, exc_info=True
                 )
                 break
 
@@ -386,7 +395,7 @@ class DataLoader:
             .sort_values("timestamp")
             .reset_index(drop=True)
         )
-        self.logger.info(f"Загружено {len(result)} свечей всего")
+        self.logger.info("Загружено %d свечей всего", len(result))
         return result
 
     # ── Technical indicators ───────────────────────────────────────
@@ -409,8 +418,8 @@ class DataLoader:
         try:
             if "close" not in df.columns:
                 raise ValueError(
-                    f"Обязательная колонка 'close' отсутствует. "
-                    f"Доступные: {df.columns.tolist()}"
+                    "Обязательная колонка 'close' отсутствует. "
+                    "Доступные: %s" % df.columns.tolist()
                 )
 
             df = add_indicators(df)
@@ -425,15 +434,13 @@ class DataLoader:
         except ValueError:
             raise
         except Exception as e:
-            self.logger.error(f"Ошибка расчёта индикаторов: {e}", exc_info=True)
-            self.logger.error(f"Колонки DataFrame: {df.columns.tolist()}")
-            self.logger.error(f"Размер DataFrame: {df.shape}")
+            self.logger.error("Ошибка расчёта индикаторов: %s", e, exc_info=True)
+            self.logger.error("Колонки DataFrame: %s", df.columns.tolist())
+            self.logger.error("Размер DataFrame: %s", df.shape)
             if not df.empty:
-                self.logger.error(f"Пример данных:\n{df.head(2)}")
+                self.logger.error("Пример данных:\n%s", df.head(2))
             raise
 
     async def close(self) -> None:
-        """
-        Закрывает соединения, включая подключение к API Bybit.
-        """
+        """Закрывает соединения, включая подключение к API Bybit."""
         await self.api.close()

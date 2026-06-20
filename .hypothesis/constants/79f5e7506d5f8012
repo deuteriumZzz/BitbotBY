@@ -1,0 +1,4 @@
+# file: /Users/deuterium/Dev/BitbotBY/src/position_monitor.py
+# hypothesis_version: 6.141.1
+
+[0.0, 'BybitAPI', 'PortfolioManager', 'TelegramNotifier', 'TradeHistory', 'atr', 'buy', 'circuit_breaker', 'consecutive_losses', 'entry', 'exchange_sl_id', 'exchange_tp_id', 'inf', 'market', 'qty', 'sell', 'side', 'snap', 'stop_loss', 'take_profit', 'trade_id']

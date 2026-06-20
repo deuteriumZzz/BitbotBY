@@ -164,9 +164,9 @@ class SACSignal:
             self._model = SAC.load(path)
             self.loaded = True
             self._mtime = os.path.getmtime(path)
-            self.logger.info(f"SAC загружен из {path}")
+            self.logger.info("SAC загружен из %s", path)
         except Exception as e:
-            self.logger.warning(f"Ошибка загрузки SAC: {e}")
+            self.logger.warning("Ошибка загрузки SAC: %s", e)
             return
 
         norm_path = path.replace(".zip", "_norm_stats.json")
@@ -174,10 +174,10 @@ class SACSignal:
             try:
                 with open(norm_path, encoding="utf-8") as f:
                     self._norm_stats = json.load(f)
-                self.logger.info(f"Norm stats загружены из {norm_path}")
+                self.logger.info("Norm stats загружены из %s", norm_path)
             except (OSError, json.JSONDecodeError) as e:
                 self._norm_stats = None
-                self.logger.warning(f"Ошибка загрузки norm stats: {e}")
+                self.logger.warning("Ошибка загрузки norm stats: %s", e)
         else:
             self.logger.warning("Norm stats не найдены — инференс без нормализации")
 
@@ -258,7 +258,7 @@ class SACSignal:
             return default
 
         except Exception as e:
-            self.logger.error(f"Ошибка инференса SAC: {e}", exc_info=True)
+            self.logger.error("Ошибка инференса SAC: %s", e, exc_info=True)
             return default
 
     # ── Вариант 1: горячая перезагрузка модели ───────────────────────────────

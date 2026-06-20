@@ -1,5 +1,8 @@
 """
 Управление портфелем: отслеживание баланса, позиций и ребалансировка.
+
+Менеджер портфеля отслеживает баланс USDT, открытые позиции,
+рассчитывает стоимость портфеля и выполняет ребалансировку.
 """
 
 from __future__ import annotations
@@ -80,7 +83,7 @@ class PortfolioManager:
             return False
 
         except Exception as e:
-            self.logger.error(f"Ошибка обновления портфеля: {e}", exc_info=True)
+            self.logger.error("Ошибка обновления портфеля: %s", e, exc_info=True)
             return False
 
     async def get_portfolio_value(self, current_prices: Dict[str, float]) -> float:

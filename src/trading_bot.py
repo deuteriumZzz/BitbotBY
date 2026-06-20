@@ -1,9 +1,16 @@
+"""Главный модуль торгового бота BitbotBY.
+
+Содержит класс TradingBot — оркестратор всего цикла:
+сканирование рынка, генерация сигналов, исполнение ордеров,
+мониторинг позиций и управление рисками.
+"""
+
 import asyncio
 import logging
 import os
 import time
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import ccxt
 import pandas as pd
@@ -11,15 +18,20 @@ import pandas as pd
 from config import Config
 from src.ai_analyzer import AIAnalyzer
 from src.bybit_api import BybitAPI
+from src.constants import REDIS_TTL_MARKET_DATA, SILENT_DEATH_ALERT_COOLDOWN
+
+_SECONDS_PER_HOUR: int = 3_600
 from src.correlation_filter import CorrelationFilter
+from src.cycle import CycleRunner
 from src.data_loader import DataLoader
 from src.health_server import cycles_counter, start_health_server
 from src.logger import _SecretFilter, setup_logging
-from src.market_impact import estimate_from_df as _ac_impact
 from src.market_scanner import MarketScanner
 from src.news_analyzer import NewsAnalyzer
+from src.order_executor import OrderExecutor
 from src.portfolio_manager import PortfolioManager
 from src.portfolio_optimizer import PortfolioOptimizer
+from src.position_monitor import PositionMonitor
 from src.redis_client import RedisClient
 from src.regime_detector import RegimeDetector
 from src.risk_management import RiskManager
@@ -27,6 +39,7 @@ from src.signal_combiner import SignalCombiner
 from src.strategies import TradingStrategy
 from src.telegram_notifier import TelegramNotifier
 from src.trade_history import TradeHistory
+from src.types import PositionRecord
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -68,8 +81,9 @@ class TradingBot:
             max_corr=Config.MAX_CORRELATION,
         )
         self.is_running: bool = False
-        # symbol → {qty, stop_loss, take_profit, side, entry, ...}
-        self._monitored: Dict[str, Any] = {}
+        # Explicit schema via TypedDict — replaces Dict[str, Any] to catch missing
+        # fields at construction time (mypy) rather than as KeyErrors in the monitor.
+        self._monitored: Dict[str, PositionRecord] = {}
         self._monitored_lock: asyncio.Lock = asyncio.Lock()
         self._monitor_task: Optional[asyncio.Task[None]] = None
         self.trade_history = TradeHistory()
@@ -78,14 +92,11 @@ class TradingBot:
             Config.TELEGRAM_CHAT_ID,
         )
         self._paper_balance: float = Config.INITIAL_BALANCE
-        # symbol → last notified action ("buy"/"sell")
-        self._last_signals: Dict[str, str] = {}
-        # circuit breaker: consecutive closed losses counter
-        self._consecutive_losses: int = 0
         # regime cache: symbol → (regime, timestamp) — refreshed every 5 min
         self._regime_cache: Dict[str, Tuple[str, float]] = {}
-        _REGIME_TTL = 300  # seconds
-        self._regime_ttl: float = float(os.getenv("REGIME_CACHE_TTL", str(_REGIME_TTL)))
+        self._regime_ttl: float = float(
+            os.getenv("REGIME_CACHE_TTL", str(REDIS_TTL_MARKET_DATA))
+        )
         # silent-death detection: track last trade and last alert times
         self._last_trade_at: Optional[float] = None
         self._silent_death_alerted_at: float = 0.0
@@ -101,6 +112,41 @@ class TradingBot:
             Config.TELEGRAM_BOT_TOKEN,
             getattr(Config, "OPENAI_API_KEY", ""),
             getattr(Config, "NEWS_API_KEY", ""),
+        )
+
+        # Monitoring and execution are separate objects so each concern has its
+        # own state (circuit-breaker counter, sizing logic) and can be tested
+        # without constructing the whole TradingBot.
+        self._position_monitor = PositionMonitor(
+            api=self.api,
+            trade_history=self.trade_history,
+            telegram=self.telegram,
+            portfolio_manager=self.portfolio_manager,
+            set_running=lambda v: setattr(self, "is_running", v),
+            redis=self.redis,
+        )
+        self._executor = OrderExecutor(
+            api=self.api,
+            trade_history=self.trade_history,
+            telegram=self.telegram,
+            risk_manager=self.risk_manager,
+            portfolio_optimizer=self.portfolio_optimizer,
+            corr_filter=self.corr_filter,
+            # Lambdas defer dict/lock lookup to call time so that code which
+            # replaces bot._monitored (including tests) is always visible.
+            get_monitored=lambda: self._monitored,
+            get_lock=lambda: self._monitored_lock,
+            get_paper_balance=lambda: self._paper_balance,
+            set_paper_balance=lambda v: setattr(self, "_paper_balance", v),
+            set_last_trade_at=lambda v: setattr(self, "_last_trade_at", v),
+            get_current_regime=lambda: self._current_regime,
+        )
+        self._cycle = CycleRunner(
+            news=self.news,
+            scanner=self.scanner,
+            portfolio_optimizer=self.portfolio_optimizer,
+            telegram=self.telegram,
+            get_current_regime=lambda: self._current_regime,
         )
 
     async def initialize(self) -> None:
@@ -121,7 +167,7 @@ class TradingBot:
                     e,
                 )
             else:
-                logger.error(f"Failed to initialize: {e}")
+                logger.error("Failed to initialize Bybit API: %s", e)
                 raise
         try:
             await self.data_loader.initialize(
@@ -144,7 +190,7 @@ class TradingBot:
                         logger.warning(
                             "Live mode: real balance is 0 — check Bybit account"
                         )
-                except Exception as e:
+                except (ccxt.NetworkError, ccxt.ExchangeError) as e:
                     logger.warning(
                         "Live mode: balance sync failed, using INITIAL_BALANCE: %s", e
                     )
@@ -157,7 +203,7 @@ class TradingBot:
             self._load_corr_filter()
             logger.info("Trading bot initialized successfully")
         except Exception as e:
-            logger.error(f"Failed to initialize: {e}")
+            logger.error("Bot initialization failed: %s", e)
             raise
 
     async def _reconcile_positions(self) -> None:
@@ -235,7 +281,7 @@ class TradingBot:
     async def _restore_state(self) -> None:
         state = self.redis.load_trading_state(Config.SYMBOL)
         if state:
-            logger.info(f"Restored state: {state}")
+            logger.info("Restored state: %s", state)
         portfolio = self.redis.load_trading_state("portfolio_state")
         if portfolio:
             self.portfolio_manager.current_balance = portfolio.get(
@@ -278,102 +324,23 @@ class TradingBot:
         except Exception as exc:
             logger.warning("RegimeDetector fit skipped: %s", exc)
 
-    def _optimize_allocation(
-        self,
-        recs: list,
-        market_data: dict,
-    ) -> list:
-        """
-        Annotate buy recommendations with CVaR-optimal allocation fractions.
-
-        When ≥2 buy signals exist, runs PortfolioOptimizer.allocate() on the
-        joint returns matrix and adds "alloc_fraction" to each rec.
-        Single-signal or sell signals keep Config.RISK_PER_TRADE.
-
-        :param recs: Recommendations from SignalCombiner.
-        :param market_data: {symbol: DataFrame} from the current cycle scan.
-        :return: recs with "alloc_fraction" field populated.
-        """
-        buy_syms = [r["symbol"] for r in recs if r.get("action") == "buy"]
-
-        if len(buy_syms) < 2:
-            for r in recs:
-                r.setdefault("alloc_fraction", Config.RISK_PER_TRADE)
-            return recs
-
-        returns_list = []
-        valid: list[str] = []
-        for sym in buy_syms:
-            df = market_data.get(sym)
-            if df is not None and len(df) >= 30:
-                ret = df["close"].astype(float).pct_change().dropna().rename(sym)
-                returns_list.append(ret)
-                valid.append(sym)
-
-        if len(valid) >= 2:
-            returns_df = pd.concat(returns_list, axis=1).dropna()
-            weights = self.portfolio_optimizer.allocate(valid, returns_df)
-        else:
-            weights = {}
-
-        for r in recs:
-            sym = r.get("symbol", "")
-            if r.get("action") == "buy" and sym in weights:
-                # Weight is portfolio share; scale to max RISK_PER_TRADE * 3
-                r["alloc_fraction"] = min(weights[sym], Config.RISK_PER_TRADE * 3)
-            else:
-                r.setdefault("alloc_fraction", Config.RISK_PER_TRADE)
-        return recs
-
     async def _get_balance_usdt(self) -> float:
-        """Свободный баланс USDT (fallback — PortfolioManager)."""
+        """Free USDT balance; falls back to PortfolioManager if exchange is unreachable.
+        """
         if Config.PAPER_TRADING:
             return self._paper_balance
         try:
             bal = await self.api.get_balance()
             if bal:
                 return float(bal.get("free", {}).get("USDT", 0))
-        except Exception as e:
-            logger.warning(f"Balance fetch failed: {e}")
+        except (ccxt.NetworkError, ccxt.ExchangeError) as e:
+            logger.warning("Balance fetch failed, using cached value: %s", e)
         return self.portfolio_manager.current_balance
 
-    async def _collect_snapshots(
-        self,
-        symbols: List[str],
-        market_data: dict,
-    ) -> list:
-        """
-        Параллельно получает новости, строит снэпшоты.
-
-        :param symbols: Символы с загруженными данными.
-        :param market_data: {symbol: DataFrame}.
-        :return: Список снэпшотов для AIAnalyzer.
-        """
-        news_results = await asyncio.gather(
-            *[self.news.get_sentiment(s) for s in symbols],
-            return_exceptions=True,
-        )
-        snapshots = []
-        for sym, result in zip(symbols, news_results):
-            if isinstance(result, BaseException):
-                logger.warning(f"News sentiment failed for {sym}: " f"{result}")
-                sent: float = 0.0
-                headlines: List[str] = []
-            else:
-                sent, headlines = result
-            df = market_data.get(sym)
-            if df is None or df.empty:
-                continue
-            snap = self.scanner.build_snapshot(sym, df, sent, headlines)
-            if snap:
-                snapshots.append(snap)
-        return snapshots
-
     def _filter_by_balance(self, recs: list, balance: float) -> list:
-        """
-        Оставляет рекомендации, доступные по балансу.
+        """Keep only recommendations whose minimum lot fits within balance.
 
-        Мин. лот = entry * 0.001.
+        Min lot = entry * 0.001 (smallest tradable notional on Bybit).
         """
         result = []
         for r in recs:
@@ -386,433 +353,32 @@ class TradingBot:
                 result.append(r)
             else:
                 logger.debug(
-                    f"Skip {r['symbol']}: "
-                    f"need ${entry * 0.001:.2f}, "
-                    f"have ${balance:.2f}"
+                    "Skip %s: need $%.2f, have $%.2f",
+                    r["symbol"],
+                    entry * 0.001,
+                    balance,
                 )
         return result
-
-    def _print_recommendations(
-        self,
-        recs: list,
-        balance: float,
-        cycle: int,
-    ) -> None:
-        sep = "=" * 60
-        ts = datetime.now().strftime("%H:%M:%S")
-        print(f"\n{sep}")
-        print(f"  CYCLE #{cycle} | {ts} | " f"Balance: ${balance:.2f} USDT")
-        print(sep)
-        if not recs:
-            print("  No actionable signals this cycle.")
-            print(sep)
-            return
-        for i, r in enumerate(recs, 1):
-            action = r.get("action", "?").upper()
-            sym = r.get("symbol", "?")
-            conf = r.get("confidence", 0) * 100
-            strat = r.get("strategy", "?")
-            entry = r.get("entry", 0)
-            sl = r.get("stop_loss", 0)
-            tp = r.get("take_profit", 0)
-            reasoning = r.get("reasoning", "")
-            print(f"  [{i}] {action:4s} {sym:<12s} " f"conf={conf:.0f}% strat={strat}")
-            if entry:
-                print(f"       entry={entry:.4f} " f"SL={sl:.4f} TP={tp:.4f}")
-            if reasoning:
-                print(f"       {reasoning}")
-        print(sep)
-
-    @staticmethod
-    def _md_escape(text: str) -> str:
-        """Экранирует спецсимволы Telegram Markdown v1 в произвольном тексте."""
-        return (
-            text.replace("_", "\\_")
-            .replace("*", "\\*")
-            .replace("`", "\\`")
-            .replace("[", "\\[")
-        )
-
-    async def _notify_new_signals(self, recs: list, balance: float, cycle: int) -> None:
-        """
-        Отправляет в Telegram только новые или изменившиеся buy/sell сигналы.
-        Hold и повторы одного и того же действия по символу не отправляются.
-        """
-        new_lines = []
-        for r in recs:
-            sym = r.get("symbol", "")
-            action = r.get("action", "hold")
-            if action not in ("buy", "sell"):
-                continue
-            if self._last_signals.get(sym) == action:
-                continue  # уже отправляли этот сигнал
-
-            icon = "🟢" if action == "buy" else "🔴"
-            conf = r.get("confidence", 0) * 100
-            strat = self._md_escape(str(r.get("strategy", "?")))
-            entry = r.get("entry", 0)
-            sl = r.get("stop_loss", 0)
-            tp = r.get("take_profit", 0)
-            regime = self._md_escape(str(self._current_regime))
-            reasoning = self._md_escape(str(r.get("reasoning", ""))[:120])
-
-            line = f"{icon} *{sym}* — {action.upper()}\n"
-            line += f"   Conf: {conf:.0f}% | {strat} | Режим: {regime}\n"
-            if entry:
-                line += f"   Entry: ${entry:.4f} | SL: ${sl:.4f} | TP: ${tp:.4f}\n"
-            if reasoning:
-                line += f"   {reasoning}"
-            new_lines.append(line)
-            self._last_signals[sym] = action
-
-        # Сбрасываем hold-символы из кэша (чтобы при следующем buy/sell уведомить)
-        signaled = {r.get("symbol") for r in recs if r.get("action") in ("buy", "sell")}
-        for sym in list(self._last_signals):
-            if sym not in signaled:
-                self._last_signals.pop(sym, None)
-
-        if not new_lines:
-            return
-
-        ts = datetime.now().strftime("%H:%M:%S")
-        header = f"📊 Цикл \\#{cycle} | {ts} | Баланс: ${balance:.2f}\n\n"
-        text = header + "\n\n".join(new_lines)
-        await self.telegram.notify(text)
 
     async def _execute_top_rec(
         self,
         filtered: list,
         market_data: dict,
     ) -> None:
-        """Исполняет топ-1 (только если AUTO_EXECUTE)."""
+        """Execute the top recommendation — delegated to OrderExecutor."""
         if not filtered or not Config.AUTO_EXECUTE:
             return
-
-        top = filtered[0]
-        sym = top.get("symbol", Config.SYMBOL)
-        action = top.get("action")
-
-        if action not in ("buy", "sell"):
-            return
-
-        # Max positions check + duplicate guard (race-safe)
-        async with self._monitored_lock:
-            if len(self._monitored) >= Config.MAX_POSITIONS:
-                logger.warning(
-                    f"Max positions " f"({Config.MAX_POSITIONS}) " "reached. Skipping."
-                )
-                return
-            if sym in self._monitored:
-                logger.info(f"{sym} already monitored, skip")
-                return
-            open_syms = list(self._monitored.keys())
-
-        # Correlation guard: block if new position is too correlated with open ones
-        if Config.MAX_CORRELATION > 0 and not self.corr_filter.is_allowed(
-            sym, open_syms
-        ):
-            max_corr = self.corr_filter.max_correlation(sym, open_syms)
-            logger.warning(
-                "Skipping %s: correlation %.2f >= MAX_CORRELATION %.2f",
-                sym,
-                max_corr,
-                Config.MAX_CORRELATION,
-            )
-            return
-
-        # EV and win rate for this strategy
-        strategy = top.get("strategy", Config.DEFAULT_STRATEGY)
-        from src.trade_history import get_backtest_stats
-
-        bt = get_backtest_stats(strategy)
-        live_wr = await self.trade_history.get_win_rate(strategy, lookback=50)
-        live_n = await self.trade_history.get_trade_count(strategy, lookback=50)
-        live_ev = await self.trade_history.get_expected_value(strategy, lookback=50)
-
-        # Telegram confirmation with full stats
-        confirmed = await self.telegram.ask_confirm(
-            top,
-            live_win_rate=live_wr,
-            live_trades=live_n,
-            live_ev=live_ev,
-            bt_win_rate=bt["win_rate"],
-            bt_trades=bt["total_trades"],
-            bt_ev=bt["ev"],
-            timeout=Config.TELEGRAM_CONFIRM_TIMEOUT,
-        )
-        if not confirmed:
-            logger.info(f"Trade rejected by user: {sym}")
-            return
-
-        entry = top.get("entry", 0.0)
-        if not entry:
-            return
-
         balance = await self._get_balance_usdt()
-
-        # Portfolio optimizer provides the allocation fraction (CVaR-optimal)
-        alloc_fraction = top.get("alloc_fraction", Config.RISK_PER_TRADE)
-        portfolio_qty = balance * alloc_fraction / entry
-
-        # Kelly criterion caps the portfolio allocation when enough trade history
-        stop_loss = top.get("stop_loss", 0.0)
-        take_profit = top.get("take_profit", 0.0)
-        if stop_loss and take_profit and live_n >= 10:
-            kelly_qty = self.risk_manager.calculate_kelly_size(
-                entry_price=entry,
-                stop_loss=stop_loss,
-                take_profit=take_profit,
-                win_rate=live_wr,
-                current_balance=balance,
-            )
-            quantity = min(portfolio_qty, kelly_qty) if kelly_qty > 0 else portfolio_qty
-            logger.info(
-                "Sizing: portfolio=%.6f kelly=%.6f final=%.6f "
-                "(win_rate=%.0f%% alloc=%.1f%% regime=%s)",
-                portfolio_qty,
-                kelly_qty,
-                quantity,
-                live_wr * 100,
-                alloc_fraction * 100,
-                self._current_regime,
-            )
-        else:
-            # No trade history yet: cap at standard RISK_PER_TRADE (conservative)
-            conservative_qty = balance * Config.RISK_PER_TRADE / entry
-            quantity = min(portfolio_qty, conservative_qty)
-            logger.info(
-                "Sizing (early trades %d/10): conservative cap=%.6f final=%.6f",
-                live_n,
-                conservative_qty,
-                quantity,
-            )
-
-        # AC model: adjust entry price for estimated market impact
-        sym = top.get("symbol", Config.SYMBOL)
-        main_df = market_data.get(sym)
-        if main_df is not None and not main_df.empty:
-            impact = _ac_impact(main_df, quantity * entry, Config.TIMEFRAME)
-            action = top.get("action")
-            if action == "buy":
-                entry = entry * (1.0 + impact)
-            elif action == "sell":
-                entry = entry * (1.0 - impact)
-
-        # Round to exchange lot size; returns 0.0 if below minimum
-        quantity = self.api.round_quantity(sym, quantity)
-
-        if quantity <= 0:
-            return
-
-        commission = quantity * entry * Config.COMMISSION_RATE
-
-        sl_price = top.get("stop_loss", 0.0)
-        tp_price = top.get("take_profit", 0.0)
-        close_side = "sell" if action == "buy" else "buy"
-        exchange_sl_id: str | None = None
-        exchange_tp_id: str | None = None
-
-        if Config.PAPER_TRADING:
-            # Simulate: no real order
-            logger.info(
-                f"[PAPER] {action.upper()} " f"{quantity:.6f} {sym} @ {entry:.4f}"
-            )
-            if action == "buy":
-                self._paper_balance -= quantity * entry + commission
-            else:
-                self._paper_balance += quantity * entry - commission
-        else:
-            order = await self.api.create_order(sym, "market", action, quantity)
-            if not order:
-                logger.error(f"Order failed for {sym}")
-                return
-            # Place SL/TP on exchange — protects position if bot crashes
-            exchange_sl_id, exchange_tp_id = await self.api.place_exchange_sl_tp(
-                sym, close_side, quantity, sl_price, tp_price
-            )
-
-        # Record in trade history
-        trade_id = await self.trade_history.record_open(
-            symbol=sym,
-            strategy=strategy,
-            action=action,
-            entry_price=entry,
-            quantity=quantity,
-            confidence=top.get("confidence", 0.0),
-            commission=commission,
-        )
-
-        # Register for SL/TP monitoring (under lock)
-        async with self._monitored_lock:
-            self._monitored[sym] = {
-                "trade_id": trade_id,
-                "qty": quantity,
-                "entry": entry,
-                "stop_loss": sl_price,
-                "take_profit": tp_price,
-                "side": action,
-                "atr": top.get("atr", 0.0),
-                "snap": top.get("_snap"),
-                "balance_at_entry": balance,
-                "peak_price": entry,
-                "exchange_sl_id": exchange_sl_id,
-                "exchange_tp_id": exchange_tp_id,
-            }
-
-        self._last_trade_at = time.time()
-        await self.telegram.notify(
-            f"Opened position *{sym}*\n"
-            f"{action.upper()} {quantity:.6f} "
-            f"@ ${entry:.4f}\n"
-            f"SL: ${top.get('stop_loss', 0):.4f}  "
-            f"TP: ${top.get('take_profit', 0):.4f}"
-        )
-        logger.info(f"Position opened: {sym} {action} " f"{quantity:.6f} @ {entry:.4f}")
+        await self._executor.execute(filtered[0], market_data, balance)
 
     async def _monitor_positions(self) -> None:
+        """Background SL/TP/trailing/circuit-breaker loop — delegated to PositionMonitor.
         """
-        Background task: checks SL/TP every 5 seconds.
-        Executes market close when price hits SL or TP.
-        Applies trailing stop-loss based on ATR.
-        """
-        _error_counts: dict = {}
-        while self.is_running:
-            async with self._monitored_lock:
-                snapshot = list(self._monitored.items())
-            for sym, pos in snapshot:
-                try:
-                    price = await self.api.get_current_price(sym)
-                    if not price:
-                        continue
-                    sl = pos.get("stop_loss", 0)
-                    tp = pos.get("take_profit", 0)
-                    side = pos.get("side", "buy")
-                    qty = pos.get("qty", 0)
-
-                    # Trailing stop-loss
-                    atr = pos.get("atr", 0.0)
-                    mult = Config.TRAILING_STOP_ATR_MULT
-                    if atr and atr > 0 and mult > 0:
-                        if side == "buy":
-                            trail = price - atr * mult
-                            if trail > pos.get("stop_loss", 0):
-                                async with self._monitored_lock:
-                                    if sym in (self._monitored):
-                                        self._monitored[sym]["stop_loss"] = trail
-                                        pos["stop_loss"] = trail
-                                sl = trail
-                        else:
-                            trail = price + atr * mult
-                            if trail < pos.get("stop_loss", float("inf")):
-                                async with self._monitored_lock:
-                                    if sym in (self._monitored):
-                                        self._monitored[sym]["stop_loss"] = trail
-                                        pos["stop_loss"] = trail
-                                sl = trail
-
-                    triggered = False
-                    if side == "buy":
-                        if sl and price <= sl:
-                            logger.warning(
-                                f"SL hit {sym}: " f"price={price} <= sl={sl}"
-                            )
-                            triggered = True
-                        elif tp and price >= tp:
-                            logger.info(f"TP hit {sym}: " f"price={price} >= tp={tp}")
-                            triggered = True
-                    else:
-                        if sl and price >= sl:
-                            logger.warning(
-                                f"SL hit {sym}: " f"price={price} >= sl={sl}"
-                            )
-                            triggered = True
-                        elif tp and price <= tp:
-                            logger.info(f"TP hit {sym}: " f"price={price} <= tp={tp}")
-                            triggered = True
-
-                    if triggered:
-                        trade_id = pos.get("trade_id")
-                        close_side = "sell" if side == "buy" else "buy"
-                        if not Config.PAPER_TRADING:
-                            await self.api.create_order(sym, "market", close_side, qty)
-                            # Cancel exchange SL/TP orders to avoid double-execution
-                            for oid in (
-                                pos.get("exchange_sl_id"),
-                                pos.get("exchange_tp_id"),
-                            ):
-                                if oid:
-                                    await self.api.cancel_order(oid, sym)
-                        await self.portfolio_manager.update_portfolio(
-                            sym, close_side, qty, price
-                        )
-                        async with self._monitored_lock:
-                            self._monitored.pop(sym, None)
-                        logger.info(f"Position closed: {sym} " f"at {price}")
-                        # Save experience to file for next SAC retraining
-                        if pos.get("snap"):
-                            from src.experience_buffer import save as _exp_save
-
-                            _exp_save(
-                                snap=pos["snap"],
-                                action=side,
-                                entry_price=pos.get("entry", price),
-                                exit_price=price,
-                            )
-                        if trade_id:
-                            await self.trade_history.record_close(
-                                trade_id=trade_id,
-                                exit_price=price,
-                                commission=(qty * price * Config.COMMISSION_RATE),
-                            )
-                        stats = await self.trade_history.get_summary()
-                        await self.telegram.notify(
-                            f"Closed position *{sym}* "
-                            f"@ ${price:.4f}\n"
-                            f"Total trades: "
-                            f"{stats['closed_trades']}  "
-                            f"Win Rate: "
-                            f"{stats['win_rate']:.0%}\n"
-                            f"Total PnL: "
-                            f"${stats['total_pnl']:+.2f}"
-                        )
-                        # ── Circuit breaker ──────────────────────────────
-                        entry_px = pos.get("entry", price)
-                        is_loss = (side == "buy" and price < entry_px) or (
-                            side == "sell" and price > entry_px
-                        )
-                        cb = Config.CIRCUIT_BREAKER_LOSSES
-                        if cb > 0:
-                            if is_loss:
-                                self._consecutive_losses += 1
-                                logger.warning(
-                                    "Circuit breaker: %d/%d consecutive losses",
-                                    self._consecutive_losses,
-                                    cb,
-                                )
-                                if self._consecutive_losses >= cb:
-                                    msg = (
-                                        f"⛔ Circuit breaker: "
-                                        f"{self._consecutive_losses} убытка подряд. "
-                                        "Торговля остановлена автоматически."
-                                    )
-                                    logger.critical(msg)
-                                    await self.telegram.notify(msg)
-                                    self.is_running = False
-                            else:
-                                self._consecutive_losses = 0
-                    _error_counts.pop(sym, None)
-                except Exception as e:
-                    _error_counts[sym] = _error_counts.get(sym, 0) + 1
-                    count = _error_counts[sym]
-                    logger.error(f"Monitor error {sym} " f"(attempt {count}): {e}")
-                    if count >= 5:
-                        logger.warning(
-                            f"Removing {sym} from monitor" " after 5 consecutive errors"
-                        )
-                        async with self._monitored_lock:
-                            self._monitored.pop(sym, None)
-                        _error_counts.pop(sym, None)
-            await asyncio.sleep(5)
+        await self._position_monitor.run(
+            is_running=lambda: self.is_running,
+            monitored=self._monitored,
+            lock=self._monitored_lock,
+        )
 
     async def _update_performance_stats(self) -> None:
         try:
@@ -832,8 +398,118 @@ class TradingBot:
                     "positions": (self.portfolio_manager.get_positions()),
                 }
             )
-        except Exception as e:
-            logger.error(f"Error updating performance stats: {e}")
+        except (ccxt.NetworkError, ccxt.ExchangeError, Exception) as e:
+            logger.error("Error updating performance stats: %s", e)
+
+    async def _scan_and_update_correlations(
+        self, symbols: list
+    ) -> Dict[str, pd.DataFrame]:
+        """Сканирует рыночные данные, обновляет корреляционный фильтр и сохраняет в Redis.
+
+        :param symbols: Список символов для сканирования.
+        :return: Словарь {символ: DataFrame с OHLCV+индикаторами}.
+        """
+        market_data = await self.scanner.scan_all(symbols, Config.TIMEFRAME)
+        for sym, df in market_data.items():
+            self.corr_filter.update_from_df(sym, df)
+        self._save_corr_filter()
+        return market_data
+
+    async def _detect_regimes(
+        self, market_data: Dict[str, pd.DataFrame]
+    ) -> Dict[str, str]:
+        """Определяет рыночный режим для каждого символа с кэшем TTL.
+
+        :param market_data: Словарь {символ: DataFrame с OHLCV+индикаторами}.
+        :return: Словарь {символ: режим} ('trending_up', 'trending_down', 'ranging').
+        """
+        now = time.monotonic()
+        regimes: Dict[str, str] = {}
+        for sym, df in market_data.items():
+            cached_regime, cached_ts = self._regime_cache.get(
+                sym, ("unknown", float("-inf"))
+            )
+            if now - cached_ts < self._regime_ttl:
+                regimes[sym] = cached_regime
+            elif df is not None and not df.empty:
+                regime = self.regime_detector.predict(df)
+                regimes[sym] = regime
+                self._regime_cache[sym] = (regime, now)
+        self._current_regime = regimes.get(Config.SYMBOL, "unknown")
+        logger.info(
+            "Regimes: %s",
+            {s: r for s, r in regimes.items() if r != "unknown"},
+        )
+        return regimes
+
+    async def _generate_signals(
+        self,
+        snapshots: list,
+        balance: float,
+        regimes: Dict[str, str],
+        market_data: Dict[str, pd.DataFrame],
+    ) -> list:
+        """Генерирует торговые сигналы через combiner с локальным fallback.
+
+        :param snapshots: Список снэпшотов по символам.
+        :param balance: Текущий баланс в USDT.
+        :param regimes: Словарь {символ: режим}.
+        :param market_data: Словарь {символ: DataFrame} для fallback-стратегии.
+        :return: Список рекомендаций.
+        """
+        recs = await self.combiner.combine(
+            snapshots,
+            balance,
+            regime=self._current_regime,
+            regimes=regimes,
+        )
+        recs = self._cycle.optimize_allocation(recs, market_data)
+
+        if not recs:
+            logger.info("MODE=%s, no signals — local fallback", Config.MODE)
+            for snap in snapshots:
+                sym = snap["symbol"]
+                strat, conf = self.combiner.ai.recommend_strategy_local(snap)
+                if conf >= Config.MIN_SIGNAL_CONFIDENCE:
+                    df = market_data.get(sym)
+                    sig = {}
+                    if df is not None and not df.empty and self.strategy:
+                        try:
+                            sig = await self.strategy.get_signal(df)
+                        except (ValueError, KeyError):
+                            # Strategy may raise on missing indicators;
+                            # safe to skip — no signal is the right fallback.
+                            pass
+                    action = sig.get("action", "hold")
+                    recs.append(
+                        {
+                            "symbol": sym,
+                            "action": action,
+                            "strategy": strat,
+                            "confidence": conf,
+                            "reasoning": "Local analysis",
+                        }
+                    )
+        return recs
+
+    async def _check_silent_death(self) -> None:
+        """Отправляет Telegram-алерт если бот не совершал сделок дольше порогового времени.
+
+        Пропускается в режиме 'local' и когда сделок ещё не было.
+        """
+        if Config.MODE == "local" or self._last_trade_at is None:
+            return
+        hours_idle = (time.time() - self._last_trade_at) / _SECONDS_PER_HOUR
+        if (
+            hours_idle >= self._silent_death_hours
+            and time.time() - self._silent_death_alerted_at
+            > SILENT_DEATH_ALERT_COOLDOWN
+        ):
+            self._silent_death_alerted_at = time.time()
+            await self.telegram.notify(
+                f"⚠️ Бот работает, но нет сделок уже "
+                f"{hours_idle:.0f}ч. Проверьте сигналы и баланс AI."
+            )
 
     async def trading_loop(self) -> None:
         """
@@ -847,9 +523,10 @@ class TradingBot:
         cycle = 0
         ai_status = "on" if self.ai.enabled else "off"
         logger.info(
-            f"Starting hybrid loop "
-            f"(interval={Config.TRADING_INTERVAL}s, "
-            f"top={Config.SCAN_TOP_N}, ai={ai_status})"
+            "Starting hybrid loop (interval=%ds, top=%d, ai=%s)",
+            Config.TRADING_INTERVAL,
+            Config.SCAN_TOP_N,
+            ai_status,
         )
         mode = "paper" if Config.PAPER_TRADING else "live"
         await self.telegram.notify(
@@ -866,19 +543,12 @@ class TradingBot:
 
             try:
                 symbols = await self.scanner.get_top_symbols(Config.SCAN_TOP_N)
-                market_data = await self.scanner.scan_all(symbols, Config.TIMEFRAME)
-
-                # Feed latest close prices into correlation filter and persist
-                for sym, df in market_data.items():
-                    self.corr_filter.update_from_df(sym, df)
-                self._save_corr_filter()
-
-                scanned = list(market_data.keys())
-                snapshots = await self._collect_snapshots(scanned, market_data)
-
+                market_data = await self._scan_and_update_correlations(symbols)
+                snapshots = await self._cycle.collect_snapshots(
+                    list(market_data.keys()), market_data
+                )
                 balance = await self._get_balance_usdt()
 
-                # Enforce daily loss limit before doing anything this cycle
                 if not self.risk_manager.check_daily_loss_limit(balance):
                     await self.telegram.notify(
                         "⛔ Дневной лимит потерь достигнут. "
@@ -888,116 +558,58 @@ class TradingBot:
                     self.is_running = False
                     break
 
-                # Detect regime per symbol with TTL cache (refresh every 5 min)
-                now = time.monotonic()
-                regimes: Dict[str, str] = {}
-                for sym, df in market_data.items():
-                    cached_regime, cached_ts = self._regime_cache.get(
-                        sym, ("unknown", float("-inf"))
-                    )
-                    if now - cached_ts < self._regime_ttl:
-                        regimes[sym] = cached_regime
-                    elif df is not None and not df.empty:
-                        regime = self.regime_detector.predict(df)
-                        regimes[sym] = regime
-                        self._regime_cache[sym] = (regime, now)
-                self._current_regime = regimes.get(Config.SYMBOL, "unknown")
-                logger.info(
-                    "Regimes: %s",
-                    {s: r for s, r in regimes.items() if r != "unknown"},
+                regimes = await self._detect_regimes(market_data)
+                recs = await self._generate_signals(
+                    snapshots, balance, regimes, market_data
                 )
 
-                recs = await self.combiner.combine(
-                    snapshots,
-                    balance,
-                    regime=self._current_regime,
-                    regimes=regimes,
-                )
-                recs = self._optimize_allocation(recs, market_data)
-
-                if not recs:
-                    logger.info(f"MODE={Config.MODE}, " "no signals — local fallback")
-                    for snap in snapshots:
-                        sym = snap["symbol"]
-                        strat, conf = self.combiner.ai.recommend_strategy_local(snap)
-                        if conf >= Config.MIN_SIGNAL_CONFIDENCE:
-                            df = market_data.get(sym)
-                            sig = {}
-                            if df is not None and not df.empty and self.strategy:
-                                try:
-                                    sig = await self.strategy.get_signal(df)
-                                except Exception:
-                                    pass
-                            action = sig.get("action", "hold")
-                            recs.append(
-                                {
-                                    "symbol": sym,
-                                    "action": action,
-                                    "strategy": strat,
-                                    "confidence": conf,
-                                    "reasoning": "Local analysis",
-                                }
-                            )
-
-                # Attach snapshot to each rec so _execute_top_rec can save it
                 snap_map = {s["symbol"]: s for s in snapshots}
                 for rec in recs:
                     rec.setdefault("_snap", snap_map.get(rec.get("symbol")))
 
                 filtered = self._filter_by_balance(recs, balance)
-                filtered.sort(
-                    key=lambda x: x.get("confidence", 0),
-                    reverse=True,
-                )
+                filtered.sort(key=lambda x: x.get("confidence", 0), reverse=True)
 
-                self._print_recommendations(filtered, balance, cycle)
-                await self._notify_new_signals(filtered, balance, cycle)
+                self._cycle.print_recommendations(filtered, balance, cycle)
+                await self._cycle.notify_new_signals(filtered, balance, cycle)
                 await self._execute_top_rec(filtered, market_data)
                 await self._update_performance_stats()
 
-                # Hot-reload SAC model if trainer wrote a new version
                 self.combiner.sac.reload_if_updated()
-
-                # Silent-death alert: no trades for SILENT_DEATH_HOURS in non-local mode
-                if Config.MODE != "local" and self._last_trade_at is not None:
-                    hours_idle = (time.time() - self._last_trade_at) / 3600
-                    alert_cooldown = 3600  # re-alert every hour max
-                    if (
-                        hours_idle >= self._silent_death_hours
-                        and time.time() - self._silent_death_alerted_at > alert_cooldown
-                    ):
-                        self._silent_death_alerted_at = time.time()
-                        await self.telegram.notify(
-                            f"⚠️ Бот работает, но нет сделок уже "
-                            f"{hours_idle:.0f}ч. Проверьте сигналы и баланс AI."
-                        )
+                await self._check_silent_death()
 
                 cycles_counter.inc()
                 elapsed = loop.time() - t0
                 sleep_for = max(0, Config.TRADING_INTERVAL - elapsed)
                 logger.info(
-                    f"Cycle #{cycle}: {elapsed:.1f}s, " f"sleep {sleep_for:.1f}s"
+                    "Cycle #%d: %.1fs elapsed, sleeping %.1fs",
+                    cycle,
+                    elapsed,
+                    sleep_for,
                 )
                 await asyncio.sleep(sleep_for)
 
             except Exception as e:
-                logger.error(f"Error in trading loop: {e}")
+                # Top-level catch: keeps the loop alive through transient failures
+                # (network blips, exchange maintenance). Specific sub-errors are
+                # caught closer to their source; this handles the unexpected remainder.
+                logger.error("Error in trading loop: %s", e)
                 await asyncio.sleep(10)
 
     async def analyze_market(
         self, symbol: str, timeframe: str
     ) -> Optional[Dict[str, Any]]:
-        """Анализ одного символа (обратная совместимость)."""
+        """Single-symbol analysis kept for backward compatibility with tests/CLI."""
         try:
             if self.strategy is None:
                 return None
             data = await self.data_loader.get_market_data(symbol, timeframe, limit=100)
             data = self.data_loader.calculate_technical_indicators(data)
             signal = await self.strategy.get_signal(data)
-            logger.info(f"Signal for {symbol}: {signal}")
+            logger.info("Signal for %s: %s", symbol, signal)
             return signal
-        except Exception as e:
-            logger.error(f"Error analyzing {symbol}: {e}")
+        except (ccxt.NetworkError, ccxt.ExchangeError, ValueError) as e:
+            logger.error("Error analyzing %s: %s", symbol, e)
             return None
 
     async def stop(self) -> None:
@@ -1036,7 +648,7 @@ async def main():
             logger.info("Received interrupt signal")
             break
         except Exception as e:
-            logger.error(f"Fatal error: {e}. Retrying in {retry_delay}s...")
+            logger.error("Fatal error: %s. Retrying in %ds...", e, retry_delay)
             try:
                 await bot.stop()
             except Exception:

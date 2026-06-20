@@ -1,0 +1,4 @@
+# file: /Users/deuterium/Dev/BitbotBY/src/ai_analyzer.py
+# hypothesis_version: 6.141.1
+
+[0.0, 0.04, 0.08, 0.6, 0.7, 0.72, 0.75, 0.78, 1.0, 2.0, 402, 429, 4096, 'AI [%s] failed: %s', '```', 'action', 'anthropic', 'bb_position', 'bb_width', 'bearish', 'bollinger_bands', 'breakout', 'bullish', 'buy', 'confidence', 'content', 'deepseek', 'description', 'downtrend', 'ema_crossover', 'hold', 'indicators', 'json', 'macd', 'middle', 'near_lower', 'near_upper', 'none', 'openai', 'role', 'rsi', 'rsi_momentum', 'sell', 'sideways', 'status_code', 'strategy', 'swing_trading', 'symbol', 'system', 'text', 'trend', 'trend_following', 'uptrend', 'user', 'volume_ratio']

@@ -30,6 +30,8 @@ class CorrelationFilter:
 
     def __init__(self, window: int = 50, max_corr: float = 0.7) -> None:
         """
+        Инициализирует фильтр корреляции.
+
         :param window: Количество свечей для расчёта корреляции.
         :param max_corr: Порог: если |corr| ≥ max_corr — открытие запрещено.
         """
@@ -53,7 +55,11 @@ class CorrelationFilter:
             q.append(price)
 
     def _returns(self, symbol: str) -> Optional[np.ndarray]:
-        """Log-returns для символа. None если данных меньше 10 свечей."""
+        """
+        Вычисляет log-returns для символа.
+
+        :return: Массив log-returns или None если данных меньше 10 свечей.
+        """
         prices = list(self._prices[symbol])
         if len(prices) < 10:
             return None
@@ -63,8 +69,10 @@ class CorrelationFilter:
 
     def correlation(self, sym_a: str, sym_b: str) -> Optional[float]:
         """
-        Pearson-корреляция log-returns двух монет.
+        Вычисляет Pearson-корреляцию log-returns двух монет.
 
+        :param sym_a: Первый символ.
+        :param sym_b: Второй символ.
         :return: Значение [-1, 1] или None если данных недостаточно.
         """
         r_a = self._returns(sym_a)
@@ -82,8 +90,10 @@ class CorrelationFilter:
 
     def max_correlation(self, new_symbol: str, open_symbols: List[str]) -> float:
         """
-        Максимальная |correlation| new_symbol с любой из открытых позиций.
+        Возвращает максимальную |correlation| new_symbol с любой открытой позицией.
 
+        :param new_symbol: Символ нового ордера.
+        :param open_symbols: Список символов уже открытых позиций.
         :return: 0.0 если нет данных или открытых позиций.
         """
         if not open_symbols:
@@ -104,6 +114,8 @@ class CorrelationFilter:
         Запрещает открытие если max |correlation| с любой открытой
         позицией превышает порог max_corr.
 
+        :param new_symbol: Символ нового ордера.
+        :param open_symbols: Список символов уже открытых позиций.
         :return: True — открыть можно, False — слишком высокая корреляция.
         """
         corr = self.max_correlation(new_symbol, open_symbols)
@@ -126,4 +138,4 @@ class CorrelationFilter:
         for sym, prices in data.items():
             q = self._prices[sym]
             q.clear()
-            q.extend(prices[-(self._window + 1) :])
+            q.extend(prices[-(self._window + 1):])

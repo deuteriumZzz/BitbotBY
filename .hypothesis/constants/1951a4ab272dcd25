@@ -1,0 +1,4 @@
+# file: /Users/deuterium/Dev/BitbotBY/src/dqn_signal.py
+# hypothesis_version: 6.141.1
+
+[-1.0, 0.0, 0.04, 0.4, 1.0, 2.0, 3.0, 50.0, '.zip', '?', 'SAC загружен из %s', '_norm_stats.json', 'action', 'bb_lower', 'bb_middle', 'bb_upper', 'bb_width', 'bullish', 'buy', 'close', 'confidence', 'high', 'hold', 'indicators', 'low', 'macd', 'macd_signal', 'ohlcv', 'open', 'price', 'rsi', 'sac', 'sell', 'source', 'symbol', 'utf-8', 'volume']

@@ -36,16 +36,21 @@ app = FastAPI(docs_url=None, redoc_url=None, title="BitbotBY health")
 
 
 async def _snapshot() -> Dict[str, Any]:
-    """Собирает метрики бота и обновляет Prometheus gauges."""
+    """
+    Собирает метрики бота и обновляет Prometheus gauges.
+
+    :return: Словарь с текущим состоянием бота для /health эндпоинта.
+    """
     if _bot is None:
         return {}
 
     async with _bot._monitored_lock:
         positions = dict(_bot._monitored)
 
+    consec = _bot._position_monitor._consecutive_losses
     _g_open_positions.set(len(positions))
     _g_paper_balance.set(_bot._paper_balance)
-    _g_consec_losses.set(_bot._consecutive_losses)
+    _g_consec_losses.set(consec)
     _g_ai_calls.set(_bot.news._ai_calls_today)
 
     stats: Dict[str, Any] = {}
@@ -60,7 +65,7 @@ async def _snapshot() -> Dict[str, Any]:
         "is_running": _bot.is_running,
         "open_positions": len(positions),
         "symbols": list(positions.keys()),
-        "consecutive_losses": _bot._consecutive_losses,
+        "consecutive_losses": consec,
         "paper_balance_usdt": round(_bot._paper_balance, 2),
         "current_regime": _bot._current_regime,
         "ai_scorer": getattr(_bot.news, "_ai_scorer", "unknown"),
@@ -74,6 +79,7 @@ async def _snapshot() -> Dict[str, Any]:
 
 @app.get("/health")
 async def health() -> JSONResponse:
+    """Возвращает JSON-статус бота."""
     data = await _snapshot()
     status = "ok" if (data.get("is_running") is True) else "stopped"
     return JSONResponse({"status": status, **data})
@@ -81,6 +87,7 @@ async def health() -> JSONResponse:
 
 @app.get("/metrics")
 async def metrics() -> PlainTextResponse:
+    """Возвращает метрики в формате Prometheus для scraping."""
     await _snapshot()
     return PlainTextResponse(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 

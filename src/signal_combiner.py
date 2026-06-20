@@ -1,3 +1,10 @@
+"""
+Комбинатор сигналов SAC и AI для разных режимов работы бота.
+
+Поддерживает режимы: local (пустой список), dqn (только SAC),
+ai (только Claude API), hybrid (согласие обоих источников).
+"""
+
 from __future__ import annotations
 
 import logging
@@ -42,7 +49,7 @@ class SignalCombiner:
         self.ai = ai
         self.sac = SACSignal()
         self.logger = logging.getLogger(__name__)
-        self.logger.info(f"SignalCombiner mode={Config.MODE}")
+        self.logger.info("SignalCombiner mode=%s", Config.MODE)
 
     async def combine(
         self,
@@ -74,7 +81,7 @@ class SignalCombiner:
         if mode == "hybrid":
             return await self._hybrid(snapshots, balance, regime, regimes)
 
-        self.logger.warning(f"Unknown MODE='{mode}', fallback to 'ai'")
+        self.logger.warning("Unknown MODE='%s', fallback to 'ai'", mode)
         return await self.ai.analyze(snapshots, balance)
 
     @staticmethod

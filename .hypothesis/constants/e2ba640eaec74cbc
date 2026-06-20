@@ -1,0 +1,4 @@
+# file: /Users/deuterium/Dev/BitbotBY/src/risk_management.py
+# hypothesis_version: 6.141.1
+
+[0.0, 0.02, 0.2, 0.5, 1.0, 1.5, 2.0, 'action', 'atr', 'buy', 'confidence', 'current_balance', 'entry_price', 'hold', 'position_size', 'risk_amount', 'risk_calculation', 'sell', 'stop_loss', 'timestamp']

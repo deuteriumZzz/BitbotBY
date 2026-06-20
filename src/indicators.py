@@ -1,3 +1,10 @@
+"""
+Технические индикаторы для торгового бота.
+
+Содержит функции расчёта RSI, MACD, Bollinger Bands, ATR,
+скользящих средних, волатильности, моментума и объёмных индикаторов.
+"""
+
 import logging
 from typing import Tuple
 
@@ -63,7 +70,7 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
         return df
 
     except Exception as e:
-        logger.error(f"Error adding indicators: {e}")
+        logger.error("Error adding indicators: %s", e)
         raise
 
 
@@ -76,11 +83,16 @@ def calculate_rsi(series: pd.Series, period: int = 14) -> pd.Series:
     :return: Серия значений RSI.
     """
     delta = series.diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-    rs = gain / loss.replace(0, float("nan"))
+    gain = delta.where(delta > 0, 0.0)
+    loss = -delta.where(delta < 0, 0.0)
+    # Wilder's Smoothed Moving Average: EWM with alpha=1/period, adjust=False.
+    # Standard rolling().mean() diverges from exchange values (TradingView,
+    # Bybit) — would shift oversold/overbought trigger levels.
+    avg_gain = gain.ewm(alpha=1.0 / period, adjust=False).mean()
+    avg_loss = loss.ewm(alpha=1.0 / period, adjust=False).mean()
+    rs = avg_gain / avg_loss.replace(0, float("nan"))
     rsi = 100 - (100 / (1 + rs))
-    # loss==0 means pure bullish → RSI=100
+    # avg_loss==0 means pure bullish streak → RSI=100
     return rsi.fillna(100)
 
 

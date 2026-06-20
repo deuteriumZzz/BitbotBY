@@ -28,8 +28,7 @@ _MIN_ROWS = 100
 
 class RegimeDetector:
     """
-    Определяет режим рынка через GaussianHMM
-    на лог-доходности и реализованной волатильности.
+    Определяет режим рынка через GaussianHMM на лог-доходности и реализованной волатильности.
 
     Состояния размечаются после обучения по среднему лог-доходности:
     наибольшее — "trending_up", наименьшее — "trending_down",
@@ -37,15 +36,22 @@ class RegimeDetector:
     """
 
     def __init__(self, n_states: int = _N_STATES) -> None:
+        """
+        Инициализирует детектор режима.
+
+        :param n_states: Количество скрытых состояний HMM (по умолчанию 3).
+        """
         self.n_states = n_states
         self._model: Optional[object] = None
         self._state_labels: dict[int, str] = {}
         self._fitted = False
 
     def _build_features(self, df: pd.DataFrame) -> Optional[np.ndarray]:
-        """Строит матрицу признаков (N, 2): [log_return, realized_vol].
+        """
+        Строит матрицу признаков (N, 2): [log_return, realized_vol].
 
-        Возвращает None при нехватке данных.
+        :param df: DataFrame с колонкой 'close'.
+        :return: Матрица признаков или None при нехватке данных.
         """
         if "close" not in df.columns or len(df) < _MIN_ROWS:
             return None

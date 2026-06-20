@@ -1,0 +1,4 @@
+# file: /Users/deuterium/Dev/BitbotBY/src/market_scanner.py
+# hypothesis_version: 6.141.1
+
+[0.0, 0.02, 0.98, 0.995, 1.0, 1.005, 1.02, 100, 672, '/', '/USDT', '1h', '24h', '7d', 'Skip %s: %s', 'atr', 'bb_lower', 'bb_middle', 'bb_position', 'bb_upper', 'bb_width', 'bearish', 'bullish', 'changes', 'close', 'downtrend', 'ema_long', 'ema_short', 'high', 'indicators', 'levels', 'low', 'macd', 'macd_signal', 'middle', 'near_lower', 'near_upper', 'news_sentiment', 'ohlcv', 'open', 'price', 'quoteVolume', 'resistance', 'rsi', 'sideways', 'sma_20', 'sma_50', 'support', 'symbol', 'timestamp', 'top_headlines', 'trend', 'uptrend', 'volume', 'volume_ratio']

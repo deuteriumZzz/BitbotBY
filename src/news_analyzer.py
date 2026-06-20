@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import List, Optional, Tuple
 
 from config import Config
+from src.constants import REDIS_TTL_TRADING_STATE
 from src.redis_client import RedisClient
 
 # AI_DAILY_BUDGET применяется ко всем провайдерам (Claude / DeepSeek / OpenAI).
@@ -133,7 +134,7 @@ class NewsAnalyzer:
             count = self.redis.redis_client.incr(redis_key)
             # Expire at end of day — set TTL only on first increment
             if count == 1:
-                self.redis.redis_client.expire(redis_key, 86400)
+                self.redis.redis_client.expire(redis_key, REDIS_TTL_TRADING_STATE)
             if count > _AI_DAILY_BUDGET:
                 self.logger.warning(
                     "%s daily budget (%d calls) exhausted — VADER fallback",
@@ -141,6 +142,8 @@ class NewsAnalyzer:
                     _AI_DAILY_BUDGET,
                 )
                 return False
+            # Mirror to in-memory counter so logs always show accurate count.
+            self._ai_calls_today = int(count)
             return True
         except Exception:
             # Redis unavailable — fall back to in-memory counter

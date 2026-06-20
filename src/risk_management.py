@@ -1,5 +1,8 @@
 """
 Управление рисками: расчёт позиций, стоп-лосса, тейк-профита и валидация сигналов.
+
+Рассчитывает размер позиции по правилам риска, ATR-based SL/TP,
+критерий Келли (Half-Kelly) и проверяет дневной лимит потерь.
 """
 
 from __future__ import annotations
@@ -37,6 +40,10 @@ class RiskManager:
         self.risk_per_trade = risk_per_trade
         self.redis = RedisClient()
         self.logger = logging.getLogger(__name__)
+        # Daily-loss tracking: reset reference balance each UTC day so the
+        # limit applies to intraday losses, not total losses since bot start.
+        self._day_start_balance: float = initial_balance
+        self._last_reset_date = datetime.utcnow().date()
 
     async def calculate_position_size(
         self,
@@ -158,7 +165,7 @@ class RiskManager:
 
         Kelly fraction = (p·b − q) / b, где b = reward/risk, p = win_rate.
         Используется Half-Kelly (×0.5) и кэп 20% баланса для защиты от
-        оverbetting при зашумлённых оценках win_rate.
+        overbetting при зашумлённых оценках win_rate.
 
         :param entry_price: Цена входа.
         :param stop_loss: Цена стоп-лосса.
@@ -188,17 +195,32 @@ class RiskManager:
         """
         Проверяет, не превышен ли дневной лимит потерь.
 
+        Лимит сбрасывается в UTC-полночь: `_day_start_balance` обновляется
+        до текущего баланса, чтобы ограничивать только внутридневные потери,
+        а не совокупные потери с момента запуска бота.
+
         :param current_balance: Текущий баланс счёта.
         :return: True если лимит НЕ превышен (торговля разрешена),
             False если бот должен прекратить торговлю на сегодня.
         """
-        loss = self.initial_balance - current_balance
-        limit = self.initial_balance * Config.DAILY_LOSS_LIMIT
+        today = datetime.utcnow().date()
+        if today != self._last_reset_date:
+            self._day_start_balance = current_balance
+            self._last_reset_date = today
+            self.logger.info(
+                "Daily loss limit reset for %s; reference balance $%.2f",
+                today,
+                current_balance,
+            )
+
+        loss = self._day_start_balance - current_balance
+        limit = self._day_start_balance * Config.DAILY_LOSS_LIMIT
         if loss >= limit:
             self.logger.warning(
-                f"Достигнут дневной лимит потерь: "
-                f"${loss:.2f} >= ${limit:.2f}. "
-                "Торговля остановлена."
+                "Достигнут дневной лимит потерь: $%.2f >= $%.2f. "
+                "Торговля остановлена.",
+                loss,
+                limit,
             )
             return False
         return True

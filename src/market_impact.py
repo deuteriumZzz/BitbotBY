@@ -46,6 +46,7 @@ _TF_CANDLES: dict[str, int] = {
 
 
 def _candles_per_day(timeframe: str) -> int:
+    """Возвращает количество свечей за 24ч для указанного таймфрейма."""
     return _TF_CANDLES.get(timeframe, 96)
 
 
@@ -96,6 +97,8 @@ def estimate_from_df(
     :param df: OHLCV DataFrame с колонкой 'close' и опционально 'volume'.
     :param order_size_usdt: Номинал ордера в USDT.
     :param timeframe: Таймфрейм ccxt ("1m", "15m", "1h" и т.д.).
+    :param eta: Коэффициент временного импакта.
+    :param gamma: Коэффициент постоянного импакта.
     :return: Доля рыночного импакта.
     """
     if df is None or len(df) < 2 or "close" not in df.columns:

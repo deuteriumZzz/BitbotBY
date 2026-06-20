@@ -1,5 +1,8 @@
 """
 Клиент Bybit API с поддержкой retry, кэширования через Redis и управления ордерами.
+
+Обеспечивает подключение к бирже Bybit через ccxt, получение данных OHLCV
+с Redis-кэшем, создание и отмену ордеров, получение баланса и позиций.
 """
 
 from __future__ import annotations
@@ -70,9 +73,6 @@ class BybitAPI:
     """
 
     def __init__(self) -> None:
-        """
-        Инициализирует объект BybitAPI с подключением к Redis и настройкой логгера.
-        """
         self.exchange: Optional[ccxt.Exchange] = None
         self.redis = RedisClient()
         self.logger = logging.getLogger(__name__)
@@ -121,13 +121,13 @@ class BybitAPI:
             await self.exchange.load_markets()
             self.logger.info("Bybit API инициализирован успешно")
         except ccxt.AuthenticationError as e:
-            self.logger.critical(f"Ошибка авторизации API — проверьте ключи: {e}")
+            self.logger.critical("Ошибка авторизации API — проверьте ключи: %s", e)
             raise
         except (ccxt.NetworkError, ccxt.ExchangeNotAvailable) as e:
-            self.logger.error(f"Биржа недоступна при инициализации: {e}")
+            self.logger.error("Биржа недоступна при инициализации: %s", e)
             raise
         except Exception as e:
-            self.logger.error(f"Ошибка инициализации Bybit API: {e}", exc_info=True)
+            self.logger.error("Ошибка инициализации Bybit API: %s", e, exc_info=True)
             raise
 
     def _process_ohlcv(self, ohlcv_data: list) -> pd.DataFrame:
@@ -165,7 +165,7 @@ class BybitAPI:
 
         cached_data = self.redis.load_market_data(cache_key)
         if cached_data is not None:
-            self.logger.debug(f"Кэш Redis: {cache_key}")
+            self.logger.debug("Кэш Redis: %s", cache_key)
             return cached_data
 
         try:
@@ -178,17 +178,17 @@ class BybitAPI:
         except asyncio.CancelledError:
             raise
         except ccxt.AuthenticationError as e:
-            self.logger.critical(f"Ошибка авторизации API: {e}")
+            self.logger.critical("Ошибка авторизации API: %s", e)
             raise
         except ccxt.InsufficientFunds as e:
-            self.logger.error(f"Недостаточно средств: {e}")
+            self.logger.error("Недостаточно средств: %s", e)
             raise
         except (ccxt.NetworkError, ccxt.RequestTimeout, ccxt.ExchangeNotAvailable) as e:
-            self.logger.warning(f"Временная ошибка сети при получении OHLCV: {e}")
+            self.logger.warning("Временная ошибка сети при получении OHLCV: %s", e)
             raise
         except Exception as e:
             self.logger.error(
-                f"Неожиданная ошибка при получении OHLCV: {e}", exc_info=True
+                "Неожиданная ошибка при получении OHLCV: %s", e, exc_info=True
             )
             raise
 
@@ -214,7 +214,7 @@ class BybitAPI:
         """
         lock_name = f"order_lock:{symbol}"
         if not self.redis.acquire_lock(lock_name):
-            self.logger.warning(f"Не удалось захватить блокировку для {symbol}")
+            self.logger.warning("Не удалось захватить блокировку для %s", symbol)
             return None
         try:
             last_error: Optional[Exception] = None
@@ -235,32 +235,36 @@ class BybitAPI:
                         "status": order.get("status", "open"),
                     }
                     self.redis.save_trading_state(symbol, order_data)
-                    self.logger.info(f"Ордер создан: {order_data}")
+                    self.logger.info("Ордер создан: %s", order_data)
                     return order
                 except asyncio.CancelledError:
                     raise
                 except ccxt.AuthenticationError as e:
-                    self.logger.critical(f"Ошибка авторизации при создании ордера: {e}")
+                    self.logger.critical("Ошибка авторизации при создании ордера: %s", e)
                     raise
                 except ccxt.InsufficientFunds as e:
-                    self.logger.error(f"Недостаточно средств для ордера {symbol}: {e}")
+                    self.logger.error("Недостаточно средств для ордера %s: %s", symbol, e)
                     return None
                 except (ccxt.NetworkError, ccxt.RequestTimeout) as e:
                     last_error = e
                     wait = 2**attempt
                     self.logger.warning(
-                        f"Попытка {attempt + 1}/3 создания ордера не удалась: {e}. "
-                        f"Повтор через {wait}с"
+                        "Попытка %d/3 создания ордера не удалась: %s. Повтор через %dс",
+                        attempt + 1,
+                        e,
+                        wait,
                     )
                     await asyncio.sleep(wait)
                 except Exception as e:
                     last_error = e
                     self.logger.warning(
-                        f"Попытка {attempt + 1}/3 не удалась (неожиданная ошибка): {e}"
+                        "Попытка %d/3 не удалась (неожиданная ошибка): %s",
+                        attempt + 1,
+                        e,
                     )
                     await asyncio.sleep(2**attempt)
             self.logger.error(
-                f"Ордер не создан после 3 попыток: {last_error}", exc_info=True
+                "Ордер не создан после 3 попыток: %s", last_error, exc_info=True
             )
             return None
         finally:
@@ -277,14 +281,14 @@ class BybitAPI:
         except asyncio.CancelledError:
             raise
         except ccxt.AuthenticationError as e:
-            self.logger.critical(f"Ошибка авторизации при получении баланса: {e}")
+            self.logger.critical("Ошибка авторизации при получении баланса: %s", e)
             raise
         except (ccxt.NetworkError, ccxt.RequestTimeout) as e:
-            self.logger.warning(f"Временная ошибка сети при получении баланса: {e}")
+            self.logger.warning("Временная ошибка сети при получении баланса: %s", e)
             return None
         except Exception as e:
             self.logger.error(
-                f"Неожиданная ошибка при получении баланса: {e}", exc_info=True
+                "Неожиданная ошибка при получении баланса: %s", e, exc_info=True
             )
             return None
 
@@ -325,16 +329,16 @@ class BybitAPI:
         except asyncio.CancelledError:
             raise
         except ccxt.AuthenticationError as e:
-            self.logger.critical(f"Ошибка авторизации при получении цены: {e}")
+            self.logger.critical("Ошибка авторизации при получении цены: %s", e)
             raise
         except (ccxt.NetworkError, ccxt.RequestTimeout) as e:
             self.logger.warning(
-                f"Временная ошибка сети при получении цены {symbol}: {e}"
+                "Временная ошибка сети при получении цены %s: %s", symbol, e
             )
             return None
         except Exception as e:
             self.logger.error(
-                f"Неожиданная ошибка при получении цены {symbol}: {e}", exc_info=True
+                "Неожиданная ошибка при получении цены %s: %s", symbol, e, exc_info=True
             )
             return None
 
@@ -352,17 +356,17 @@ class BybitAPI:
             raise
         except ccxt.AuthenticationError as e:
             self.logger.critical(
-                f"Ошибка авторизации при получении статуса ордера: {e}"
+                "Ошибка авторизации при получении статуса ордера: %s", e
             )
             raise
         except (ccxt.NetworkError, ccxt.RequestTimeout) as e:
             self.logger.warning(
-                f"Временная ошибка сети при получении ордера {order_id}: {e}"
+                "Временная ошибка сети при получении ордера %s: %s", order_id, e
             )
             return None
         except Exception as e:
             self.logger.error(
-                f"Неожиданная ошибка fetch_order_status: {e}", exc_info=True
+                "Неожиданная ошибка fetch_order_status: %s", e, exc_info=True
             )
             return None
 
@@ -376,8 +380,16 @@ class BybitAPI:
     ) -> tuple[str | None, str | None]:
         """
         Ставит SL (stop-market) и TP (limit) ордера на бирже.
+
         Возвращает (sl_order_id, tp_order_id) — None если не удалось.
         Служит защитой позиции при падении бота.
+
+        :param symbol: Символ торговой пары.
+        :param close_side: Сторона закрытия ("buy" или "sell").
+        :param qty: Количество актива.
+        :param sl_price: Цена стоп-лосса.
+        :param tp_price: Цена тейк-профита.
+        :return: Кортеж (sl_order_id, tp_order_id).
         """
         sl_id: str | None = None
         tp_id: str | None = None
@@ -394,10 +406,10 @@ class BybitAPI:
                 )
                 sl_id = sl_order.get("id")
                 self.logger.info(
-                    f"Exchange SL placed: {symbol} @ {sl_price} id={sl_id}"
+                    "Exchange SL placed: %s @ %s id=%s", symbol, sl_price, sl_id
                 )
             except Exception as e:
-                self.logger.error(f"Failed to place exchange SL for {symbol}: {e}")
+                self.logger.error("Failed to place exchange SL for %s: %s", symbol, e)
 
         if tp_price and tp_price > 0:
             try:
@@ -406,10 +418,10 @@ class BybitAPI:
                 )
                 tp_id = tp_order.get("id")
                 self.logger.info(
-                    f"Exchange TP placed: {symbol} @ {tp_price} id={tp_id}"
+                    "Exchange TP placed: %s @ %s id=%s", symbol, tp_price, tp_id
                 )
             except Exception as e:
-                self.logger.error(f"Failed to place exchange TP for {symbol}: {e}")
+                self.logger.error("Failed to place exchange TP for %s: %s", symbol, e)
 
         return sl_id, tp_id
 
@@ -423,20 +435,20 @@ class BybitAPI:
         """
         try:
             await self.exchange.cancel_order(order_id, symbol)
-            self.logger.info(f"Ордер {order_id} для {symbol} отменён")
+            self.logger.info("Ордер %s для %s отменён", order_id, symbol)
             return True
         except asyncio.CancelledError:
             raise
         except ccxt.AuthenticationError as e:
-            self.logger.critical(f"Ошибка авторизации при отмене ордера: {e}")
+            self.logger.critical("Ошибка авторизации при отмене ордера: %s", e)
             raise
         except (ccxt.NetworkError, ccxt.RequestTimeout) as e:
             self.logger.warning(
-                f"Временная ошибка сети при отмене ордера {order_id}: {e}"
+                "Временная ошибка сети при отмене ордера %s: %s", order_id, e
             )
             return False
         except Exception as e:
-            self.logger.error(f"Неожиданная ошибка cancel_order: {e}", exc_info=True)
+            self.logger.error("Неожиданная ошибка cancel_order: %s", e, exc_info=True)
             return False
 
     def round_quantity(self, symbol: str, quantity: float) -> float:
@@ -473,8 +485,6 @@ class BybitAPI:
             return quantity
 
     async def close(self) -> None:
-        """
-        Закрывает соединение с биржей.
-        """
+        """Закрывает соединение с биржей."""
         if self.exchange is not None:
             await self.exchange.close()

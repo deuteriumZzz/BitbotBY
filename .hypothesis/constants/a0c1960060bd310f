@@ -1,0 +1,4 @@
+# file: /Users/deuterium/Dev/BitbotBY/src/cycle.py
+# hypothesis_version: 6.141.1
+
+[0.0, 100, 120, '%H:%M:%S', '*', '=', '?', 'MarketScanner', 'NewsAnalyzer', 'PortfolioOptimizer', 'TelegramNotifier', '[', '\\*', '\\[', '\\_', '\\`', '_', '`', 'action', 'alloc_fraction', 'buy', 'close', 'confidence', 'entry', 'hold', 'reasoning', 'sell', 'stop_loss', 'strategy', 'symbol', 'take_profit', '🔴', '🟢']

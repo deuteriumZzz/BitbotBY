@@ -1,3 +1,13 @@
+"""
+Параллельный сканер рынка.
+
+За одну итерацию:
+1. fetch_tickers() — один API-вызов, получаем все пары.
+2. Фильтр: только /USDT, топ-N по объёму за 24ч.
+3. asyncio.gather() — параллельная загрузка OHLCV + индикаторов.
+4. build_snapshot() — снэпшот монеты для AI-анализатора.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -13,6 +23,10 @@ from src.data_loader import DataLoader
 from src.redis_client import RedisClient
 
 logger = logging.getLogger(__name__)
+
+# SMA-50 is the slowest indicator — need at least this many bars before
+# calculate_technical_indicators() produces meaningful (non-zero) values.
+_MIN_INDICATOR_ROWS = 50
 
 
 class MarketScanner:
@@ -34,7 +48,7 @@ class MarketScanner:
 
     async def get_top_symbols(self, n: int = 20) -> List[str]:
         """
-        Топ-N символов /USDT по объёму за 24ч.
+        Возвращает топ-N символов /USDT по объёму за 24ч.
 
         Один вызов fetch_tickers() вместо N отдельных запросов.
 
@@ -57,11 +71,11 @@ class MarketScanner:
             )
             symbols = [sym for sym, _ in ranked[:n]]
             self.logger.info(
-                f"Top {len(symbols)} by volume: " f"{', '.join(symbols[:5])}..."
+                "Top %d by volume: %s...", len(symbols), ", ".join(symbols[:5])
             )
             return symbols
         except Exception as e:
-            self.logger.error(f"fetch_tickers failed: {e}")
+            self.logger.error("fetch_tickers failed: %s", e)
             return Config.SYMBOLS[:n]
 
     async def _fetch_one(
@@ -69,13 +83,25 @@ class MarketScanner:
         symbol: str,
         timeframe: str,
     ) -> Optional[Tuple[str, pd.DataFrame]]:
-        """OHLCV + индикаторы для одного символа."""
+        """
+        Загружает OHLCV + индикаторы для одного символа.
+
+        :param symbol: Символ торговой пары.
+        :param timeframe: Таймфрейм ccxt.
+        :return: Кортеж (symbol, DataFrame) или None при ошибке/нехватке данных.
+        """
         try:
             df = await self.data_loader.get_market_data(symbol, timeframe, limit=100)
+            if len(df) < _MIN_INDICATOR_ROWS:
+                self.logger.debug(
+                    "Skip %s: only %d bars, need >= %d for valid indicators",
+                    symbol, len(df), _MIN_INDICATOR_ROWS,
+                )
+                return None
             df = self.data_loader.calculate_technical_indicators(df)
             return symbol, df
         except Exception as e:
-            self.logger.debug(f"Skip {symbol}: {e}")
+            self.logger.debug("Skip %s: %s", symbol, e)
             return None
 
     async def scan_all(
@@ -99,7 +125,7 @@ class MarketScanner:
                 sym, df = r
                 data[sym] = df
 
-        self.logger.info(f"Scanned {len(data)}/{len(symbols)} symbols")
+        self.logger.info("Scanned %d/%d symbols", len(data), len(symbols))
         return data
 
     @staticmethod
