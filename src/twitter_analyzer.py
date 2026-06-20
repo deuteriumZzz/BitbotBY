@@ -15,11 +15,22 @@ logger = logging.getLogger(__name__)
 _TWITTER_SEARCH_URL = "https://api.twitter.com/2/tweets/search/recent"
 
 # Только крупные монеты — по мелким твитов мало, сигнал шумный.
-# Twitter Basic ~500k твитов/мес: 10 монет × 20 твитов × 48 запросов/день = 9600/день → OK
+# Twitter Basic ~500k твитов/мес: 10 монет × 20 твитов × 48/день = 9600/день → OK
 # 20 монет × тот же расчёт = 19200/день → лимит заканчивается за 26 дней
-_MAJOR_TICKERS = frozenset({
-    "BTC", "ETH", "SOL", "XRP", "BNB", "AVAX", "MATIC", "DOT", "ADA", "LINK",
-})
+_MAJOR_TICKERS = frozenset(
+    {
+        "BTC",
+        "ETH",
+        "SOL",
+        "XRP",
+        "BNB",
+        "AVAX",
+        "MATIC",
+        "DOT",
+        "ADA",
+        "LINK",
+    }
+)
 
 
 class TwitterAnalyzer:
@@ -99,7 +110,7 @@ class TwitterAnalyzer:
         headers = {"Authorization": f"Bearer {self._token}"}
         params = {
             "query": query,
-            "max_results": 20,
+            "max_results": "20",
             "tweet.fields": "created_at,public_metrics",
         }
 
@@ -116,9 +127,7 @@ class TwitterAnalyzer:
                     )
                     return 0.0
                 if resp.status != 200:
-                    logger.debug(
-                        "TwitterAnalyzer: HTTP %d for %s", resp.status, symbol
-                    )
+                    logger.debug("TwitterAnalyzer: HTTP %d for %s", resp.status, symbol)
                     return 0.0
                 data = await resp.json()
 

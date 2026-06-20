@@ -60,7 +60,7 @@ class PositionMonitor:
         self._redis = redis
         # Load persisted counter so circuit breaker survives bot restarts.
         self._consecutive_losses: int = self._load_cb_state()
-        # State for dynamic exits — updated each trading cycle via update_market_state().
+        # State for dynamic exits — updated each cycle via update_market_state().  # noqa: E501
         self._current_signals: dict = {}
         self._current_market_ctx: dict = {}
         self._current_regime: str = "unknown"
@@ -101,10 +101,14 @@ class PositionMonitor:
                             logger.warning(
                                 "Dynamic exit %s [%s]: %s", sym, pos.get("side"), reason
                             )
-                            await self._check_and_close(sym, pos, price, monitored, lock)
+                            await self._check_and_close(
+                                sym, pos, price, monitored, lock
+                            )
                             continue
                     except Exception as _dyn_exc:
-                        logger.error("Dynamic exit check failed for %s: %s", sym, _dyn_exc)
+                        logger.error(
+                            "Dynamic exit check failed for %s: %s", sym, _dyn_exc
+                        )
                     await self._check_and_close(sym, pos, price, monitored, lock)
                     error_counts.pop(sym, None)
                 except (ccxt.NetworkError, ccxt.RequestTimeout) as exc:

@@ -78,7 +78,10 @@ class MarketContext:
         # Reddit sentiment — per-base, 30 мин
         self._reddit_cache: Dict[str, Tuple[Tuple[float, str], float]] = {}
         # Stablecoin supply — global, 60 мин
-        self._stablecoin_cache: Tuple[Tuple[float, str], float] = ((0.0, "neutral"), 0.0)
+        self._stablecoin_cache: Tuple[Tuple[float, str], float] = (
+            (0.0, "neutral"),
+            0.0,
+        )
 
     async def get_context(self, symbol: str, current_price: float) -> dict:
         """
@@ -97,13 +100,17 @@ class MarketContext:
         is_btc = symbol == "BTC/USDT"
 
         funding_rate, funding_signal = await self._get_funding(symbol)
-        oi_signal, liquidation_pressure = await self._get_oi_signal(symbol, current_price)
+        oi_signal, liquidation_pressure = await self._get_oi_signal(
+            symbol, current_price
+        )
         fear_greed, fng_signal = await self._get_fear_greed()
         basis_pct, basis_signal = await self._get_basis(symbol, current_price)
         ob_imbalance, ob_signal = await self._get_orderbook_imbalance(symbol)
 
         if base == "BTC":
-            google_trends, google_trends_signal = await self._get_google_trends("buy bitcoin")
+            google_trends, google_trends_signal = await self._get_google_trends(
+                "buy bitcoin"
+            )
         else:
             google_trends, google_trends_signal = 50, "neutral"
 
@@ -116,10 +123,12 @@ class MarketContext:
 
         if is_btc:
             etf_flow, etf_signal = await self._get_btc_etf_flows()
-            stablecoin_val, stablecoin_signal = await self._get_stablecoin_supply_change()
+            stablecoin_val, stablecoin_signal = (
+                await self._get_stablecoin_supply_change()
+            )
         else:
             etf_flow, etf_signal = 0.0, "neutral"
-            stablecoin_val, stablecoin_signal = 0.0, "neutral"
+            _, stablecoin_signal = 0.0, "neutral"
 
         reddit_val, reddit_signal = await self._get_reddit_sentiment(base)
 
@@ -229,7 +238,9 @@ class MarketContext:
                 f"?category=linear&symbol={sym_bybit}&limit=1"
             )
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as resp:
+                async with session.get(
+                    url, timeout=aiohttp.ClientTimeout(total=5)
+                ) as resp:
                     data = await resp.json()
 
             result_list = (data.get("result") or {}).get("list") or []
@@ -253,7 +264,9 @@ class MarketContext:
 
     # ── Open Interest + Liquidation Pressure ──────────────────────────────────
 
-    async def _get_oi_signal(self, symbol: str, current_price: float) -> Tuple[str, str]:
+    async def _get_oi_signal(
+        self, symbol: str, current_price: float
+    ) -> Tuple[str, str]:
         """
         Сравнивает последние 2 значения OI для определения давления.
 
@@ -270,7 +283,9 @@ class MarketContext:
                 f"?category=linear&symbol={sym_bybit}&intervalTime=15min&limit=2"
             )
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as resp:
+                async with session.get(
+                    url, timeout=aiohttp.ClientTimeout(total=5)
+                ) as resp:
                     data = await resp.json()
 
             result_list = (data.get("result") or {}).get("list") or []
@@ -297,9 +312,13 @@ class MarketContext:
             price_falling = current_price < prev_price * 0.9995
 
             if oi_drop_pct > 0.02 and price_falling:
-                liquidation_pressure = "long_liquidation"   # OI упал + цена падает = лонги ликвидируются
+                liquidation_pressure = (
+                    "long_liquidation"  # OI упал + цена падает = лонги ликвидируются
+                )
             elif oi_drop_pct > 0.02 and not price_falling:
-                liquidation_pressure = "short_squeeze"      # OI упал + цена растёт = шорты закрываются
+                liquidation_pressure = (
+                    "short_squeeze"  # OI упал + цена растёт = шорты закрываются
+                )
             else:
                 liquidation_pressure = "neutral"
 
@@ -341,7 +360,9 @@ class MarketContext:
                 f"?category=linear&symbol={sym_bybit}"
             )
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as resp:
+                async with session.get(
+                    url, timeout=aiohttp.ClientTimeout(total=5)
+                ) as resp:
                     data = await resp.json()
 
             result_list = (data.get("result") or {}).get("list") or []
@@ -436,7 +457,9 @@ class MarketContext:
 
             value = await loop.run_in_executor(None, fetch)
             signal = (
-                "retail_fomo" if value > 75 else ("retail_absent" if value < 20 else "neutral")
+                "retail_fomo"
+                if value > 75
+                else ("retail_absent" if value < 20 else "neutral")
             )
             self._trends_cache = ((value, signal), now)
             return value, signal
@@ -448,7 +471,9 @@ class MarketContext:
 
     # ── Deribit options (PCR + IV Skew) ──────────────────────────────────────
 
-    async def _get_deribit_options(self, base: str = "BTC") -> Tuple[float, str, float, str]:
+    async def _get_deribit_options(
+        self, base: str = "BTC"
+    ) -> Tuple[float, str, float, str]:
         """Возвращает (pcr, pcr_signal, iv_skew, iv_signal) за один запрос."""
         now = time.monotonic()
         cached = self._deribit_cache.get(base)
@@ -463,7 +488,9 @@ class MarketContext:
                 f"?currency={base}&kind=option"
             )
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=8)) as resp:
+                async with session.get(
+                    url, timeout=aiohttp.ClientTimeout(total=8)
+                ) as resp:
                     data = await resp.json()
 
             result = data.get("result", [])
@@ -555,10 +582,12 @@ class MarketContext:
                 f"?category=linear&symbol={sym_bybit}&limit=25"
             )
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as resp:
+                async with session.get(
+                    url, timeout=aiohttp.ClientTimeout(total=5)
+                ) as resp:
                     data = await resp.json()
 
-            result = (data.get("result") or {})
+            result = data.get("result") or {}
             bids = result.get("b", [])
             asks = result.get("a", [])
 
@@ -602,17 +631,20 @@ class MarketContext:
 
         try:
             import os
+
             import aiohttp
 
             api_key = os.getenv("GLASSNODE_API_KEY", "")
 
             if api_key:
                 url = (
-                    "https://api.glassnode.com/v1/metrics/distribution/exchange_net_position_change"
+                    "https://api.glassnode.com/v1/metrics/distribution/exchange_net_position_change"  # noqa: E501
                     f"?a={base}&i=24h&api_key={api_key}"
                 )
                 async with aiohttp.ClientSession() as session:
-                    async with session.get(url, timeout=aiohttp.ClientTimeout(total=8)) as resp:
+                    async with session.get(
+                        url, timeout=aiohttp.ClientTimeout(total=8)
+                    ) as resp:
                         data = await resp.json(content_type=None)
 
                 if isinstance(data, list) and data:
@@ -638,7 +670,9 @@ class MarketContext:
                 f"?localization=false&tickers=false&community_data=false"
             )
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=8)) as resp:
+                async with session.get(
+                    url, timeout=aiohttp.ClientTimeout(total=8)
+                ) as resp:
                     data = await resp.json(content_type=None)
 
             market_data = data.get("market_data") or {}
@@ -677,6 +711,7 @@ class MarketContext:
 
         try:
             import re
+
             import aiohttp
 
             url = "https://farside.co.uk/bitcoin-etf-flow-all-data-table"
@@ -699,7 +734,11 @@ class MarketContext:
                         if len(cells) < 2:
                             continue
                         last_cell_text = cells[-1].get_text(strip=True)
-                        last_cell_text = last_cell_text.replace(",", "").replace("(", "-").replace(")", "")
+                        last_cell_text = (
+                            last_cell_text.replace(",", "")
+                            .replace("(", "-")
+                            .replace(")", "")
+                        )
                         try:
                             total = float(last_cell_text)
                             if total != 0:
@@ -718,7 +757,9 @@ class MarketContext:
                 pattern = r"<tr[^>]*>.*?</tr>"
                 rows = re.findall(pattern, html, re.DOTALL | re.IGNORECASE)
                 for row in reversed(rows):
-                    cells = re.findall(r"<t[dh][^>]*>(.*?)</t[dh]>", row, re.DOTALL | re.IGNORECASE)
+                    cells = re.findall(
+                        r"<t[dh][^>]*>(.*?)</t[dh]>", row, re.DOTALL | re.IGNORECASE
+                    )
                     if not cells:
                         continue
                     raw = re.sub(r"<[^>]+>", "", cells[-1]).strip()
@@ -763,6 +804,7 @@ class MarketContext:
 
         try:
             import os
+
             client_id = os.getenv("REDDIT_CLIENT_ID", "")
             client_secret = os.getenv("REDDIT_CLIENT_SECRET", "")
             user_agent = os.getenv("REDDIT_USER_AGENT", "BitbotBY/1.0")
@@ -826,13 +868,15 @@ class MarketContext:
 
             url = "https://api.coingecko.com/api/v3/coins/tether"
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=8)) as resp:
+                async with session.get(
+                    url, timeout=aiohttp.ClientTimeout(total=8)
+                ) as resp:
                     data = await resp.json(content_type=None)
 
             market_data = data.get("market_data") or {}
             change_pct = (
-                (market_data.get("market_cap_change_percentage_24h_in_currency") or {}).get("usd", 0.0)
-            )
+                market_data.get("market_cap_change_percentage_24h_in_currency") or {}
+            ).get("usd", 0.0)
             change_pct = float(change_pct)
 
             if change_pct > 0.5:

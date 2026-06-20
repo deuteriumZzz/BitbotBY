@@ -133,6 +133,7 @@ class TradeHistory:
         """
         now_iso = datetime.now().isoformat()
         async with self._lock:
+
             def _write():
                 cur = self._conn.execute(
                     """
@@ -179,6 +180,7 @@ class TradeHistory:
         now_iso = datetime.now().isoformat()
 
         async with self._lock:
+
             def _read():
                 return self._conn.execute(
                     "SELECT action, entry_price, quantity, "
@@ -259,6 +261,7 @@ class TradeHistory:
             )
             """
         async with self._lock:
+
             def _read():
                 return self._conn.execute(sql, params).fetchone()
 
@@ -291,6 +294,7 @@ class TradeHistory:
             ORDER BY id DESC LIMIT ?
             """
         async with self._lock:
+
             def _read():
                 return self._conn.execute(sql, params).fetchall()
 
@@ -331,6 +335,7 @@ class TradeHistory:
             f"ORDER BY id DESC LIMIT ?)"
         )
         async with self._lock:
+
             def _read():
                 return self._conn.execute(sql, params).fetchone()
 
@@ -357,6 +362,7 @@ class TradeHistory:
             FROM trades
             """
         async with self._lock:
+
             def _read():
                 return self._conn.execute(sql).fetchone()
 

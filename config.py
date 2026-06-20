@@ -166,7 +166,9 @@ class Config:
         os.getenv("DRAWDOWN_SCALE_ENABLED", "true").lower() == "true"
     )
     # Порог просадки для активации масштабирования (0.10 = 10%)
-    DRAWDOWN_SCALE_THRESHOLD: float = float(os.getenv("DRAWDOWN_SCALE_THRESHOLD", "0.10"))
+    DRAWDOWN_SCALE_THRESHOLD: float = float(
+        os.getenv("DRAWDOWN_SCALE_THRESHOLD", "0.10")
+    )
     # Множитель размера позиции при просадке (0.5 = 50% от расчётного)
     DRAWDOWN_SCALE_FACTOR: float = float(os.getenv("DRAWDOWN_SCALE_FACTOR", "0.5"))
 

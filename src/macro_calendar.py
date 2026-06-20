@@ -19,22 +19,24 @@ from typing import Dict, List
 
 logger = logging.getLogger(__name__)
 
-_BLACKOUT_MINUTES = 30   # минут до и после события
-_CACHE_TTL = 3600.0      # кэш на 1 час
+_BLACKOUT_MINUTES = 30  # минут до и после события
+_CACHE_TTL = 3600.0  # кэш на 1 час
 
 # Ключевые события которые блокируем (проверяются по вхождению в название)
-_HIGH_IMPACT_KEYWORDS = frozenset({
-    "fomc",
-    "federal reserve",
-    "interest rate decision",
-    "cpi",
-    "consumer price index",
-    "nonfarm",
-    "non-farm",
-    "nfp",
-    "gdp",
-    "pce",
-})
+_HIGH_IMPACT_KEYWORDS = frozenset(
+    {
+        "fomc",
+        "federal reserve",
+        "interest rate decision",
+        "cpi",
+        "consumer price index",
+        "nonfarm",
+        "non-farm",
+        "nfp",
+        "gdp",
+        "pce",
+    }
+)
 
 
 class MacroCalendar:

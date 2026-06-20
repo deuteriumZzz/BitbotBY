@@ -19,12 +19,13 @@ from config import Config
 from src.ai_analyzer import AIAnalyzer
 from src.bybit_api import BybitAPI
 from src.constants import REDIS_TTL_MARKET_DATA, SILENT_DEATH_ALERT_COOLDOWN
-from src.market_context import MarketContext
 from src.correlation_filter import CorrelationFilter
 from src.cycle import CycleRunner
 from src.data_loader import DataLoader
 from src.health_server import cycles_counter
 from src.logger import _SecretFilter, setup_logging
+from src.macro_calendar import MacroCalendar
+from src.market_context import MarketContext
 from src.market_scanner import MarketScanner
 from src.news_analyzer import NewsAnalyzer
 from src.order_executor import OrderExecutor
@@ -37,7 +38,6 @@ from src.risk_management import RiskManager
 from src.signal_combiner import SignalCombiner
 from src.strategies import TradingStrategy
 from src.telegram_notifier import TelegramNotifier
-from src.macro_calendar import MacroCalendar
 from src.trade_history import TradeHistory
 from src.types import PositionRecord
 
@@ -637,8 +637,10 @@ class TradingBot:
                     if df is not None and not df.empty
                 }
                 try:
-                    _market_ctx_map = await self._market_context.get_context_for_symbols(
-                        list(market_data.keys()), _prices
+                    _market_ctx_map = (
+                        await self._market_context.get_context_for_symbols(
+                            list(market_data.keys()), _prices
+                        )
                     )
                 except Exception as _mc_exc:
                     logger.warning("MarketContext fetch failed: %s", _mc_exc)

@@ -97,13 +97,13 @@ class TradingEnv(gym.Env):
         gt_raw = float(row.get("google_trends", 50.0))
 
         new_features = [
-            funding_raw * 1000.0,                          # [14] funding_rate_norm
-            float(np.clip(ob_imb, -1.0, 1.0)),            # [15] ob_imbalance
-            float(np.clip(pcr_raw / 3.0, 0.0, 1.0)),      # [16] pcr_norm
-            fg_raw / 100.0,                                 # [17] fear_greed_norm
-            float(np.clip(iv_raw / 20.0, -1.0, 1.0)),     # [18] iv_skew_norm
-            float(np.clip(basis_raw / 5.0, -1.0, 1.0)),   # [19] basis_norm
-            gt_raw / 100.0,                                 # [20] google_trends_norm
+            funding_raw * 1000.0,  # [14] funding_rate_norm
+            float(np.clip(ob_imb, -1.0, 1.0)),  # [15] ob_imbalance
+            float(np.clip(pcr_raw / 3.0, 0.0, 1.0)),  # [16] pcr_norm
+            fg_raw / 100.0,  # [17] fear_greed_norm
+            float(np.clip(iv_raw / 20.0, -1.0, 1.0)),  # [18] iv_skew_norm
+            float(np.clip(basis_raw / 5.0, -1.0, 1.0)),  # [19] basis_norm
+            gt_raw / 100.0,  # [20] google_trends_norm
         ]
 
         return np.array(

@@ -101,7 +101,7 @@ class SignalCombiner:
                     "Context signals generated: %d",
                     len(context_recs),
                 )
-                recs = self._merge_with_context(recs, context_recs)
+                return self._merge_with_context(recs, context_recs)
 
         return recs
 
@@ -462,7 +462,9 @@ class SignalCombiner:
         snap_map: Dict[str, Dict[str, Any]] = {s["symbol"]: s for s in snapshots}
 
         # Определяем, является ли context per-symbol map
-        first_val = next(iter(market_context.values()), None) if market_context else None
+        first_val = (
+            next(iter(market_context.values()), None) if market_context else None
+        )
         is_per_symbol = isinstance(first_val, dict)
 
         results: List[Dict[str, Any]] = []
@@ -501,7 +503,9 @@ class SignalCombiner:
             # ── Funding Rate (contrarian) ──────────────────────────────────
             if funding_signal == "long_overheated":
                 conf = min(0.60 + abs(funding_rate) * 100, 0.88)
-                reason = f"Funding overheated {funding_rate * 100:.3f}% → contrarian sell"
+                reason = (
+                    f"Funding overheated {funding_rate * 100:.3f}% → contrarian sell"
+                )
                 candidates.append(("sell", conf, reason))
             elif funding_signal == "short_overheated":
                 conf = min(0.60 + abs(funding_rate) * 100, 0.85)
@@ -510,17 +514,21 @@ class SignalCombiner:
 
             # ── Liquidation pressure (impulse) ────────────────────────────
             if liquidation_pressure == "long_liquidation":
-                candidates.append((
-                    "sell",
-                    0.72,
-                    "Long liquidation cascade detected → momentum sell",
-                ))
+                candidates.append(
+                    (
+                        "sell",
+                        0.72,
+                        "Long liquidation cascade detected → momentum sell",
+                    )
+                )
             elif liquidation_pressure == "short_squeeze":
-                candidates.append((
-                    "buy",
-                    0.70,
-                    "Short squeeze detected → momentum buy",
-                ))
+                candidates.append(
+                    (
+                        "buy",
+                        0.70,
+                        "Short squeeze detected → momentum buy",
+                    )
+                )
 
             # ── Orderbook imbalance (short-term) ──────────────────────────
             if ob_signal == "bid_dominant" and ob_imbalance > 0.4:
@@ -551,7 +559,9 @@ class SignalCombiner:
             # ── Basis premium (only strong premium > 2%) ──────────────────
             if basis_signal == "greed_premium" and basis_pct > 2.0:
                 conf = 0.63 + min(basis_pct - 2.0, 1.0) * 0.05
-                reason = f"Futures basis={basis_pct:.2f}% (greed premium) → contrarian sell"
+                reason = (
+                    f"Futures basis={basis_pct:.2f}% (greed premium) → contrarian sell"
+                )
                 candidates.append(("sell", conf, reason))
 
             # ── BTC ETF flows ──────────────────────────────────────────────

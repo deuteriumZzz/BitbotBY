@@ -9,7 +9,6 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
 from config import Config
-from src.constants import REDIS_TTL_TRADING_STATE
 from src.redis_client import RedisClient
 
 # AI_DAILY_BUDGET применяется ко всем провайдерам (Claude / DeepSeek / OpenAI).
@@ -154,10 +153,14 @@ class NewsAnalyzer:
         try:
             count = self.redis.redis_client.incr(redis_key)
             if count == 1:
-                # TTL до конца текущего UTC-дня (не фиксированные 86400 сек от момента создания)
+                # TTL до конца текущего UTC-дня  # noqa: E501
                 _now = datetime.utcnow()
-                _seconds_until_midnight = 86400 - (_now.hour * 3600 + _now.minute * 60 + _now.second)
-                self.redis.redis_client.expire(redis_key, max(1, _seconds_until_midnight))
+                _seconds_until_midnight = 86400 - (
+                    _now.hour * 3600 + _now.minute * 60 + _now.second
+                )
+                self.redis.redis_client.expire(
+                    redis_key, max(1, _seconds_until_midnight)
+                )
             if count > _AI_DAILY_BUDGET:
                 self.logger.warning(
                     "%s daily budget (%d calls) exhausted — VADER fallback",
@@ -246,6 +249,7 @@ class NewsAnalyzer:
                         pub = entry.get("published_parsed")
                         if pub is not None:
                             import calendar
+
                             ts = float(calendar.timegm(pub))
                             if ts < cutoff:
                                 continue
@@ -292,7 +296,9 @@ class NewsAnalyzer:
 
         if articles:
             headlines = [
-                (art.get("title", "") or "")[:100] for art in articles if art.get("title")
+                (art.get("title", "") or "")[:100]
+                for art in articles
+                if art.get("title")
             ]
         else:
             headlines = await self._fetch_rss_headlines(symbol)

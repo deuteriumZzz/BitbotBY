@@ -55,7 +55,7 @@ class FundingArbDetector:
             f"Risk: Near-zero (delta neutral)"
         )
         try:
-            await telegram.notify(msg)  # type: ignore[union-attr]
+            await telegram.notify(msg)  # type: ignore[attr-defined]
             logger.info(
                 "FundingArb alert sent: %s rate=%.4f%% APY=%.0f%%",
                 symbol,
