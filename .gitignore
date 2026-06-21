@@ -9,6 +9,9 @@ venv/
 *.log
 models/
 .env
-data/historical_btc.csv  # Если не хотите коммитить данные
+data/historical_btc.csv
 .claude/
 claude/
+.hypothesis/
+.pytest_cache/
+*.egg-info/
