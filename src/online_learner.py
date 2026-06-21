@@ -194,9 +194,7 @@ class OnlineLearner:
         if self._closed_count % self._trigger != 0:
             return
         if self._is_training:
-            logger.info(
-                "OnlineLearner [periodic]: переобучение уже идёт — пропускаем"
-            )
+            logger.info("OnlineLearner [periodic]: переобучение уже идёт — пропускаем")
             return
 
         logger.info(
@@ -237,12 +235,20 @@ class OnlineLearner:
             logger.error("OnlineLearner [online] ошибка: %s", exc)
 
     def _run_full_retrain(self) -> None:
-        """Синхронный: полный train() с горячей подменой модели."""
-        try:
-            from reinforcement_learning.train_sac import train
+        """Синхронный: полный ретрейн через subprocess с горячей подменой модели."""
+        import subprocess
+        import sys
 
+        try:
             tmp_path = Config.SAC_MODEL_PATH + ".new"
-            train(model_path=tmp_path)
+            env = os.environ.copy()
+            env["SAC_MODEL_PATH"] = tmp_path
+
+            subprocess.run(
+                [sys.executable, "reinforcement_learning/train_sac.py"],
+                env=env,
+                check=True,
+            )
 
             # Атомарная подмена: старая → .bak, новая → основной путь
             bak_path = Config.SAC_MODEL_PATH + ".bak"

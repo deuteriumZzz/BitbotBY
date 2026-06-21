@@ -68,7 +68,7 @@ def objective(trial: object, df: object) -> float:
     val_df = _df.iloc[split_idx:].reset_index(drop=True)
 
     try:
-        env = Monitor(TradingEnv(train_df))
+        env = Monitor(TradingEnv(train_df))  # type: ignore[var-annotated]
         model = SAC(
             "MlpPolicy",
             env,
@@ -160,7 +160,7 @@ if __name__ == "__main__":
             api_secret=os.getenv("BYBIT_API_SECRET", ""),
         )
         symbol = os.getenv("TRADING_SYMBOL", "BTC/USDT")
-        df = await loader.load_ohlcv(symbol, "15m", limit=5760)
+        df = await loader.get_paginated_history(symbol, "15m", months=3)
         if df is None or df.empty:
             logger.error("Нет данных для тюнинга")
             return

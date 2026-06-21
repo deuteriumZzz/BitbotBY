@@ -18,8 +18,8 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-# Путь к сохраняемой модели
-MODEL_PATH = "models/sac_model.zip"
+# Путь к сохраняемой модели (переопределяется env SAC_MODEL_PATH)
+MODEL_PATH = os.getenv("SAC_MODEL_PATH", "models/sac_model.zip")
 # Количество шагов обучения (переопределяется env-переменной TOTAL_TIMESTEPS)
 TOTAL_TIMESTEPS = int(os.getenv("TOTAL_TIMESTEPS", "500000"))
 # Доля данных для обучения (остаток — тестовая выборка)
@@ -303,7 +303,7 @@ def train(
         logger.info("Загружены Optuna-гиперпараметры из %s", hp_path)
 
     try:
-        env = Monitor(TradingEnv(train_df))
+        env = Monitor(TradingEnv(train_df))  # type: ignore[var-annotated]
         model = SAC(
             "MlpPolicy",
             env,
@@ -400,7 +400,7 @@ def train_walk_forward(
 
             from reinforcement_learning.rl_env import TradingEnv
 
-            env = Monitor(TradingEnv(train_df))
+            env = Monitor(TradingEnv(train_df))  # type: ignore[var-annotated]
             model = SAC("MlpPolicy", env, verbose=0)
             model.learn(total_timesteps=total_timesteps)
         except Exception as exc:
