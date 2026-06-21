@@ -189,6 +189,9 @@ class BybitAPI:
         except (ccxt.NetworkError, ccxt.RequestTimeout, ccxt.ExchangeNotAvailable) as e:
             self.logger.warning("Временная ошибка сети при получении OHLCV: %s", e)
             raise
+        except ccxt.BadSymbol as e:
+            self.logger.warning("Символ недоступен на этой бирже: %s", e)
+            raise
         except Exception as e:
             self.logger.error(
                 "Неожиданная ошибка при получении OHLCV: %s", e, exc_info=True
