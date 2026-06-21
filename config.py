@@ -172,6 +172,10 @@ class Config:
     # Множитель размера позиции при просадке (0.5 = 50% от расчётного)
     DRAWDOWN_SCALE_FACTOR: float = float(os.getenv("DRAWDOWN_SCALE_FACTOR", "0.5"))
 
+    # ── Backtest ───────────────────────────────────────────────────────────
+    # Доля данных, отложенная для out-of-sample теста (0.2 = последние 20%)
+    BACKTEST_HOLDOUT_RATIO: float = float(os.getenv("BT_HOLDOUT_RATIO", "0.2"))
+
     # ── Macro blackout (УЛУЧШЕНИЕ 7) ──────────────────────────────────────
     # Ключ Finnhub API для получения экономического календаря
     FINNHUB_API_KEY: str = os.getenv("FINNHUB_API_KEY", "")

@@ -55,13 +55,17 @@ class MarketScanner:
         """
         try:
             tickers = await self.api.exchange.fetch_tickers()
-            usdt = {
-                sym: t
-                for sym, t in tickers.items()
-                if sym.endswith("/USDT")
-                and (t.get("quoteVolume") or 0) > 0
-                and sym.split("/")[0] not in STABLECOIN_BASES
-            }
+            # spot: "BTC/USDT", linear futures: "BTC/USDT:USDT" — accept both
+            usdt: dict = {}
+            for sym, t in tickers.items():
+                if "/USDT" not in sym:
+                    continue
+                base_sym = sym.split(":")[0]  # "BTC/USDT:USDT" → "BTC/USDT"
+                if base_sym.split("/")[0] in STABLECOIN_BASES:
+                    continue
+                if (t.get("quoteVolume") or 0) <= 0:
+                    continue
+                usdt[base_sym] = t
             ranked = sorted(
                 usdt.items(),
                 key=lambda x: x[1].get("quoteVolume", 0),
