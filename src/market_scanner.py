@@ -66,6 +66,15 @@ class MarketScanner:
                 if (t.get("quoteVolume") or 0) <= 0:
                     continue
                 usdt[base_sym] = t
+            # Для linear-режима оставить только символы с perpetual контрактом
+            if Config.MARKET_TYPE == "linear" and self.api.exchange.markets:
+                linear_bases = {
+                    s.split(":")[0]
+                    for s in self.api.exchange.markets
+                    if s.endswith(":USDT")
+                }
+                usdt = {s: t for s, t in usdt.items() if s in linear_bases}
+
             ranked = sorted(
                 usdt.items(),
                 key=lambda x: x[1].get("quoteVolume", 0),

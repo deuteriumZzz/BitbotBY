@@ -106,6 +106,9 @@ class DataLoader:
             raise
         except ccxt.AuthenticationError:
             raise
+        except ccxt.BadSymbol as e:
+            self.logger.warning("Символ пропущен (нет на бирже): %s", e)
+            raise
         except Exception as e:
             self.logger.error(
                 "Ошибка загрузки рыночных данных: %s",
