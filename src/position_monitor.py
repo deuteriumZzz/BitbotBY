@@ -24,6 +24,7 @@ from src.types import PositionRecord
 
 if TYPE_CHECKING:
     from src.bybit_api import BybitAPI
+    from src.online_learner import OnlineLearner
     from src.portfolio_manager import PortfolioManager
     from src.redis_client import RedisClient
     from src.telegram_notifier import TelegramNotifier
@@ -49,6 +50,7 @@ class PositionMonitor:
         portfolio_manager: "PortfolioManager",
         set_running: Callable[[bool], None],
         redis: "Optional[RedisClient]" = None,
+        online_learner: "Optional[OnlineLearner]" = None,
     ) -> None:
         self._api = api
         self._trade_history = trade_history
@@ -58,6 +60,7 @@ class PositionMonitor:
         # breaker can halt trading without a circular import.
         self._set_running = set_running
         self._redis = redis
+        self._online_learner = online_learner
         # Load persisted counter so circuit breaker survives bot restarts.
         self._consecutive_losses: int = self._load_cb_state()
         # State for dynamic exits — updated each cycle via update_market_state().  # noqa: E501
@@ -457,15 +460,25 @@ class PositionMonitor:
         logger.info("Position closed: %s at %.4f", sym, price)
 
         # Save experience for the next SAC retraining run
+        entry = pos.get("entry", price)
+        if side == "buy":
+            pnl_pct = (price - entry) / entry if entry else 0.0
+        else:
+            pnl_pct = (entry - price) / entry if entry else 0.0
+
         if pos.get("snap"):
             from src.experience_buffer import save as _exp_save  # noqa: PLC0415
 
             _exp_save(
                 snap=pos["snap"],
                 action=side,
-                entry_price=pos.get("entry", price),
+                entry_price=entry,
                 exit_price=price,
             )
+
+        if self._online_learner:
+            strategy = (pos.get("snap") or {}).get("strategy", "unknown")
+            await self._online_learner.on_trade_closed(sym, side, pnl_pct, strategy)
 
         trade_id = pos.get("trade_id")
         if trade_id:

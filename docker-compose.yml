@@ -84,6 +84,7 @@ services:
         max-file: "3"
 
   trainer:
+    profiles: [training]
     build: .
     container_name: bitbot_trainer
     restart: unless-stopped

@@ -1,4 +1,4 @@
-.PHONY: train train-long tune retrain backtest backtest-eth paper paper-ai live test lint fmt up down logs
+.PHONY: train train-long train-docker tune retrain backtest backtest-eth paper paper-ai live test lint fmt up down logs
 
 # ── Training ───────────────────────────────────────────────────────────────────
 train:
@@ -9,6 +9,11 @@ train:
 train-long:
 	@echo ">>> Training SAC model (1M steps, ~2 h on CPU)..."
 	PYTHONPATH=. TOTAL_TIMESTEPS=1000000 python3 reinforcement_learning/train_sac.py
+
+train-docker:
+	@echo ">>> Starting SAC trainer in Docker (runs once, ~60 min)..."
+	docker compose --profile training up trainer --build
+	@echo ">>> Trainer done. Model saved to models/sac_model.zip"
 
 tune:
 	@echo ">>> Optuna hyperparameter search (30 trials × 50k steps)..."

@@ -63,6 +63,21 @@ def _save_norm_stats(model_path: str, stats: Dict[str, Any]) -> None:
     logger.info(f"Норм-статистика сохранена → {norm_path}")
 
 
+def _load_norm_stats(model_path: str) -> Dict[str, Any]:
+    """
+    Загружает статистику нормализации из JSON-файла рядом с моделью.
+
+    :param model_path: Путь к файлу модели (.zip).
+    :return: Словарь {column: [mean, std]} или пустой словарь если файл не найден.
+    """
+    norm_path = model_path.replace(".zip", "_norm_stats.json")
+    if not os.path.exists(norm_path):
+        logger.warning("norm_stats не найден: %s — нормализация пропущена", norm_path)
+        return {}
+    with open(norm_path, encoding="utf-8") as f:
+        return json.load(f)
+
+
 def _compute_norm_stats(df: pd.DataFrame) -> Dict[str, Any]:
     """
     Вычисляет среднее и стандартное отклонение для числовых колонок.

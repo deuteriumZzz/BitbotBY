@@ -1,0 +1,4 @@
+# file: /Users/deuterium/Dev/BitbotBY/src/position_monitor.py
+# hypothesis_version: 6.141.1
+
+[0.0, 0.72, 1.0, 100, 'BybitAPI', 'PortfolioManager', 'TelegramNotifier', 'TradeHistory', 'action', 'atr', 'buy', 'circuit_breaker', 'close', 'confidence', 'consecutive_losses', 'cost', 'entry', 'exchange_sl_id', 'exchange_tp_id', 'fear_greed', 'fee', 'funding_signal', 'inf', 'liquidation_pressure', 'long_liquidation', 'long_overheated', 'market', 'neutral', 'partial_tp', 'partial_tp_triggered', 'qty', 'sell', 'short_overheated', 'short_squeeze', 'side', 'snap', 'stop_loss', 'strategy', 'take_profit', 'trade_id', 'trending_down', 'trending_up', 'unknown']

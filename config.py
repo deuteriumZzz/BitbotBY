@@ -172,6 +172,20 @@ class Config:
     # Множитель размера позиции при просадке (0.5 = 50% от расчётного)
     DRAWDOWN_SCALE_FACTOR: float = float(os.getenv("DRAWDOWN_SCALE_FACTOR", "0.5"))
 
+    # ── Online Learning ────────────────────────────────────────────────────
+    # Режим автообучения SAC-модели на реальных сделках:
+    #   disabled — выключено (вручную: make train)
+    #   online   — gradient steps после каждой сделки [РИСКОВАННО, только эксперименты]
+    #   periodic — полный ретрейн в фоне каждые N сделок [РЕКОМЕНДУЕТСЯ]
+    #   hybrid   — periodic + динамические веса стратегий в реальном времени
+    ONLINE_LEARNING_MODE: str = os.getenv("ONLINE_LEARNING_MODE", "periodic")
+    # Количество закрытых сделок до запуска переобучения (для periodic/hybrid)
+    ONLINE_LEARNING_TRIGGER: int = int(os.getenv("ONLINE_LEARNING_TRIGGER", "50"))
+    # Шаги градиента за один online-апдейт (для режима online)
+    ONLINE_LEARNING_GRADIENT_STEPS: int = int(
+        os.getenv("ONLINE_LEARNING_GRADIENT_STEPS", "50")
+    )
+
     # ── Backtest ───────────────────────────────────────────────────────────
     # Доля данных, отложенная для out-of-sample теста (0.2 = последние 20%)
     BACKTEST_HOLDOUT_RATIO: float = float(os.getenv("BT_HOLDOUT_RATIO", "0.2"))

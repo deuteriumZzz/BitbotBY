@@ -1,7 +1,27 @@
 # BitbotBY — AI-торговый бот для Bybit
 
 Гибридный крипто-трейдинг бот на Python: **Claude / DeepSeek / OpenAI** + SAC нейросеть + рыночные сигналы реального времени + кванты (CVaR, Almgren-Chriss, Kelly) + 9 стратегий.  
-Автоматически сканирует топ-20 монет по объёму, торгует на perpetual фьючерсах (long + short), присылает сигналы в Telegram.
+Автоматически сканирует топ-20 монет по объёму, торгует на perpetual фьючерсах (long + short), открывает до 3 позиций одновременно, присылает сигналы в Telegram.
+
+---
+
+## Содержание
+
+1. [Как это работает](#как-это-работает)
+2. [Возможности](#возможности)
+3. [Быстрый старт](#быстрый-старт)
+4. [Настройка .env — подробно](#настройка-env--подробно)
+5. [Пошаговая инструкция запуска](#пошаговая-инструкция-запуска)
+6. [Режимы работы](#режимы-работы)
+7. [Онлайн-обучение модели](#онлайн-обучение-модели)
+8. [Мониторинг](#мониторинг)
+9. [Обучение SAC-модели](#обучение-sac-модели)
+10. [Бэктест](#бэктест)
+11. [Makefile команды](#makefile-команды)
+12. [Архитектура](#архитектура)
+13. [Тесты](#тесты)
+14. [Частые вопросы](#частые-вопросы)
+15. [Перед реальной торговлей](#перед-реальной-торговлей)
 
 ---
 
@@ -10,16 +30,17 @@
 Каждые 30 секунд бот проходит полный цикл:
 
 ```
-1. Сканирует топ-20 монет по объёму на Bybit
-2. Загружает OHLCV (15m), считает индикаторы
-3. Параллельно получает рыночный контекст (funding, OI, F&G, orderbook, ...)
-4. Определяет режим рынка per-символ (trending_up / ranging / trending_down)
-5. Генерирует торговые сигналы (9 стратегий + AI + SAC + контекстные сигналы)
-6. Комбинирует и фильтрует сигналы с учётом режима, контекста и риска
-7. Выбирает топ-1 рекомендацию по уверенности
-8. Запрашивает подтверждение в Telegram (или исполняет автоматически)
-9. Открывает позицию с динамическим плечом, ставит SL/TP на бирже
-10. Мониторит позиции: trailing stop + динамические выходы по условиям
+1.  Сканирует топ-20 монет по объёму на Bybit (futures)
+2.  Загружает OHLCV (15m свечи), рассчитывает индикаторы
+3.  Параллельно получает рыночный контекст (funding, OI, F&G, orderbook ...)
+4.  Определяет режим рынка per-символ (trending_up / ranging / trending_down)
+5.  Генерирует торговые сигналы (9 стратегий + AI + SAC + контекстные сигналы)
+6.  Комбинирует и фильтрует сигналы с учётом режима, контекста и риска
+7.  Выбирает до 3 лучших рекомендаций по уверенности
+8.  Запрашивает подтверждение в Telegram (или исполняет автоматически)
+9.  Открывает позиции с динамическим плечом, ставит SL/TP на бирже
+10. Мониторит позиции: trailing stop + частичный TP + динамические выходы
+11. После закрытия — автоматически дообучает SAC-модель (если включено)
 ```
 
 ---
@@ -28,7 +49,7 @@
 
 ### Рыночный Edge — сигналы реального времени
 
-Бот собирает 10+ внешних источников и генерирует из них **прямые BUY/SELL сигналы**, а не только фильтры:
+Бот собирает 10+ внешних источников и генерирует из них **прямые BUY/SELL сигналы**:
 
 | Источник | Логика | Пример сигнала |
 |---|---|---|
@@ -49,18 +70,18 @@
 ### Торговые стратегии
 
 - **9 технических стратегий** — EMA crossover, RSI, MACD, Bollinger Bands, Scalping, Swing, Breakout, Mean Reversion, Trend Following
-- **Автопереключение стратегии** по режиму рынка (`REGIME_STRATEGY_SWITCH=true`):
+- **Автопереключение стратегии** по режиму рынка:
   - `trending_up` → Trend Following
   - `trending_down` → EMA Crossover
   - `ranging` → Mean Reversion
-- **AI-анализ** — Claude / DeepSeek / OpenAI: анализирует OHLCV + контекст, выбирает стратегию
-- **SAC нейросеть** (Stable-Baselines3) — RL-агент, observation space 21 фича (14 рыночных + 7 контекстных)
+- **AI-анализ** — Claude / DeepSeek / OpenAI анализирует OHLCV + контекст, генерирует сигнал
+- **SAC нейросеть** (Stable-Baselines3) — RL-агент, observation space 21 фича
 
 ### Кванты
 
-- **CVaR / Markowitz** — оптимальная аллокация капитала на каждую монету (scipy, 95% CVaR)
+- **CVaR / Markowitz** — оптимальная аллокация капитала на каждую монету
 - **Almgren-Chriss (2001)** — оценка рыночного импакта, корректирует размер позиции
-- **Half-Kelly** — ×0.5 от формулы Келли, кэп 20%, fallback на `RISK_PER_TRADE` при <10 сделках
+- **Half-Kelly** — ×0.5 от формулы Келли, кэп 20%
 - **Динамическое плечо** — бот сам рассчитывает плечо для каждой сделки:
 
 ```
@@ -77,11 +98,13 @@ Base от confidence:  ≥0.85 → max;  ≥0.75 → 75%;  ≥0.65 → 50%
 
 ### Управление позициями
 
-- **Фьючерсный рынок (linear)** — торгует perpetual фьючерсами, умеет открывать LONG и SHORT
+- **До 3 позиций одновременно** — бот открывает лучшие сигналы параллельно, не только топ-1
+- **Фьючерсный рынок (linear)** — perpetual, умеет открывать LONG и SHORT
 - **Лимитные ордера** — вход 0.05% лучше рынка, таймаут 30с → автофоллбек на рыночный
-- **SL/TP на бирже** — сразу при открытии ставятся `stop_market` + `limit` ордера на Bybit
+- **SL/TP на бирже** — ставятся `stop_market` + `limit` ордера сразу при открытии
 - **Trailing stop** — SL подтягивается за ценой на основе ATR
-- **Динамические выходы** — позиция закрывается досрочно при смене условий, не дожидаясь SL:
+- **Partial TP** — при 60% пути к TP закрывает 50% позиции, SL → breakeven
+- **Динамические выходы** — позиция закрывается досрочно при смене условий:
 
 | Условие | Логика |
 |---|---|
@@ -96,27 +119,12 @@ Base от confidence:  ≥0.85 → max;  ≥0.75 → 75%;  ≥0.65 → 50%
 
 - **Circuit breaker** — автостоп после N подряд убыточных сделок
 - **Дневной лимит потерь** — 5% по умолчанию, проверяется каждый цикл
-- **Drawdown scaling** — при просадке ≥10% от пика размер позиций автоматически снижается до 50%
-- **Partial TP** — при достижении 60% пути к TP закрывает 50% позиции, SL переносится на breakeven
+- **Drawdown scaling** — при просадке ≥10% от пика размер позиций снижается до 50%
+- **Partial TP** — частичная фиксация прибыли + перенос SL на breakeven
 - **Фильтр ликвидности** — проверяет спред (<0.3%) и объём (>$1M) перед входом
-- **Фильтр времени суток** — опционально ограничить торговлю часами с высокой ликвидностью
-- **Macro blackout** — приостанавливает новые позиции за 30 мин до/после FOMC, CPI, NFP
-- **Корреляционный фильтр** — блокирует одновременные позиции с |корреляцией| выше порога
-- **Стейблкоин-фильтр** — USDC, BUSD, DAI и ещё 17 стейблкоинов никогда не попадают в сканирование
-- **AI бюджет-гард** — лимит вызовов AI в сутки (UTC), при исчерпании — VADER fallback
-- **Funding Arbitrage Detector** — алертит в Telegram когда |funding| >0.05% (HIGH) или >0.10% (EXTREME)
-
-### Инфраструктура
-
-- **Telegram** — сигналы по топ-20, кнопки Trade/Skip, алерт при тишине >6ч, funding arb алерты
-- **Position reconciliation** — при рестарте бот сверяет позиции с биржей
-- **Redis persistence** — circuit breaker, корреляции, кэш переживают рестарт
-- **Secret filter** — API-ключи маскируются в логах (`***`)
-- **Health server** — `GET /health` (JSON) и `GET /metrics` (Prometheus)
-- **Alertmanager** — 7 правил алертинга (включая `HighDrawdown`) → Telegram webhook
-- **SIGTERM / SIGINT** — чистое завершение, `docker stop` работает корректно
-- **Веб-дашборд** — баланс, позиции, история сделок (http://localhost:8080)
-- **Grafana** — метрики в реальном времени (http://localhost:3000)
+- **Macro blackout** — пауза за 30 мин до/после FOMC, CPI, NFP, GDP, PCE
+- **Корреляционный фильтр** — блокирует одновременные похожие позиции (напр. BTC + ETH лонг)
+- **Стейблкоин-фильтр** — USDC, BUSD, DAI и ещё 17 стейблкоинов не попадают в сканирование
 
 ---
 
@@ -124,200 +132,413 @@ Base от confidence:  ≥0.85 → max;  ≥0.75 → 75%;  ≥0.65 → 50%
 
 ### Требования
 
-- Python 3.11+ или [Docker Desktop](https://docs.docker.com/get-docker/)
-- Redis (локально или Docker)
-- API ключи: Bybit + один из AI-провайдеров + Telegram Bot
+- **Python 3.11+** или [Docker Desktop](https://docs.docker.com/get-docker/)
+- **Bybit аккаунт** с API-ключами (Unified Trading Account)
+- **Один из AI-провайдеров**: DeepSeek (дешевле всего), Claude или ChatGPT
+- **Telegram Bot** (создать через [@BotFather](https://t.me/BotFather))
 
-### 1. Клонировать и настроить
+### Минимальный .env для старта
+
+```env
+BYBIT_API_KEY=ваш_ключ
+BYBIT_API_SECRET=ваш_секрет
+MARKET_TYPE=linear
+LEVERAGE=3
+DEEPSEEK_API_KEY=sk-...
+TELEGRAM_BOT_TOKEN=1234567890:ABC...
+TELEGRAM_CHAT_ID=ваш_chat_id
+PAPER_TRADING=true
+AUTO_EXECUTE=false
+MODE=ai
+```
+
+### Запуск
 
 ```bash
 git clone <repo-url>
 cd BitbotBY
-cp .env.example .env   # заполните ключи в .env
+cp .env.example .env
+# заполнить .env (см. раздел ниже)
+
+make up      # Docker: бот + Redis + Grafana + Prometheus
+             # ⚠ trainer НЕ запускается автоматически — SAC учится через OnlineLearner
+make logs    # смотреть что происходит
 ```
-
-### 2. Запустить через Docker (рекомендуется)
-
-```bash
-make up
-```
-
-Поднимает: бот + дашборд + Redis + Prometheus + Grafana.
 
 | Сервис | URL |
 |--------|-----|
 | Веб-дашборд | http://localhost:8080 |
-| Grafana | http://localhost:3000 (admin / `GRAFANA_PASSWORD` из .env) |
+| Grafana | http://localhost:3000 (admin / `GRAFANA_PASSWORD`) |
 | Prometheus | http://localhost:9090 |
 | Alertmanager | http://localhost:9093 |
 
-### 3. Или запустить локально
-
-```bash
-pip install -r requirements.txt
-
-make paper      # paper trading (MODE=local, без реальных ордеров)
-make paper-ai   # paper trading с AI
-```
+> **SAC модель:** trainer контейнер не запускается с `make up` — модель дообучается автоматически через `OnlineLearner` каждые 50 сделок.  
+> Для первоначального обучения с нуля (раз в месяц): `make train-docker`
 
 ---
 
-## Обучение SAC-модели
+## Настройка .env — подробно
 
-SAC-нейросеть нужна только для режимов `dqn` и `hybrid`. Для `MODE=ai` — не нужна.
+### Bybit API
 
-```bash
-make train       # 500k шагов, ~60 мин на CPU
-make train-long  # 1M шагов, ~2 ч на CPU
+```env
+BYBIT_API_KEY=           # Получить: bybit.com → Account → API Management
+BYBIT_API_SECRET=        # ⚠ Никогда не публиковать, не коммитить в git
+
+TESTNET=false            # true → торговать на testnet.bybit.com (без реальных денег)
+                         # Ключи testnet создаются отдельно от production!
+
+MARKET_TYPE=linear       # linear → perpetual futures (РЕКОМЕНДУЕТСЯ)
+                         #   + Умеет открывать SHORT позиции
+                         #   + Есть funding rate (дополнительный сигнал)
+                         #   + Плечо до 100x (мы ставим max=3)
+                         # spot → только LONG, нет шорта, нет плеча
+
+LEVERAGE=3               # МАКСИМАЛЬНОЕ плечо. Бот рассчитывает динамически от 1 до LEVERAGE.
+                         # Рекомендуется: 2–3 для старта. Не ставить >5 пока нет статистики.
+                         # LEVERAGE=1 = торговля без плеча (как спот, но на фьючерсах)
 ```
 
-Observation space: **21 фича** — 14 рыночных (OHLCV, индикаторы) + 7 контекстных:
-`funding_rate`, `orderbook_imbalance`, `put_call_ratio`, `fear_greed`, `iv_skew`, `basis_pct`, `google_trends`
-
-После обучения скрипт оценивает модель на out-of-sample тесте (последние 20%):
-
-```
-IN-SAMPLE  (13600 candles) — Sharpe: 1.84
-OUT-SAMPLE (3400 candles)  — Sharpe: 1.21  Overfit ratio: 1.52x  ✓
-```
-
-Overfit ratio > 2x = переобучение, нужно переобучить с меньшим числом шагов.  
-Модель сохраняется в `models/sac_model.zip`.
+> **Права API ключей:** включить только `Contract — Orders` и `Contract — Positions`.  
+> Право на вывод средств — **НЕ включать**.
 
 ---
 
-## Бэктест
+### AI провайдер
 
-```bash
-BT_MONTHS=2 BT_TIMEFRAME=15m BT_TOP_N=20 python3 backtest.py
-BT_SYMBOLS=BTC/USDT,ETH/USDT,SOL/USDT python3 backtest.py
-make backtest
+```env
+AI_PROVIDER=auto         # auto      → пробует Claude → DeepSeek → OpenAI → локальные стратегии
+                         # deepseek  → только DeepSeek
+                         # anthropic → только Claude
+                         # openai    → только ChatGPT
+
+# ── DeepSeek — САМЫЙ ДЕШЁВЫЙ (~$0.002 за запрос) ──
+# platform.deepseek.com → API Keys → Create
+DEEPSEEK_API_KEY=sk-...
+DEEPSEEK_MODEL=deepseek-chat
+
+# ── Claude (Anthropic) — лучшее качество анализа ──
+# console.anthropic.com → API Keys → Create Key
+ANTHROPIC_API_KEY=sk-ant-...
+AI_MODEL=claude-sonnet-4-6
+
+# ── ChatGPT (OpenAI) ──
+# platform.openai.com → API Keys
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-4o-mini
+
+AI_DAILY_BUDGET=200      # Лимит AI-вызовов в сутки (UTC). Сверх лимита → VADER fallback.
+                         # 20 монет × 48 циклов/день = ~960 максимум.
+                         # Рекомендуется: 200–500 (баланс качество/стоимость).
 ```
 
-Walk-forward с holdout 20% — показывает IN-SAMPLE и OUT-SAMPLE Sharpe отдельно.  
-Результаты в `data/backtest_results.json`.
+> **Совет:** начать с DeepSeek (`AI_PROVIDER=deepseek`). Если качество сигналов недостаточное — перейти на Claude.
 
 ---
 
-## Makefile команды
+### Режим торговли
 
-| Команда | Описание |
-|---------|----------|
-| `make train` | Обучить SAC-модель (500k шагов) |
-| `make train-long` | Обучить SAC-модель (1M шагов) |
-| `make tune` | Optuna поиск гиперпараметров (30 trials) |
-| `make retrain` | Walk-forward retraining |
-| `make backtest` | Walk-forward бэктест (топ-20 монет) |
-| `make paper` | Paper trading (MODE=local) |
-| `make paper-ai` | Paper trading с AI |
-| `make live` | Живая торговля |
-| `make test` | Тесты с покрытием |
-| `make lint` | flake8 + mypy |
-| `make fmt` | black + isort |
-| `make up` | `docker compose up -d --build` |
-| `make down` | `docker compose down` |
-| `make logs` | Логи бота в реальном времени |
+```env
+MODE=ai                  # ai     → AI анализирует каждую монету и генерирует сигнал
+                         # local  → только 9 технических стратегий, без AI (бесплатно)
+                         # dqn    → только SAC нейросеть (нужна обученная модель)
+                         # hybrid → SAC + AI должны согласиться (самый консервативный)
+
+AUTO_EXECUTE=false       # false → бот СПРАШИВАЕТ подтверждения в Telegram перед каждой сделкой
+                         # true  → бот ТОРГУЕТ САМ без подтверждения
+                         # Рекомендуется: начать с false (2 недели), потом включить true
+
+PAPER_TRADING=true       # true  → симуляция, реальных ордеров НЕТ (для старта)
+                         # false → реальная торговля (только после проверки сигналов!)
+
+SCAN_TOP_N=20            # Сколько монет сканировать (топ по объёму за 24ч).
+                         # Больше = больше возможностей, но больше API-запросов.
+
+MAX_POSITIONS=3          # Максимум одновременных открытых позиций (1–3 рекомендуется).
+                         # Бот сам выберет лучшие 1–MAX_POSITIONS сигнала за цикл.
+```
 
 ---
-
-## Конфигурация (.env)
-
-### Bybit и рынок
-
-| Параметр | По умолчанию | Описание |
-|----------|-------------|----------|
-| `BYBIT_API_KEY` | — | **Обязателен** при `PAPER_TRADING=false` |
-| `BYBIT_API_SECRET` | — | **Обязателен** при `PAPER_TRADING=false` |
-| `MARKET_TYPE` | `linear` | `linear` — perpetual фьючерсы (long+short); `spot` — только long |
-| `LEVERAGE` | `3` | Максимальное плечо (бот рассчитывает динамически ≤ этого значения) |
-| `TESTNET` | `false` | Bybit testnet |
-| `PAPER_TRADING` | `false` | Симуляция без реальных ордеров |
-
-### AI провайдеры
-
-| Параметр | По умолчанию | Описание |
-|----------|-------------|----------|
-| `AI_PROVIDER` | `auto` | `auto` / `anthropic` / `deepseek` / `openai` |
-| `ANTHROPIC_API_KEY` | — | Claude — [console.anthropic.com](https://console.anthropic.com) |
-| `AI_MODEL` | `claude-sonnet-4-6` | Модель Claude |
-| `DEEPSEEK_API_KEY` | — | DeepSeek (~10× дешевле Claude) |
-| `OPENAI_API_KEY` | — | ChatGPT |
-| `AI_DAILY_BUDGET` | `200` | Лимит AI-вызовов в сутки (UTC); сверх → VADER |
-
-При `AI_PROVIDER=auto` при billing/quota ошибке бот переключается: Claude → DeepSeek → OpenAI → локальные стратегии.
-
-### Торговля
-
-| Параметр | По умолчанию | Описание |
-|----------|-------------|----------|
-| `MODE` | `ai` | `local` / `ai` / `dqn` / `hybrid` |
-| `AUTO_EXECUTE` | `false` | Авто-исполнение топ-1 рекомендации |
-| `REGIME_STRATEGY_SWITCH` | `true` | Автопереключение стратегии по режиму рынка |
-| `SCAN_TOP_N` | `20` | Количество монет для сканирования |
-| `RISK_PER_TRADE` | `0.02` | Риск на сделку (2% баланса) |
-| `MAX_POSITIONS` | `3` | Максимум одновременных позиций |
-| `MIN_SIGNAL_CONFIDENCE` | `0.65` | Минимальный порог уверенности сигнала |
-| `TRAILING_STOP_ATR_MULT` | `1.0` | Trailing stop (× ATR) |
-| `SAC_MODEL_PATH` | `models/sac_model.zip` | Путь к модели (нужна для `dqn` / `hybrid`) |
-| `BACKTEST_HOLDOUT_RATIO` | `0.2` | Доля out-of-sample в бэктесте |
-
-### Риск-менеджмент
-
-| Параметр | По умолчанию | Описание |
-|----------|-------------|----------|
-| `DAILY_LOSS_LIMIT` | `0.05` | Лимит дневного убытка (5%) |
-| `CIRCUIT_BREAKER_LOSSES` | `3` | Стоп после N подряд убытков (0 = выключен) |
-| `MAX_CORRELATION` | `0.7` | Блокировать если \|корр.\| с открытой ≥ порога (0 = выключен) |
-| `CORRELATION_WINDOW` | `50` | Окно корреляции в барах |
 
 ### Telegram
 
-| Параметр | По умолчанию | Описание |
-|----------|-------------|----------|
-| `TELEGRAM_BOT_TOKEN` | — | Токен от [@BotFather](https://t.me/BotFather) |
-| `TELEGRAM_CHAT_ID` | — | Chat ID ([@userinfobot](https://t.me/userinfobot)) |
-| `TELEGRAM_CONFIRM_TIMEOUT` | `60` | Секунд ждать Trade/Skip |
-| `SILENT_DEATH_HOURS` | `6` | Алерт если нет сделок N часов |
+```env
+TELEGRAM_BOT_TOKEN=      # Шаг 1: написать @BotFather → /newbot → скопировать токен
+                         # Формат: 1234567890:ABCdefGHI...
+
+TELEGRAM_CHAT_ID=        # Шаг 2: написать @userinfobot → скопировать "Your ID"
+                         # ⚠ ВАЖНО: это ВАШ числовой ID, не ID бота.
+                         # Формат: 123456789 (только цифры, без @)
+
+TELEGRAM_CONFIRM_TIMEOUT=60   # Секунд ждать ответа на кнопки Trade/Skip.
+                               # По истечении → если AUTO_EXECUTE=true → исполняет сам.
+
+SILENT_DEATH_HOURS=6.0   # Алерт в Telegram если нет ни одной сделки за N часов.
+                         # Помогает вовремя заметить зависание бота. 0 = выключен.
+```
+
+---
+
+### Торговые параметры
+
+```env
+TIMEFRAME=15m            # Таймфрейм свечей для стратегий.
+                         # 15m — хороший баланс. Варианты: 1m (шумно), 5m, 15m, 1h, 4h.
+
+INITIAL_BALANCE=10000.0  # Начальный баланс для paper trading (для расчётов и отображения).
+                         # В реальной торговле бот берёт баланс с биржи автоматически.
+
+RISK_PER_TRADE=0.02      # Риск на одну сделку как доля баланса.
+                         # 0.02 = 2% баланса. При $10k → рискуем $200 на сделку.
+                         # Рекомендуется: 0.01 для старта, потом 0.02.
+
+MIN_SIGNAL_CONFIDENCE=0.65   # Минимальная уверенность сигнала (0–1).
+                              # 0.65 = игнорировать слабые сигналы ниже 65% уверенности.
+                              # Повысить до 0.70–0.75 для более консервативной торговли.
+
+TRADING_INTERVAL=30      # Интервал цикла в секундах. 30 = реальное время.
+```
+
+---
 
 ### Управление позициями
 
-| Параметр | По умолчанию | Описание |
-|----------|-------------|----------|
-| `PARTIAL_TP_ENABLED` | `true` | Частичная фиксация прибыли |
-| `PARTIAL_TP_TRIGGER` | `0.6` | Закрыть часть при достижении 60% пути до TP |
-| `PARTIAL_TP_FRACTION` | `0.5` | Закрыть 50% позиции на Partial TP |
-| `TRADING_HOURS` | `` | Торговые часы UTC (пример: `8-22`); пусто = круглосуточно |
-| `MIN_VOLUME_USDT` | `1000000` | Минимальный 24h объём в USDT ($1M) |
-| `MAX_SPREAD_PCT` | `0.3` | Максимальный спред в % (0.3%) |
-| `DRAWDOWN_SCALE_ENABLED` | `true` | Снижать размер позиций при просадке |
-| `DRAWDOWN_SCALE_THRESHOLD` | `0.10` | Порог просадки от пика (10%) |
-| `DRAWDOWN_SCALE_FACTOR` | `0.5` | Множитель размера при просадке (50%) |
-| `MACRO_BLACKOUT_ENABLED` | `true` | Пауза торговли во время FOMC/CPI/NFP |
-| `FINNHUB_API_KEY` | — | Finnhub API для макро-календаря (бесплатно: finnhub.io) |
+```env
+# ── Частичная фиксация прибыли ──────────────────────────────────────────
+PARTIAL_TP_ENABLED=true  # При достижении 60% пути до TP:
+                         # 1. Закрывает 50% позиции (фиксирует часть прибыли)
+                         # 2. Переносит SL на breakeven (остаток торгуется без риска)
+PARTIAL_TP_TRIGGER=0.6   # Доля пути entry→TP для срабатывания. 0.6 = 60%.
+PARTIAL_TP_FRACTION=0.5  # Какую долю позиции закрыть. 0.5 = 50%.
+
+# ── Trailing stop ────────────────────────────────────────────────────────
+TRAILING_STOP_ATR_MULT=1.0   # SL подтягивается за ценой с шагом 1×ATR.
+                              # 0.5 = тесный стоп (больше срабатываний).
+                              # 1.5 = широкий стоп (меньше срабатываний, больше просадка).
+
+# ── Drawdown scaling ─────────────────────────────────────────────────────
+DRAWDOWN_SCALE_ENABLED=true       # При просадке от пика — уменьшить размер позиций.
+DRAWDOWN_SCALE_THRESHOLD=0.10     # Порог: 0.10 = при просадке >10% от пика баланса.
+DRAWDOWN_SCALE_FACTOR=0.5         # Множитель размера при просадке: 0.5 = торговать вдвое меньше.
+                                  # Пример: баланс был $10k, упал до $9k → позиции ×0.5.
+
+# ── Фильтр ликвидности ───────────────────────────────────────────────────
+MIN_VOLUME_USDT=1000000  # Минимальный объём монеты за 24ч в USDT.
+                         # $1M = только ликвидные монеты. Ниже → риск манипуляций.
+MAX_SPREAD_PCT=0.3       # Максимальный спред bid/ask в %.
+                         # 0.3% = на входе и выходе теряем не более 0.3%.
+
+# ── Торговые часы ────────────────────────────────────────────────────────
+TRADING_HOURS=           # Пусто = торговать круглосуточно (РЕКОМЕНДУЕТСЯ для крипты).
+                         # "8-22" = только с 8:00 до 22:00 UTC.
+                         # Не рекомендуется: крипта активна 24/7, ночные движения реальные.
+```
+
+---
+
+### Риск-менеджмент
+
+```env
+DAILY_LOSS_LIMIT=0.05    # Дневной лимит убытка: 0.05 = 5% баланса.
+                         # При превышении → бот прекращает торговлю до следующего UTC-дня.
+                         # Рекомендуется: 0.03 для старта, потом 0.05.
+
+CIRCUIT_BREAKER_LOSSES=3 # Автостоп после N убыточных сделок подряд.
+                         # 3 = три стопа подряд → бот останавливается до ручного перезапуска.
+                         # 0 = выключен. Рекомендуется: 3–5.
+
+MAX_CORRELATION=0.7      # Блокировать сигнал если |корреляция| с открытой позицией ≥ порога.
+                         # 0.7 = не откроем ETH long если уже держим BTC long.
+                         # 0.0 = фильтр выключен. Рекомендуется: 0.7.
+CORRELATION_WINDOW=50    # Окно расчёта корреляции в барах (50 × 15m = 12.5 часов).
+```
+
+---
+
+### Macro blackout
+
+```env
+FINNHUB_API_KEY=         # Ключ Finnhub (бесплатный тир): finnhub.io → Dashboard → API Key
+                         # Если не задан — macro blackout отключается автоматически.
+
+MACRO_BLACKOUT_ENABLED=true  # Блокировать новые позиции за 30 мин до/после:
+                             # FOMC (ставка ФРС), CPI (инфляция), NFP (занятость), GDP, PCE.
+                             # Эти события вызывают резкие движения — лучше переждать.
+```
+
+---
+
+### Онлайн-обучение SAC
+
+```env
+ONLINE_LEARNING_MODE=periodic  # disabled → выключено (SAC не обучается автоматически)
+                                # online   → gradient steps после КАЖДОЙ сделки
+                                #            ⚠ РИСКОВАННО: серия убытков может испортить модель
+                                # periodic → переобучение каждые N сделок в фоне [РЕКОМЕНДУЕТСЯ]
+                                # hybrid   → periodic + динамические веса стратегий в реальном времени
+
+ONLINE_LEARNING_TRIGGER=50      # Переобучение каждые 50 закрытых сделок (для periodic/hybrid).
+                                # 3 позиции × 10 сделок/день ≈ переобучение каждые ~17 часов.
+
+ONLINE_LEARNING_GRADIENT_STEPS=50  # Шагов градиента за один online-апдейт.
+                                    # Только для режима online. Рекомендуется ≤ 50.
+```
+
+---
 
 ### Внешние сигналы (опционально)
 
-| Параметр | Описание |
-|----------|----------|
-| `TWITTER_BEARER_TOKEN` | Twitter API v2 — sentiment по топ-10 монетам; без ключа — пропускается |
-| `REDDIT_CLIENT_ID` | Reddit API — sentiment r/CryptoCurrency |
-| `REDDIT_CLIENT_SECRET` | Reddit API |
-| `REDDIT_USER_AGENT` | Reddit API user agent |
-| `GLASSNODE_API_KEY` | Glassnode — on-chain данные |
-| `NEWS_API_KEY` | NewsAPI — новостной sentiment |
+Все ключи опциональны. Без них бот работает, просто без этих источников сигналов.
+
+```env
+# Twitter/X sentiment — VADER по твитам топ-10 монет
+# developer.twitter.com → Projects & Apps → Keys and Tokens → Bearer Token
+TWITTER_BEARER_TOKEN=
+
+# Reddit sentiment — r/CryptoCurrency
+# reddit.com/prefs/apps → create app (тип: script)
+REDDIT_CLIENT_ID=
+REDDIT_CLIENT_SECRET=
+REDDIT_USER_AGENT=BitbotBY/1.0
+
+# Glassnode — on-chain метрики (stablecoin supply и др.)
+# glassnode.com → Account → API Access
+GLASSNODE_API_KEY=
+
+# NewsAPI — новостной sentiment (CoinDesk, CoinTelegraph)
+# newsapi.org → Get API Key (бесплатно)
+NEWS_API_KEY=
+NEWS_UPDATE_INTERVAL=900   # Обновлять новости каждые 15 минут
+```
+
+---
+
+### Мониторинг и инфраструктура
+
+```env
+HEALTH_PORT=8080         # Порт HTTP health-сервера:
+                         # GET /health  → JSON статус бота
+                         # GET /metrics → Prometheus метрики
+                         # 0 = выключен
+
+DASHBOARD_API_KEY=       # Опциональный ключ для веб-дашборда.
+                         # Если задан → все запросы требуют заголовок: X-API-Key: значение
+
+GRAFANA_PASSWORD=admin   # Пароль Grafana (http://localhost:3000, логин: admin)
+
+REDIS_HOST=localhost     # В Docker автоматически переопределяется на "redis".
+REDIS_PORT=6379
+REDIS_PASSWORD=          # Рекомендуется задать в production.
+```
+
+---
+
+## Пошаговая инструкция запуска
+
+### Шаг 1 — Получить ключи
+
+**Bybit API:**
+1. bybit.com → правый угол → API Management → Create New Key
+2. Включить только: `Contract — Orders` + `Contract — Positions`
+3. Скопировать API Key и Secret (показываются один раз!)
+
+**Telegram Bot:**
+1. Написать [@BotFather](https://t.me/BotFather) → `/newbot` → придумать имя → скопировать токен
+2. Написать [@userinfobot](https://t.me/userinfobot) → скопировать числовой "Your ID"
+3. Написать своему боту любое сообщение (чтобы открыть чат)
+
+**DeepSeek (самый дешёвый AI):**
+1. platform.deepseek.com → API Keys → Create new secret key
+
+### Шаг 2 — Настроить .env
+
+```bash
+cp .env.example .env
+# Открыть .env и заполнить обязательные поля
+```
+
+Минимум для старта:
+```env
+BYBIT_API_KEY=xxxxx
+BYBIT_API_SECRET=xxxxx
+DEEPSEEK_API_KEY=sk-xxxxx
+TELEGRAM_BOT_TOKEN=1234567890:ABCxxx
+TELEGRAM_CHAT_ID=123456789    # ваш числовой ID из @userinfobot
+PAPER_TRADING=true
+AUTO_EXECUTE=false
+MODE=ai
+MARKET_TYPE=linear
+LEVERAGE=3
+```
+
+### Шаг 3 — Запустить в paper trading
+
+```bash
+# Через Docker (рекомендуется)
+make up
+make logs
+
+# Или локально
+pip install -r requirements.txt
+make paper-ai
+```
+
+**Что должно произойти:**
+- В логах: `Top 20 by volume: BTC/USDT, ETH/USDT, SOL/USDT ...`
+- В Telegram: первые сигналы с кнопками Trade/Skip
+- Дашборд: http://localhost:8080
+
+### Шаг 4 — Наблюдать за сигналами (1–2 недели)
+
+Пока `AUTO_EXECUTE=false` — бот спрашивает разрешение на каждую сделку. Это нормально.  
+Нажимайте Skip и наблюдайте направление сигналов, сравнивайте с реальным рынком.
+
+```bash
+make logs     # логи в реальном времени
+```
+
+### Шаг 5 — Включить автоторговлю (paper)
+
+Когда убедились что сигналы адекватные:
+
+```env
+AUTO_EXECUTE=true
+```
+
+```bash
+make down && make up
+```
+
+Бот торгует сам в бумажном режиме. Смотрите статистику в дашборде.
+
+### Шаг 6 — Переход на реальные деньги
+
+После 2–4 недель успешного paper trading и win rate >50%:
+
+```env
+PAPER_TRADING=false
+RISK_PER_TRADE=0.01    # начать с 1%
+MAX_POSITIONS=2        # начать с 2 позиций
+LEVERAGE=2             # начать с 2x
+DAILY_LOSS_LIMIT=0.03  # жёсткий лимит на первое время
+```
+
+```bash
+make live
+```
 
 ---
 
 ## Режимы работы
 
-| Режим | Описание | Требования |
-|-------|----------|------------|
-| `local` | 9 стратегий + рыночный контекст | Bybit API |
-| `ai` | AI + контекстные сигналы | Bybit + AI-ключ |
-| `dqn` | SAC нейросеть (21 фича) | Bybit + обученная модель |
-| `hybrid` | SAC + AI, веса по режиму рынка | Bybit + AI-ключ + модель |
+| Режим | Описание | Требования | Когда использовать |
+|-------|----------|------------|-------------------|
+| `local` | 9 стратегий + рыночный контекст | Только Bybit API | Нет ключей AI |
+| `ai` | AI генерирует сигналы | Bybit + AI-ключ | **Рекомендуется для старта** |
+| `dqn` | Только SAC нейросеть | Bybit + обученная модель | После `make train` |
+| `hybrid` | SAC + AI согласуются | Bybit + AI + модель | Самый консервативный |
 
-В режиме `hybrid` веса адаптируются:
+В режиме `hybrid` веса адаптируются по режиму рынка:
 
 | Режим рынка | Вес SAC | Вес AI |
 |-------------|---------|--------|
@@ -327,15 +548,147 @@ Walk-forward с holdout 20% — показывает IN-SAMPLE и OUT-SAMPLE Sha
 
 ---
 
+## Онлайн-обучение модели
+
+Бот автоматически учится на своих сделках. Каждая закрытая позиция сохраняется в `data/experiences.jsonl` и `data/trades.db`.
+
+### Режимы обучения
+
+| Режим | Частота обновления | Риск | Рекомендация |
+|-------|---------------------|------|--------------|
+| `disabled` | никогда | нет | Нет модели / ручной `make train` |
+| `online` | после каждой сделки | ⚠ высокий | Только эксперименты |
+| `periodic` | каждые N сделок в фоне | низкий | ✅ Продакшн |
+| `hybrid` | periodic + мгновенные веса стратегий | средний | После 500+ сделок |
+
+**Режим `periodic`** (рекомендуется для начала):
+- После каждых 50 закрытых сделок → фоновый поток запускает полный ретрейн
+- Торговля не останавливается во время переобучения
+- Новая модель горячо подменяет старую через атомарный `os.replace()`
+- Старая модель сохраняется как `.bak` на случай отката
+
+**Режим `hybrid`** добавляет динамические веса стратегий:
+- Если `ema_crossover` дал 3 стопа подряд → его confidence понижается немедленно (×0.5)
+- Если `macd` дал 3 прибыльных → его confidence повышается (×1.5)
+- Веса хранятся в Redis → видны всем процессам в Docker
+
+**Путь перехода:**
+```
+Старт → ONLINE_LEARNING_MODE=disabled  (нет модели)
+  ↓ накопить 100+ сделок (2–4 недели paper trading)
+  ↓ make train-docker  (первоначальное обучение SAC, ~60 мин)
+ONLINE_LEARNING_MODE=periodic           ← запустить здесь (авто-дообучение каждые 50 сделок)
+  ↓ накопить 500+ сделок
+ONLINE_LEARNING_MODE=hybrid             ← перейти когда есть статистика
+  ↓ раз в месяц: make train-docker      (полное переобучение на свежих данных)
+```
+
+---
+
+## Мониторинг
+
+### Веб-дашборд (http://localhost:8080)
+- Текущий баланс и открытые позиции
+- История сделок с PnL по каждой
+- Win rate и Expected Value
+
+### Grafana (http://localhost:3000)
+Метрики в реальном времени. Настроенные алерты:
+- **HighDrawdown** — просадка >10% за 5 мин → предупреждение в Telegram
+- **SilentDeath** — нет торговли >6 часов
+
+### Prometheus (http://localhost:9090)
+```
+bitbot_balance          — текущий баланс USDT
+bitbot_peak_balance     — максимальный баланс (для расчёта drawdown)
+bitbot_open_positions   — количество открытых позиций
+bitbot_cycle_total      — количество торговых циклов
+```
+
+### Telegram уведомления
+- Каждый сигнал с кнопками Trade / Skip
+- Открытие позиции: символ, направление, цена, SL/TP, плечо
+- Закрытие позиции: PnL, win rate, total PnL
+- Алерт при тишине >6 часов
+- Funding arbitrage: если |funding| >0.05%
+
+---
+
+## Обучение SAC-модели
+
+SAC нужна только для режимов `dqn` и `hybrid`. Для `MODE=ai` — не нужна.
+
+```bash
+make train          # локально: 500k шагов, ~60 мин на CPU
+make train-long     # локально: 1M шагов, ~2 ч на CPU
+make train-docker   # в Docker: запускает trainer контейнер разово, не мешает боту
+make tune           # Optuna: поиск лучших гиперпараметров (30 итераций, ~3 ч)
+```
+
+> **В Docker:** trainer контейнер не стартует автоматически с `make up`.  
+> Текущие сделки дообучают SAC через `OnlineLearner` (каждые 50 сделок, в фоне).  
+> `make train-docker` запускать раз в месяц для полного переобучения на свежих данных.
+
+**Observation space: 21 фича**
+- 14 рыночных: OHLCV, RSI, MACD, Bollinger Bands, позиция, PnL
+- 7 контекстных: funding_rate, orderbook_imbalance, put_call_ratio, fear_greed, iv_skew, basis_pct, google_trends
+
+После обучения — оценка на out-of-sample данных (последние 20%):
+```
+IN-SAMPLE  (80% данных) — Sharpe: 1.84
+OUT-SAMPLE (20% данных) — Sharpe: 1.21  Overfit ratio: 1.52x  ✓
+```
+Overfit ratio > 2× = переобучение → уменьшить `TOTAL_TIMESTEPS` или добавить данных.
+
+Модель: `models/sac_model.zip`
+
+---
+
+## Бэктест
+
+```bash
+make backtest                                         # топ-20 монет, 15m, последние 3 месяца
+BT_MONTHS=6 make backtest                            # 6 месяцев истории
+BT_SYMBOLS=BTC/USDT,ETH/USDT,SOL/USDT make backtest # конкретные монеты
+BT_TIMEFRAME=1h make backtest                        # другой таймфрейм
+```
+
+Walk-forward с holdout 20% — показывает IN-SAMPLE и OUT-SAMPLE Sharpe отдельно.  
+Результаты: `data/backtest_results.json`
+
+---
+
+## Makefile команды
+
+| Команда | Описание |
+|---------|----------|
+| `make up` | Запустить Docker стек (бот + Redis + Grafana + Prometheus) |
+| `make down` | Остановить Docker стек |
+| `make logs` | Логи бота в реальном времени |
+| `make paper` | Paper trading (MODE=local, без AI) |
+| `make paper-ai` | Paper trading с AI |
+| `make live` | Живая торговля (PAPER_TRADING=false) |
+| `make train` | Обучить SAC-модель локально (500k шагов, ~60 мин) |
+| `make train-long` | Обучить SAC-модель локально (1M шагов, ~2 ч) |
+| `make train-docker` | Обучить SAC-модель в Docker (разово, не мешает боту) |
+| `make tune` | Optuna поиск гиперпараметров (30 trials) |
+| `make retrain` | Walk-forward retraining |
+| `make backtest` | Walk-forward бэктест (топ-20 монет) |
+| `make test` | Запустить тесты с coverage |
+| `make lint` | flake8 + mypy |
+| `make fmt` | black + isort (форматирование кода) |
+
+---
+
 ## Архитектура
 
 ```
 supervisor.py
   └── TradingBot (src/trading_bot.py)
-        ├── MarketScanner       — топ-N монет, фильтр стейблкоинов
+        ├── MarketScanner       — топ-N монет по объёму, фильтр стейблкоинов
         ├── DataLoader          — OHLCV ccxt async, кэш CSV 24ч
         ├── RegimeDetector      — GaussianHMM per-symbol, TTL-кэш 5 мин
-        ├── MarketContext       — 10+ внешних источников (TTL-кэш 5–240 мин)
+        ├── MarketContext       — 10+ источников с TTL-кэшем (5–240 мин)
         │     funding/OI/liquidation · Fear&Greed · Orderbook · Basis
         │     Deribit PCR+IV · Google Trends · ETF Flows · Reddit · Twitter
         ├── PortfolioOptimizer  — CVaR / Markowitz (scipy)
@@ -344,22 +697,24 @@ supervisor.py
         ├── TwitterAnalyzer     — Twitter API v2 VADER, топ-10 монет
         ├── FundingArbDetector  — delta-neutral арбитраж алерты
         ├── MacroCalendar       — blackout за 30 мин до/после FOMC/CPI/NFP
-        ├── SignalCombiner      — SAC + AI + контекстные сигналы → топ-1
+        ├── SignalCombiner      — SAC + AI + контекстные сигналы → топ-3
         ├── OrderExecutor       — CVaR→Kelly→AC + лимитный ордер + dynamic leverage
-        │     liquidity filter · time-of-day filter · drawdown scaling
+        │     liquidity filter · drawdown scaling
         ├── PositionMonitor     — SL/TP/trailing + partial TP + dynamic exits
+        ├── OnlineLearner       — авто-переобучение SAC (periodic/hybrid/online)
         ├── BybitAPI            — ccxt async, linear+spot, exchange SL/TP
-        ├── TelegramNotifier    — сигналы, Trade/Skip, silent death, funding arb
-        ├── TradeHistory        — SQLite: win rate, EV
+        ├── TelegramNotifier    — сигналы, Trade/Skip, silent death, arb алерты
+        ├── TradeHistory        — SQLite: win rate, EV, история сделок
         └── HealthServer        — /health + /metrics (Prometheus)
 
 reinforcement_learning/
   ├── rl_env.py      — TradingEnv (Gymnasium), OBS_DIM=21, exec по open[i+1]
-  ├── train_sac.py   — SAC: 80/20 split, Optuna, walk-forward
+  ├── train_sac.py   — SAC: 80/20 split, Optuna, walk-forward, online finetune
   └── tune_sac.py    — Optuna hyperparameter search
 
 backtest.py          — walk-forward с holdout 20%, overfit ratio
 dashboard.py         — FastAPI :8080 (баланс, позиции, история)
+supervisor.py        — перезапуск при падении, SIGTERM handling
 ```
 
 ---
@@ -371,22 +726,48 @@ make test
 # pytest tests/ -v --cov=src --cov-fail-under=50
 ```
 
-**593 unit-теста** — индикаторы, стратегии, риск-менеджмент, CVaR, Kelly, Almgren-Chriss, корреляция, SAC-инференс, dynamic leverage, partial TP, drawdown scaling, liquidity filter, dynamic exits, position monitor, e2e торговый цикл.  
+**593 unit-теста** — индикаторы, стратегии, риск-менеджмент, CVaR, Kelly, Almgren-Chriss, корреляция, SAC-инференс, dynamic leverage, partial TP, drawdown scaling, liquidity filter, dynamic exits, position monitor, online learner, e2e торговый цикл.  
 Coverage: **93%**.
+
+---
+
+## Частые вопросы
+
+**Q: Бот пишет `Top 0 by volume` и не торгует**  
+A: Убедиться что `MARKET_TYPE=linear` в .env. При linear Bybit возвращает символы как `BTC/USDT:USDT` — бот нормализует автоматически. Если ошибка остаётся — проверить `BYBIT_API_KEY`.
+
+**Q: Telegram не получает сообщения**  
+A: `TELEGRAM_CHAT_ID` должен быть **вашим числовым ID** из @userinfobot (напр. `123456789`), а не ID бота. Написать своему боту любое сообщение для активации чата.
+
+**Q: `MODE=dqn` или `hybrid` падает с ошибкой о модели**  
+A: Нужно сначала обучить модель: `make train` (локально) или `make train-docker` (в Docker, ~60 мин). До завершения использовать `MODE=ai`.
+
+**Q: Как проверить что сигналы адекватные?**  
+A: Запустить `make paper-ai` на 2 недели. Win rate в дашборде (http://localhost:8080) должен быть >50% на 50+ сделках.
+
+**Q: Сколько стоят AI-вызовы в сутки?**  
+A: DeepSeek: ~$0.002/запрос × 200 = ~$0.40/день. Claude Sonnet: ~$0.01/запрос × 200 = ~$2/день. Установить `AI_DAILY_BUDGET=100` для экономии.
+
+**Q: Как изменить настройки без перезапуска?**  
+A: Изменить `.env`, затем `make down && make up`.
+
+**Q: Бот открывает сделки, но они сразу закрываются**  
+A: Проверить логи `make logs`. Возможные причины: сработал circuit breaker (`CIRCUIT_BREAKER_LOSSES`), достигнут дневной лимит (`DAILY_LOSS_LIMIT`), или слишком высокий `MIN_SIGNAL_CONFIDENCE`.
+
+**Q: Почему бот иногда не торгует часами?**  
+A: Нормально. Бот ждёт сигналы с confidence ≥ `MIN_SIGNAL_CONFIDENCE`. Если рынок в боковике без чётких сигналов — бот ждёт. Это защита от overtrading.
 
 ---
 
 ## Перед реальной торговлей
 
-1. Заполнить `.env` — `BYBIT_API_KEY`, `BYBIT_API_SECRET`, AI-ключ, `TELEGRAM_BOT_TOKEN`
-2. Запустить integration-тесты: `BYBIT_TESTNET_API_KEY=xxx ... pytest tests/integration/ -m integration`
-3. Установить `PAPER_TRADING=true`, `MARKET_TYPE=linear`, `LEVERAGE=3`
-4. Запустить `make paper-ai` минимум **1–2 недели** — проверить сигналы, логи, dynamic exits
-5. Запустить `make backtest` — изучить win rate и EV, проверить overfit ratio (<2x)
-6. Если нужен `hybrid` — обучить модель: `make train`
-7. Прочитать [RUNBOOK.md](RUNBOOK.md)
-8. Начать с `RISK_PER_TRADE=0.01` (1%) и `MAX_POSITIONS=2`
-9. Включить `PAPER_TRADING=false` только после уверенности в сигналах
+1. ✅ Заполнить `.env` — Bybit API, AI-ключ, Telegram
+2. ✅ Запустить `make paper-ai` — минимум **2 недели** бумажной торговли
+3. ✅ Проверить win rate >50% на 50+ сделках в дашборде
+4. ✅ Запустить `make backtest` — overfit ratio должен быть <2×
+5. ✅ Начать с консервативных настроек: `RISK_PER_TRADE=0.01`, `MAX_POSITIONS=2`, `LEVERAGE=2`
+6. ✅ Держать `DAILY_LOSS_LIMIT=0.03` на первое время
+7. ✅ Включать `PAPER_TRADING=false` только после уверенности в сигналах
 
 ---
 

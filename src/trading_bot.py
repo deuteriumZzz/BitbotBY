@@ -28,6 +28,7 @@ from src.macro_calendar import MacroCalendar
 from src.market_context import MarketContext
 from src.market_scanner import MarketScanner
 from src.news_analyzer import NewsAnalyzer
+from src.online_learner import OnlineLearner
 from src.order_executor import OrderExecutor
 from src.portfolio_manager import PortfolioManager
 from src.portfolio_optimizer import PortfolioOptimizer
@@ -119,6 +120,7 @@ class TradingBot:
         # Мониторинг и исполнение — отдельные объекты: каждый отвечает за своё
         # (счётчик circuit-breaker, логика размера позиции) и тестируется
         # независимо от всего TradingBot.
+        self._online_learner = OnlineLearner(redis_client=self.redis)
         self._position_monitor = PositionMonitor(
             api=self.api,
             trade_history=self.trade_history,
@@ -126,6 +128,7 @@ class TradingBot:
             portfolio_manager=self.portfolio_manager,
             set_running=lambda v: setattr(self, "is_running", v),
             redis=self.redis,
+            online_learner=self._online_learner,
         )
         self._executor = OrderExecutor(
             api=self.api,

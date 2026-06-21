@@ -1,0 +1,4 @@
+# file: /Users/deuterium/Dev/BitbotBY/src/online_learner.py
+# hypothesis_version: 6.141.1
+
+[0.5, 1.0, 1.5, 100, 3600, '.bak', '.new', 'LOSS', 'WIN', 'disabled', 'hybrid', 'online', 'periodic', 'strategy_weight:', 'unknown']
