@@ -54,8 +54,9 @@ class MarketScanner:
         :return: Символы в формате ccxt ('BTC/USDT').
         """
         try:
-            tickers = await self.api.exchange.fetch_tickers()
-            # spot: "BTC/USDT", linear futures: "BTC/USDT:USDT" — accept both
+            # Запрашиваем только linear perpetuals если MARKET_TYPE=linear
+            params = {"category": "linear"} if Config.MARKET_TYPE == "linear" else {}
+            tickers = await self.api.exchange.fetch_tickers(params=params)
             usdt: dict = {}
             for sym, t in tickers.items():
                 if "/USDT" not in sym:
@@ -66,14 +67,6 @@ class MarketScanner:
                 if (t.get("quoteVolume") or 0) <= 0:
                     continue
                 usdt[base_sym] = t
-            # Для linear-режима оставить только символы с perpetual контрактом
-            if Config.MARKET_TYPE == "linear" and self.api.exchange.markets:
-                linear_bases = {
-                    s.split(":")[0]
-                    for s in self.api.exchange.markets
-                    if s.endswith(":USDT")
-                }
-                usdt = {s: t for s, t in usdt.items() if s in linear_bases}
 
             ranked = sorted(
                 usdt.items(),
