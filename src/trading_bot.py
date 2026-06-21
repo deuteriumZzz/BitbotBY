@@ -431,7 +431,8 @@ class TradingBot:
                 logger.warning("Macro blackout active — skipping execution")
                 return
         balance = await self._get_balance_usdt()
-        await self._executor.execute(filtered[0], market_data, balance)
+        for rec in filtered[: Config.MAX_POSITIONS]:
+            await self._executor.execute(rec, market_data, balance)
 
     async def _monitor_positions(self) -> None:
         """Фоновый цикл SL/TP/трейлинг/circuit-breaker —
