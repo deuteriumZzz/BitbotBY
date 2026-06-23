@@ -31,6 +31,8 @@ _KEY_LEVERAGE_MODE = "bot:leverage_mode"
 _KEY_LEVERAGE_TARGET_RISK = "bot:leverage_target_risk"
 _KEY_MAX_DRAWDOWN = "bot:max_drawdown_percent"
 _KEY_SAC_PROMPTED = "bot:sac_prompted"
+_KEY_FIRST_START_DATE = "bot:first_start_date"
+_KEY_TUNE_REMINDED = "bot:tune_reminded"
 
 _AI_PROVIDERS = frozenset({"auto", "anthropic", "openai", "deepseek", "groq"})
 _LEVERAGE_MODES = frozenset({"fixed", "volatility", "full"})
@@ -420,6 +422,38 @@ class RuntimeConfig:
     def set_sac_prompted(self) -> None:
         """Отмечаем что запрос об обучении SAC был отправлен."""
         self._set(_KEY_SAC_PROMPTED, "1")
+
+    # ── First start & tune reminder ───────────────────────────────────────────
+
+    def ensure_first_start_date(self) -> str:
+        """Записывает дату первого запуска если ещё не записана. Возвращает дату."""
+        import datetime as dt
+        existing = self._get(_KEY_FIRST_START_DATE)
+        if existing:
+            return existing
+        today = dt.date.today().isoformat()
+        self._set(_KEY_FIRST_START_DATE, today)
+        return today
+
+    def days_since_first_start(self) -> int:
+        """Количество дней с первого запуска бота."""
+        import datetime as dt
+        raw = self._get(_KEY_FIRST_START_DATE)
+        if not raw:
+            return 0
+        try:
+            first = dt.date.fromisoformat(raw)
+            return (dt.date.today() - first).days
+        except ValueError:
+            return 0
+
+    def is_tune_reminded(self) -> bool:
+        """True если напоминание о тюнинге уже отправлялось."""
+        return self._get(_KEY_TUNE_REMINDED) == "1"
+
+    def set_tune_reminded(self) -> None:
+        """Отмечаем что напоминание о тюнинге было отправлено."""
+        self._set(_KEY_TUNE_REMINDED, "1")
 
     # ── Startup ───────────────────────────────────────────────────────────────
 
