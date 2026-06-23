@@ -30,6 +30,7 @@ _KEY_AI_PROVIDER = "bot:ai_provider"
 _KEY_LEVERAGE_MODE = "bot:leverage_mode"
 _KEY_LEVERAGE_TARGET_RISK = "bot:leverage_target_risk"
 _KEY_MAX_DRAWDOWN = "bot:max_drawdown_percent"
+_KEY_SAC_PROMPTED = "bot:sac_prompted"
 
 _AI_PROVIDERS = frozenset({"auto", "anthropic", "openai", "deepseek", "groq"})
 _LEVERAGE_MODES = frozenset({"fixed", "volatility", "full"})
@@ -409,6 +410,16 @@ class RuntimeConfig:
             return True
         self.disable_strategy(name)
         return False
+
+    # ── SAC prompt ────────────────────────────────────────────────────────────
+
+    def is_sac_prompted(self) -> bool:
+        """True если пользователь уже получал запрос об обучении SAC."""
+        return self._get(_KEY_SAC_PROMPTED) == "1"
+
+    def set_sac_prompted(self) -> None:
+        """Отмечаем что запрос об обучении SAC был отправлен."""
+        self._set(_KEY_SAC_PROMPTED, "1")
 
     # ── Startup ───────────────────────────────────────────────────────────────
 

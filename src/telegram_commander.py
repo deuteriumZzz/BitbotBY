@@ -121,7 +121,7 @@ def _kb_mode_menu() -> "InlineKeyboardMarkup":
             ],
             [
                 InlineKeyboardButton("🔀 Hybrid", callback_data="mode:hybrid"),
-                InlineKeyboardButton("🧠 DQN", callback_data="mode:dqn"),
+                InlineKeyboardButton("🧠 SAC", callback_data="mode:dqn"),
             ],
             [InlineKeyboardButton("« Настройки", callback_data="settings")],
         ]
@@ -174,6 +174,17 @@ def _kb_help_back() -> "InlineKeyboardMarkup":
                 InlineKeyboardButton("« Справка", callback_data="help_menu"),
                 InlineKeyboardButton("🏠 Главная", callback_data="main"),
             ],
+        ]
+    )
+
+
+def _kb_sac_train() -> "InlineKeyboardMarkup":
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("✅ Обучить сейчас (~60 мин)", callback_data="train_sac_now"),
+                InlineKeyboardButton("⏭ Пропустить", callback_data="train_sac_skip"),
+            ]
         ]
     )
 
@@ -382,7 +393,7 @@ _HELP_MODES = (
     "   Работает без интернет-зависимостей\n\n"
     "🔀 *Hybrid* — AI + локальные стратегии совместно\n"
     "   Сигналы комбинируются и взвешиваются\n\n"
-    "🧠 *DQN* — нейросеть (SAC/DQN), обученная на истории\n"
+    "🧠 *SAC* — нейросеть (Soft Actor-Critic), обученная на истории\n"
     "   Требует предварительного обучения тренером\n\n"
     "Менять режим: кнопка *Режим торговли* в Настройках\n"
     "или команда `/mode ai`"
@@ -395,7 +406,7 @@ _HELP_SETTINGS = (
     "   ВЫКЛ = только сигналы, без сделок\n\n"
     "⏸ *Пауза* — остановить новые сделки без перезапуска\n"
     "   Открытые позиции продолжают мониториться!\n\n"
-    "🤖 *Режим* — AI / Local / Hybrid / DQN\n\n"
+    "🤖 *Режим* — AI / Local / Hybrid / SAC\n\n"
     "🔢 *Кол-во символов* — сколько монет сканировать\n\n"
     "📐 *Стратегии* — включить/выключить отдельные стратегии\n"
     "   Актуально для режимов Local и Hybrid\n\n"
@@ -503,6 +514,8 @@ class TelegramCommander:
         self._notifier = notifier
         self._rc = runtime_config
         self._get_state = get_state
+        self._sac_training = False
+        self._background_tasks: set = set()
 
     def register(self) -> None:
         if not _TG_AVAILABLE:
@@ -1158,6 +1171,37 @@ class TelegramCommander:
 
     # ── Callback-handler (все кнопки) ─────────────────────────────────────────
 
+    async def _run_sac_training(self) -> None:
+        """Запускает train_sac.py как subprocess, не блокируя event loop."""
+        import asyncio as _asyncio
+        import os
+        try:
+            env = {**os.environ, "PYTHONPATH": "/app"}
+            proc = await _asyncio.create_subprocess_exec(
+                "python", "reinforcement_learning/train_sac.py",
+                env=env,
+                stdout=_asyncio.subprocess.DEVNULL,
+                stderr=_asyncio.subprocess.PIPE,
+            )
+            _, stderr = await proc.communicate()
+            if proc.returncode == 0:
+                await self._notifier.notify(
+                    "✅ *SAC модель обучена!*\n\n"
+                    "Модель сохранена в `models/sac_model.zip`.\n"
+                    "Бот автоматически подхватит её в следующем цикле.",
+                    reply_markup=_kb_main(),
+                )
+            else:
+                err = stderr.decode()[-300:] if stderr else "нет деталей"
+                await self._notifier.notify(
+                    f"❌ *Ошибка обучения SAC*\n\n`{err}`\n\nПроверьте: `make logs`",
+                    reply_markup=_kb_main(),
+                )
+        except Exception as e:
+            await self._notifier.notify(f"❌ SAC обучение упало: {e}")
+        finally:
+            self._sac_training = False
+
     async def _handle_callback(
         self, update: Update, _context: ContextTypes.DEFAULT_TYPE
     ) -> None:
@@ -1463,6 +1507,34 @@ class TelegramCommander:
             short = _STRAT_SHORT.get(name, name)
             state = "включена" if now_enabled else "отключена"
             await self._edit(query, f"{icon} `{short}` {state}\n\n" + text, kb)
+
+        # ── SAC обучение ─────────────────────────────────────────────────────
+        elif data == "train_sac_now":
+            if self._sac_training:
+                await self._edit(query, "⏳ Обучение уже запущено, ожидайте...", _kb_after_action())
+                return
+            self._sac_training = True
+            await self._edit(
+                query,
+                "🚀 *Запускаю обучение SAC...*\n\n"
+                "⏱ Это займёт ~60 мин на CPU.\n"
+                "Бот продолжает торговать.\n"
+                "Пришлю уведомление когда готово.",
+                _kb_after_action(),
+            )
+            import asyncio as _asyncio
+            task = _asyncio.ensure_future(self._run_sac_training())
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
+
+        elif data == "train_sac_skip":
+            await self._edit(
+                query,
+                "⏭ *Обучение пропущено*\n\n"
+                "Бот работает на AI + локальных стратегиях.\n"
+                "Запустить позже: /trainn",
+                _kb_main(),
+            )
 
         else:
             await query.answer("Неизвестная команда")
