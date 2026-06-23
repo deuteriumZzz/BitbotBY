@@ -17,7 +17,8 @@ Telegram-команды и inline-панель управления BitbotBY.
   /lev fixed     — фиксированное плечо из LEVERAGE
   /lev volatility — ATR-таргетинг (авто по волатильности)
   /lev full      — ATR + режим рынка + просадка
-  /lev target N  — целевой риск на ATR (0.005–0.1, default 0.01)
+  /lev target N    — целевой риск на ATR (0.005–0.1, default 0.01)
+  /lev drawdown N  — порог просадки для режима full (0.05–0.5, default 0.15)
   /provider      — показать текущий AI провайдер
   /provider groq — переключить на Groq (auto|anthropic|openai|deepseek|groq)
   /pnl           — P&L за день и всего
@@ -750,21 +751,29 @@ class TelegramCommander:
         if not args:
             mode = self._rc.get_leverage_mode()
             risk = self._rc.get_leverage_target_risk()
+            dd = self._rc.get_max_drawdown_percent()
             mode_desc = {
                 "fixed": "Фиксированное (LEVERAGE из .env)",
                 "volatility": "ATR-таргетинг (авто по волатильности) ✅",
                 "full": "ATR + режим рынка + просадка",
             }.get(mode, mode)
+            dd_info = (
+                f"\nПорог просадки: `{dd:.0%}` — при достижении плечо снижается до 30%"
+                if mode == "full"
+                else ""
+            )
             await self._reply(
                 update,
                 f"📊 *Управление плечом*\n\n"
-                f"Режим: *{mode}*\n{mode_desc}\n\n"
-                f"Целевой риск на ATR: `{risk:.3f}` ({risk*100:.1f}%)\n\n"
+                f"Режим: *{mode}*\n{mode_desc}\n"
+                f"Целевой риск на ATR: `{risk:.3f}` ({risk*100:.1f}%)"
+                f"{dd_info}\n\n"
                 f"*Команды:*\n"
-                f"`/lev fixed` — фиксированное\n"
-                f"`/lev volatility` — ATR-таргетинг\n"
-                f"`/lev full` — ATR + режим + просадка\n"
-                f"`/lev target 0.02` — целевой риск (0.5%–10%)",
+                f"`/lev fixed` — всегда фиксированное плечо из LEVERAGE\n"
+                f"`/lev volatility` — авто под волатильность монеты\n"
+                f"`/lev full` — авто + режим рынка + защита при просадке\n"
+                f"`/lev target 0.02` — целевой риск на ATR (0.5%–10%)\n"
+                f"`/lev drawdown 0.15` — порог просадки для режима full (5%–50%)",
             )
             return
 
@@ -777,9 +786,16 @@ class TelegramCommander:
                     "volatility": "ATR-таргетинг",
                     "full": "ATR + режим рынка + просадка",
                 }[sub]
+                extra = (
+                    f"\n_Текущий порог просадки: "
+                    f"{self._rc.get_max_drawdown_percent():.0%} "
+                    f"(изменить: `/lev drawdown 0.15`)_"
+                    if sub == "full"
+                    else ""
+                )
                 await self._reply(
                     update,
-                    f"✅ Режим плеча: *{sub}* ({desc})\n"
+                    f"✅ Режим плеча: *{sub}* ({desc}){extra}\n"
                     f"_Применится к следующим ордерам._",
                     _kb_after_action(),
                 )
@@ -804,10 +820,30 @@ class TelegramCommander:
                 await self._reply(update, "❌ Диапазон: 0.005–0.1 (0.5%–10%)")
             return
 
+        if sub == "drawdown" and len(args) >= 2:
+            try:
+                pct = float(args[1])
+            except ValueError:
+                await self._reply(update, "❌ Укажи число: `/lev drawdown 0.15`")
+                return
+            if self._rc.set_max_drawdown_percent(pct):
+                await self._reply(
+                    update,
+                    f"✅ Порог просадки: `{pct:.0%}`\n"
+                    f"При просадке баланса ≥ {pct:.0%} плечо снизится до 30%.\n"
+                    f"_Работает только в режиме_ `full`.\n"
+                    f"_Применится к следующим ордерам._",
+                    _kb_after_action(),
+                )
+            else:
+                await self._reply(update, "❌ Диапазон: 0.05–0.5 (5%–50%)")
+            return
+
         await self._reply(
             update,
             "❌ Неизвестная команда.\n"
-            "Используй: `/lev fixed` | `/lev volatility` | `/lev full` | `/lev target 0.02`",
+            "Используй: `/lev fixed` | `/lev volatility` | `/lev full`\n"
+            "`/lev target 0.02` | `/lev drawdown 0.15`",
         )
 
     async def _cmd_provider(
