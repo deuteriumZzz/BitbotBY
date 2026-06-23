@@ -308,17 +308,13 @@ def _kb_risk_menu(drawdown_on: bool, max_pos: int = 3) -> "InlineKeyboardMarkup"
     )
     rows = [
         [
-            InlineKeyboardButton(
-                "🟢 Консерватив.", callback_data="risk:conservative"
-            ),
+            InlineKeyboardButton("🟢 Консерватив.", callback_data="risk:conservative"),
             InlineKeyboardButton("🟡 Умеренный", callback_data="risk:moderate"),
             InlineKeyboardButton("🔴 Агрессивный", callback_data="risk:aggressive"),
         ],
         [
             InlineKeyboardButton("➖", callback_data="pos_less"),
-            InlineKeyboardButton(
-                f"📊 Позиций: {max_pos}", callback_data="pos_noop"
-            ),
+            InlineKeyboardButton(f"📊 Позиций: {max_pos}", callback_data="pos_noop"),
             InlineKeyboardButton("➕", callback_data="pos_more"),
         ],
         [InlineKeyboardButton(dd_label, callback_data="toggle_drawdown")],
@@ -328,11 +324,7 @@ def _kb_risk_menu(drawdown_on: bool, max_pos: int = 3) -> "InlineKeyboardMarkup"
     if Config.PAPER_TRADING:
         rows.insert(
             2,
-            [
-                InlineKeyboardButton(
-                    "🚀 Paper макс (15)", callback_data="pos_paper_max"
-                )
-            ],
+            [InlineKeyboardButton("🚀 Paper макс (15)", callback_data="pos_paper_max")],
         )
     return InlineKeyboardMarkup(rows)
 
@@ -1632,9 +1624,7 @@ class TelegramCommander:
                 new_val = 15
             self._rc.set_max_positions(new_val)
             text, kb = self._build_risk()
-            await self._edit(
-                query, f"✅ Макс. позиций: `{new_val}`\n\n" + text, kb
-            )
+            await self._edit(query, f"✅ Макс. позиций: `{new_val}`\n\n" + text, kb)
 
         # ── Часы торговли ────────────────────────────────────────────────────
         elif data == "hours_info":
