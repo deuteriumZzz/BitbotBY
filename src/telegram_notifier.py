@@ -55,7 +55,9 @@ class TelegramNotifier:
         if not self._enabled:
             return
         self._app = Application.builder().token(self._token).build()
-        self._app.add_handler(CallbackQueryHandler(self._handle_callback))
+        self._app.add_handler(
+            CallbackQueryHandler(self._handle_callback, pattern="^(confirm|reject)$")
+        )
         await self._app.initialize()
         await self._app.start()
         self._polling_task = asyncio.create_task(self._app.updater.start_polling())
