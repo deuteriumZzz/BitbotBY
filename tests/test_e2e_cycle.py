@@ -192,11 +192,18 @@ class TestExecuteTopRec:
         assert bot._monitored == {}
 
     @pytest.mark.asyncio
-    async def test_auto_execute_false_skips(self):
+    async def test_auto_execute_false_shows_dialog_and_executes(self):
+        # AUTO_EXECUTE=False → диалог с таймером, авто-исполнение если нет ответа
         bot = make_bot()
+        bot.telegram.ask_confirm = AsyncMock(return_value=True)
         with _patch_cfg(_make_cfg(auto=False)):
-            await bot._execute_top_rec([_buy_rec()], {})
-        assert bot._monitored == {}
+            with patch(
+                "src.trade_history.get_backtest_stats",
+                return_value={"win_rate": 0.5, "total_trades": 0, "ev": 0.0},
+            ):
+                with patch("src.order_executor._ac_impact", return_value=0.0):
+                    await bot._execute_top_rec([_buy_rec()], {})
+        assert "BTC/USDT" in bot._monitored
 
     @pytest.mark.asyncio
     async def test_hold_action_skipped(self):
@@ -246,7 +253,8 @@ class TestExecuteTopRec:
         bot.telegram.ask_confirm = AsyncMock(return_value=False)
         rec = _buy_rec(sym="ETH/USDT", entry=3000.0)
 
-        with _patch_cfg(_make_cfg(auto=True)):
+        # AUTO_EXECUTE=False → диалог показывается, Skip отменяет сделку
+        with _patch_cfg(_make_cfg(auto=False)):
             with patch(
                 "src.trade_history.get_backtest_stats",
                 return_value={"win_rate": 0.5, "total_trades": 0, "ev": 0.0},
