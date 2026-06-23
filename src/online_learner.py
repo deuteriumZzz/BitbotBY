@@ -209,6 +209,16 @@ class OnlineLearner:
         self._background_tasks.add(task)
         task.add_done_callback(self._background_tasks.discard)
 
+    def _get_train_top_n(self) -> int:
+        """Читает train_top_n из Redis — учитывает изменения из Telegram."""
+        try:
+            from src.runtime_config import RuntimeConfig
+
+            rc = RuntimeConfig(redis_client=self._redis)
+            return rc.get_train_top_n()
+        except Exception:
+            return int(os.environ.get("TRAIN_TOP_N", "20"))
+
     async def _background_retrain(self) -> None:
         """Запускает _run_full_retrain в thread executor, не блокируя event loop."""
         try:
@@ -255,7 +265,7 @@ class OnlineLearner:
                 "PYTHONPATH": os.environ.get("PYTHONPATH", ""),
                 "HOME": os.environ.get("HOME", ""),
                 "SAC_MODEL_PATH": tmp_path,
-                "TRAIN_TOP_N": os.environ.get("TRAIN_TOP_N", "20"),
+                "TRAIN_TOP_N": str(self._get_train_top_n()),
                 "TRAIN_MIN_CANDLES": os.environ.get("TRAIN_MIN_CANDLES", "2880"),
                 "TOTAL_TIMESTEPS": os.environ.get("TOTAL_TIMESTEPS", "50000"),
                 "EXPERIENCES_PATH": os.environ.get(
