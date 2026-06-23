@@ -117,6 +117,7 @@ def test_volume_fallback_uses_training_mean():
 
 def test_portfolio_features_set_correctly():
     from config import Config
+
     obs = _snap_to_obs(_SNAP_MINIMAL, norm_stats=None, balance=3000.0)
     initial = max(Config.INITIAL_BALANCE, 1.0)
     # obs[11] = balance / initial_balance

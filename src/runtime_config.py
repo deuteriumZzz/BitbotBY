@@ -4,6 +4,7 @@ Runtime-конфигурация поверх Redis.
 Позволяет менять настройки бота без перезапуска контейнера.
 Все значения хранятся в Redis и переопределяют .env при наличии.
 """
+
 from __future__ import annotations
 
 import logging
@@ -240,8 +241,10 @@ class RuntimeConfig:
         """Количество символов для обучения SAC (default: TRAIN_TOP_N или 20)."""
         val = self._get(_KEY_TRAIN_TOP_N)
         try:
-            return max(1, min(int(val), 100)) if val else int(
-                __import__("os").getenv("TRAIN_TOP_N", "20")
+            return (
+                max(1, min(int(val), 100))
+                if val
+                else int(__import__("os").getenv("TRAIN_TOP_N", "20"))
             )
         except (ValueError, TypeError):
             return 20
@@ -275,8 +278,10 @@ class RuntimeConfig:
         """Порог просадки для режима плеча full (0.05–0.5)."""
         val = self._get(_KEY_MAX_DRAWDOWN)
         try:
-            return max(0.05, min(float(val), 0.5)) if val else float(
-                getattr(Config, "MAX_DRAWDOWN_PERCENT", 0.15)
+            return (
+                max(0.05, min(float(val), 0.5))
+                if val
+                else float(getattr(Config, "MAX_DRAWDOWN_PERCENT", 0.15))
             )
         except (ValueError, TypeError):
             return 0.15
@@ -306,8 +311,10 @@ class RuntimeConfig:
         """Целевой риск на ATR-движение для режимов volatility/full."""
         val = self._get(_KEY_LEVERAGE_TARGET_RISK)
         try:
-            return max(0.001, min(float(val), 0.1)) if val else float(
-                getattr(Config, "LEVERAGE_TARGET_RISK", 0.01)
+            return (
+                max(0.001, min(float(val), 0.1))
+                if val
+                else float(getattr(Config, "LEVERAGE_TARGET_RISK", 0.01))
             )
         except (ValueError, TypeError):
             return 0.01
@@ -353,6 +360,7 @@ class RuntimeConfig:
     def is_trading_time(self) -> bool:
         """True если сейчас разрешено торговать по временному фильтру (UTC)."""
         import datetime as dt
+
         hours = self.get_trading_hours()
         if not hours:
             return True
@@ -406,11 +414,22 @@ class RuntimeConfig:
     # ── Startup ───────────────────────────────────────────────────────────────
 
     _ALL_KEYS = (
-        _KEY_MODE, _KEY_SCAN_TOP_N, _KEY_PAUSED, _KEY_AUTO_EXECUTE,
-        _KEY_FORCED, _KEY_EXCLUDED, _KEY_DISABLED_STRATS, _KEY_TRADING_HOURS,
-        _KEY_MAX_POSITIONS, _KEY_RISK_PER_TRADE, _KEY_DRAWDOWN_SCALE,
-        _KEY_TRAIN_TOP_N, _KEY_AI_PROVIDER,
-        _KEY_LEVERAGE_MODE, _KEY_LEVERAGE_TARGET_RISK, _KEY_MAX_DRAWDOWN,
+        _KEY_MODE,
+        _KEY_SCAN_TOP_N,
+        _KEY_PAUSED,
+        _KEY_AUTO_EXECUTE,
+        _KEY_FORCED,
+        _KEY_EXCLUDED,
+        _KEY_DISABLED_STRATS,
+        _KEY_TRADING_HOURS,
+        _KEY_MAX_POSITIONS,
+        _KEY_RISK_PER_TRADE,
+        _KEY_DRAWDOWN_SCALE,
+        _KEY_TRAIN_TOP_N,
+        _KEY_AI_PROVIDER,
+        _KEY_LEVERAGE_MODE,
+        _KEY_LEVERAGE_TARGET_RISK,
+        _KEY_MAX_DRAWDOWN,
     )
 
     def reset_to_defaults(self) -> None:
@@ -436,9 +455,7 @@ class RuntimeConfig:
             "excluded_symbols": sorted(self.get_excluded_symbols()),
         }
 
-    def format_full_status(
-        self, balance: float, paper: bool, all_strats: list
-    ) -> str:
+    def format_full_status(self, balance: float, paper: bool, all_strats: list) -> str:
         """Форматирует полный статус всех параметров для Telegram."""
         mode = self.get_mode()
         scan_n = self.get_scan_top_n()

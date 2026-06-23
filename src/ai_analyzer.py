@@ -320,14 +320,14 @@ class AIAnalyzer:
             except Exception as e:
                 status = getattr(e, "status_code", None)
                 if status == 400:
-                    self.logger.error(
-                        "AI [%s] bad request (400): %s", provider, e
-                    )
+                    self.logger.error("AI [%s] bad request (400): %s", provider, e)
                     return []
                 # Любая другая ошибка (429, 402, 500, таймаут, сеть) — пробуем следующего
                 self.logger.warning(
                     "AI [%s] error (HTTP %s) — trying next provider: %s",
-                    provider, status or "?", e,
+                    provider,
+                    status or "?",
+                    e,
                 )
                 continue
 

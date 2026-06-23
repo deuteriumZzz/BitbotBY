@@ -219,7 +219,9 @@ class CycleRunner:
             sl = r.get("stop_loss", 0)
             tp = r.get("take_profit", 0)
             reasoning = r.get("reasoning", "")
-            logger.info("  [%d] %-4s %-12s conf=%.0f%% strat=%s", i, action, sym, conf, strat)
+            logger.info(
+                "  [%d] %-4s %-12s conf=%.0f%% strat=%s", i, action, sym, conf, strat
+            )
             if entry:
                 logger.info("       entry=%.4f SL=%.4f TP=%.4f", entry, sl, tp)
             if reasoning:
