@@ -18,6 +18,8 @@ Telegram-команды и inline-панель управления BitbotBY.
   /lev volatility — ATR-таргетинг (авто по волатильности)
   /lev full      — ATR + режим рынка + просадка
   /lev target N  — целевой риск на ATR (0.005–0.1, default 0.01)
+  /provider      — показать текущий AI провайдер
+  /provider groq — переключить на Groq (auto|anthropic|openai|deepseek|groq)
   /pnl           — P&L за день и всего
   /pos           — открытые позиции
   /add SYM       — добавить символ (напр. /add SOL)
@@ -422,6 +424,7 @@ class TelegramCommander:
             ("risk",       self._cmd_risk),
             ("trainn",     self._cmd_trainn),
             ("lev",        self._cmd_lev),
+            ("provider",   self._cmd_provider),
         ]
         for name, handler in commands:
             app.add_handler(CommandHandler(name, handler))
@@ -806,6 +809,48 @@ class TelegramCommander:
             "❌ Неизвестная команда.\n"
             "Используй: `/lev fixed` | `/lev volatility` | `/lev full` | `/lev target 0.02`",
         )
+
+    async def _cmd_provider(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        if not self._authorized(update):
+            return
+        args = context.args or []
+
+        _PROVIDERS = {
+            "auto":      "Авто (Claude → OpenAI → DeepSeek → Groq)",
+            "anthropic": "Claude (Anthropic) — лучшее качество",
+            "openai":    "ChatGPT (OpenAI)",
+            "deepseek":  "DeepSeek — самый дешёвый",
+            "groq":      "Groq / Llama 3.3 70B — бесплатный, быстрый",
+        }
+
+        if not args:
+            current = self._rc.get_ai_provider()
+            desc = _PROVIDERS.get(current, current)
+            lines = "\n".join(
+                f"`/provider {k}` — {v}" for k, v in _PROVIDERS.items()
+            )
+            await self._reply(
+                update,
+                f"🤖 *AI провайдер*\n\n"
+                f"Текущий: *{current}* ({desc})\n\n"
+                f"*Доступные:*\n{lines}",
+            )
+            return
+
+        provider = args[0].lower()
+        if self._rc.set_ai_provider(provider):
+            desc = _PROVIDERS.get(provider, provider)
+            await self._reply(
+                update,
+                f"✅ AI провайдер: *{provider}*\n{desc}\n"
+                f"_Применится к следующему циклу анализа._",
+                _kb_after_action(),
+            )
+        else:
+            opts = " | ".join(f"`{k}`" for k in _PROVIDERS)
+            await self._reply(update, f"❌ Неизвестный провайдер.\nДоступные: {opts}")
 
     async def _cmd_pnl(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE

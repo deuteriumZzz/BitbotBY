@@ -25,9 +25,11 @@ _KEY_MAX_POSITIONS = "bot:max_positions"
 _KEY_RISK_PER_TRADE = "bot:risk_per_trade"
 _KEY_DRAWDOWN_SCALE = "bot:drawdown_scale_enabled"
 _KEY_TRAIN_TOP_N = "bot:train_top_n"
+_KEY_AI_PROVIDER = "bot:ai_provider"
 _KEY_LEVERAGE_MODE = "bot:leverage_mode"
 _KEY_LEVERAGE_TARGET_RISK = "bot:leverage_target_risk"
 
+_AI_PROVIDERS = frozenset({"auto", "anthropic", "openai", "deepseek", "groq"})
 _LEVERAGE_MODES = frozenset({"fixed", "volatility", "full"})
 
 _RISK_PRESETS = {
@@ -250,6 +252,22 @@ class RuntimeConfig:
         logger.info("Runtime: train_top_n → %d", n)
         return True
 
+    # ── AI Provider ───────────────────────────────────────────────────────────
+
+    def get_ai_provider(self) -> str:
+        """Текущий AI-провайдер: auto | anthropic | openai | deepseek | groq."""
+        val = self._get(_KEY_AI_PROVIDER)
+        if val and val in _AI_PROVIDERS:
+            return val
+        return getattr(Config, "AI_PROVIDER", "auto")
+
+    def set_ai_provider(self, provider: str) -> bool:
+        if provider not in _AI_PROVIDERS:
+            return False
+        self._set(_KEY_AI_PROVIDER, provider)
+        logger.info("Runtime: ai_provider → %s", provider)
+        return True
+
     # ── Leverage ──────────────────────────────────────────────────────────────
 
     def get_leverage_mode(self) -> str:
@@ -373,7 +391,8 @@ class RuntimeConfig:
         _KEY_MODE, _KEY_SCAN_TOP_N, _KEY_PAUSED, _KEY_AUTO_EXECUTE,
         _KEY_FORCED, _KEY_EXCLUDED, _KEY_DISABLED_STRATS, _KEY_TRADING_HOURS,
         _KEY_MAX_POSITIONS, _KEY_RISK_PER_TRADE, _KEY_DRAWDOWN_SCALE,
-        _KEY_TRAIN_TOP_N, _KEY_LEVERAGE_MODE, _KEY_LEVERAGE_TARGET_RISK,
+        _KEY_TRAIN_TOP_N, _KEY_AI_PROVIDER,
+        _KEY_LEVERAGE_MODE, _KEY_LEVERAGE_TARGET_RISK,
     )
 
     def reset_to_defaults(self) -> None:
