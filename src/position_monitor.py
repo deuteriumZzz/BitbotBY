@@ -582,13 +582,13 @@ class PositionMonitor:
             if self._consecutive_losses >= cb:
                 if Config.PAPER_TRADING:
                     msg = (
-                        f"⚠️ Circuit breaker: {self._consecutive_losses} убытков подряд."
-                        " В paper режиме торговля продолжается."
+                        f"⚠️ Circuit breaker: {self._consecutive_losses}"
+                        " убытков подряд. В paper режиме торговля продолжается."
                     )
                 else:
                     msg = (
-                        f"⛔ Circuit breaker: {self._consecutive_losses} losses in a row."
-                        " Trading halted automatically."
+                        f"⛔ Circuit breaker: {self._consecutive_losses}"
+                        " losses in a row. Trading halted automatically."
                     )
                     self._set_running(False)
                 logger.critical(msg)
