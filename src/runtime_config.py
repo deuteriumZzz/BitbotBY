@@ -34,6 +34,7 @@ _KEY_SAC_PROMPTED = "bot:sac_prompted"
 _KEY_CONFIRM_TIMEOUT = "bot:confirm_timeout"
 _KEY_FIRST_START_DATE = "bot:first_start_date"
 _KEY_TUNE_REMINDED = "bot:tune_reminded"
+_KEY_CHRONOS = "bot:chronos_filter"
 
 _AI_PROVIDERS = frozenset({"auto", "anthropic", "openai", "deepseek", "groq"})
 _LEVERAGE_MODES = frozenset({"fixed", "volatility", "full"})
@@ -472,6 +473,17 @@ class RuntimeConfig:
     def set_tune_reminded(self) -> None:
         """Отмечаем что напоминание о тюнинге было отправлено."""
         self._set(_KEY_TUNE_REMINDED, "1")
+
+    # ── Chronos filter ────────────────────────────────────────────────────────
+
+    def get_chronos_enabled(self) -> bool:
+        """True → тройное подтверждение SAC+LLM+Chronos в hybrid режиме."""
+        val = self._get(_KEY_CHRONOS)
+        return val == "1" if val is not None else False
+
+    def set_chronos_enabled(self, enabled: bool) -> None:
+        self._set(_KEY_CHRONOS, "1" if enabled else "0")
+        logger.info("Chronos filter %s", "ON" if enabled else "OFF")
 
     # ── Startup ───────────────────────────────────────────────────────────────
 

@@ -359,13 +359,15 @@ class TestCircuitBreaker:
     async def test_win_resets_consecutive_losses(self):
         """A profitable close (TP hit) must reset _consecutive_losses to 0."""
         bot = make_bot()
-        # Counter lives on PositionMonitor (extracted from TradingBot)
         bot._position_monitor._consecutive_losses = 2
         bot._monitored["BTC/USDT"] = _open_pos(
             side="buy", entry=50000, sl=49000, tp=52000
         )
 
-        # Price 53000 > TP 52000 → profit → losses reset
-        await _run_once(bot, price=53000.0, cfg_overrides={"CIRCUIT_BREAKER_LOSSES": 3})
+        await _run_once(
+            bot,
+            price=53000.0,
+            cfg_overrides={"CIRCUIT_BREAKER_LOSSES": 3},
+        )
 
         assert bot._position_monitor._consecutive_losses == 0

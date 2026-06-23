@@ -11,7 +11,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install Python deps first (layer caching)
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# CPU-only torch — избегаем скачивания 1GB+ CUDA библиотек
+RUN pip install --no-cache-dir --timeout 300 \
+    "torch>=2.0.0" --extra-index-url https://download.pytorch.org/whl/cpu
+RUN pip install --no-cache-dir --timeout 300 -r requirements.txt
 
 # Copy source
 COPY . .

@@ -85,7 +85,22 @@ def _kb_status(paused: bool) -> "InlineKeyboardMarkup":
     )
 
 
-def _kb_settings(paused: bool, auto_exec: bool) -> "InlineKeyboardMarkup":
+def _kb_chronos_prompt() -> "InlineKeyboardMarkup":
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "✅ Включить (рекомендуется)", callback_data="chronos_on"
+                )
+            ],
+            [InlineKeyboardButton("⚡ Стандартный режим", callback_data="chronos_off")],
+        ]
+    )
+
+
+def _kb_settings(
+    paused: bool, auto_exec: bool, mode: str = "", chronos: bool = False
+) -> "InlineKeyboardMarkup":
     pause_btn = (
         InlineKeyboardButton("▶️ Возобновить торговлю", callback_data="resume")
         if paused
@@ -94,37 +109,37 @@ def _kb_settings(paused: bool, auto_exec: bool) -> "InlineKeyboardMarkup":
     exec_label = (
         "✅ Авто-сделки: ВКЛ  →  выкл" if auto_exec else "❌ Авто-сделки: ВЫКЛ  →  вкл"
     )
-    return InlineKeyboardMarkup(
+    rows = [
+        [InlineKeyboardButton(exec_label, callback_data="toggle_auto_exec")],
+        [pause_btn],
         [
-            [InlineKeyboardButton(exec_label, callback_data="toggle_auto_exec")],
-            [pause_btn],
-            [
-                InlineKeyboardButton("🤖 Режим торговли", callback_data="mode_menu"),
-                InlineKeyboardButton("🔢 Кол-во символов", callback_data="scan_menu"),
-            ],
-            [InlineKeyboardButton("📐 Стратегии", callback_data="strategies")],
-            [InlineKeyboardButton("⚖️ Риск-профиль", callback_data="risk_menu")],
-            [InlineKeyboardButton("🕐 Часы торговли", callback_data="hours_info")],
-            [InlineKeyboardButton("🤖 AI-провайдер", callback_data="provider_menu")],
-            [
-                InlineKeyboardButton(
-                    "🔬 Тюнинг SAC (~2ч) + обучение", callback_data="tune_sac_menu"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    "⏱ Таймаут подтверждения", callback_data="timeout_menu"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    "📊 Бэктест стратегий", callback_data="backtest_menu"
-                )
-            ],
-            [InlineKeyboardButton("🔄 Сброс настроек", callback_data="reset_defaults")],
-            [InlineKeyboardButton("« Главная", callback_data="main")],
-        ]
-    )
+            InlineKeyboardButton("🤖 Режим торговли", callback_data="mode_menu"),
+            InlineKeyboardButton("🔢 Кол-во символов", callback_data="scan_menu"),
+        ],
+        [InlineKeyboardButton("📐 Стратегии", callback_data="strategies")],
+        [InlineKeyboardButton("⚖️ Риск-профиль", callback_data="risk_menu")],
+        [InlineKeyboardButton("🕐 Часы торговли", callback_data="hours_info")],
+        [InlineKeyboardButton("🤖 AI-провайдер", callback_data="provider_menu")],
+    ]
+    if mode == "hybrid":
+        chronos_label = (
+            "🛡 Chronos: ВКЛ  →  выкл" if chronos else "⚡ Chronos: ВЫКЛ  →  вкл"
+        )
+        rows.append(
+            [InlineKeyboardButton(chronos_label, callback_data="toggle_chronos")]
+        )
+    rows += [
+        [
+            InlineKeyboardButton(
+                "🔬 Тюнинг SAC (~2ч) + обучение", callback_data="tune_sac_menu"
+            )
+        ],
+        [InlineKeyboardButton("⏱ Таймаут подтверждения", callback_data="timeout_menu")],
+        [InlineKeyboardButton("📊 Бэктест стратегий", callback_data="backtest_menu")],
+        [InlineKeyboardButton("🔄 Сброс настроек", callback_data="reset_defaults")],
+        [InlineKeyboardButton("« Главная", callback_data="main")],
+    ]
+    return InlineKeyboardMarkup(rows)
 
 
 def _kb_mode_menu() -> "InlineKeyboardMarkup":
@@ -730,10 +745,18 @@ class TelegramCommander:
             else "✅ все включены"
         )
 
+        chronos = self._rc.get_chronos_enabled() if mode == "hybrid" else False
+        chronos_str = ""
+        if mode == "hybrid":
+            chronos_str = (
+                f"  Chronos (усил. контроль): {'✅ ВКЛ' if chronos else '❌ ВЫКЛ'}\n"
+            )
+
         text = (
             f"⚙️ *Настройки бота*\n\n"
             f"*Статус:* {state_str}\n"
             f"*Режим торговли:* `{mode}`\n"
+            f"{chronos_str}"
             f"*AI-провайдер:* `{provider}`\n\n"
             f"*Риск-менеджмент:*\n"
             f"  Макс. позиций: `{max_pos}`\n"
@@ -750,7 +773,7 @@ class TelegramCommander:
         if excluded:
             text += f"*Исключены из скан.:* `{', '.join(excluded)}`\n"
         text += "\n_Нажми кнопку для изменения:_"
-        return text, _kb_settings(paused, auto_exec)
+        return text, _kb_settings(paused, auto_exec, mode=mode, chronos=chronos)
 
     def _build_risk(self) -> tuple[str, Any]:
         r = self._rc.get_risk_summary()
@@ -1456,8 +1479,18 @@ class TelegramCommander:
         elif data.startswith("mode:"):
             mode = data.split(":", 1)[1]
             if self._rc.set_mode(mode):
-                text, kb = self._build_settings()
-                if mode == "local":
+                if mode == "hybrid":
+                    await self._edit(
+                        query,
+                        "🔀 *Режим переключён: Hybrid*\n\n"
+                        "Включить *усиленный контроль*?\n"
+                        "SAC + LLM + Chronos — тройное подтверждение.\n"
+                        "Меньше сделок, выше точность.\n\n"
+                        "_(В paper режиме Chronos автоматически игнорируется)_",
+                        _kb_chronos_prompt(),
+                    )
+                elif mode == "local":
+                    text, _ = self._build_settings()
                     hint = (
                         "✅ Режим → `local`\n\n"
                         "💡 Стратегия выбирается автоматически по индикаторам. "
@@ -1480,9 +1513,20 @@ class TelegramCommander:
                     )
                     await self._edit(query, hint + text, kb_local)
                 else:
+                    text, kb = self._build_settings()
                     await self._edit(query, f"✅ Режим → `{mode}`\n\n" + text, kb)
             else:
                 await self._edit(query, "❌ Неверный режим", _kb_mode_menu())
+
+        elif data in ("chronos_on", "chronos_off", "toggle_chronos"):
+            if data == "toggle_chronos":
+                enabled = not self._rc.get_chronos_enabled()
+            else:
+                enabled = data == "chronos_on"
+            self._rc.set_chronos_enabled(enabled)
+            text, kb = self._build_settings()
+            status = "🛡 Усиленный контроль ВКЛ" if enabled else "⚡ Стандартный режим"
+            await self._edit(query, f"✅ {status}\n\n" + text, kb)
 
         elif data.startswith("scan:"):
             try:

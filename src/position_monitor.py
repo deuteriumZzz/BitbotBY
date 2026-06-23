@@ -580,15 +580,21 @@ class PositionMonitor:
             )
             self._save_cb_state()
             if self._consecutive_losses >= cb:
-                msg = (
-                    f"⛔ Circuit breaker: {self._consecutive_losses} losses in a row."
-                    " Trading halted automatically."
-                )
+                if Config.PAPER_TRADING:
+                    msg = (
+                        f"⚠️ Circuit breaker: {self._consecutive_losses} убытков подряд."
+                        " В paper режиме торговля продолжается."
+                    )
+                else:
+                    msg = (
+                        f"⛔ Circuit breaker: {self._consecutive_losses} losses in a row."
+                        " Trading halted automatically."
+                    )
+                    self._set_running(False)
                 logger.critical(msg)
                 _t = asyncio.create_task(self._telegram.notify(msg))
                 self._background_tasks.add(_t)
                 _t.add_done_callback(self._background_tasks.discard)
-                self._set_running(False)
         else:
             self._consecutive_losses = 0
             self._save_cb_state()
