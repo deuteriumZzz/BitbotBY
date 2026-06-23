@@ -39,7 +39,7 @@ from src.risk_management import RiskManager
 from src.runtime_config import RuntimeConfig
 from src.signal_combiner import SignalCombiner
 from src.strategies import TradingStrategy
-from src.telegram_commander import TelegramCommander, _kb_main
+from src.telegram_commander import TelegramCommander, _kb_main, _kb_sac_train
 from src.telegram_notifier import TelegramNotifier
 from src.trade_history import TradeHistory
 from src.types import PositionRecord
@@ -230,6 +230,23 @@ class TradingBot:
         except Exception as e:
             logger.error("Bot initialization failed: %s", e)
             raise
+
+    async def _check_sac_model(self) -> None:
+        """Однократно предупреждает об отсутствии SAC модели при первом запуске."""
+        if os.path.exists(os.path.join("models", "sac_model.zip")):
+            return
+        if self._runtime_config.is_sac_prompted():
+            return
+        self._runtime_config.set_sac_prompted()
+        await self.telegram.notify(
+            "⚠️ *SAC модель не найдена*\n\n"
+            "Без неё бот работает только на AI + локальных стратегиях.\n"
+            "В `hybrid` режиме SAC даёт дополнительный сигнал.\n\n"
+            "⏱ Обучение займёт ~60 мин на CPU.\n"
+            "_После достаточного числа сделок модель переобучается автоматически._\n\n"
+            "Хотите обучить SAC сейчас?",
+            reply_markup=_kb_sac_train(),
+        )
 
     async def _reconcile_positions(self) -> None:
         """
@@ -654,6 +671,7 @@ class TradingBot:
             f"Используй кнопки ниже или набери /help",
             reply_markup=_kb_main(),
         )
+        await self._check_sac_model()
 
         while self.is_running:
             cycle += 1
