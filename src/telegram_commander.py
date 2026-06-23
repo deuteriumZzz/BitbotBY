@@ -107,6 +107,9 @@ def _kb_settings(paused: bool, auto_exec: bool) -> "InlineKeyboardMarkup":
             [InlineKeyboardButton("🕐 Часы торговли", callback_data="hours_info")],
             [InlineKeyboardButton("🤖 AI-провайдер", callback_data="provider_menu")],
             [InlineKeyboardButton("🔬 Тюнинг SAC (~2ч) + обучение", callback_data="tune_sac_menu")],
+            [InlineKeyboardButton(
+                "⏱ Таймаут подтверждения", callback_data="timeout_menu"
+            )],
             [InlineKeyboardButton("🔄 Сброс настроек", callback_data="reset_defaults")],
             [InlineKeyboardButton("« Главная", callback_data="main")],
         ]
@@ -175,6 +178,20 @@ def _kb_help_back() -> "InlineKeyboardMarkup":
                 InlineKeyboardButton("« Справка", callback_data="help_menu"),
                 InlineKeyboardButton("🏠 Главная", callback_data="main"),
             ],
+        ]
+    )
+
+
+def _kb_timeout_menu(current: int) -> "InlineKeyboardMarkup":
+    def _btn(sec: int) -> "InlineKeyboardButton":
+        label = f"{'✅ ' if sec == current else ''}{sec}с"
+        return InlineKeyboardButton(label, callback_data=f"timeout:{sec}")
+
+    return InlineKeyboardMarkup(
+        [
+            [_btn(15), _btn(30), _btn(60)],
+            [_btn(120), _btn(180), _btn(300)],
+            [InlineKeyboardButton("« Настройки", callback_data="settings")],
         ]
     )
 
@@ -1581,6 +1598,35 @@ class TelegramCommander:
             short = _STRAT_SHORT.get(name, name)
             state = "включена" if now_enabled else "отключена"
             await self._edit(query, f"{icon} `{short}` {state}\n\n" + text, kb)
+
+        # ── Таймаут подтверждения ─────────────────────────────────────────────
+        elif data == "timeout_menu":
+            cur = self._rc.get_confirm_timeout()
+            auto = self._rc.get_auto_execute()
+            mode_hint = "авто-исполнение" if auto else "авто-пропуск"
+            await self._edit(
+                query,
+                f"⏱ *Таймаут подтверждения сделки*\n\n"
+                f"Сейчас: *{cur}с* → {mode_hint} если нет ответа\n\n"
+                f"Выбери новое значение:",
+                _kb_timeout_menu(cur),
+            )
+
+        elif data.startswith("timeout:"):
+            try:
+                sec = int(data.split(":", 1)[1])
+            except (ValueError, IndexError):
+                return
+            ok = self._rc.set_confirm_timeout(sec)
+            if ok:
+                auto = self._rc.get_auto_execute()
+                mode_hint = "авто-исполнение" if auto else "авто-пропуск"
+                await self._edit(
+                    query,
+                    f"✅ Таймаут: *{sec}с* → {mode_hint}\n\n"
+                    f"_Применится к следующей сделке._",
+                    _kb_timeout_menu(sec),
+                )
 
         # ── Тюнинг SAC ───────────────────────────────────────────────────────
         elif data == "tune_sac_menu":

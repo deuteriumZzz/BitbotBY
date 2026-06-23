@@ -110,6 +110,7 @@ class TelegramNotifier:
         bt_trades: int = 0,
         bt_ev: float = 0.0,
         timeout: int = _CONFIRM_TIMEOUT,
+        auto_execute: bool = True,
     ) -> bool:
         """
         Отправляет предложение сделки; возвращает True если
@@ -168,7 +169,7 @@ class TelegramNotifier:
             f"AI confidence: *{confidence:.0%}*\n\n"
             f"{bt_line}\n"
             f"{live_line}\n\n"
-            f"Auto-execute in {timeout}s"
+            f"⚡ Авто-исполнение через {timeout}с — нажми Skip чтобы пропустить"
         )
         keyboard = InlineKeyboardMarkup(
             [
@@ -195,20 +196,42 @@ class TelegramNotifier:
             mid = msg.message_id
             event = asyncio.Event()
             self._pending[mid] = event
-            self._decisions[mid] = True  # default: confirm
+            self._decisions[mid] = True  # default: всегда авто-исполнение
 
+            timed_out = False
             try:
                 await asyncio.wait_for(event.wait(), timeout=timeout)
             except asyncio.TimeoutError:
-                logger.info("Telegram timeout for %s -> auto-confirm", symbol)
-                await bot.edit_message_reply_markup(
-                    chat_id=self._chat_id,
-                    message_id=mid,
-                    reply_markup=None,
+                timed_out = True
+                logger.info(
+                    "Telegram timeout for %s -> %s",
+                    symbol,
+                    "auto-execute" if auto_execute else "skip",
                 )
 
-            decision = self._decisions.pop(mid, True)
+            decision = self._decisions.pop(mid, auto_execute)
             self._pending.pop(mid, None)
+
+            if timed_out:
+                timeout_text = "⚡ *Авто-исполнено*"
+                try:
+                    await bot.edit_message_text(
+                        chat_id=self._chat_id,
+                        message_id=mid,
+                        text=text + f"\n\n{timeout_text}",
+                        parse_mode="Markdown",
+                    )
+                except Exception:
+                    pass
+            else:
+                try:
+                    await bot.edit_message_reply_markup(
+                        chat_id=self._chat_id,
+                        message_id=mid,
+                        reply_markup=None,
+                    )
+                except Exception:
+                    pass
             return decision
 
         except Exception as e:
