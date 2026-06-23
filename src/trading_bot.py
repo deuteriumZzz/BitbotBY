@@ -66,6 +66,7 @@ class TradingBot:
 
     def __init__(self) -> None:
         self.redis = RedisClient()
+        self._runtime_config = RuntimeConfig(redis_client=self.redis)
         self.api = BybitAPI()
         self.data_loader = DataLoader()
         self.portfolio_manager = PortfolioManager(Config.INITIAL_BALANCE, redis_client=self.redis)
@@ -76,7 +77,7 @@ class TradingBot:
         )
         self.scanner = MarketScanner(self.api, self.data_loader)
         self.news = NewsAnalyzer()
-        self.ai = AIAnalyzer()
+        self.ai = AIAnalyzer(runtime_config=self._runtime_config)
         self.combiner = SignalCombiner(self.ai)
         self.regime_detector = RegimeDetector()
         self._current_regime: str = "unknown"
@@ -132,7 +133,6 @@ class TradingBot:
             redis=self.redis,
             online_learner=self._online_learner,
         )
-        self._runtime_config = RuntimeConfig(redis_client=self.redis)
         self._executor = OrderExecutor(
             api=self.api,
             trade_history=self.trade_history,

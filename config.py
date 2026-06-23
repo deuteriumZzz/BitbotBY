@@ -91,6 +91,7 @@ class Config:
     OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
     GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
     GROQ_MODEL: str = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+    MAX_DRAWDOWN_PERCENT: float = float(os.getenv("MAX_DRAWDOWN_PERCENT", "0.2"))
 
     # ── Mode ───────────────────────────────────────────────────────────────
     # local  → только правила (9 стратегий, без внешних API)
@@ -269,7 +270,8 @@ class Config:
             if self.AI_PROVIDER == "auto" and not has_any_key:
                 raise ValueError(
                     "AI_PROVIDER=auto: нужен хотя бы один ключ — "
-                    "ANTHROPIC_API_KEY, OPENAI_API_KEY, DEEPSEEK_API_KEY или GROQ_API_KEY."
+                    "ANTHROPIC_API_KEY, OPENAI_API_KEY, "
+                    "DEEPSEEK_API_KEY или GROQ_API_KEY."
                 )
             if self.AI_PROVIDER != "auto" and not provider_key:
                 raise ValueError(

@@ -68,8 +68,9 @@ class AIAnalyzer:
     # HTTP status codes treated as billing/quota exhaustion → try next provider
     _BILLING_CODES: frozenset = frozenset({402, 429})
 
-    def __init__(self) -> None:
+    def __init__(self, runtime_config: "Any | None" = None) -> None:
         self._provider = _resolve_provider()
+        self._runtime_config = runtime_config
         self.enabled = self._provider != "none"
         self.strategies = get_all_strategies()
         self.logger = logging.getLogger(__name__)
@@ -275,7 +276,23 @@ class AIAnalyzer:
 
         prompt = self._build_prompt(snapshots, balance)
 
-        for provider in self._provider_order:
+        # Если провайдер переключён из Telegram — ставим его первым
+        provider_order = list(self._provider_order)
+        _rc = getattr(self, "_runtime_config", None)
+        if _rc is not None:
+            try:
+                rt_provider = self._runtime_config.get_ai_provider()
+                if (
+                    rt_provider != "auto"
+                    and rt_provider in provider_order
+                    and provider_order[0] != rt_provider
+                ):
+                    provider_order.remove(rt_provider)
+                    provider_order.insert(0, rt_provider)
+            except Exception:
+                pass
+
+        for provider in provider_order:
             try:
                 if provider == "anthropic":
                     raw = await self._call_anthropic(prompt)
@@ -296,13 +313,16 @@ class AIAnalyzer:
                 return valid
 
             except json.JSONDecodeError as e:
-                self.logger.warning("AI [%s] JSON parse error — trying next provider: %s", provider, e)
+                self.logger.warning(
+                    "AI [%s] JSON parse error — trying next: %s", provider, e
+                )
                 continue
             except Exception as e:
                 status = getattr(e, "status_code", None)
                 if status == 400:
-                    # Bad request — наша вина (неверный промпт/модель), не пробуем других
-                    self.logger.error("AI [%s] bad request (400): %s", provider, e)
+                    self.logger.error(
+                        "AI [%s] bad request (400): %s", provider, e
+                    )
                     return []
                 # Любая другая ошибка (429, 402, 500, таймаут, сеть) — пробуем следующего
                 self.logger.warning(
