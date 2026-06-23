@@ -17,10 +17,12 @@ def _make_config(**kwargs):
     cfg.AI_PROVIDER = kwargs.get("AI_PROVIDER", "auto")
     cfg.ANTHROPIC_API_KEY = kwargs.get("ANTHROPIC_API_KEY", "")
     cfg.DEEPSEEK_API_KEY = kwargs.get("DEEPSEEK_API_KEY", "")
+    cfg.GROQ_API_KEY = kwargs.get("GROQ_API_KEY", "")
     cfg.OPENAI_API_KEY = kwargs.get("OPENAI_API_KEY", "")
     cfg.MIN_SIGNAL_CONFIDENCE = kwargs.get("MIN_SIGNAL_CONFIDENCE", 0.65)
     cfg.AI_MODEL = kwargs.get("AI_MODEL", "claude-sonnet-4-6")
     cfg.DEEPSEEK_MODEL = kwargs.get("DEEPSEEK_MODEL", "deepseek-chat")
+    cfg.GROQ_MODEL = kwargs.get("GROQ_MODEL", "llama-3.3-70b-versatile")
     cfg.OPENAI_MODEL = kwargs.get("OPENAI_MODEL", "gpt-4o-mini")
     return cfg
 
@@ -114,23 +116,36 @@ class TestResolveProvider:
         )
         assert result == "anthropic"
 
-    def test_resolve_auto_falls_to_deepseek(self):
+    def test_resolve_auto_falls_to_openai(self):
+        # Anthropic → OpenAI → DeepSeek → Groq: без Anthropic берём OpenAI
         result = self._call(
             AI_PROVIDER="auto",
             ANTHROPIC_API_KEY="",
-            DEEPSEEK_API_KEY="deepseek_key",
             OPENAI_API_KEY="openai_key",
+            DEEPSEEK_API_KEY="deepseek_key",
+        )
+        assert result == "openai"
+
+    def test_resolve_auto_falls_to_deepseek(self):
+        # Без Anthropic и OpenAI берём DeepSeek
+        result = self._call(
+            AI_PROVIDER="auto",
+            ANTHROPIC_API_KEY="",
+            OPENAI_API_KEY="",
+            DEEPSEEK_API_KEY="deepseek_key",
         )
         assert result == "deepseek"
 
-    def test_resolve_auto_falls_to_openai(self):
+    def test_resolve_auto_falls_to_groq(self):
+        # Без всех платных берём Groq (бесплатный)
         result = self._call(
             AI_PROVIDER="auto",
             ANTHROPIC_API_KEY="",
+            OPENAI_API_KEY="",
             DEEPSEEK_API_KEY="",
-            OPENAI_API_KEY="openai_key",
+            GROQ_API_KEY="groq_key",
         )
-        assert result == "openai"
+        assert result == "groq"
 
     def test_resolve_auto_no_keys(self):
         result = self._call(

@@ -44,7 +44,14 @@ class Config:
     # "linear" — бессрочные фьючерсы (нужен reduceOnly для SL/TP)
     MARKET_TYPE: str = os.getenv("MARKET_TYPE", "linear")
     # Плечо для фьючерсной торговли (1 = без плеча, 3 = 3x)
+    # Используется как fallback когда ATR недоступен или LEVERAGE_MODE=fixed
     LEVERAGE: int = int(os.getenv("LEVERAGE", "3"))
+    # Режим управления плечом: fixed | volatility | full
+    LEVERAGE_MODE: str = os.getenv("LEVERAGE_MODE", "volatility")
+    # Волатильность-таргетинг: целевой риск портфеля на одно ATR-движение (0.01 = 1%)
+    LEVERAGE_TARGET_RISK: float = float(os.getenv("LEVERAGE_TARGET_RISK", "0.01"))
+    LEVERAGE_MAX: int = int(os.getenv("LEVERAGE_MAX", "5"))
+    LEVERAGE_MIN: int = int(os.getenv("LEVERAGE_MIN", "1"))
 
     # ── Trading ────────────────────────────────────────────────────────────
     INITIAL_BALANCE: float = float(os.getenv("INITIAL_BALANCE", "10000.0"))
@@ -82,6 +89,8 @@ class Config:
     DEEPSEEK_MODEL: str = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
     OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
+    GROQ_MODEL: str = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
     # ── Mode ───────────────────────────────────────────────────────────────
     # local  → только правила (9 стратегий, без внешних API)
@@ -213,6 +222,10 @@ class Config:
 
         if self.INITIAL_BALANCE <= 0:
             raise ValueError("INITIAL_BALANCE must be positive")
+        if getattr(self, "LEVERAGE", 1) < 1:
+            raise ValueError("LEVERAGE must be >= 1")
+        if not (0 < getattr(self, "STOP_LOSS_PERCENT", 0.02) < 1):
+            raise ValueError("STOP_LOSS_PERCENT must be between 0 and 1")
         if not 0 < self.RISK_PER_TRADE < 1:
             raise ValueError("RISK_PER_TRADE must be between 0 and 1")
         if self.MAX_POSITION_SIZE <= 0 or self.MAX_POSITION_SIZE > 1:
@@ -237,24 +250,26 @@ class Config:
                 )
 
         # Валидация AI-провайдера
-        if self.AI_PROVIDER not in ("auto", "anthropic", "deepseek", "openai"):
+        if self.AI_PROVIDER not in ("auto", "anthropic", "deepseek", "openai", "groq"):
             raise ValueError(
                 f"AI_PROVIDER={self.AI_PROVIDER!r} is invalid. "
-                "Use: auto | anthropic | deepseek | openai"
+                "Use: auto | anthropic | openai | deepseek | groq"
             )
         if self.MODE in ("ai", "hybrid"):
             has_any_key = bool(
-                self.ANTHROPIC_API_KEY or self.DEEPSEEK_API_KEY or self.OPENAI_API_KEY
+                self.ANTHROPIC_API_KEY or self.OPENAI_API_KEY
+                or self.DEEPSEEK_API_KEY or self.GROQ_API_KEY
             )
             provider_key = {
                 "anthropic": self.ANTHROPIC_API_KEY,
-                "deepseek": self.DEEPSEEK_API_KEY,
                 "openai": self.OPENAI_API_KEY,
+                "deepseek": self.DEEPSEEK_API_KEY,
+                "groq": self.GROQ_API_KEY,
             }.get(self.AI_PROVIDER, "")
             if self.AI_PROVIDER == "auto" and not has_any_key:
                 raise ValueError(
                     "AI_PROVIDER=auto: нужен хотя бы один ключ — "
-                    "ANTHROPIC_API_KEY, DEEPSEEK_API_KEY или OPENAI_API_KEY."
+                    "ANTHROPIC_API_KEY, OPENAI_API_KEY, DEEPSEEK_API_KEY или GROQ_API_KEY."
                 )
             if self.AI_PROVIDER != "auto" and not provider_key:
                 raise ValueError(

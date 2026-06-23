@@ -20,7 +20,6 @@ import pandas as pd
 from config import STABLECOIN_BASES, Config
 from src.bybit_api import BybitAPI
 from src.data_loader import DataLoader
-from src.redis_client import RedisClient
 
 # SMA-50 is the slowest indicator — need at least this many bars before
 # calculate_technical_indicators() produces meaningful (non-zero) values.
@@ -41,28 +40,35 @@ class MarketScanner:
     def __init__(self, api: BybitAPI, data_loader: DataLoader):
         self.api = api
         self.data_loader = data_loader
-        self.redis = RedisClient()
         self.logger = logging.getLogger(__name__)
 
-    async def get_top_symbols(self, n: int = 20) -> List[str]:
+    async def get_top_symbols(
+        self,
+        n: int = 20,
+        forced: set | None = None,
+        excluded: set | None = None,
+    ) -> List[str]:
         """
         Возвращает топ-N символов /USDT по объёму за 24ч.
 
-        Один вызов fetch_tickers() вместо N отдельных запросов.
-
-        :param n: Количество символов.
+        :param n: Количество символов из топа по объёму.
+        :param forced: Символы, всегда добавляемые в список (через /add).
+        :param excluded: Символы, исключённые из сканирования (через /remove).
         :return: Символы в формате ccxt ('BTC/USDT').
         """
+        forced = forced or set()
+        excluded = excluded or set()
         try:
-            # Запрашиваем только linear perpetuals если MARKET_TYPE=linear
             params = {"category": "linear"} if Config.MARKET_TYPE == "linear" else {}
             tickers = await self.api.exchange.fetch_tickers(params=params)
             usdt: dict = {}
             for sym, t in tickers.items():
                 if "/USDT" not in sym:
                     continue
-                base_sym = sym.split(":")[0]  # "BTC/USDT:USDT" → "BTC/USDT"
+                base_sym = sym.split(":")[0]
                 if base_sym.split("/")[0] in STABLECOIN_BASES:
+                    continue
+                if base_sym in excluded:
                     continue
                 if (t.get("quoteVolume") or 0) <= 0:
                     continue
@@ -74,6 +80,12 @@ class MarketScanner:
                 reverse=True,
             )
             symbols = [sym for sym, _ in ranked[:n]]
+
+            # Forced символы добавляются поверх топа если их там нет
+            for sym in forced:
+                if sym not in symbols:
+                    symbols.append(sym)
+
             self.logger.info(
                 "Top %d by volume: %s...", len(symbols), ", ".join(symbols[:5])
             )

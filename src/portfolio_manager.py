@@ -24,18 +24,22 @@ class PortfolioManager:
     Использует Redis для сохранения состояния между запусками.
     """
 
-    def __init__(self, initial_balance: float) -> None:
+    def __init__(self, initial_balance: float, redis_client=None) -> None:
         """
         Инициализирует менеджер портфеля.
 
         :param initial_balance: Начальный баланс в USDT.
+        :param redis_client: Внешний RedisClient (если None — создаётся новый).
         """
         self.initial_balance = initial_balance
         self.current_balance = initial_balance
         self.positions: Dict[str, float] = {}
         self.commission_rate: float = Config.COMMISSION_RATE
         self.total_commissions: float = 0.0
-        self.redis = RedisClient()
+        if redis_client is not None:
+            self.redis = redis_client
+        else:
+            self.redis = RedisClient()
         self.logger = logging.getLogger(__name__)
 
     async def update_portfolio(

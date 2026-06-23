@@ -1,0 +1,1098 @@
+"""
+Telegram-команды и inline-панель управления BitbotBY.
+
+Все настройки доступны прямо из Telegram — пользователю не нужно
+смотреть в репозиторий или перезапускать бота.
+
+Команды:
+  /start, /help  — главная панель
+  /status        — текущий статус
+  /settings      — все настройки (режим, символы, авто-сделки, пауза)
+  /pause         — приостановить торговлю
+  /resume        — возобновить торговлю
+  /mode MODE     — сменить режим ai / local / hybrid / dqn
+  /scan N        — кол-во сканируемых символов
+  /trainn N      — кол-во символов для обучения SAC (1–100, default 20)
+  /lev           — режим плеча: fixed | volatility | full
+  /lev fixed     — фиксированное плечо из LEVERAGE
+  /lev volatility — ATR-таргетинг (авто по волатильности)
+  /lev full      — ATR + режим рынка + просадка
+  /lev target N  — целевой риск на ATR (0.005–0.1, default 0.01)
+  /pnl           — P&L за день и всего
+  /pos           — открытые позиции
+  /add SYM       — добавить символ (напр. /add SOL)
+  /remove SYM    — исключить символ из сканирования
+"""
+from __future__ import annotations
+
+import logging
+from typing import Any, Callable, Dict
+
+logger = logging.getLogger(__name__)
+
+try:
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+    from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes
+
+    _TG_AVAILABLE = True
+except ImportError:
+    _TG_AVAILABLE = False
+
+
+# ── Клавиатуры ────────────────────────────────────────────────────────────────
+
+def _kb_main() -> "InlineKeyboardMarkup":
+    """Главная панель — появляется после /start и /help."""
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("📊 Статус",    callback_data="status"),
+            InlineKeyboardButton("📈 P&L",       callback_data="pnl"),
+            InlineKeyboardButton("📋 Позиции",   callback_data="pos"),
+        ],
+        [
+            InlineKeyboardButton("⚙️ Настройки", callback_data="settings"),
+            InlineKeyboardButton("❓ Справка",   callback_data="help_menu"),
+        ],
+    ])
+
+
+def _kb_status(paused: bool) -> "InlineKeyboardMarkup":
+    toggle = (
+        InlineKeyboardButton("▶️ Возобновить", callback_data="resume")
+        if paused
+        else InlineKeyboardButton("⏸ Пауза", callback_data="pause")
+    )
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("📈 P&L",       callback_data="pnl"),
+            InlineKeyboardButton("📋 Позиции",   callback_data="pos"),
+            InlineKeyboardButton("🔄 Обновить",  callback_data="status"),
+        ],
+        [
+            toggle,
+            InlineKeyboardButton("⚙️ Настройки", callback_data="settings"),
+        ],
+    ])
+
+
+def _kb_settings(paused: bool, auto_exec: bool) -> "InlineKeyboardMarkup":
+    pause_btn = (
+        InlineKeyboardButton("▶️ Возобновить торговлю", callback_data="resume")
+        if paused
+        else InlineKeyboardButton("⏸ Поставить на паузу", callback_data="pause")
+    )
+    exec_label = (
+        "✅ Авто-сделки: ВКЛ  →  выкл"
+        if auto_exec
+        else "❌ Авто-сделки: ВЫКЛ  →  вкл"
+    )
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(exec_label, callback_data="toggle_auto_exec")],
+        [pause_btn],
+        [
+            InlineKeyboardButton("🤖 Режим торговли", callback_data="mode_menu"),
+            InlineKeyboardButton("🔢 Кол-во символов", callback_data="scan_menu"),
+        ],
+        [InlineKeyboardButton("📐 Стратегии",     callback_data="strategies")],
+        [InlineKeyboardButton("⚖️ Риск-профиль", callback_data="risk_menu")],
+        [InlineKeyboardButton("🕐 Часы торговли", callback_data="hours_info")],
+        [InlineKeyboardButton("🔄 Сброс настроек", callback_data="reset_defaults")],
+        [InlineKeyboardButton("« Главная", callback_data="main")],
+    ])
+
+
+def _kb_mode_menu() -> "InlineKeyboardMarkup":
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("🤖 AI",      callback_data="mode:ai"),
+            InlineKeyboardButton("📐 Local",   callback_data="mode:local"),
+        ],
+        [
+            InlineKeyboardButton("🔀 Hybrid",  callback_data="mode:hybrid"),
+            InlineKeyboardButton("🧠 DQN",     callback_data="mode:dqn"),
+        ],
+        [InlineKeyboardButton("« Настройки",  callback_data="settings")],
+    ])
+
+
+def _kb_scan_menu() -> "InlineKeyboardMarkup":
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("10",  callback_data="scan:10"),
+            InlineKeyboardButton("20",  callback_data="scan:20"),
+            InlineKeyboardButton("30",  callback_data="scan:30"),
+            InlineKeyboardButton("50",  callback_data="scan:50"),
+        ],
+        [
+            InlineKeyboardButton("75",  callback_data="scan:75"),
+            InlineKeyboardButton("100", callback_data="scan:100"),
+        ],
+        [InlineKeyboardButton("« Настройки", callback_data="settings")],
+    ])
+
+
+def _kb_help_menu() -> "InlineKeyboardMarkup":
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("📖 О боте",     callback_data="help:about"),
+            InlineKeyboardButton("💡 Режимы",     callback_data="help:modes"),
+        ],
+        [
+            InlineKeyboardButton("⚙️ Настройки",  callback_data="help:settings"),
+            InlineKeyboardButton("📋 Команды",    callback_data="help:commands"),
+        ],
+        [
+            InlineKeyboardButton("💰 Символы",    callback_data="help:symbols"),
+            InlineKeyboardButton("⚖️ Риски",      callback_data="help:risk"),
+        ],
+        [InlineKeyboardButton("🔒 Безопасность", callback_data="help:security")],
+        [InlineKeyboardButton("« Главная",        callback_data="main")],
+    ])
+
+
+def _kb_help_back() -> "InlineKeyboardMarkup":
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("« Справка",  callback_data="help_menu"),
+            InlineKeyboardButton("🏠 Главная", callback_data="main"),
+        ],
+    ])
+
+
+def _kb_pnl() -> "InlineKeyboardMarkup":
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("📊 Статус",    callback_data="status"),
+        InlineKeyboardButton("📋 Позиции",  callback_data="pos"),
+        InlineKeyboardButton("🔄 Обновить", callback_data="pnl"),
+    ]])
+
+
+def _kb_pos() -> "InlineKeyboardMarkup":
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("📊 Статус",   callback_data="status"),
+        InlineKeyboardButton("📈 P&L",      callback_data="pnl"),
+        InlineKeyboardButton("🔄 Обновить", callback_data="pos"),
+    ]])
+
+
+def _kb_after_action() -> "InlineKeyboardMarkup":
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("📊 Статус",    callback_data="status"),
+        InlineKeyboardButton("⚙️ Настройки", callback_data="settings"),
+    ]])
+
+
+def _kb_risk_menu(drawdown_on: bool) -> "InlineKeyboardMarkup":
+    dd_label = (
+        "✅ Защита просадки: ВКЛ  →  выкл"
+        if drawdown_on
+        else "❌ Защита просадки: ВЫКЛ  →  вкл"
+    )
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("🟢 Консерватив.", callback_data="risk:conservative"),
+            InlineKeyboardButton("🟡 Умеренный",    callback_data="risk:moderate"),
+            InlineKeyboardButton("🔴 Агрессивный",  callback_data="risk:aggressive"),
+        ],
+        [InlineKeyboardButton(dd_label, callback_data="toggle_drawdown")],
+        [InlineKeyboardButton("« Настройки", callback_data="settings")],
+    ])
+
+
+def _kb_hours_info() -> "InlineKeyboardMarkup":
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("🕐 1-10 (Азия)",   callback_data="hours:1-10"),
+            InlineKeyboardButton("🕐 8-20 (Европа)",  callback_data="hours:8-20"),
+        ],
+        [
+            InlineKeyboardButton("🕐 14-22 (США)",    callback_data="hours:14-22"),
+            InlineKeyboardButton("🕐 22-6 (ночь)",    callback_data="hours:22-6"),
+        ],
+        [InlineKeyboardButton("🔄 24/7 (сброс)",    callback_data="hours:")],
+        [InlineKeyboardButton("« Настройки",        callback_data="settings")],
+    ])
+
+
+_RISK_ICON = {"low": "🟢", "medium": "🟡", "high": "🔴"}
+_STRAT_SHORT = {
+    "ema_crossover":   "EMA↕",
+    "rsi_momentum":    "RSI",
+    "macd_crossover":  "MACD↕",
+    "bollinger_bands": "BB",
+    "scalping":        "Scalp🔴",
+    "swing_trading":   "Swing",
+    "breakout":        "Break🔴",
+    "mean_reversion":  "Mean↩",
+    "trend_following": "Trend🟢",
+}
+
+
+def _kb_strategies(strategies: list) -> "InlineKeyboardMarkup":
+    """Кнопка на каждую стратегию — нажатие переключает вкл/выкл."""
+    buttons = []
+    row: list = []
+    for i, s in enumerate(strategies):
+        icon = "✅" if s["enabled"] else "❌"
+        label = f"{icon} {_STRAT_SHORT.get(s['name'], s['name'])}"
+        row.append(
+            InlineKeyboardButton(label, callback_data=f"strat:{s['name']}")
+        )
+        if len(row) == 3 or i == len(strategies) - 1:
+            buttons.append(row)
+            row = []
+    buttons.append([
+        InlineKeyboardButton("🔁 Все ВКЛ", callback_data="strat_reset"),
+        InlineKeyboardButton("« Настройки", callback_data="settings"),
+    ])
+    return InlineKeyboardMarkup(buttons)
+
+
+# ── Тексты справки ────────────────────────────────────────────────────────────
+
+_HELP_ABOUT = (
+    "📖 *О боте BitbotBY*\n\n"
+    "Гибридный крипто-трейдинг бот для Bybit Futures.\n\n"
+    "*Как работает:*\n"
+    "1️⃣ Сканирует топ-N монет по объёму каждые 30 сек\n"
+    "2️⃣ Загружает OHLCV + технические индикаторы\n"
+    "3️⃣ Анализирует через AI (Claude / DeepSeek / Groq)\n"
+    "4️⃣ Комбинирует AI-сигнал с локальными стратегиями\n"
+    "5️⃣ При AUTO_EXECUTE — спрашивает подтверждение в Telegram\n"
+    "6️⃣ Управляет позицией: SL/TP, трейлинг-стоп, circuit breaker\n\n"
+    "*Paper trading:* виртуальные сделки, реальные данные биржи\n"
+    "*Live trading:* реальные ордера через Bybit API"
+)
+
+_HELP_MODES = (
+    "💡 *Режимы торговли*\n\n"
+    "🤖 *AI* — всё решает Claude / DeepSeek / Groq\n"
+    "   Лучший режим при наличии API ключа\n\n"
+    "📐 *Local* — локальные стратегии без AI\n"
+    "   RSI, EMA, Bollinger, Breakout и др.\n"
+    "   Работает без интернет-зависимостей\n\n"
+    "🔀 *Hybrid* — AI + локальные стратегии совместно\n"
+    "   Сигналы комбинируются и взвешиваются\n\n"
+    "🧠 *DQN* — нейросеть (SAC/DQN), обученная на истории\n"
+    "   Требует предварительного обучения тренером\n\n"
+    "Менять режим: кнопка *Режим торговли* в Настройках\n"
+    "или команда `/mode ai`"
+)
+
+_HELP_SETTINGS = (
+    "⚙️ *Настройки бота*\n\n"
+    "🔄 *Авто-сделки* — исполнение ордеров\n"
+    "   ВКЛ = бот торгует сам (с подтверждением в Telegram)\n"
+    "   ВЫКЛ = только сигналы, без сделок\n\n"
+    "⏸ *Пауза* — остановить новые сделки без перезапуска\n"
+    "   Открытые позиции продолжают мониториться!\n\n"
+    "🤖 *Режим* — AI / Local / Hybrid / DQN\n\n"
+    "🔢 *Кол-во символов* — сколько монет сканировать\n\n"
+    "📐 *Стратегии* — включить/выключить отдельные стратегии\n"
+    "   Актуально для режимов Local и Hybrid\n\n"
+    "⚖️ *Риск-профиль* — управление рисками:\n"
+    "   Макс. позиций / Риск на сделку / Защита просадки\n"
+    "   Пресеты: 🟢 Консервативный / 🟡 Умеренный / 🔴 Агрессивный\n\n"
+    "🕐 *Часы торговли* — диапазон UTC когда открывать сделки\n"
+    "   Пусто = 24/7. Формат: `9-17`, поддерживается `22-6`\n\n"
+    "🔄 *Сброс настроек* — вернуть все параметры к .env\n\n"
+    "Все настройки сохраняются в Redis и переживают перезапуск"
+)
+
+_HELP_COMMANDS = (
+    "📋 *Команды бота*\n\n"
+    "*Информация:*\n"
+    "`/status`      — баланс, режим, позиции\n"
+    "`/pnl`         — P&L за день и с начала\n"
+    "`/pos`         — открытые позиции\n\n"
+    "*Управление торговлей:*\n"
+    "`/pause`       — поставить на паузу\n"
+    "`/resume`      — возобновить торговлю\n"
+    "`/mode ai`     — сменить режим (ai/local/hybrid/dqn)\n"
+    "`/scan 50`     — сканировать 50 символов\n\n"
+    "*Символы:*\n"
+    "`/add SOL`     — всегда включать SOL в сканирование\n"
+    "`/remove HYPE` — исключить HYPE из сканирования\n\n"
+    "*Стратегии и риски:*\n"
+    "`/strategies`  — меню включения/выключения стратегий\n"
+    "`/risk`        — риск-профиль (позиции, % риска, просадка)\n"
+    "`/hours 9-17`  — торговля только с 9 до 17 UTC\n"
+    "`/hours`       — сброс на 24/7\n\n"
+    "*Прочее:*\n"
+    "`/settings`    — панель всех настроек\n"
+    "`/help`        — эта справка\n\n"
+    "💡 Все команды доступны также через кнопки в меню"
+)
+
+_HELP_SYMBOLS = (
+    "💰 *Управление символами*\n\n"
+    "По умолчанию бот сам выбирает топ-N монет по объёму за 24ч.\n\n"
+    "*Добавить символ поверх топа:*\n"
+    "`/add SOL` или `/add SOL/USDT`\n"
+    "→ SOL сканируется всегда, даже если вылетел из топа\n\n"
+    "*Исключить символ:*\n"
+    "`/remove PEPE` или `/remove PEPE/USDT`\n"
+    "→ PEPE пропускается при сканировании\n\n"
+    "*Изменить кол-во сканируемых:*\n"
+    "`/scan 50` или кнопка *Кол-во символов* в Настройках\n"
+    "Диапазон: 1–200 символов\n\n"
+    "*Часы торговли:*\n"
+    "`/hours 9-17` — торговать только с 9:00 до 17:00 UTC\n"
+    "`/hours 22-6` — поддерживается перенос через полночь\n"
+    "`/hours` — сброс, торговать 24/7\n\n"
+    "⚡ Все настройки сохраняются в Redis и переживают перезапуск бота"
+)
+
+_HELP_RISK = (
+    "⚖️ *Стратегии и риск-менеджмент*\n\n"
+    "*Стратегии* (`/strategies`):\n"
+    "9 встроенных стратегий — каждую можно вкл/выкл:\n"
+    "EMA↕ · RSI · MACD↕ · BB · Scalp🔴 · Swing · Break🔴 · Mean↩ · Trend🟢\n"
+    "🟢 низкий риск · 🟡 средний · 🔴 высокий\n"
+    "В режиме AI — передаются в промпт\n"
+    "В режиме Local — выбираются автоматически по индикаторам\n\n"
+    "*Риск-профиль* (`/risk`):\n"
+    "🟢 Консервативный — 2 поз, 1%/сделку, защита просадки ВКЛ\n"
+    "🟡 Умеренный       — 3 поз, 2%/сделку, защита просадки ВКЛ\n"
+    "🔴 Агрессивный     — 5 поз, 4%/сделку, защита просадки ВЫКЛ\n\n"
+    "*Защита просадки:*\n"
+    "При просадке ≥10% от пика баланс позиция уменьшается вдвое\n\n"
+    "⚡ Всё меняется на лету без перезапуска"
+)
+
+_HELP_SECURITY = (
+    "🔒 *Безопасность*\n\n"
+    "✅ *Что можно делать через Telegram:*\n"
+    "   Менять режим, паузу, кол-во символов\n"
+    "   Подтверждать/отклонять сделки\n"
+    "   Смотреть баланс, позиции, P&L\n\n"
+    "❌ *Что НЕ делается через Telegram:*\n"
+    "   API ключи Bybit — только в .env файле\n"
+    "   Ключи AI провайдеров — только в .env файле\n\n"
+    "📍 *Почему?*\n"
+    "Telegram не шифрует историю сообщений.\n"
+    "Ключ биржи в чате = риск потерять деньги.\n"
+    "Секреты живут только в .env на сервере.\n\n"
+    "🛡 Только ты (твой chat_id) можешь управлять ботом"
+)
+
+
+class TelegramCommander:
+    """
+    Telegram-панель управления BitbotBY.
+
+    Регистрирует команды и inline-кнопки на Application из TelegramNotifier.
+    Состояние бота получает через callback get_state(), не держит ссылку на TradingBot.
+    """
+
+    def __init__(
+        self,
+        notifier: Any,
+        runtime_config: Any,
+        get_state: Callable[[], Dict[str, Any]],
+    ) -> None:
+        self._notifier = notifier
+        self._rc = runtime_config
+        self._get_state = get_state
+
+    def register(self) -> None:
+        if not _TG_AVAILABLE:
+            logger.warning("TelegramCommander: python-telegram-bot не установлен")
+            return
+        app = getattr(self._notifier, "_app", None)
+        if app is None:
+            logger.warning("TelegramCommander: notifier._app не инициализирован")
+            return
+
+        commands = [
+            ("start",      self._cmd_help),
+            ("help",       self._cmd_help),
+            ("settings",   self._cmd_settings),
+            ("status",     self._cmd_status),
+            ("pause",      self._cmd_pause),
+            ("resume",     self._cmd_resume),
+            ("mode",       self._cmd_mode),
+            ("scan",       self._cmd_scan),
+            ("pnl",        self._cmd_pnl),
+            ("pos",        self._cmd_pos),
+            ("add",        self._cmd_add),
+            ("remove",     self._cmd_remove),
+            ("strategies", self._cmd_strategies),
+            ("hours",      self._cmd_hours),
+            ("risk",       self._cmd_risk),
+            ("trainn",     self._cmd_trainn),
+            ("lev",        self._cmd_lev),
+        ]
+        for name, handler in commands:
+            app.add_handler(CommandHandler(name, handler))
+        app.add_handler(CallbackQueryHandler(self._handle_callback))
+        logger.info("TelegramCommander: %d команд зарегистрировано", len(commands))
+
+    # ── Auth & helpers ────────────────────────────────────────────────────────
+
+    def _authorized(self, update: Any) -> bool:
+        chat_id = str(getattr(update.effective_chat, "id", ""))
+        return chat_id == str(self._notifier._chat_id)
+
+    async def _reply(self, update: Any, text: str, kb: Any = None) -> None:
+        if kb is None:
+            kb = _kb_main()
+        if update and update.message:
+            await update.message.reply_text(
+                text, parse_mode="Markdown", reply_markup=kb
+            )
+
+    async def _edit(self, query: Any, text: str, kb: Any = None) -> None:
+        if kb is None:
+            kb = _kb_main()
+        try:
+            await query.edit_message_text(
+                text, parse_mode="Markdown", reply_markup=kb
+            )
+        except Exception as _e:
+            if "message is not modified" not in str(_e).lower():
+                raise
+
+    # ── Builders ──────────────────────────────────────────────────────────────
+
+    def _build_status(self) -> tuple[str, Any]:
+        s = self._get_state()
+        mode = self._rc.get_mode()
+        n = self._rc.get_scan_top_n()
+        paused = self._rc.is_paused()
+        auto_exec = self._rc.get_auto_execute()
+        balance = s.get("balance", 0.0)
+        initial = s.get("initial_balance", balance)
+        pnl_pct = (balance - initial) / initial * 100 if initial else 0.0
+        positions = s.get("positions", [])
+        paper = "paper" if s.get("paper_trading") else "live"
+        forced = sorted(self._rc.get_forced_symbols())
+
+        state_icon = "⏸" if paused else "🟢"
+        exec_icon = "✅" if auto_exec else "❌"
+        text = (
+            f"{state_icon} *BitbotBY [{paper}]*\n\n"
+            f"💰 Баланс: `${balance:,.2f}` ({pnl_pct:+.2f}%)\n"
+            f"🤖 Режим: `{mode}`\n"
+            f"🔢 Символов: `{n}`\n"
+            f"📋 Позиций: `{len(positions)}`\n"
+            f"{exec_icon} Авто-сделки: `{'ВКЛ' if auto_exec else 'ВЫКЛ'}`\n"
+        )
+        if forced:
+            text += f"➕ Доп. символы: `{', '.join(forced)}`\n"
+        if paused:
+            text += "\n⏸ *Торговля приостановлена*"
+        return text, _kb_status(paused)
+
+    def _build_settings(self) -> tuple[str, Any]:
+        paused = self._rc.is_paused()
+        auto_exec = self._rc.get_auto_execute()
+        mode = self._rc.get_mode()
+        n = self._rc.get_scan_top_n()
+        excluded = sorted(self._rc.get_excluded_symbols())
+
+        state_str = "⏸ на паузе" if paused else "🟢 торгует"
+        exec_str = "✅ ВКЛ" if auto_exec else "❌ ВЫКЛ"
+        text = (
+            f"⚙️ *Настройки бота*\n\n"
+            f"Статус: {state_str}\n"
+            f"Режим: `{mode}`\n"
+            f"Символов: `{n}`\n"
+            f"Авто-сделки: {exec_str}\n"
+        )
+        if excluded:
+            text += f"Исключены: `{', '.join(excluded)}`\n"
+        text += "\n_Нажми кнопку для изменения:_"
+        return text, _kb_settings(paused, auto_exec)
+
+    def _build_risk(self) -> tuple[str, Any]:
+        r = self._rc.get_risk_summary()
+        max_pos = r["max_positions"]
+        rpt = r["risk_per_trade"]
+        dd = r["drawdown_scale_enabled"]
+        dd_icon = "✅" if dd else "❌"
+        text = (
+            f"⚖️ *Риск-профиль*\n\n"
+            f"Макс. позиций: `{max_pos}`\n"
+            f"Риск на сделку: `{rpt * 100:.1f}%`\n"
+            f"Защита просадки: {dd_icon}\n\n"
+            f"_Пресеты:_\n"
+            f"🟢 Конс. — 2 поз, 1%, защита ВКЛ\n"
+            f"🟡 Умер. — 3 поз, 2%, защита ВКЛ\n"
+            f"🔴 Агр. — 5 поз, 4%, защита ВЫКЛ\n"
+        )
+        return text, _kb_risk_menu(dd)
+
+    def _build_hours_text(self) -> str:
+        hours = self._rc.get_trading_hours()
+        if hours:
+            active = f"`{hours}` UTC"
+            status = "🕐 Торговля ограничена по времени"
+        else:
+            active = "24/7"
+            status = "🟢 Торговля без ограничений"
+        return (
+            f"🕐 *Часы торговли*\n\n"
+            f"{status}\n"
+            f"Текущий диапазон: {active}\n\n"
+            f"Формат: `ЧЧ-ЧЧ` UTC (пример: `9-17`)\n"
+            f"Поддерживается перенос через полночь: `22-6`\n\n"
+            f"_Команда: `/hours 9-17` или `/hours` для сброса_"
+        )
+
+    def _build_strategies(self) -> tuple[str, Any]:
+        strats = self._get_state().get("strategies", [])
+        total = len(strats)
+        enabled_count = sum(1 for s in strats if s["enabled"])
+        mode = self._rc.get_mode()
+        note = (
+            "\n_В режиме AI стратегии передаются в промпт._"
+            if mode != "local"
+            else "\n_В режиме Local стратегия выбирается автоматически._"
+        )
+        lines = [f"📐 *Стратегии* — включено {enabled_count}/{total}\n"]
+        for s in strats:
+            icon = "✅" if s["enabled"] else "❌"
+            risk = _RISK_ICON.get(s.get("risk_level", "medium"), "🟡")
+            mtype = s.get("market_type", "any")
+            lines.append(f"{icon} `{s['name']}` {risk} _{mtype}_")
+        text = "\n".join(lines) + note
+        return text, _kb_strategies(strats)
+
+    def _build_pnl(self) -> str:
+        s = self._get_state()
+        balance = s.get("balance", 0.0)
+        initial = s.get("initial_balance", balance)
+        total = balance - initial
+        total_p = (total / initial * 100) if initial else 0.0
+        daily_p = s.get("daily_pnl_pct", 0.0)
+        icon = "📈" if total >= 0 else "📉"
+        return (
+            f"{icon} *P&L отчёт*\n\n"
+            f"Баланс: `${balance:,.2f}`\n"
+            f"Старт:  `${initial:,.2f}`\n"
+            f"Итого:  `{total:+.2f}$` ({total_p:+.2f}%)\n"
+            f"За день: `{daily_p:+.2f}%`\n"
+        )
+
+    def _build_pos(self) -> str:
+        positions = self._get_state().get("positions", [])
+        if not positions:
+            return "📭 Открытых позиций нет."
+        lines = ["*Открытые позиции:*\n"]
+        for p in positions:
+            sym = p.get("symbol", "?")
+            side = p.get("side", "?").upper()
+            entry = p.get("entry_price", 0.0)
+            size = p.get("size", 0.0)
+            pnl = p.get("unrealized_pnl", 0.0)
+            icon = "🟢" if pnl >= 0 else "🔴"
+            lines.append(
+                f"{icon} `{sym}` {side}  "
+                f"qty `{size}`  entry `{entry:.4f}`  "
+                f"PnL `{pnl:+.2f}$`"
+            )
+        return "\n".join(lines)
+
+    # ── Команды ───────────────────────────────────────────────────────────────
+
+    async def _cmd_help(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        if not self._authorized(update):
+            return
+        text, kb = self._build_status()
+        intro = "👋 *Добро пожаловать в BitbotBY!*\n\n" + text
+        await self._reply(update, intro, _kb_main())
+
+    async def _cmd_settings(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        if not self._authorized(update):
+            return
+        text, kb = self._build_settings()
+        await self._reply(update, text, kb)
+
+    async def _cmd_status(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        if not self._authorized(update):
+            return
+        text, kb = self._build_status()
+        await self._reply(update, text, kb)
+
+    async def _cmd_pause(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        if not self._authorized(update):
+            return
+        self._rc.set_paused(True)
+        await self._reply(
+            update,
+            "⏸ *Торговля приостановлена.*\n\n"
+            "Открытые позиции продолжают мониториться (SL/TP работают).\n"
+            "Новые сделки не открываются.",
+            InlineKeyboardMarkup([[
+                InlineKeyboardButton("▶️ Возобновить", callback_data="resume"),
+                InlineKeyboardButton("📊 Статус",      callback_data="status"),
+            ]]),
+        )
+
+    async def _cmd_resume(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        if not self._authorized(update):
+            return
+        self._rc.set_paused(False)
+        await self._reply(
+            update,
+            "▶️ *Торговля возобновлена.*",
+            InlineKeyboardMarkup([[
+                InlineKeyboardButton("⏸ Пауза",     callback_data="pause"),
+                InlineKeyboardButton("📊 Статус",   callback_data="status"),
+            ]]),
+        )
+
+    async def _cmd_mode(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        if not self._authorized(update):
+            return
+        args = context.args or []
+        if not args:
+            current = self._rc.get_mode()
+            await self._reply(
+                update,
+                f"Текущий режим: `{current}`\nВыбери новый:",
+                _kb_mode_menu(),
+            )
+            return
+        mode = args[0].lower()
+        if self._rc.set_mode(mode):
+            await self._reply(
+                update,
+                f"✅ Режим → `{mode}`\nПрименится на следующем цикле.",
+                _kb_after_action(),
+            )
+        else:
+            await self._reply(
+                update,
+                "❌ Неверный режим. Доступны: `ai`, `local`, `hybrid`, `dqn`",
+                _kb_mode_menu(),
+            )
+
+    async def _cmd_scan(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        if not self._authorized(update):
+            return
+        args = context.args or []
+        if not args:
+            n = self._rc.get_scan_top_n()
+            await self._reply(
+                update,
+                f"Сейчас: `{n}` символов\nВыбери или введи `/scan N`:",
+                _kb_scan_menu(),
+            )
+            return
+        try:
+            n = int(args[0])
+        except ValueError:
+            await self._reply(update, "❌ Укажи число: `/scan 50`", _kb_scan_menu())
+            return
+        if self._rc.set_scan_top_n(n):
+            await self._reply(
+                update, f"✅ Теперь сканируется `{n}` символов.", _kb_after_action()
+            )
+        else:
+            await self._reply(update, "❌ Диапазон: 1–200", _kb_scan_menu())
+
+    async def _cmd_trainn(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        if not self._authorized(update):
+            return
+        args = context.args or []
+        n = self._rc.get_train_top_n()
+        if not args:
+            await self._reply(
+                update,
+                f"Сейчас для обучения SAC используется *{n}* символов.\n"
+                f"Введи `/trainn N` чтобы изменить (1–100).\n\n"
+                f"_Применится при следующем запуске обучения._",
+            )
+            return
+        try:
+            n = int(args[0])
+        except ValueError:
+            await self._reply(update, "❌ Укажи число: `/trainn 30`")
+            return
+        if self._rc.set_train_top_n(n):
+            await self._reply(
+                update,
+                f"✅ Обучение SAC будет использовать *{n}* символов.\n"
+                f"_Применится при следующем запуске обучения._",
+                _kb_after_action(),
+            )
+        else:
+            await self._reply(update, "❌ Диапазон: 1–100")
+
+    async def _cmd_lev(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        if not self._authorized(update):
+            return
+        args = context.args or []
+
+        if not args:
+            mode = self._rc.get_leverage_mode()
+            risk = self._rc.get_leverage_target_risk()
+            mode_desc = {
+                "fixed": "Фиксированное (LEVERAGE из .env)",
+                "volatility": "ATR-таргетинг (авто по волатильности) ✅",
+                "full": "ATR + режим рынка + просадка",
+            }.get(mode, mode)
+            await self._reply(
+                update,
+                f"📊 *Управление плечом*\n\n"
+                f"Режим: *{mode}*\n{mode_desc}\n\n"
+                f"Целевой риск на ATR: `{risk:.3f}` ({risk*100:.1f}%)\n\n"
+                f"*Команды:*\n"
+                f"`/lev fixed` — фиксированное\n"
+                f"`/lev volatility` — ATR-таргетинг\n"
+                f"`/lev full` — ATR + режим + просадка\n"
+                f"`/lev target 0.02` — целевой риск (0.5%–10%)",
+            )
+            return
+
+        sub = args[0].lower()
+
+        if sub in ("fixed", "volatility", "full"):
+            if self._rc.set_leverage_mode(sub):
+                desc = {
+                    "fixed": "фиксированное плечо из LEVERAGE",
+                    "volatility": "ATR-таргетинг",
+                    "full": "ATR + режим рынка + просадка",
+                }[sub]
+                await self._reply(
+                    update,
+                    f"✅ Режим плеча: *{sub}* ({desc})\n"
+                    f"_Применится к следующим ордерам._",
+                    _kb_after_action(),
+                )
+            else:
+                await self._reply(update, "❌ Ошибка сохранения")
+            return
+
+        if sub == "target" and len(args) >= 2:
+            try:
+                risk = float(args[1])
+            except ValueError:
+                await self._reply(update, "❌ Укажи число: `/lev target 0.02`")
+                return
+            if self._rc.set_leverage_target_risk(risk):
+                await self._reply(
+                    update,
+                    f"✅ Целевой риск на ATR: `{risk:.3f}` ({risk*100:.1f}%)\n"
+                    f"_Применится к следующим ордерам._",
+                    _kb_after_action(),
+                )
+            else:
+                await self._reply(update, "❌ Диапазон: 0.005–0.1 (0.5%–10%)")
+            return
+
+        await self._reply(
+            update,
+            "❌ Неизвестная команда.\n"
+            "Используй: `/lev fixed` | `/lev volatility` | `/lev full` | `/lev target 0.02`",
+        )
+
+    async def _cmd_pnl(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        if not self._authorized(update):
+            return
+        await self._reply(update, self._build_pnl(), _kb_pnl())
+
+    async def _cmd_pos(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        if not self._authorized(update):
+            return
+        await self._reply(update, self._build_pos(), _kb_pos())
+
+    async def _cmd_add(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        if not self._authorized(update):
+            return
+        args = context.args or []
+        if not args:
+            await self._reply(update, "Использование: `/add SOL` или `/add SOL/USDT`")
+            return
+        sym = args[0].upper()
+        if "/" not in sym:
+            sym = f"{sym}/USDT"
+        self._rc.add_forced_symbol(sym)
+        self._rc.remove_excluded_symbol(sym)
+        await self._reply(
+            update, f"✅ `{sym}` добавлен в список сканирования.", _kb_after_action()
+        )
+
+    async def _cmd_remove(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        if not self._authorized(update):
+            return
+        args = context.args or []
+        if not args:
+            await self._reply(
+                update, "Использование: `/remove HYPE` или `/remove HYPE/USDT`"
+            )
+            return
+        sym = args[0].upper()
+        if "/" not in sym:
+            sym = f"{sym}/USDT"
+        self._rc.remove_forced_symbol(sym)
+        self._rc.add_excluded_symbol(sym)
+        await self._reply(
+            update, f"✅ `{sym}` исключён из сканирования.", _kb_after_action()
+        )
+
+    async def _cmd_strategies(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        if not self._authorized(update):
+            return
+        text, kb = self._build_strategies()
+        await self._reply(update, text, kb)
+
+    async def _cmd_risk(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        if not self._authorized(update):
+            return
+        text, kb = self._build_risk()
+        await self._reply(update, text, kb)
+
+    async def _cmd_hours(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        if not self._authorized(update):
+            return
+        args = context.args or []
+        if not args:
+            await self._reply(update, self._build_hours_text(), _kb_hours_info())
+            return
+        val = args[0].strip() if args else ""
+        if not self._rc.set_trading_hours(val):
+            await self._reply(
+                update,
+                "❌ Неверный формат. Примеры: `/hours 9-17` или `/hours` для сброса",
+            )
+            return
+        label = (
+            "24/7 (без ограничений)" if not val or val == "0"
+            else f"`{val}` UTC"
+        )
+        await self._reply(
+            update,
+            f"✅ Часы торговли: {label}",
+            _kb_after_action(),
+        )
+
+    # ── Callback-handler (все кнопки) ─────────────────────────────────────────
+
+    async def _handle_callback(
+        self, update: Update, _context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        query = update.callback_query
+        await query.answer()
+
+        chat_id = str(getattr(update.effective_chat, "id", ""))
+        if chat_id != str(self._notifier._chat_id):
+            return
+
+        data = query.data or ""
+
+        # ── Навигация ────────────────────────────────────────────────────────
+        if data == "main":
+            text, _ = self._build_status()
+            await self._edit(query, "🏠 *Главная панель*\n\n" + text, _kb_main())
+
+        elif data == "status":
+            text, kb = self._build_status()
+            await self._edit(query, text, kb)
+
+        elif data == "pnl":
+            await self._edit(query, self._build_pnl(), _kb_pnl())
+
+        elif data == "pos":
+            await self._edit(query, self._build_pos(), _kb_pos())
+
+        elif data == "settings":
+            text, kb = self._build_settings()
+            await self._edit(query, text, kb)
+
+        # ── Управление ───────────────────────────────────────────────────────
+        elif data == "pause":
+            self._rc.set_paused(True)
+            text, kb = self._build_settings()
+            await self._edit(query, "⏸ *Пауза включена*\n\n" + text, kb)
+
+        elif data == "resume":
+            self._rc.set_paused(False)
+            text, kb = self._build_settings()
+            await self._edit(query, "▶️ *Торговля возобновлена*\n\n" + text, kb)
+
+        elif data == "toggle_auto_exec":
+            self._rc.set_auto_execute(not self._rc.get_auto_execute())
+            text, kb = self._build_settings()
+            await self._edit(query, text, kb)
+
+        elif data == "mode_menu":
+            mode = self._rc.get_mode()
+            await self._edit(
+                query, f"Текущий режим: `{mode}`\nВыбери новый:", _kb_mode_menu()
+            )
+
+        elif data == "scan_menu":
+            n = self._rc.get_scan_top_n()
+            await self._edit(query, f"Сейчас: `{n}` символов\nВыбери:", _kb_scan_menu())
+
+        elif data.startswith("mode:"):
+            mode = data.split(":", 1)[1]
+            if self._rc.set_mode(mode):
+                text, kb = self._build_settings()
+                if mode == "local":
+                    hint = (
+                        "✅ Режим → `local`\n\n"
+                        "💡 Стратегия выбирается автоматически по индикаторам. "
+                        "Можно отключить ненужные через меню ниже.\n\n"
+                    )
+                    kb_local = InlineKeyboardMarkup([
+                        [InlineKeyboardButton(
+                            "📐 Настроить стратегии →",
+                            callback_data="strategies",
+                        )],
+                        [InlineKeyboardButton(
+                            "⚙️ К настройкам", callback_data="settings"
+                        )],
+                    ])
+                    await self._edit(query, hint + text, kb_local)
+                else:
+                    await self._edit(query, f"✅ Режим → `{mode}`\n\n" + text, kb)
+            else:
+                await self._edit(query, "❌ Неверный режим", _kb_mode_menu())
+
+        elif data.startswith("scan:"):
+            try:
+                n = int(data.split(":", 1)[1])
+            except ValueError:
+                return
+            if self._rc.set_scan_top_n(n):
+                text, kb = self._build_settings()
+                await self._edit(query, f"✅ Символов → `{n}`\n\n" + text, kb)
+            else:
+                await self._edit(query, "❌ Недопустимое значение", _kb_scan_menu())
+
+        # ── Справка ──────────────────────────────────────────────────────────
+        elif data == "help_menu":
+            await self._edit(
+                query,
+                "❓ *Справка по боту*\n\nВыбери раздел:",
+                _kb_help_menu(),
+            )
+
+        elif data == "help:about":
+            await self._edit(query, _HELP_ABOUT, _kb_help_back())
+
+        elif data == "help:modes":
+            await self._edit(query, _HELP_MODES, _kb_help_back())
+
+        elif data == "help:settings":
+            await self._edit(query, _HELP_SETTINGS, _kb_help_back())
+
+        elif data == "help:commands":
+            await self._edit(query, _HELP_COMMANDS, _kb_help_back())
+
+        elif data == "help:symbols":
+            await self._edit(query, _HELP_SYMBOLS, _kb_help_back())
+
+        elif data == "help:risk":
+            await self._edit(query, _HELP_RISK, _kb_help_back())
+
+        elif data == "help:security":
+            await self._edit(query, _HELP_SECURITY, _kb_help_back())
+
+        # ── Сброс к .env ─────────────────────────────────────────────────────
+        elif data == "reset_defaults":
+            self._rc.reset_to_defaults()
+            text, kb = self._build_settings()
+            await self._edit(
+                query,
+                "🔄 *Настройки сброшены к значениям по умолчанию*\n\n" + text,
+                kb,
+            )
+
+        # ── Риск-профиль ─────────────────────────────────────────────────────
+        elif data == "risk_menu":
+            text, kb = self._build_risk()
+            await self._edit(query, text, kb)
+
+        elif data.startswith("risk:"):
+            preset = data.split(":", 1)[1]
+            if self._rc.apply_risk_preset(preset):
+                text, kb = self._build_risk()
+                names = {
+                    "conservative": "🟢 Консервативный",
+                    "moderate": "🟡 Умеренный",
+                    "aggressive": "🔴 Агрессивный",
+                }
+                label = names.get(preset, preset)
+                await self._edit(query, f"✅ {label}\n\n" + text, kb)
+
+        elif data == "toggle_drawdown":
+            current = self._rc.get_drawdown_scale_enabled()
+            self._rc.set_drawdown_scale_enabled(not current)
+            text, kb = self._build_risk()
+            icon = "✅" if not current else "❌"
+            await self._edit(query, f"{icon} Защита просадки изменена\n\n" + text, kb)
+
+        # ── Часы торговли ────────────────────────────────────────────────────
+        elif data == "hours_info":
+            await self._edit(query, self._build_hours_text(), _kb_hours_info())
+
+        elif data.startswith("hours:"):
+            val = data.split(":", 1)[1]
+            self._rc.set_trading_hours(val)
+            label = "24/7" if not val else f"`{val}` UTC"
+            await self._edit(
+                query,
+                f"✅ Часы торговли: {label}\n\n" + self._build_hours_text(),
+                _kb_hours_info(),
+            )
+
+        # ── Стратегии ────────────────────────────────────────────────────────
+        elif data == "strategies":
+            text, kb = self._build_strategies()
+            await self._edit(query, text, kb)
+
+        elif data == "strat_reset":
+            self._rc.reset_strategies()
+            text, kb = self._build_strategies()
+            await self._edit(query, "🔁 *Все стратегии включены*\n\n" + text, kb)
+
+        elif data.startswith("strat:"):
+            name = data.split(":", 1)[1]
+            now_enabled = self._rc.toggle_strategy(name)
+            icon = "✅" if now_enabled else "❌"
+            text, kb = self._build_strategies()
+            short = _STRAT_SHORT.get(name, name)
+            state = "включена" if now_enabled else "отключена"
+            await self._edit(
+                query, f"{icon} `{short}` {state}\n\n" + text, kb
+            )
+
+        else:
+            await query.answer("Неизвестная команда")

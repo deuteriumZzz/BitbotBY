@@ -232,6 +232,11 @@ class TestSizing:
         executor, _ = _make_executor()
         cfg = _make_cfg()
         cfg.RISK_PER_TRADE = 0.01
+        executor.configure_risk(
+            max_positions=cfg.MAX_POSITIONS,
+            risk_per_trade=0.01,
+            drawdown_scale_enabled=True,
+        )
 
         with patch("src.order_executor.Config", cfg):
             qty = executor._size_position(

@@ -230,16 +230,18 @@ class TestOptimizeAllocation:
 
 
 class TestPrintRecommendations:
-    """Тесты вывода рекомендаций в stdout."""
+    """Тесты вывода рекомендаций через logger."""
 
-    def test_print_empty_recs_does_not_raise(self, capsys):
+    def test_print_empty_recs_does_not_raise(self, caplog):
         """print_recommendations не падает на пустом списке."""
-        CycleRunner.print_recommendations([], balance=10000.0, cycle=1)
-        captured = capsys.readouterr()
-        assert "No actionable" in captured.out
+        import logging
+        with caplog.at_level(logging.INFO, logger="src.cycle"):
+            CycleRunner.print_recommendations([], balance=10000.0, cycle=1)
+        assert "No actionable" in caplog.text
 
-    def test_print_with_recs_shows_symbol(self, capsys):
+    def test_print_with_recs_shows_symbol(self, caplog):
         """print_recommendations выводит символ и action."""
+        import logging
         recs = [
             {
                 "symbol": "BTC/USDT",
@@ -252,13 +254,14 @@ class TestPrintRecommendations:
                 "reasoning": "Strong trend",
             }
         ]
-        CycleRunner.print_recommendations(recs, balance=10000.0, cycle=5)
-        captured = capsys.readouterr()
-        assert "BTC/USDT" in captured.out
-        assert "BUY" in captured.out
+        with caplog.at_level(logging.INFO, logger="src.cycle"):
+            CycleRunner.print_recommendations(recs, balance=10000.0, cycle=5)
+        assert "BTC/USDT" in caplog.text
+        assert "BUY" in caplog.text
 
-    def test_print_multiple_recs_does_not_raise(self, capsys):
+    def test_print_multiple_recs_does_not_raise(self, caplog):
         """print_recommendations выводит несколько записей без ошибок."""
+        import logging
         recs = [
             {
                 "symbol": f"SYM{i}",
@@ -268,9 +271,9 @@ class TestPrintRecommendations:
             }
             for i in range(5)
         ]
-        CycleRunner.print_recommendations(recs, balance=5000.0, cycle=10)
-        captured = capsys.readouterr()
-        assert "SYM0" in captured.out
+        with caplog.at_level(logging.INFO, logger="src.cycle"):
+            CycleRunner.print_recommendations(recs, balance=5000.0, cycle=10)
+        assert "SYM0" in caplog.text
 
 
 # ---------------------------------------------------------------------------

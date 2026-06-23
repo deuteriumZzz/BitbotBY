@@ -43,6 +43,76 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+_REGIME_MULT = {"uptrend": 1.0, "sideways": 0.7, "downtrend": 0.5}
+
+
+def _calc_dynamic_leverage(
+    top: dict,
+    entry: float,
+    balance: float = 0.0,
+    peak_balance: float = 0.0,
+    runtime_config: "Any | None" = None,
+) -> int:
+    """
+    Вычисляет плечо в зависимости от выбранного режима (LEVERAGE_MODE):
+
+    fixed      — фиксированное Config.LEVERAGE на все монеты
+    volatility — target_risk / (ATR / price)  [Вариант 2]
+    full       — volatility × regime_mult × drawdown_mult  [Вариант 3]
+    """
+    try:
+        lev_min = int(getattr(Config, "LEVERAGE_MIN", 1))
+        lev_max = int(getattr(Config, "LEVERAGE_MAX", 5))
+        fallback = max(lev_min, min(lev_max, int(getattr(Config, "LEVERAGE", 3))))
+
+        # Режим: из RuntimeConfig (Telegram) или из .env
+        mode = "volatility"
+        target_risk = float(getattr(Config, "LEVERAGE_TARGET_RISK", 0.01))
+        if runtime_config is not None:
+            try:
+                mode = runtime_config.get_leverage_mode()
+                target_risk = runtime_config.get_leverage_target_risk()
+            except Exception:
+                pass
+        else:
+            mode = getattr(Config, "LEVERAGE_MODE", "volatility")
+
+        if mode == "fixed":
+            return fallback
+
+        atr = float(top.get("atr", 0.0))
+        price = entry if entry > 0 else float(top.get("price", 0.0))
+        if atr <= 0 or price <= 0:
+            return fallback
+
+        atr_pct = atr / price
+        base_lev = target_risk / atr_pct
+
+        if mode == "full":
+            # Режим рынка из индикаторов снэпшота
+            trend = top.get("indicators", {}).get("trend", "sideways")
+            regime_mult = _REGIME_MULT.get(trend, 0.7)
+
+            # Просадка относительно пика баланса
+            if peak_balance > 0 and balance > 0 and peak_balance > balance:
+                dd_pct = (peak_balance - balance) / peak_balance
+                max_dd = float(getattr(Config, "MAX_DRAWDOWN_PERCENT", 0.2))
+                drawdown_mult = max(0.3, 1.0 - dd_pct / max(max_dd, 0.01))
+            else:
+                drawdown_mult = 1.0
+
+            base_lev = base_lev * regime_mult * drawdown_mult
+
+        lev = int(max(lev_min, min(lev_max, round(base_lev))))
+        logger.debug(
+            "Leverage [%s] %s: ATR=%.2f%% → %dx",
+            mode, top.get("symbol", "?"), atr_pct * 100, lev,
+        )
+        return lev
+    except Exception:
+        return max(1, int(getattr(Config, "LEVERAGE", 3)))
+
+
 class OrderExecutor:
     """Определяет размер позиции и размещает рыночный ордер для топ-рекомендации."""
 
@@ -60,6 +130,7 @@ class OrderExecutor:
         set_paper_balance: Callable[[float], None],
         set_last_trade_at: Callable[[float], None],
         get_current_regime: Callable[[], str],
+        runtime_config: "Any | None" = None,
     ) -> None:
         self._api = api
         self._trade_history = trade_history
@@ -67,6 +138,7 @@ class OrderExecutor:
         self._risk_manager = risk_manager
         self._portfolio_optimizer = portfolio_optimizer
         self._corr_filter = corr_filter
+        self._runtime_config = runtime_config
         # Getters instead of direct references so that tests or runtime code that
         # replace bot._monitored (e.g. bot._monitored = {}) don't leave the executor
         # holding a stale reference to the old dict object.
@@ -78,6 +150,20 @@ class OrderExecutor:
         self._get_current_regime = get_current_regime
         # УЛУЧШЕНИЕ 6: отслеживание пика баланса для масштабирования при просадке
         self._peak_balance: float = 0.0
+
+    def configure_risk(
+        self,
+        max_positions: int | None = None,
+        risk_per_trade: float | None = None,
+        drawdown_scale_enabled: bool | None = None,
+    ) -> None:
+        """Обновляет параметры риска из RuntimeConfig во время работы."""
+        if max_positions is not None:
+            self._risk_manager.max_positions = max_positions
+        if risk_per_trade is not None:
+            self._risk_manager.risk_per_trade = risk_per_trade
+        if drawdown_scale_enabled is not None:
+            self._risk_manager.drawdown_scale_enabled = drawdown_scale_enabled
 
     async def execute(
         self,
@@ -303,11 +389,14 @@ class OrderExecutor:
             exchange_sl_id: Optional[str] = None
             exchange_tp_id: Optional[str] = None
 
-            # Determine leverage for pnl_pct calculation in record_close
-            try:
-                dynamic_lev = max(1, int(Config.LEVERAGE))
-            except (TypeError, ValueError):
-                dynamic_lev = 1
+            # Volatility-targeted leverage: target_risk / (ATR / price)
+            # Falls back to Config.LEVERAGE when ATR is unavailable
+            dynamic_lev = _calc_dynamic_leverage(
+                top, entry,
+                balance=balance,
+                peak_balance=self._peak_balance,
+                runtime_config=self._runtime_config,
+            )
 
             if Config.PAPER_TRADING:
                 logger.info(
@@ -326,6 +415,11 @@ class OrderExecutor:
                         margin = quantity * entry / dynamic_lev
                         self._set_paper_balance(bal - margin - commission)
             else:
+                if Config.MARKET_TYPE != "spot":
+                    try:
+                        await self._api.set_leverage(sym, dynamic_lev)
+                    except Exception as _lev_err:
+                        logger.warning("set_leverage failed for %s: %s", sym, _lev_err)
                 order = await self._api.create_order(sym, "market", action, quantity)
                 if not order:
                     logger.error("Order creation failed for %s", sym)

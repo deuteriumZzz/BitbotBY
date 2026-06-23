@@ -203,12 +203,12 @@ class CycleRunner:
         """
         sep = "=" * 60
         ts = datetime.now().strftime("%H:%M:%S")
-        print(f"\n{sep}")
-        print(f"  CYCLE #{cycle} | {ts} | Balance: ${balance:.2f} USDT")
-        print(sep)
+        logger.info(sep)
+        logger.info("  CYCLE #%d | %s | Balance: $%.2f USDT", cycle, ts, balance)
+        logger.info(sep)
         if not recs:
-            print("  No actionable signals this cycle.")
-            print(sep)
+            logger.info("  No actionable signals this cycle.")
+            logger.info(sep)
             return
         for i, r in enumerate(recs, 1):
             action = r.get("action", "?").upper()
@@ -219,12 +219,12 @@ class CycleRunner:
             sl = r.get("stop_loss", 0)
             tp = r.get("take_profit", 0)
             reasoning = r.get("reasoning", "")
-            print(f"  [{i}] {action:4s} {sym:<12s} conf={conf:.0f}% strat={strat}")
+            logger.info("  [%d] %-4s %-12s conf=%.0f%% strat=%s", i, action, sym, conf, strat)
             if entry:
-                print(f"       entry={entry:.4f} SL={sl:.4f} TP={tp:.4f}")
+                logger.info("       entry=%.4f SL=%.4f TP=%.4f", entry, sl, tp)
             if reasoning:
-                print(f"       {reasoning}")
-        print(sep)
+                logger.info("       %s", reasoning)
+        logger.info(sep)
 
     @staticmethod
     def md_escape(text: str) -> str:
