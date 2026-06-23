@@ -21,7 +21,7 @@ from src.dashboard import app  # noqa: F401 — re-exported for uvicorn discover
 if __name__ == "__main__":
     uvicorn.run(
         app,
-        host="127.0.0.1",  # bind to localhost; use a reverse proxy for external access
+        host="0.0.0.0",
         port=8080,
         log_level="warning",
     )
