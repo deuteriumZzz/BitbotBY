@@ -182,7 +182,9 @@ def _kb_sac_train() -> "InlineKeyboardMarkup":
     return InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("✅ Обучить сейчас (~60 мин)", callback_data="train_sac_now"),
+                InlineKeyboardButton(
+                    "✅ Обучить сейчас (~60 мин)", callback_data="train_sac_now"
+                ),
                 InlineKeyboardButton("⏭ Пропустить", callback_data="train_sac_skip"),
             ]
         ]
@@ -1183,6 +1185,12 @@ class TelegramCommander:
                 stdout=_asyncio.subprocess.DEVNULL,
                 stderr=_asyncio.subprocess.PIPE,
             )
+            await self._notifier.notify(
+                "🧠 *Обучение SAC запущено*\n\n"
+                "Процесс идёт в фоне, бот продолжает торговать.\n"
+                "⏱ Ожидаемое время: ~60 мин на CPU.\n"
+                "_Пришлю уведомление когда модель будет готова._"
+            )
             _, stderr = await proc.communicate()
             if proc.returncode == 0:
                 await self._notifier.notify(
@@ -1508,10 +1516,12 @@ class TelegramCommander:
             state = "включена" if now_enabled else "отключена"
             await self._edit(query, f"{icon} `{short}` {state}\n\n" + text, kb)
 
-        # ── SAC обучение ─────────────────────────────────────────────────────
+        # ── SAC обучение ──────────────────────────────────────────────────────
         elif data == "train_sac_now":
             if self._sac_training:
-                await self._edit(query, "⏳ Обучение уже запущено, ожидайте...", _kb_after_action())
+                await self._edit(
+                    query, "⏳ Обучение уже запущено, ожидайте...", _kb_after_action()
+                )
                 return
             self._sac_training = True
             await self._edit(
