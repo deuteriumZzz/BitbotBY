@@ -9,8 +9,8 @@ import asyncio
 import logging
 import os
 import time
-from datetime import datetime
-from typing import Dict, Optional, Tuple
+from datetime import datetime, timezone
+from typing import Any, Dict, Optional, Tuple
 
 import ccxt
 import pandas as pd
@@ -38,8 +38,10 @@ from src.regime_detector import RegimeDetector
 from src.risk_management import RiskManager
 from src.signal_combiner import SignalCombiner
 from src.strategies import TradingStrategy
+from src.telegram_commander import TelegramCommander
 from src.telegram_notifier import TelegramNotifier
 from src.trade_history import TradeHistory
+from src.runtime_config import RuntimeConfig
 from src.types import PositionRecord
 
 _SECONDS_PER_HOUR: int = 3_600
@@ -66,7 +68,7 @@ class TradingBot:
         self.redis = RedisClient()
         self.api = BybitAPI()
         self.data_loader = DataLoader()
-        self.portfolio_manager = PortfolioManager(Config.INITIAL_BALANCE)
+        self.portfolio_manager = PortfolioManager(Config.INITIAL_BALANCE, redis_client=self.redis)
         self.strategy: Optional[TradingStrategy] = None
         self.risk_manager = RiskManager(
             Config.INITIAL_BALANCE,
@@ -130,6 +132,7 @@ class TradingBot:
             redis=self.redis,
             online_learner=self._online_learner,
         )
+        self._runtime_config = RuntimeConfig(redis_client=self.redis)
         self._executor = OrderExecutor(
             api=self.api,
             trade_history=self.trade_history,
@@ -145,6 +148,12 @@ class TradingBot:
             set_paper_balance=self._set_paper_balance,
             set_last_trade_at=lambda v: setattr(self, "_last_trade_at", v),
             get_current_regime=lambda: self._current_regime,
+            runtime_config=self._runtime_config,
+        )
+        self._commander = TelegramCommander(
+            notifier=self.telegram,
+            runtime_config=self._runtime_config,
+            get_state=self._get_bot_state,
         )
         self._cycle = CycleRunner(
             news=self.news,
@@ -163,6 +172,7 @@ class TradingBot:
 
         :raises Exception: Если инициализация не удалась.
         """
+        Config().validate()
         try:
             await self.api.initialize(
                 Config.BYBIT_API_KEY,
@@ -211,6 +221,7 @@ class TradingBot:
             await self._restore_state()
             await self._reconcile_positions()
             await self.telegram.start()
+            self._commander.register()
             await self._fit_regime_detector()
             self._load_corr_filter()
             logger.info("Trading bot initialized successfully")
@@ -336,6 +347,19 @@ class TradingBot:
                 "balance", Config.INITIAL_BALANCE
             )
             self.portfolio_manager.positions = portfolio.get("positions", {})
+        monitored_state = self.redis.load_trading_state("monitored_positions")
+        if monitored_state and isinstance(monitored_state, dict):
+            async with self._monitored_lock:
+                for sym, pos in monitored_state.items():
+                    if pos and sym not in self._monitored:
+                        self._monitored[sym] = pos
+            logger.info("Restored %d monitored positions from Redis", len(monitored_state))
+
+    def _save_monitored_state(self) -> None:
+        try:
+            self.redis.save_trading_state("monitored_positions", dict(self._monitored))
+        except Exception as e:
+            logger.warning("Failed to save monitored state: %s", e)
 
     _CORR_REDIS_KEY = "corr_filter_prices"
 
@@ -371,6 +395,26 @@ class TradingBot:
                 logger.info("RegimeDetector fitted on %d candles", len(df))
         except Exception as exc:
             logger.warning("RegimeDetector fit skipped: %s", exc)
+
+    def _get_bot_state(self) -> Dict[str, Any]:
+        """Снэпшот состояния бота для TelegramCommander."""
+        positions = [
+            {
+                "symbol": sym,
+                "side": pos.get("side", "buy"),
+                "qty": pos.get("qty", 0),
+                "entry_price": pos.get("entry_price", 0),
+                "pnl_pct": pos.get("pnl_pct", 0),
+            }
+            for sym, pos in self._monitored.items()
+        ]
+        return {
+            "balance": self._paper_balance,
+            "initial_balance": Config.INITIAL_BALANCE,
+            "positions": positions,
+            "paper_trading": Config.PAPER_TRADING,
+            "strategies": [],
+        }
 
     def _set_paper_balance(self, value: float) -> None:
         """Синхронизирует оба регистра бумажного баланса.
@@ -669,6 +713,7 @@ class TradingBot:
 
                 self.combiner.sac.reload_if_updated()
                 await self._check_silent_death()
+                self._save_monitored_state()
 
                 cycles_counter.inc()
                 elapsed = loop.time() - t0
@@ -699,7 +744,7 @@ class TradingBot:
                 pass
         try:
             await self.telegram.notify(
-                f"⛔ *BitbotBY остановлен*\n" f"Баланс: `${self._paper_balance:,.2f}`"
+                f"⛔ *BitbotBY остановлен*\n" f"Баланс: `${self.portfolio_manager.current_balance:,.2f}`"
             )
         except Exception:
             pass

@@ -213,11 +213,18 @@ class TelegramNotifier:
             logger.error("Telegram error: %s", e)
             return False  # C3: fail-closed — skip trade on Telegram errors
 
-    async def notify(self, text: str) -> None:
+    async def notify(
+        self,
+        text: str,
+        reply_markup=None,
+        parse_mode: str = "Markdown",
+    ) -> None:
         """
         Отправляет текстовое уведомление в Telegram-чат.
 
-        :param text: Текст уведомления (поддерживает Markdown).
+        :param text: Текст уведомления.
+        :param reply_markup: Опциональная InlineKeyboardMarkup.
+        :param parse_mode: Режим разметки (по умолчанию MarkdownV2).
         """
         if not self._enabled:
             return
@@ -225,7 +232,8 @@ class TelegramNotifier:
             await self._app.bot.send_message(
                 chat_id=self._chat_id,
                 text=text,
-                parse_mode="Markdown",
+                parse_mode=parse_mode,
+                reply_markup=reply_markup,
             )
         except Exception as e:
             logger.error("Telegram notify error: %s", e)

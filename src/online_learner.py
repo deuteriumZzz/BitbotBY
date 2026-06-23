@@ -63,6 +63,7 @@ class OnlineLearner:
         self._closed_count = 0
         self._is_training = False
         self._training_lock = asyncio.Lock()
+        self._background_tasks: set = set()
 
         # Для режима hybrid: скользящее окно результатов по каждой стратегии
         self._strategy_results: Dict[str, deque] = defaultdict(
@@ -202,13 +203,11 @@ class OnlineLearner:
             self._closed_count,
         )
 
-        async with self._training_lock:
-            self._is_training = True
-            try:
-                loop = asyncio.get_running_loop()
-                await loop.run_in_executor(None, self._run_full_retrain)
-            finally:
-                self._is_training = False
+        # Fire-and-forget: не блокируем вызывающую корутину (position monitor)
+        self._is_training = True
+        task = asyncio.create_task(self._background_retrain())
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
 
     def _run_online_update(self, gradient_steps: int) -> None:
         """Синхронный: загружает модель и делает N gradient steps из experience buffer."""  # noqa: E501
@@ -223,7 +222,9 @@ class OnlineLearner:
             model = SAC.load(Config.SAC_MODEL_PATH)
             norm_stats = _load_norm_stats(Config.SAC_MODEL_PATH)
             _finetune_on_experiences(model, norm_stats)
-            model.save(Config.SAC_MODEL_PATH)
+            tmp = Config.SAC_MODEL_PATH + ".online_tmp"
+            model.save(tmp)
+            os.replace(tmp, Config.SAC_MODEL_PATH)
             logger.info(
                 "OnlineLearner [online]: gradient steps выполнено, модель сохранена"
             )
@@ -241,13 +242,25 @@ class OnlineLearner:
 
         try:
             tmp_path = Config.SAC_MODEL_PATH + ".new"
-            env = os.environ.copy()
-            env["SAC_MODEL_PATH"] = tmp_path
+            env = {
+                "PATH": os.environ.get("PATH", ""),
+                "PYTHONPATH": os.environ.get("PYTHONPATH", ""),
+                "HOME": os.environ.get("HOME", ""),
+                "SAC_MODEL_PATH": tmp_path,
+                "TRAIN_TOP_N": str(self._get_train_top_n()),
+                "TRAIN_MIN_CANDLES": os.environ.get("TRAIN_MIN_CANDLES", "2880"),
+                "TOTAL_TIMESTEPS": os.environ.get("TOTAL_TIMESTEPS", "50000"),
+                "EXPERIENCES_PATH": os.environ.get("EXPERIENCES_PATH", "data/experiences.jsonl"),
+                "TELEGRAM_BOT_TOKEN": os.environ.get("TELEGRAM_BOT_TOKEN", ""),
+                "TELEGRAM_CHAT_ID": os.environ.get("TELEGRAM_CHAT_ID", ""),
+                "LOG_LEVEL": os.environ.get("LOG_LEVEL", "INFO"),
+            }
 
             subprocess.run(
                 [sys.executable, "reinforcement_learning/train_sac.py"],
                 env=env,
                 check=True,
+                timeout=7200,  # 2 часа максимум
             )
 
             # Атомарная подмена: старая → .bak, новая → основной путь

@@ -125,5 +125,11 @@ async def start_health_server(bot: "TradingBot", port: int = 8080) -> None:
         access_log=False,
     )
     server = uvicorn.Server(config)
-    asyncio.create_task(server.serve())
+    _server_task = asyncio.create_task(server.serve())
+
+    def _on_server_done(task: asyncio.Task) -> None:
+        if not task.cancelled() and task.exception():
+            logger.error("Health server crashed: %s", task.exception())
+
+    _server_task.add_done_callback(_on_server_done)
     logger.info("Health server started on :%d  (/health  /metrics)", port)

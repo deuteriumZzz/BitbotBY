@@ -38,8 +38,10 @@ _MARKET_COLS = [
 
 def _snap_to_obs(
     snap: Dict[str, Any],
-    balance: float,
     norm_stats: Optional[Dict[str, list]],
+    balance: float,
+    position: float = 0.0,
+    entry_price: float = 0.0,
 ) -> np.ndarray:
     """
     Строит вектор наблюдения shape=(OBS_DIM,) из снэпшота MarketScanner.
@@ -55,8 +57,10 @@ def _snap_to_obs(
     fallback к snap["price"] для цен и к training-mean для volume.
 
     :param snap: Снэпшот из MarketScanner.build_snapshot().
-    :param balance: Свободный баланс USDT.
     :param norm_stats: Словарь {col: [mean, std]} из train_sac или None.
+    :param balance: Свободный баланс USDT.
+    :param position: Текущий размер позиции (в единицах актива).
+    :param entry_price: Цена входа в позицию.
     :return: float32-массив shape=(OBS_DIM,).
     """
     ind = snap.get("indicators", {})
@@ -97,22 +101,24 @@ def _snap_to_obs(
     basis_raw = float(ctx.get("basis_pct", 0.0))
     gt_raw = float(ctx.get("google_trends", 50.0))
 
+    initial_balance = max(Config.INITIAL_BALANCE, 1.0)
+
     raw = np.array(
         [
             open_,  # [0]  open
             high,  # [1]  high
             low,  # [2]  low
             close,  # [3]  close
-            volume,  # [4]  volume
+            float(np.log1p(max(volume, 0.0)) / 15.0),  # [4]  volume (log-transformed)
             float(ind.get("rsi", 50.0)),  # [5]  rsi
             macd_val,  # [6]  macd
             macd_signal_val,  # [7]  macd_signal
             bb_upper,  # [8]  bb_upper
-            price,  # [9]  bb_middle
+            float(ind.get("bb_middle", price)),  # [9]  bb_middle
             bb_lower,  # [10] bb_lower
-            balance,  # [11] portfolio: balance
-            0.0,  # [12] portfolio: position
-            balance,  # [13] portfolio: current_value
+            balance / initial_balance,  # [11] portfolio: balance_norm
+            (position * price) / initial_balance,  # [12] portfolio: pos_value_norm
+            (balance + position * price) / initial_balance,  # [13] portfolio: val_norm
             funding_raw * 1000.0,  # [14] funding_rate_norm
             float(np.clip(ob_imb, -1.0, 1.0)),  # [15] ob_imbalance
             float(np.clip(pcr_raw / 3.0, 0.0, 1.0)),  # [16] pcr_norm
@@ -126,9 +132,10 @@ def _snap_to_obs(
 
     # Нормализация только для первых 11 элементов (OHLCV + индикаторы)
     # Индексы 11-20 не нормализуются: портфельные и контекстные уже в нужном масштабе
+    # volume (index 4) уже log-трансформирован — пропускаем z-score для него
     if norm_stats:
         for i, col in enumerate(_MARKET_COLS):
-            if col in norm_stats:
+            if col in norm_stats and col != "volume":  # volume already log-transformed
                 mu, sd = norm_stats[col]
                 if sd > 0:
                     raw[i] = (raw[i] - mu) / sd
@@ -206,6 +213,8 @@ class SACSignal:
         self,
         snap: Dict[str, Any],
         balance: float,
+        position: float = 0.0,
+        entry_price: float = 0.0,
     ) -> Dict[str, Any]:
         """
         Выполняет детерминированный инференс SAC для одного снэпшота.
@@ -217,6 +226,8 @@ class SACSignal:
 
         :param snap: Снэпшот из MarketScanner.build_snapshot().
         :param balance: Свободный баланс USDT.
+        :param position: Текущий размер позиции (в единицах актива).
+        :param entry_price: Цена входа в позицию.
         :return: Словарь {action, confidence, source="sac"}.
         """
         default: Dict[str, Any] = {
@@ -228,7 +239,7 @@ class SACSignal:
             return default
 
         try:
-            obs = _snap_to_obs(snap, balance, self._norm_stats)
+            obs = _snap_to_obs(snap, self._norm_stats, balance, position, entry_price)
             # Detect normstats drift: features far outside training distribution
             if self._norm_stats and np.any(np.abs(obs[:11]) > 3.0):
                 outliers = [_MARKET_COLS[i] for i in range(11) if abs(obs[i]) > 3.0]

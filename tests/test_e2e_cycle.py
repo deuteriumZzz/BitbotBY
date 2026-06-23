@@ -112,10 +112,11 @@ def make_bot(balance: float = 1000.0):
 
 @contextmanager
 def _patch_cfg(cfg):
-    """Патчим Config в trading_bot и order_executor (исполнение перенесено туда)."""
+    """Патчим Config в trading_bot, order_executor и runtime_config."""
     with patch("src.trading_bot.Config", cfg):
         with patch("src.order_executor.Config", cfg):
-            yield cfg
+            with patch("src.runtime_config.Config", cfg):
+                yield cfg
 
 
 def _buy_rec(sym: str = "BTC/USDT", entry: float = 50000.0, conf: float = 0.85) -> dict:

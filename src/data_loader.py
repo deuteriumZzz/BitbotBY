@@ -251,8 +251,8 @@ class DataLoader:
         """
         try:
             df.to_csv(path)
-        except OSError:
-            pass
+        except OSError as e:
+            logging.getLogger(__name__).warning("CSV cache write failed for %s: %s", path, e)
 
     async def get_paginated_history(
         self,

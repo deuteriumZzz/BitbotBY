@@ -12,10 +12,12 @@ def analyzer():
         cfg.AI_PROVIDER = "none"
         cfg.ANTHROPIC_API_KEY = ""
         cfg.DEEPSEEK_API_KEY = ""
+        cfg.GROQ_API_KEY = ""
         cfg.OPENAI_API_KEY = ""
         cfg.MIN_SIGNAL_CONFIDENCE = 0.65
         cfg.AI_MODEL = "claude-3"
         cfg.DEEPSEEK_MODEL = "deepseek-chat"
+        cfg.GROQ_MODEL = "llama-3.3-70b-versatile"
         cfg.OPENAI_MODEL = "gpt-4"
         with patch("src.ai_analyzer.get_all_strategies", return_value=[]):
             from src.ai_analyzer import AIAnalyzer

@@ -95,7 +95,12 @@ class PositionMonitor:
                     price = await self._api.get_current_price(sym)
                     if not price:
                         continue
-                    pos = self._apply_trailing_stop(sym, pos, price, monitored)
+                    new_pos = self._apply_trailing_stop(sym, pos, price)
+                    if new_pos is not pos:
+                        async with lock:
+                            if sym in monitored and monitored[sym] is not None:
+                                monitored[sym] = new_pos
+                        pos = new_pos
                     # УЛУЧШЕНИЕ 3: частичная фиксация прибыли
                     pos = await self._check_partial_tp(sym, pos, price, monitored, lock)
                     try:
@@ -132,6 +137,11 @@ class PositionMonitor:
                             sym,
                             count,
                         )
+                        if self._telegram:
+                            asyncio.create_task(self._telegram.notify(
+                                f"⚠️ *{sym}* удалён из мониторинга после {count} ошибок. "
+                                f"Проверь позицию на бирже вручную!"
+                            ))
                         async with lock:
                             monitored.pop(sym, None)
                         error_counts.pop(sym, None)
@@ -153,6 +163,11 @@ class PositionMonitor:
                             sym,
                             count,
                         )
+                        if self._telegram:
+                            asyncio.create_task(self._telegram.notify(
+                                f"⚠️ *{sym}* удалён из мониторинга после {count} ошибок. "
+                                f"Проверь позицию на бирже вручную!"
+                            ))
                         async with lock:
                             monitored.pop(sym, None)
                         error_counts.pop(sym, None)
@@ -334,7 +349,6 @@ class PositionMonitor:
         sym: str,
         pos: PositionRecord,
         price: float,
-        monitored: Dict[str, PositionRecord],
     ) -> PositionRecord:
         """
         Подтягивает SL к текущей цене на шаг ATR × multiplier.
@@ -342,11 +356,13 @@ class PositionMonitor:
         ATR-based шаг адаптируется к волатильности: узкий на спокойном рынке
         (меньше преждевременных стопов), широкий на волатильном (меньше шумовых).
 
+        Returns a new pos dict if changed, same pos object if unchanged.
+        The caller must write the result to monitored under the lock.
+
         :param sym: Символ позиции.
         :param pos: Текущая запись позиции.
         :param price: Текущая рыночная цена.
-        :param monitored: Словарь всех открытых позиций (для обновления на месте).
-        :return: Обновлённая запись позиции.
+        :return: Обновлённая запись позиции (новый объект если изменилась).
         """
         atr = pos.get("atr", 0.0)
         mult = Config.TRAILING_STOP_ATR_MULT
@@ -359,16 +375,10 @@ class PositionMonitor:
         if side == "buy":
             trail = price - atr * mult
             if trail > current_sl:
-                # Guard: sym may have been removed between the snapshot and here
-                # (asyncio yield in get_current_price); skip silently if gone.
-                if sym in monitored and monitored[sym] is not None:
-                    monitored[sym]["stop_loss"] = trail
                 return {**pos, "stop_loss": trail}  # type: ignore[return-value]
         else:
             trail = price + atr * mult
             if trail < pos.get("stop_loss", float("inf")):
-                if sym in monitored and monitored[sym] is not None:
-                    monitored[sym]["stop_loss"] = trail
                 return {**pos, "stop_loss": trail}  # type: ignore[return-value]
 
         return pos
@@ -421,9 +431,18 @@ class PositionMonitor:
         if not Config.PAPER_TRADING:
             # Шаг 1: сначала отменяем биржевые условные ордера, чтобы избежать
             # двойного закрытия (race condition между SL биржи и программным закрытием).
-            for oid in (pos.get("exchange_sl_id"), pos.get("exchange_tp_id")):
-                if oid:
-                    await self._api.cancel_order(oid, sym)
+            exchange_sl_id = pos.get("exchange_sl_id")
+            exchange_tp_id = pos.get("exchange_tp_id")
+            if exchange_sl_id:
+                try:
+                    await self._api.cancel_order(sym, exchange_sl_id)
+                except Exception as _ce:
+                    logger.warning("Cancel SL order %s failed: %s — proceeding with close", exchange_sl_id, _ce)
+            if exchange_tp_id:
+                try:
+                    await self._api.cancel_order(sym, exchange_tp_id)
+                except Exception as _ce:
+                    logger.warning("Cancel TP order %s failed: %s — proceeding with close", exchange_tp_id, _ce)
 
             # Шаг 2: программное закрытие позиции (lock_suffix="close" не конкурирует
             # с order_open:{sym} при открытии новой позиции).
@@ -469,11 +488,14 @@ class PositionMonitor:
         if pos.get("snap"):
             from src.experience_buffer import save as _exp_save  # noqa: PLC0415
 
-            _exp_save(
-                snap=pos["snap"],
-                action=side,
-                entry_price=entry,
-                exit_price=price,
+            _snap = pos["snap"]
+            _side = side
+            _entry = entry
+            _price = price
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: _exp_save(snap=_snap, action=_side, entry_price=_entry, exit_price=_price),
             )
 
         if self._online_learner:

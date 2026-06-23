@@ -24,10 +24,11 @@ def _resolve_provider() -> str:
     """
     Определяет активного AI-провайдера согласно Config.AI_PROVIDER.
 
-    auto      → Claude → DeepSeek → OpenAI → none (первый найденный ключ)
+    auto      → Anthropic → OpenAI → DeepSeek → Groq → none
     anthropic → Claude
     deepseek  → DeepSeek
     openai    → ChatGPT
+    groq      → Groq
     """
     p = Config.AI_PROVIDER
     if p == "anthropic":
@@ -36,13 +37,17 @@ def _resolve_provider() -> str:
         return "deepseek" if Config.DEEPSEEK_API_KEY else "none"
     if p == "openai":
         return "openai" if Config.OPENAI_API_KEY else "none"
-    # auto
+    if p == "groq":
+        return "groq" if getattr(Config, "GROQ_API_KEY", "") else "none"
+    # auto: prefer paid flagship, then cheaper options
     if Config.ANTHROPIC_API_KEY:
         return "anthropic"
-    if Config.DEEPSEEK_API_KEY:
-        return "deepseek"
     if Config.OPENAI_API_KEY:
         return "openai"
+    if Config.DEEPSEEK_API_KEY:
+        return "deepseek"
+    if getattr(Config, "GROQ_API_KEY", ""):
+        return "groq"
     return "none"
 
 
@@ -73,6 +78,7 @@ class AIAnalyzer:
         self._anthropic = None
         self._deepseek = None
         self._openai = None
+        self._groq = None
 
         if Config.ANTHROPIC_API_KEY:
             import anthropic
@@ -95,8 +101,17 @@ class AIAnalyzer:
             self._openai = AsyncOpenAI(api_key=Config.OPENAI_API_KEY)
             self._openai_model = Config.OPENAI_MODEL
 
+        if getattr(Config, "GROQ_API_KEY", ""):
+            from openai import AsyncOpenAI
+
+            self._groq = AsyncOpenAI(
+                api_key=Config.GROQ_API_KEY,
+                base_url="https://api.groq.com/openai/v1",
+            )
+            self._groq_model = getattr(Config, "GROQ_MODEL", "llama-3.3-70b-versatile")
+
         # Ordered list of available providers (primary first)
-        _all = ["anthropic", "deepseek", "openai"]
+        _all = ["anthropic", "openai", "deepseek", "groq"]
         available = [p for p in _all if getattr(self, f"_{p}") is not None]
         # Put the configured primary provider first
         if self._provider in available:
@@ -228,6 +243,18 @@ class AIAnalyzer:
         )
         return response.choices[0].message.content or ""
 
+    async def _call_groq(self, prompt: str) -> str:
+        """Вызов Groq (Llama 3.3 70B через OpenAI-совместимый API)."""
+        response = await self._groq.chat.completions.create(
+            model=self._groq_model,
+            max_tokens=4096,
+            messages=[
+                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+        )
+        return response.choices[0].message.content or ""
+
     async def analyze(
         self,
         snapshots: List[Dict[str, Any]],
@@ -254,6 +281,8 @@ class AIAnalyzer:
                     raw = await self._call_anthropic(prompt)
                 elif provider == "deepseek":
                     raw = await self._call_deepseek(prompt)
+                elif provider == "groq":
+                    raw = await self._call_groq(prompt)
                 else:
                     raw = await self._call_openai(prompt)
 
@@ -267,22 +296,22 @@ class AIAnalyzer:
                 return valid
 
             except json.JSONDecodeError as e:
-                self.logger.error("AI [%s] JSON parse error: %s", provider, e)
-                return []
+                self.logger.warning("AI [%s] JSON parse error — trying next provider: %s", provider, e)
+                continue
             except Exception as e:
-                # Check for billing/quota errors — try next provider
                 status = getattr(e, "status_code", None)
-                if status in self._BILLING_CODES:
-                    self.logger.warning(
-                        "AI [%s] billing/quota error (HTTP %s) — trying next provider",
-                        provider,
-                        status,
-                    )
-                    continue
-                self.logger.error("AI [%s] failed: %s", provider, e)
-                return []
+                if status == 400:
+                    # Bad request — наша вина (неверный промпт/модель), не пробуем других
+                    self.logger.error("AI [%s] bad request (400): %s", provider, e)
+                    return []
+                # Любая другая ошибка (429, 402, 500, таймаут, сеть) — пробуем следующего
+                self.logger.warning(
+                    "AI [%s] error (HTTP %s) — trying next provider: %s",
+                    provider, status or "?", e,
+                )
+                continue
 
-        self.logger.error("All AI providers exhausted (billing/quota)")
+        self.logger.error("All AI providers exhausted")
         return []
 
     def recommend_strategy_local(self, snapshot: Dict[str, Any]) -> Tuple[str, float]:

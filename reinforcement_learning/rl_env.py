@@ -86,6 +86,7 @@ class TradingEnv(gym.Env):
 
         row = self.data.iloc[self.current_step]
         price = float(row["close"])
+        current_price = price  # same value, alias for pos_value_norm
 
         # Новые фичи (индексы 14-20) — если колонка отсутствует → нейтральный дефолт
         funding_raw = float(row.get("funding_rate", 0.0))
@@ -106,22 +107,30 @@ class TradingEnv(gym.Env):
             gt_raw / 100.0,  # [20] google_trends_norm
         ]
 
+        # log1p compresses volume from millions → ~0-1 range
+        vol_norm = float(np.log1p(max(float(row["volume"]), 0.0)) / 15.0)
+
+        # Normalize portfolio by initial_balance so all values ≈ 0-2
+        balance_norm = self.balance / self.initial_balance
+        pos_value_norm = (self.position * current_price) / self.initial_balance
+        val_norm = self.current_value / self.initial_balance
+
         return np.array(
             [
                 float(row["open"]),
                 float(row["high"]),
                 float(row["low"]),
                 price,
-                float(row["volume"]),
-                float(row.get("rsi", 50)),
+                vol_norm,
+                float(row.get("rsi", 50)) / 100.0,  # 0-100 → 0-1
                 float(row.get("macd", 0)),
                 float(row.get("macd_signal", 0)),
                 float(row.get("bb_upper", price * 1.02)),
                 float(row.get("bb_middle", price)),
                 float(row.get("bb_lower", price * 0.98)),
-                self.balance,
-                self.position,
-                self.current_value,
+                balance_norm,
+                pos_value_norm,
+                val_norm,
                 *new_features,
             ],
             dtype=np.float32,
@@ -218,7 +227,9 @@ class TradingEnv(gym.Env):
             * max(0.0, self.peak_value - self.current_value)
             / self.initial_balance
         )
-        reward = log_ret + sharpe_bonus - 0.01 * drawdown_pct
+        reward = float(np.clip(
+            log_ret + sharpe_bonus - 0.01 * drawdown_pct, -5.0, 5.0
+        ))
 
         self.current_step += 1
         if self.current_step >= len(self.data) - 1:

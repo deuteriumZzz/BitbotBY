@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import threading
 from datetime import datetime, timezone
 from typing import Any, Dict
 
@@ -31,6 +32,7 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_PATH = os.getenv("EXPERIENCES_PATH", "data/experiences.jsonl")
 _MAX_LINES = int(os.getenv("EXPERIENCES_MAX", "10000"))
+_lock = threading.Lock()
 
 
 def save(
@@ -71,9 +73,10 @@ def save(
 
     try:
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-        with open(path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(record, ensure_ascii=False) + "\n")
-        _trim(path)
+        with _lock:
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
+            _trim(path)
         logger.debug(
             "Experience saved: %s %s pnl=%.2f%%",
             action,

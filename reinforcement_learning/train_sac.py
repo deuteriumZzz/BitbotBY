@@ -172,9 +172,12 @@ def _finetune_on_experiences(model: Any, norm_stats: Dict[str, Any]) -> None:
         "bb_lower",
     ]
 
-    def _to_obs(rec: Dict[str, Any]) -> np.ndarray:
+    def _to_obs(rec: Dict[str, Any], use_exit: bool = False) -> np.ndarray:
         ind = rec.get("indicators", {})
-        price = rec.get("price", rec.get("entry_price", 0.0))
+        entry_price = rec.get("price", rec.get("entry_price", 0.0))
+        exit_price = rec.get("exit_price", entry_price)
+        price = exit_price if use_exit else entry_price
+        pnl = rec.get("pnl_pct", 0.0)
         raw = [
             price,
             price,
@@ -187,9 +190,9 @@ def _finetune_on_experiences(model: Any, norm_stats: Dict[str, Any]) -> None:
             ind.get("bb_upper", price * 1.02),
             ind.get("bb_middle", price),
             ind.get("bb_lower", price * 0.98),
-            float(rec.get("action") == "buy"),  # флаг позиции
-            0.0,  # нереализованный PnL (при входе = 0)
-            rec.get("pnl_pct", 0.0),  # реализованный PnL как подсказка награды
+            0.0 if use_exit else float(rec.get("action") == "buy"),
+            pnl if use_exit else 0.0,
+            pnl,
             # Новые фичи (14-20) — уже нормализованы, не нормализовать повторно
             ind.get("funding_rate", 0.0) * 1000.0,
             ind.get("ob_imbalance", 0.0),
@@ -210,17 +213,17 @@ def _finetune_on_experiences(model: Any, norm_stats: Dict[str, Any]) -> None:
     added = 0
     for rec in records:
         try:
-            obs = _to_obs(rec)
-            # next_obs ≈ obs (we don't have market state after close)
+            obs = _to_obs(rec, use_exit=False)
+            next_obs = _to_obs(rec, use_exit=True)
             action_val = np.array(
                 [1.0 if rec["action"] == "buy" else -1.0], dtype=np.float32
             )
             model.replay_buffer.add(
                 obs=obs.reshape(1, -1),
-                next_obs=obs.reshape(1, -1),
+                next_obs=next_obs.reshape(1, -1),
                 action=action_val.reshape(1, -1),
                 reward=np.array([rec.get("pnl_pct", 0.0)], dtype=np.float32),
-                done=np.array([True]),
+                done=np.array([False]),
                 infos=[{}],
             )
             added += 1
@@ -264,6 +267,10 @@ def train(
     :return: Путь к сохранённой модели или None при ошибке.
     :raises ImportError: Если stable-baselines3 не установлен.
     """
+    _min_candles = int(os.getenv("TRAIN_MIN_CANDLES", "2880"))
+    if len(df) < _min_candles:
+        raise ValueError(f"DataFrame too short: {len(df)} candles < {_min_candles} minimum")
+
     try:
         from stable_baselines3 import SAC
         from stable_baselines3.common.monitor import Monitor
@@ -356,6 +363,10 @@ def train_walk_forward(
     :param total_timesteps: Шагов обучения за итерацию.
     :return: Путь к финальной модели или None при ошибке.
     """
+    _min_candles = int(os.getenv("TRAIN_MIN_CANDLES", "2880"))
+    if len(df) < _min_candles:
+        raise ValueError(f"DataFrame too short: {len(df)} candles < {_min_candles} minimum")
+
     train_size = train_months * _CANDLES_PER_MONTH
     step_size = step_months * _CANDLES_PER_MONTH
     n = len(df)
