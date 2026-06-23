@@ -99,6 +99,7 @@ def _kb_settings(paused: bool, auto_exec: bool) -> "InlineKeyboardMarkup":
         [InlineKeyboardButton("📐 Стратегии",     callback_data="strategies")],
         [InlineKeyboardButton("⚖️ Риск-профиль", callback_data="risk_menu")],
         [InlineKeyboardButton("🕐 Часы торговли", callback_data="hours_info")],
+        [InlineKeyboardButton("🤖 AI-провайдер",  callback_data="provider_menu")],
         [InlineKeyboardButton("🔄 Сброс настроек", callback_data="reset_defaults")],
         [InlineKeyboardButton("« Главная", callback_data="main")],
     ])
@@ -198,6 +199,7 @@ def _kb_risk_menu(drawdown_on: bool) -> "InlineKeyboardMarkup":
             InlineKeyboardButton("🔴 Агрессивный",  callback_data="risk:aggressive"),
         ],
         [InlineKeyboardButton(dd_label, callback_data="toggle_drawdown")],
+        [InlineKeyboardButton("📊 Управление плечом →", callback_data="lev_menu")],
         [InlineKeyboardButton("« Настройки", callback_data="settings")],
     ])
 
@@ -214,6 +216,67 @@ def _kb_hours_info() -> "InlineKeyboardMarkup":
         ],
         [InlineKeyboardButton("🔄 24/7 (сброс)",    callback_data="hours:")],
         [InlineKeyboardButton("« Настройки",        callback_data="settings")],
+    ])
+
+
+def _kb_lev_menu(mode: str, target: float, drawdown: float) -> "InlineKeyboardMarkup":
+    def _m(label: str, val: str) -> "InlineKeyboardButton":
+        tick = "✅ " if val == mode else ""
+        return InlineKeyboardButton(f"{tick}{label}", callback_data=f"lev:mode:{val}")
+
+    rows = [
+        [_m("fixed", "fixed"), _m("volatility", "volatility"), _m("full", "full")],
+        [InlineKeyboardButton(
+            f"── Риск на ATR: {target*100:.1f}% ──", callback_data="noop"
+        )],
+        [
+            InlineKeyboardButton("0.5%", callback_data="lev:target:0.005"),
+            InlineKeyboardButton("1%",   callback_data="lev:target:0.01"),
+            InlineKeyboardButton("1.5%", callback_data="lev:target:0.015"),
+            InlineKeyboardButton("2%",   callback_data="lev:target:0.02"),
+            InlineKeyboardButton("3%",   callback_data="lev:target:0.03"),
+        ],
+    ]
+    if mode == "full":
+        def _d(label: str, val: str) -> "InlineKeyboardButton":
+            tick = "✅ " if abs(drawdown - float(val)) < 0.001 else ""
+            return InlineKeyboardButton(
+                f"{tick}{label}", callback_data=f"lev:drawdown:{val}"
+            )
+        rows += [
+            [InlineKeyboardButton(
+                f"── Порог просадки: {drawdown*100:.0f}% ──", callback_data="noop"
+            )],
+            [_d("10%", "0.1"), _d("15%", "0.15"), _d("20%", "0.2"), _d("25%", "0.25")],
+        ]
+    rows += [
+        [InlineKeyboardButton("✏️ Ввести вручную", callback_data="lev:manual")],
+        [InlineKeyboardButton("« Риск-профиль", callback_data="risk_menu")],
+    ]
+    return InlineKeyboardMarkup(rows)
+
+
+def _kb_provider_menu(current: str) -> "InlineKeyboardMarkup":
+    providers = [
+        ("🆓 Groq",    "groq"),
+        ("Claude",     "anthropic"),
+        ("DeepSeek",   "deepseek"),
+        ("OpenAI",     "openai"),
+    ]
+
+    def _p(label: str, val: str) -> "InlineKeyboardButton":
+        tick = "✅ " if val == current else ""
+        return InlineKeyboardButton(
+            f"{tick}{label}", callback_data=f"provider:{val}"
+        )
+
+    auto_tick = "✅ " if current == "auto" else ""
+    return InlineKeyboardMarkup([
+        [_p(label, val) for label, val in providers],
+        [InlineKeyboardButton(
+            f"{auto_tick}🔄 auto (цепочка)", callback_data="provider:auto"
+        )],
+        [InlineKeyboardButton("« Настройки", callback_data="settings")],
     ])
 
 
@@ -1152,6 +1215,117 @@ class TelegramCommander:
                 query,
                 f"✅ Часы торговли: {label}\n\n" + self._build_hours_text(),
                 _kb_hours_info(),
+            )
+
+        # ── Плечо ────────────────────────────────────────────────────────────
+        elif data == "lev_menu":
+            mode = self._rc.get_leverage_mode()
+            target = self._rc.get_leverage_target_risk()
+            dd = self._rc.get_max_drawdown_percent()
+            mode_desc = {
+                "fixed": "Фиксированное плечо из LEVERAGE",
+                "volatility": "ATR-таргетинг (авто по волатильности)",
+                "full": "ATR + режим рынка + защита просадки",
+            }.get(mode, mode)
+            text = (
+                f"📊 *Управление плечом*\n\n"
+                f"Режим: *{mode}* — {mode_desc}\n"
+                f"Риск на ATR: `{target*100:.1f}%`\n"
+            )
+            if mode == "full":
+                text += f"Порог просадки: `{dd*100:.0f}%`\n"
+            text += "\n_Выбери режим или параметр:_"
+            await self._edit(query, text, _kb_lev_menu(mode, target, dd))
+
+        elif data.startswith("lev:mode:"):
+            val = data.split(":", 2)[2]
+            self._rc.set_leverage_mode(val)
+            mode = val
+            target = self._rc.get_leverage_target_risk()
+            dd = self._rc.get_max_drawdown_percent()
+            desc = {
+                "fixed": "Фиксированное плечо из LEVERAGE",
+                "volatility": "ATR-таргетинг (авто по волатильности)",
+                "full": "ATR + режим рынка + защита просадки",
+            }.get(val, val)
+            await self._edit(
+                query,
+                f"✅ Режим плеча: *{val}*\n{desc}\n\n_Выбери режим или параметр:_",
+                _kb_lev_menu(mode, target, dd),
+            )
+
+        elif data.startswith("lev:target:"):
+            val = float(data.split(":", 2)[2])
+            self._rc.set_leverage_target_risk(val)
+            mode = self._rc.get_leverage_mode()
+            dd = self._rc.get_max_drawdown_percent()
+            await self._edit(
+                query,
+                f"✅ Риск на ATR: `{val*100:.1f}%`\n\n_Выбери режим или параметр:_",
+                _kb_lev_menu(mode, val, dd),
+            )
+
+        elif data.startswith("lev:drawdown:"):
+            val = float(data.split(":", 2)[2])
+            self._rc.set_max_drawdown_percent(val)
+            mode = self._rc.get_leverage_mode()
+            target = self._rc.get_leverage_target_risk()
+            await self._edit(
+                query,
+                f"✅ Порог просадки: `{val*100:.0f}%`\n\n_Выбери режим или параметр:_",
+                _kb_lev_menu(mode, target, val),
+            )
+
+        elif data == "lev:manual":
+            mode = self._rc.get_leverage_mode()
+            target = self._rc.get_leverage_target_risk()
+            dd = self._rc.get_max_drawdown_percent()
+            await self._edit(
+                query,
+                "✏️ *Ручной ввод параметров плеча*\n\n"
+                "Напиши команду в чат:\n"
+                "`/lev target 0.015` — риск на ATR (0.005–0.1)\n"
+                "`/lev drawdown 0.12` — порог просадки (0.05–0.5)\n\n"
+                "_После отправки команды вернись в меню: /lev_",
+                _kb_lev_menu(mode, target, dd),
+            )
+
+        elif data == "noop":
+            await query.answer()
+
+        # ── AI-провайдер ─────────────────────────────────────────────────────
+        elif data == "provider_menu":
+            current = self._rc.get_ai_provider()
+            desc = {
+                "auto":      "Claude → OpenAI → DeepSeek → Groq",
+                "groq":      "Llama 3.3 70B — бесплатный, быстрый",
+                "anthropic": "Claude — лучшее качество",
+                "deepseek":  "Самый дешёвый платный",
+                "openai":    "ChatGPT GPT-4o-mini",
+            }.get(current, current)
+            await self._edit(
+                query,
+                f"🤖 *AI-провайдер*\n\n"
+                f"Текущий: *{current}*\n{desc}\n\n"
+                f"_При ошибке основного — автоматически пробует следующий с ключом._",
+                _kb_provider_menu(current),
+            )
+
+        elif data.startswith("provider:"):
+            val = data.split(":", 1)[1]
+            self._rc.set_ai_provider(val)
+            desc = {
+                "auto":      "Claude → OpenAI → DeepSeek → Groq",
+                "groq":      "Llama 3.3 70B — бесплатный, быстрый",
+                "anthropic": "Claude — лучшее качество",
+                "deepseek":  "Самый дешёвый платный",
+                "openai":    "ChatGPT GPT-4o-mini",
+            }.get(val, val)
+            await self._edit(
+                query,
+                f"✅ AI-провайдер: *{val}*\n{desc}\n\n"
+                f"_Применится к следующему циклу анализа._",
+                _kb_provider_menu(val),
             )
 
         # ── Стратегии ────────────────────────────────────────────────────────
