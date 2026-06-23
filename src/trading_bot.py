@@ -85,7 +85,7 @@ class TradingBot:
         self.scanner = MarketScanner(self.api, self.data_loader)
         self.news = NewsAnalyzer()
         self.ai = AIAnalyzer(runtime_config=self._runtime_config)
-        self.combiner = SignalCombiner(self.ai)
+        self.combiner = SignalCombiner(self.ai, rc=self._runtime_config)
         self.regime_detector = RegimeDetector()
         self._current_regime: str = "unknown"
         self.portfolio_optimizer = PortfolioOptimizer()
@@ -617,6 +617,7 @@ class TradingBot:
             balance,
             regime=self._current_regime,
             regimes=regimes,
+            market_data=market_data,
         )
         recs = self._cycle.optimize_allocation(recs, market_data)
 
@@ -715,7 +716,10 @@ class TradingBot:
                 )
                 balance = await self._get_balance_usdt()
 
-                if not self.risk_manager.check_daily_loss_limit(balance):
+                if (
+                    not Config.PAPER_TRADING
+                    and not self.risk_manager.check_daily_loss_limit(balance)
+                ):
                     await self.telegram.notify(
                         "⛔ Дневной лимит потерь достигнут. "
                         f"Баланс: ${balance:.2f}. Торговля остановлена до завтра."

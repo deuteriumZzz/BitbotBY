@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Tuple
 
 from config import Config
 from src.ai_analyzer import AIAnalyzer
+from src import chronos_analyzer
 from src.dqn_signal import SACSignal
 
 logger = logging.getLogger(__name__)
@@ -45,9 +46,10 @@ class SignalCombiner:
     _W_AI = 0.6
     _SAC_SOLO_MIN = 0.80
 
-    def __init__(self, ai: AIAnalyzer):
+    def __init__(self, ai: AIAnalyzer, rc: Any = None):
         self.ai = ai
         self.sac = SACSignal()
+        self._rc = rc
         self.logger = logging.getLogger(__name__)
         self.logger.info("SignalCombiner mode=%s", Config.MODE)
 
@@ -59,6 +61,7 @@ class SignalCombiner:
         regimes: Dict[str, str] | None = None,
         market_context: Dict[str, Any] | None = None,
         sentiment: Dict[str, float] | None = None,
+        market_data: Dict[str, Any] | None = None,
     ) -> List[Dict[str, Any]]:
         """
         Возвращает рекомендации согласно MODE.
@@ -84,7 +87,9 @@ class SignalCombiner:
         elif mode == "dqn":
             recs = self._sac_only(snapshots, balance)
         elif mode == "hybrid":
-            recs = await self._hybrid(snapshots, balance, regime, regimes)
+            recs = await self._hybrid(
+                snapshots, balance, regime, regimes, market_data or {}
+            )
         else:
             self.logger.warning("Unknown MODE='%s', fallback to 'ai'", mode)
             recs = await self.ai.analyze(snapshots, balance)
@@ -164,6 +169,7 @@ class SignalCombiner:
         balance: float,
         regime: str = "unknown",
         regimes: Dict[str, str] | None = None,
+        market_data: Dict[str, Any] | None = None,
     ) -> List[Dict]:
         """
         Гибридный режим: согласие SAC + AI с режим-зависимыми весами.
@@ -173,6 +179,14 @@ class SignalCombiner:
         trending_up → SAC 50%/AI 50%, trending_down → SAC 30%/AI 70%,
         ranging / unknown → SAC 40%/AI 60%.
         """
+        use_chronos = (
+            not Config.PAPER_TRADING
+            and self._rc is not None
+            and self._rc.get_chronos_enabled()
+        )
+        if use_chronos:
+            self.logger.info("Hybrid+Chronos: enhanced triple-confirmation active")
+
         ai_recs = await self.ai.analyze(snapshots, balance)
         ai_map: Dict[str, Dict] = {r["symbol"]: r for r in ai_recs}
 
@@ -218,10 +232,29 @@ class SignalCombiner:
                 combined = round(d_conf * w_sac + a_conf * w_ai, 3)
                 if combined < Config.MIN_SIGNAL_CONFIDENCE:
                     continue
+
+                # Chronos — третья точка зрения (только live + enhanced режим)
+                if use_chronos and market_data:
+                    df = market_data.get(sym)
+                    if df is not None and not df.empty and "close" in df.columns:
+                        chronos_dir = chronos_analyzer.predict_direction(
+                            df["close"].tolist()
+                        )
+                        expected = "up" if d_action == "buy" else "down"
+                        if chronos_dir not in (expected, "neutral"):
+                            self.logger.info(
+                                "%s: Chronos disagrees (expects %s, got %s) → hold",
+                                sym,
+                                expected,
+                                chronos_dir,
+                            )
+                            continue
+
                 rec = dict(ai)
                 rec["confidence"] = combined
                 base_strat = ai.get("strategy", "ai")
-                rec["strategy"] = f"hybrid({base_strat}+sac)"
+                enhanced = "+chronos" if use_chronos else ""
+                rec["strategy"] = f"hybrid({base_strat}+sac{enhanced})"
                 reason = ai.get("reasoning", "").strip()
                 rec["reasoning"] = (
                     f"{reason} [SAC {d_conf:.0%}, regime={sym_regime}]"

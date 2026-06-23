@@ -87,8 +87,9 @@ logs:
 	docker compose logs -f bot
 
 htpasswd:
-	@set -a && . ./.env && set +a && \
-	docker run --rm httpd:alpine htpasswd -nb "$$DASHBOARD_USER" "$$DASHBOARD_PASSWORD" > nginx/htpasswd
+	$(eval DASHBOARD_USER := $(shell grep '^DASHBOARD_USER=' .env | cut -d= -f2))
+	$(eval DASHBOARD_PASSWORD := $(shell grep '^DASHBOARD_PASSWORD=' .env | cut -d= -f2))
+	@docker run --rm httpd:alpine htpasswd -nb "$(DASHBOARD_USER)" "$(DASHBOARD_PASSWORD)" > nginx/htpasswd
 	@echo ">>> nginx/htpasswd создан."
 
 setup:
