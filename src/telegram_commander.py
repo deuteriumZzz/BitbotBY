@@ -116,6 +116,11 @@ def _kb_settings(paused: bool, auto_exec: bool) -> "InlineKeyboardMarkup":
                     "⏱ Таймаут подтверждения", callback_data="timeout_menu"
                 )
             ],
+            [
+                InlineKeyboardButton(
+                    "📊 Бэктест стратегий", callback_data="backtest_menu"
+                )
+            ],
             [InlineKeyboardButton("🔄 Сброс настроек", callback_data="reset_defaults")],
             [InlineKeyboardButton("« Главная", callback_data="main")],
         ]
@@ -197,6 +202,19 @@ def _kb_timeout_menu(current: int) -> "InlineKeyboardMarkup":
         [
             [_btn(15), _btn(30), _btn(60)],
             [_btn(120), _btn(180), _btn(300)],
+            [InlineKeyboardButton("« Настройки", callback_data="settings")],
+        ]
+    )
+
+
+def _kb_backtest_menu() -> "InlineKeyboardMarkup":
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "▶ Запустить (~5-10 мин)", callback_data="backtest_now"
+                )
+            ],
             [InlineKeyboardButton("« Настройки", callback_data="settings")],
         ]
     )
@@ -554,6 +572,7 @@ class TelegramCommander:
         self._rc = runtime_config
         self._get_state = get_state
         self._sac_training = False
+        self._backtesting = False
         self._background_tasks: set = set()
 
     def register(self) -> None:
@@ -1211,6 +1230,68 @@ class TelegramCommander:
 
     # ── Callback-handler (все кнопки) ─────────────────────────────────────────
 
+    async def _run_backtest(self) -> None:
+        """Запускает backtest.py как subprocess и присылает итоговый отчёт."""
+        import asyncio as _asyncio
+        import json
+        import os
+
+        try:
+            env = {**os.environ, "PYTHONPATH": "/app"}
+            proc = await _asyncio.create_subprocess_exec(
+                "python",
+                "backtest.py",
+                env=env,
+                stdout=_asyncio.subprocess.DEVNULL,
+                stderr=_asyncio.subprocess.PIPE,
+            )
+            _, stderr = await proc.communicate()
+            if proc.returncode != 0:
+                err = (stderr or b"").decode()[-300:]
+                await self._notifier.notify(f"❌ *Бэктест упал*\n```{err}```")
+                return
+
+            results_path = os.path.join("data", "backtest_results.json")
+            try:
+                with open(results_path, encoding="utf-8") as f:
+                    data = json.load(f)
+            except Exception:
+                await self._notifier.notify(
+                    "✅ Бэктест завершён. Файл результатов недоступен."
+                )
+                return
+
+            results = data.get("results", [])
+            if not results:
+                await self._notifier.notify("✅ Бэктест завершён, но результатов нет.")
+                return
+
+            best = max(results, key=lambda r: r.get("expected_value", 0))
+            lines = [
+                "📊 *Бэктест завершён*",
+                f"Символ: `{data.get('symbol', '?')}` | "
+                f"{data.get('timeframe', '?')} | "
+                f"{data.get('months', '?')} мес.\n",
+                f"🏆 Лучшая стратегия: `{best['strategy']}`",
+                f"  Win rate: *{best['win_rate']:.0%}*",
+                f"  Sharpe: *{best['sharpe_ratio']:.2f}*",
+                f"  EV: *{best['expected_value']:.3f}*",
+                f"  Доходность: *{best['total_return_pct']:.1f}%*",
+                f"  Max drawdown: *{best['max_drawdown_pct']:.1f}%*\n",
+            ]
+            good = best["win_rate"] >= 0.5 and best["sharpe_ratio"] >= 1.0
+            verdict = (
+                "✅ Стратегии работают — можно переходить дальше"
+                if good
+                else "⚠️ Win rate или Sharpe ниже нормы — не спеши с реальными деньгами"
+            )
+            lines.append(verdict)
+            await self._notifier.notify("\n".join(lines))
+        except Exception as e:
+            await self._notifier.notify(f"❌ Бэктест: непредвиденная ошибка\n`{e}`")
+        finally:
+            self._backtesting = False
+
     async def _run_sac_training(self) -> None:
         """Запускает train_sac.py как subprocess, не блокируя event loop."""
         import asyncio as _asyncio
@@ -1610,6 +1691,36 @@ class TelegramCommander:
             short = _STRAT_SHORT.get(name, name)
             state = "включена" if now_enabled else "отключена"
             await self._edit(query, f"{icon} `{short}` {state}\n\n" + text, kb)
+
+        # ── Бэктест ───────────────────────────────────────────────────────────
+        elif data == "backtest_menu":
+            await self._edit(
+                query,
+                "📊 *Бэктест стратегий*\n\n"
+                "Проверяет все стратегии на 3-6 месяцах исторических данных.\n\n"
+                "📌 *Когда запускать:*\n"
+                "• Перед переходом на реальные деньги\n"
+                "• После тюнинга SAC — убедиться что стало лучше\n\n"
+                "⏱ Займёт ~5-10 мин. Бот продолжает торговать.",
+                _kb_backtest_menu(),
+            )
+
+        elif data == "backtest_now":
+            if self._backtesting:
+                await query.answer("⏳ Бэктест уже выполняется...", show_alert=True)
+                return
+            self._backtesting = True
+            await self._edit(
+                query,
+                "⏳ *Бэктест запущен*\n\n"
+                "Бот продолжает торговать.\nПришлю результаты когда готово.",
+                _kb_after_action(),
+            )
+            import asyncio as _asyncio
+
+            task = _asyncio.ensure_future(self._run_backtest())
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
 
         # ── Таймаут подтверждения ─────────────────────────────────────────────
         elif data == "timeout_menu":
