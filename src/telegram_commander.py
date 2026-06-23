@@ -533,6 +533,36 @@ class TelegramCommander:
         for name, handler in commands:
             app.add_handler(CommandHandler(name, handler))
         app.add_handler(CallbackQueryHandler(self._handle_callback))
+
+        bot_commands = [
+            ("start", "Главная панель"),
+            ("status", "Текущий статус бота"),
+            ("settings", "Все настройки"),
+            ("pnl", "Прибыль и убытки"),
+            ("pos", "Открытые позиции"),
+            ("pause", "Поставить на паузу"),
+            ("resume", "Возобновить торговлю"),
+            ("mode", "Сменить режим (ai/local/hybrid)"),
+            ("lev", "Управление плечом"),
+            ("provider", "AI провайдер"),
+            ("risk", "Риск-профиль"),
+            ("hours", "Часы торговли"),
+            ("scan", "Топ монет по объёму"),
+            ("add", "Добавить символ"),
+            ("remove", "Удалить символ"),
+            ("strategies", "Стратегии"),
+            ("trainn", "Переобучить SAC"),
+            ("help", "Справка"),
+        ]
+        try:
+            import asyncio as _asyncio
+            loop = _asyncio.get_event_loop()
+            if loop.is_running():
+                _asyncio.ensure_future(app.bot.set_my_commands(bot_commands))
+            else:
+                loop.run_until_complete(app.bot.set_my_commands(bot_commands))
+        except Exception as e:
+            logger.warning("set_my_commands failed: %s", e)
         logger.info("TelegramCommander: %d команд зарегистрировано", len(commands))
 
     # ── Auth & helpers ────────────────────────────────────────────────────────
