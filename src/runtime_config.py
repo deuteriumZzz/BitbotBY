@@ -28,6 +28,7 @@ _KEY_TRAIN_TOP_N = "bot:train_top_n"
 _KEY_AI_PROVIDER = "bot:ai_provider"
 _KEY_LEVERAGE_MODE = "bot:leverage_mode"
 _KEY_LEVERAGE_TARGET_RISK = "bot:leverage_target_risk"
+_KEY_MAX_DRAWDOWN = "bot:max_drawdown_percent"
 
 _AI_PROVIDERS = frozenset({"auto", "anthropic", "openai", "deepseek", "groq"})
 _LEVERAGE_MODES = frozenset({"fixed", "volatility", "full"})
@@ -236,7 +237,7 @@ class RuntimeConfig:
     # ── SAC Training ──────────────────────────────────────────────────────────
 
     def get_train_top_n(self) -> int:
-        """Количество символов для обучения SAC (default: TRAIN_TOP_N из .env или 20)."""
+        """Количество символов для обучения SAC (default: TRAIN_TOP_N или 20)."""
         val = self._get(_KEY_TRAIN_TOP_N)
         try:
             return max(1, min(int(val), 100)) if val else int(
@@ -269,6 +270,23 @@ class RuntimeConfig:
         return True
 
     # ── Leverage ──────────────────────────────────────────────────────────────
+
+    def get_max_drawdown_percent(self) -> float:
+        """Порог просадки для режима плеча full (0.05–0.5)."""
+        val = self._get(_KEY_MAX_DRAWDOWN)
+        try:
+            return max(0.05, min(float(val), 0.5)) if val else float(
+                getattr(Config, "MAX_DRAWDOWN_PERCENT", 0.15)
+            )
+        except (ValueError, TypeError):
+            return 0.15
+
+    def set_max_drawdown_percent(self, pct: float) -> bool:
+        if not (0.05 <= pct <= 0.5):
+            return False
+        self._set(_KEY_MAX_DRAWDOWN, str(pct))
+        logger.info("Runtime: max_drawdown_percent → %.2f", pct)
+        return True
 
     def get_leverage_mode(self) -> str:
         """Режим плеча: fixed | volatility | full."""
@@ -392,7 +410,7 @@ class RuntimeConfig:
         _KEY_FORCED, _KEY_EXCLUDED, _KEY_DISABLED_STRATS, _KEY_TRADING_HOURS,
         _KEY_MAX_POSITIONS, _KEY_RISK_PER_TRADE, _KEY_DRAWDOWN_SCALE,
         _KEY_TRAIN_TOP_N, _KEY_AI_PROVIDER,
-        _KEY_LEVERAGE_MODE, _KEY_LEVERAGE_TARGET_RISK,
+        _KEY_LEVERAGE_MODE, _KEY_LEVERAGE_TARGET_RISK, _KEY_MAX_DRAWDOWN,
     )
 
     def reset_to_defaults(self) -> None:
