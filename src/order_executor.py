@@ -267,16 +267,29 @@ class OrderExecutor:
                 strategy, lookback=TRADE_HISTORY_LOOKBACK
             )
 
-            confirmed = await self._telegram.ask_confirm(
-                top,
-                live_win_rate=live_wr,
-                live_trades=live_n,
-                live_ev=live_ev,
-                bt_win_rate=bt["win_rate"],
-                bt_trades=bt["total_trades"],
-                bt_ev=bt["ev"],
-                timeout=Config.TELEGRAM_CONFIRM_TIMEOUT,
+            _rc = getattr(self, "_runtime_config", None)
+            _auto_exec = (
+                _rc.get_auto_execute() if _rc is not None else Config.AUTO_EXECUTE
             )
+            if _auto_exec:
+                # AUTO_EXECUTE=true → без диалога, исполняем сразу
+                confirmed = True
+            else:
+                _timeout = (
+                    _rc.get_confirm_timeout()
+                    if _rc is not None
+                    else Config.TELEGRAM_CONFIRM_TIMEOUT
+                )
+                confirmed = await self._telegram.ask_confirm(
+                    top,
+                    live_win_rate=live_wr,
+                    live_trades=live_n,
+                    live_ev=live_ev,
+                    bt_win_rate=bt["win_rate"],
+                    bt_trades=bt["total_trades"],
+                    bt_ev=bt["ev"],
+                    timeout=_timeout,
+                )
             if not confirmed:
                 logger.info("Trade rejected via Telegram: %s", sym)
                 return

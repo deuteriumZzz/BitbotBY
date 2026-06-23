@@ -39,7 +39,12 @@ from src.risk_management import RiskManager
 from src.runtime_config import RuntimeConfig
 from src.signal_combiner import SignalCombiner
 from src.strategies import TradingStrategy
-from src.telegram_commander import TelegramCommander, _kb_main, _kb_sac_train, _kb_tune_sac
+from src.telegram_commander import (
+    TelegramCommander,
+    _kb_main,
+    _kb_sac_train,
+    _kb_tune_sac,
+)
 from src.telegram_notifier import TelegramNotifier
 from src.trade_history import TradeHistory
 from src.types import PositionRecord
@@ -509,7 +514,7 @@ class TradingBot:
         market_data: dict,
     ) -> None:
         """Исполняет лучшую рекомендацию — делегирует OrderExecutor."""
-        if not filtered or not Config.AUTO_EXECUTE:
+        if not filtered:
             return
         # УЛУЧШЕНИЕ 7: пропускаем исполнение во время макро-событийного blackout
         if Config.MACRO_BLACKOUT_ENABLED:

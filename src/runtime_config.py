@@ -31,6 +31,7 @@ _KEY_LEVERAGE_MODE = "bot:leverage_mode"
 _KEY_LEVERAGE_TARGET_RISK = "bot:leverage_target_risk"
 _KEY_MAX_DRAWDOWN = "bot:max_drawdown_percent"
 _KEY_SAC_PROMPTED = "bot:sac_prompted"
+_KEY_CONFIRM_TIMEOUT = "bot:confirm_timeout"
 _KEY_FIRST_START_DATE = "bot:first_start_date"
 _KEY_TUNE_REMINDED = "bot:tune_reminded"
 
@@ -414,6 +415,21 @@ class RuntimeConfig:
         return False
 
     # ── SAC prompt ────────────────────────────────────────────────────────────
+
+    def get_confirm_timeout(self) -> int:
+        """Таймаут подтверждения сделки в секундах (10–300, default 60)."""
+        val = self._get(_KEY_CONFIRM_TIMEOUT)
+        try:
+            return max(10, min(int(val), 300)) if val else 60
+        except (ValueError, TypeError):
+            return 60
+
+    def set_confirm_timeout(self, seconds: int) -> bool:
+        if not (10 <= seconds <= 300):
+            return False
+        self._set(_KEY_CONFIRM_TIMEOUT, str(seconds))
+        logger.info("Runtime: confirm_timeout → %ds", seconds)
+        return True
 
     def is_sac_prompted(self) -> bool:
         """True если пользователь уже получал запрос об обучении SAC."""
