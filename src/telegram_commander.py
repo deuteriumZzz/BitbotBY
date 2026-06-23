@@ -32,6 +32,8 @@ from __future__ import annotations
 import logging
 from typing import Any, Callable, Dict
 
+from config import Config
+
 logger = logging.getLogger(__name__)
 
 try:
@@ -298,26 +300,41 @@ def _kb_after_action() -> "InlineKeyboardMarkup":
     )
 
 
-def _kb_risk_menu(drawdown_on: bool) -> "InlineKeyboardMarkup":
+def _kb_risk_menu(drawdown_on: bool, max_pos: int = 3) -> "InlineKeyboardMarkup":
     dd_label = (
         "✅ Защита просадки: ВКЛ  →  выкл"
         if drawdown_on
         else "❌ Защита просадки: ВЫКЛ  →  вкл"
     )
-    return InlineKeyboardMarkup(
+    rows = [
         [
+            InlineKeyboardButton(
+                "🟢 Консерватив.", callback_data="risk:conservative"
+            ),
+            InlineKeyboardButton("🟡 Умеренный", callback_data="risk:moderate"),
+            InlineKeyboardButton("🔴 Агрессивный", callback_data="risk:aggressive"),
+        ],
+        [
+            InlineKeyboardButton("➖", callback_data="pos_less"),
+            InlineKeyboardButton(
+                f"📊 Позиций: {max_pos}", callback_data="pos_noop"
+            ),
+            InlineKeyboardButton("➕", callback_data="pos_more"),
+        ],
+        [InlineKeyboardButton(dd_label, callback_data="toggle_drawdown")],
+        [InlineKeyboardButton("📊 Управление плечом →", callback_data="lev_menu")],
+        [InlineKeyboardButton("« Настройки", callback_data="settings")],
+    ]
+    if Config.PAPER_TRADING:
+        rows.insert(
+            2,
             [
                 InlineKeyboardButton(
-                    "🟢 Консерватив.", callback_data="risk:conservative"
-                ),
-                InlineKeyboardButton("🟡 Умеренный", callback_data="risk:moderate"),
-                InlineKeyboardButton("🔴 Агрессивный", callback_data="risk:aggressive"),
+                    "🚀 Paper макс (15)", callback_data="pos_paper_max"
+                )
             ],
-            [InlineKeyboardButton(dd_label, callback_data="toggle_drawdown")],
-            [InlineKeyboardButton("📊 Управление плечом →", callback_data="lev_menu")],
-            [InlineKeyboardButton("« Настройки", callback_data="settings")],
-        ]
-    )
+        )
+    return InlineKeyboardMarkup(rows)
 
 
 def _kb_hours_info() -> "InlineKeyboardMarkup":
@@ -791,7 +808,7 @@ class TelegramCommander:
             f"🟡 Умер. — 3 поз, 2%, защита ВКЛ\n"
             f"🔴 Агр. — 5 поз, 4%, защита ВЫКЛ\n"
         )
-        return text, _kb_risk_menu(dd)
+        return text, _kb_risk_menu(dd, max_pos)
 
     def _build_hours_text(self) -> str:
         hours = self._rc.get_trading_hours()
@@ -1601,6 +1618,23 @@ class TelegramCommander:
             text, kb = self._build_risk()
             icon = "✅" if not current else "❌"
             await self._edit(query, f"{icon} Защита просадки изменена\n\n" + text, kb)
+
+        elif data in ("pos_more", "pos_less", "pos_paper_max", "pos_noop"):
+            if data == "pos_noop":
+                await query.answer()
+                return
+            cur = self._rc.get_max_positions()
+            if data == "pos_more":
+                new_val = min(cur + 1, 20)
+            elif data == "pos_less":
+                new_val = max(cur - 1, 1)
+            else:
+                new_val = 15
+            self._rc.set_max_positions(new_val)
+            text, kb = self._build_risk()
+            await self._edit(
+                query, f"✅ Макс. позиций: `{new_val}`\n\n" + text, kb
+            )
 
         # ── Часы торговли ────────────────────────────────────────────────────
         elif data == "hours_info":

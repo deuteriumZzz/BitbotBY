@@ -222,10 +222,15 @@ class OrderExecutor:
         # lock so a second concurrent cycle can't open the same symbol while
         # Telegram confirmation is being awaited (up to TELEGRAM_CONFIRM_TIMEOUT s).
         async with lock:
-            if len(monitored) >= Config.MAX_POSITIONS:
+            _max = (
+                self._runtime_config.get_max_positions()
+                if self._runtime_config is not None
+                else Config.MAX_POSITIONS
+            )
+            if len(monitored) >= _max:
                 logger.warning(
                     "Max positions (%d) reached, skipping %s",
-                    Config.MAX_POSITIONS,
+                    _max,
                     sym,
                 )
                 return
