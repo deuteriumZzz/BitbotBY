@@ -107,7 +107,13 @@ class MarketScanner:
         :return: Кортеж (symbol, DataFrame) или None при ошибке/нехватке данных.
         """
         try:
-            df = await self.data_loader.get_market_data(symbol, timeframe, limit=100)
+            df = await self.data_loader.load_historical_data(
+                symbol, timeframe, months=1
+            )
+            if df.empty:
+                df = await self.data_loader.get_market_data(
+                    symbol, timeframe, limit=100
+                )
             if len(df) < _MIN_INDICATOR_ROWS:
                 self.logger.debug(
                     "Skip %s: only %d bars, need >= %d for valid indicators",
