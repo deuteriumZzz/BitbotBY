@@ -534,15 +534,21 @@ class TelegramCommander:
         positions = s.get("positions", [])
         paper = "paper" if s.get("paper_trading") else "live"
         forced = sorted(self._rc.get_forced_symbols())
+        lev_mode = self._rc.get_leverage_mode()
+        lev_target = self._rc.get_leverage_target_risk()
+        provider = self._rc.get_ai_provider()
+        hours = self._rc.get_trading_hours()
 
         state_icon = "⏸" if paused else "🟢"
         exec_icon = "✅" if auto_exec else "❌"
+        hours_str = f"`{hours}`" if hours else "`24/7`"
         text = (
             f"{state_icon} *BitbotBY [{paper}]*\n\n"
             f"💰 Баланс: `${balance:,.2f}` ({pnl_pct:+.2f}%)\n"
-            f"🤖 Режим: `{mode}`\n"
-            f"🔢 Символов: `{n}`\n"
-            f"📋 Позиций: `{len(positions)}`\n"
+            f"🤖 Режим: `{mode}` | AI: `{provider}`\n"
+            f"🔢 Символов: `{n}` | Позиций: `{len(positions)}`\n"
+            f"📊 Плечо: `{lev_mode}` ({lev_target*100:.1f}% ATR)\n"
+            f"🕐 Часы: {hours_str}\n"
             f"{exec_icon} Авто-сделки: `{'ВКЛ' if auto_exec else 'ВЫКЛ'}`\n"
         )
         if forced:
@@ -557,18 +563,45 @@ class TelegramCommander:
         mode = self._rc.get_mode()
         n = self._rc.get_scan_top_n()
         excluded = sorted(self._rc.get_excluded_symbols())
+        lev_mode = self._rc.get_leverage_mode()
+        lev_target = self._rc.get_leverage_target_risk()
+        lev_dd = self._rc.get_max_drawdown_percent()
+        provider = self._rc.get_ai_provider()
+        hours = self._rc.get_trading_hours()
+        max_pos = self._rc.get_max_positions()
+        risk_pt = self._rc.get_risk_per_trade()
+        dd_scale = self._rc.get_drawdown_scale_enabled()
+        train_n = self._rc.get_train_top_n()
+        disabled_strats = self._rc.get_disabled_strategies()
 
         state_str = "⏸ на паузе" if paused else "🟢 торгует"
-        exec_str = "✅ ВКЛ" if auto_exec else "❌ ВЫКЛ"
+        exec_str = "✅" if auto_exec else "❌"
+        dd_str = "✅" if dd_scale else "❌"
+        hours_str = hours if hours else "24/7"
+        lev_str = f"`{lev_mode}` ({lev_target*100:.1f}% ATR)"
+        if lev_mode == "full":
+            lev_str += f", просадка `{lev_dd*100:.0f}%`"
+        strats_str = f"❌ выкл: `{', '.join(sorted(disabled_strats))}`" if disabled_strats else "✅ все включены"
+
         text = (
             f"⚙️ *Настройки бота*\n\n"
-            f"Статус: {state_str}\n"
-            f"Режим: `{mode}`\n"
-            f"Символов: `{n}`\n"
-            f"Авто-сделки: {exec_str}\n"
+            f"*Статус:* {state_str}\n"
+            f"*Режим торговли:* `{mode}`\n"
+            f"*AI-провайдер:* `{provider}`\n\n"
+            f"*Риск-менеджмент:*\n"
+            f"  Макс. позиций: `{max_pos}`\n"
+            f"  Риск на сделку: `{risk_pt*100:.1f}%`\n"
+            f"  Защита просадки: {dd_str}\n"
+            f"  Плечо: {lev_str}\n\n"
+            f"*Сканирование:*\n"
+            f"  Символов (торговля): `{n}`\n"
+            f"  Символов (обучение SAC): `{train_n}`\n\n"
+            f"*Стратегии:* {strats_str}\n"
+            f"*Часы торговли:* `{hours_str}`\n"
+            f"*Авто-сделки:* {exec_str}\n"
         )
         if excluded:
-            text += f"Исключены: `{', '.join(excluded)}`\n"
+            text += f"*Исключены из скан.:* `{', '.join(excluded)}`\n"
         text += "\n_Нажми кнопку для изменения:_"
         return text, _kb_settings(paused, auto_exec)
 
