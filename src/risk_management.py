@@ -38,6 +38,8 @@ class RiskManager:
         """
         self.initial_balance = initial_balance
         self.risk_per_trade = risk_per_trade
+        self.max_positions: int = Config.MAX_POSITIONS
+        self.drawdown_scale_enabled: bool = Config.DRAWDOWN_SCALE_ENABLED
         self.redis = RedisClient()
         self.logger = logging.getLogger(__name__)
         # Daily-loss tracking: reset reference balance each UTC day so the

@@ -1339,25 +1339,25 @@ class TelegramCommander:
             )
 
         elif data.startswith("lev:target:"):
-            val = float(data.split(":", 2)[2])
-            self._rc.set_leverage_target_risk(val)
+            val_f = float(data.split(":", 2)[2])
+            self._rc.set_leverage_target_risk(val_f)
             mode = self._rc.get_leverage_mode()
             dd = self._rc.get_max_drawdown_percent()
             await self._edit(
                 query,
-                f"✅ Риск на ATR: `{val*100:.1f}%`\n\n_Выбери режим или параметр:_",
-                _kb_lev_menu(mode, val, dd),
+                f"✅ Риск на ATR: `{val_f*100:.1f}%`\n\n_Выбери режим или параметр:_",
+                _kb_lev_menu(mode, val_f, dd),
             )
 
         elif data.startswith("lev:drawdown:"):
-            val = float(data.split(":", 2)[2])
-            self._rc.set_max_drawdown_percent(val)
+            val_f = float(data.split(":", 2)[2])
+            self._rc.set_max_drawdown_percent(val_f)
             mode = self._rc.get_leverage_mode()
             target = self._rc.get_leverage_target_risk()
             await self._edit(
                 query,
-                f"✅ Порог просадки: `{val*100:.0f}%`\n\n_Выбери режим или параметр:_",
-                _kb_lev_menu(mode, target, val),
+                f"✅ Порог просадки: `{val_f*100:.0f}%`\n\n_Выбери режим или параметр:_",
+                _kb_lev_menu(mode, target, val_f),
             )
 
         elif data == "lev:manual":

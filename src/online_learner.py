@@ -209,6 +209,14 @@ class OnlineLearner:
         self._background_tasks.add(task)
         task.add_done_callback(self._background_tasks.discard)
 
+    async def _background_retrain(self) -> None:
+        """Запускает _run_full_retrain в thread executor, не блокируя event loop."""
+        try:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, self._run_full_retrain)
+        finally:
+            self._is_training = False
+
     def _run_online_update(self, gradient_steps: int) -> None:
         """Синхронный: загружает модель и делает N gradient steps из experience buffer."""  # noqa: E501
         try:
@@ -247,7 +255,7 @@ class OnlineLearner:
                 "PYTHONPATH": os.environ.get("PYTHONPATH", ""),
                 "HOME": os.environ.get("HOME", ""),
                 "SAC_MODEL_PATH": tmp_path,
-                "TRAIN_TOP_N": str(self._get_train_top_n()),
+                "TRAIN_TOP_N": os.environ.get("TRAIN_TOP_N", "20"),
                 "TRAIN_MIN_CANDLES": os.environ.get("TRAIN_MIN_CANDLES", "2880"),
                 "TOTAL_TIMESTEPS": os.environ.get("TOTAL_TIMESTEPS", "50000"),
                 "EXPERIENCES_PATH": os.environ.get(

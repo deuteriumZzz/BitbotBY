@@ -322,7 +322,7 @@ class AIAnalyzer:
                 if status == 400:
                     self.logger.error("AI [%s] bad request (400): %s", provider, e)
                     return []
-                # Любая другая ошибка (429, 402, 500, таймаут, сеть) — пробуем следующего
+                # Любая другая ошибка (429, 402, 500, таймаут) — пробуем следующего
                 self.logger.warning(
                     "AI [%s] error (HTTP %s) — trying next provider: %s",
                     provider,
