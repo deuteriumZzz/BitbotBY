@@ -444,6 +444,7 @@ class RuntimeConfig:
     def ensure_first_start_date(self) -> str:
         """Записывает дату первого запуска если ещё не записана. Возвращает дату."""
         import datetime as dt
+
         existing = self._get(_KEY_FIRST_START_DATE)
         if existing:
             return existing
@@ -454,6 +455,7 @@ class RuntimeConfig:
     def days_since_first_start(self) -> int:
         """Количество дней с первого запуска бота."""
         import datetime as dt
+
         raw = self._get(_KEY_FIRST_START_DATE)
         if not raw:
             return 0

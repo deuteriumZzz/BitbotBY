@@ -107,9 +107,7 @@ class MarketScanner:
         :return: Кортеж (symbol, DataFrame) или None при ошибке/нехватке данных.
         """
         try:
-            df = await self.data_loader.get_historical_data(
-                symbol, timeframe, days=30
-            )
+            df = await self.data_loader.get_historical_data(symbol, timeframe, days=30)
             if df.empty:
                 df = await self.data_loader.get_market_data(
                     symbol, timeframe, limit=100
