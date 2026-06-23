@@ -119,6 +119,7 @@ def _kb_settings(
             InlineKeyboardButton("🔢 Кол-во символов", callback_data="scan_menu"),
         ],
         [InlineKeyboardButton("📐 Стратегии", callback_data="strategies")],
+        [InlineKeyboardButton("🎯 Профиль рынка", callback_data="market_profile_menu")],
         [InlineKeyboardButton("⚖️ Риск-профиль", callback_data="risk_menu")],
         [InlineKeyboardButton("🕐 Часы торговли", callback_data="hours_info")],
         [InlineKeyboardButton("🤖 AI-провайдер", callback_data="provider_menu")],
@@ -154,6 +155,41 @@ def _kb_mode_menu() -> "InlineKeyboardMarkup":
             [
                 InlineKeyboardButton("🔀 Hybrid", callback_data="mode:hybrid"),
                 InlineKeyboardButton("🧠 SAC", callback_data="mode:dqn"),
+            ],
+            [InlineKeyboardButton("« Настройки", callback_data="settings")],
+        ]
+    )
+
+
+def _kb_market_profile_menu(
+    current: str = "",
+    bluechip_model: bool = False,
+    altcoin_model: bool = False,
+) -> "InlineKeyboardMarkup":
+    import os as _os
+
+    def _mark(name: str) -> str:
+        return "✅ " if current == name else ""
+
+    def _model_icon(exists: bool) -> str:
+        return "🧠" if exists else "⚠️"
+
+    bc_has = bluechip_model or _os.path.exists("models/sac_model.zip")
+    alt_has = altcoin_model or _os.path.exists("models/sac_model_altcoin.zip")
+
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    f"{_mark('bluechip')}🔵 Блючипы {_model_icon(bc_has)}",
+                    callback_data="market_profile:bluechip",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    f"{_mark('altcoin')}🟡 Альткоины {_model_icon(alt_has)}",
+                    callback_data="market_profile:altcoin",
+                ),
             ],
             [InlineKeyboardButton("« Настройки", callback_data="settings")],
         ]
@@ -740,6 +776,8 @@ class TelegramCommander:
         dd_scale = self._rc.get_drawdown_scale_enabled()
         train_n = self._rc.get_train_top_n()
         disabled_strats = self._rc.get_disabled_strategies()
+        market_profile = self._rc.get_market_profile()
+        timeframe = self._rc.get_timeframe()
 
         state_str = "⏸ на паузе" if paused else "🟢 торгует"
         exec_str = "✅" if auto_exec else "❌"
@@ -761,11 +799,16 @@ class TelegramCommander:
                 f"  Chronos (усил. контроль): {'✅ ВКЛ' if chronos else '❌ ВЫКЛ'}\n"
             )
 
+        profile_labels = {"bluechip": "🔵 Блючипы", "altcoin": "🟡 Альткоины"}
+        profile_str = profile_labels.get(market_profile, "⚪ не задан")
+
         text = (
             f"⚙️ *Настройки бота*\n\n"
             f"*Статус:* {state_str}\n"
+            f"*Профиль рынка:* {profile_str}\n"
             f"*Режим торговли:* `{mode}`\n"
             f"{chronos_str}"
+            f"*Таймфрейм:* `{timeframe}`\n"
             f"*AI-провайдер:* `{provider}`\n\n"
             f"*Риск-менеджмент:*\n"
             f"  Макс. позиций: `{max_pos}`\n"
@@ -1339,8 +1382,19 @@ class TelegramCommander:
         import asyncio as _asyncio
         import os
 
+        model_path = self._rc.get_sac_model_path()
+        profile = self._rc.get_market_profile()
+        profile_labels = {"bluechip": "🔵 Блючипы", "altcoin": "🟡 Альткоины"}
+        profile_note = (
+            f" ({profile_labels[profile]})" if profile in profile_labels else ""
+        )
+
         try:
-            env = {**os.environ, "PYTHONPATH": "/app"}
+            env = {
+                **os.environ,
+                "PYTHONPATH": "/app",
+                "SAC_MODEL_PATH": model_path,
+            }
             proc = await _asyncio.create_subprocess_exec(
                 "python",
                 "reinforcement_learning/train_sac.py",
@@ -1349,16 +1403,17 @@ class TelegramCommander:
                 stderr=_asyncio.subprocess.PIPE,
             )
             await self._notifier.notify(
-                "🧠 *Обучение SAC запущено*\n\n"
+                f"🧠 *Обучение SAC запущено{profile_note}*\n\n"
                 "Процесс идёт в фоне, бот продолжает торговать.\n"
+                f"📁 Сохранение в: `{model_path}`\n"
                 "⏱ Ожидаемое время: ~60 мин на CPU.\n"
                 "_Пришлю уведомление когда модель будет готова._"
             )
             _, stderr = await proc.communicate()
             if proc.returncode == 0:
                 await self._notifier.notify(
-                    "✅ *SAC модель обучена!*\n\n"
-                    "Модель сохранена в `models/sac_model.zip`.\n"
+                    f"✅ *SAC модель обучена{profile_note}!*\n\n"
+                    f"Модель сохранена в `{model_path}`.\n"
                     "Бот автоматически подхватит её в следующем цикле.",
                     reply_markup=_kb_main(),
                 )
@@ -1378,7 +1433,8 @@ class TelegramCommander:
         import asyncio as _asyncio
         import os
 
-        env = {**os.environ, "PYTHONPATH": "/app"}
+        model_path = self._rc.get_sac_model_path()
+        env = {**os.environ, "PYTHONPATH": "/app", "SAC_MODEL_PATH": model_path}
         try:
             # ── Этап 1: тюнинг ───────────────────────────────────────────────
             proc = await _asyncio.create_subprocess_exec(
@@ -1586,6 +1642,52 @@ class TelegramCommander:
                 "🔄 *Настройки сброшены к значениям по умолчанию*\n\n" + text,
                 kb,
             )
+
+        # ── Профиль рынка ────────────────────────────────────────────────────
+        elif data == "market_profile_menu":
+            import os as _os
+
+            current = self._rc.get_market_profile()
+            bc_has = _os.path.exists("models/sac_model_bluechip.zip")
+            alt_has = _os.path.exists("models/sac_model_altcoin.zip")
+            model_legend = "🧠 — модель есть  |  ⚠️ — нужно обучить"
+            await self._edit(
+                query,
+                "🎯 *Профиль рынка*\n\n"
+                "🔵 *Блючипы* — BTC, ETH, SOL и другие топ-монеты.\n"
+                "Таймфрейм 15m, топ-20, риск 2%, режим Hybrid.\n\n"
+                "🟡 *Альткоины* — середина рынка, топ-50 по объёму.\n"
+                "Таймфрейм 5m, топ-50, риск 1%, режим AI, без BTC/ETH.\n\n"
+                f"_{model_legend}_\n"
+                "_Профиль применяется мгновенно. Таймфрейм — со следующего цикла._",
+                _kb_market_profile_menu(current, bc_has, alt_has),
+            )
+
+        elif data.startswith("market_profile:"):
+            import os as _os
+
+            profile_name = data.split(":", 1)[1]
+            if self._rc.apply_market_profile(profile_name):
+                labels = {"bluechip": "🔵 Блючипы", "altcoin": "🟡 Альткоины"}
+                label = labels.get(profile_name, profile_name)
+                model_path = self._rc.get_sac_model_path()
+                model_exists = _os.path.exists(model_path)
+                model_note = (
+                    ""
+                    if model_exists
+                    else f"\n\n⚠️ SAC модель для этого профиля не найдена.\n"
+                    f"📁 `{model_path}`\n"
+                    "_Используй кнопку обучения в настройках._"
+                )
+                # предупреждение уже показано inline — фоновый check не нужен
+                if not model_exists:
+                    self._rc.set_sac_prompted(profile_name)
+                text, kb = self._build_settings()
+                await self._edit(
+                    query,
+                    f"✅ Профиль применён: *{label}*{model_note}\n\n" + text,
+                    kb,
+                )
 
         # ── Риск-профиль ─────────────────────────────────────────────────────
         elif data == "risk_menu":

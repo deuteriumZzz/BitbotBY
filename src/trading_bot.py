@@ -82,7 +82,9 @@ class TradingBot:
             Config.INITIAL_BALANCE,
             Config.RISK_PER_TRADE,
         )
-        self.scanner = MarketScanner(self.api, self.data_loader)
+        self.scanner = MarketScanner(
+            self.api, self.data_loader, rc=self._runtime_config
+        )
         self.news = NewsAnalyzer()
         self.ai = AIAnalyzer(runtime_config=self._runtime_config)
         self.combiner = SignalCombiner(self.ai, rc=self._runtime_config)
@@ -255,16 +257,25 @@ class TradingBot:
         )
 
     async def _check_sac_model(self) -> None:
-        """Однократно предупреждает об отсутствии SAC модели при первом запуске."""
-        if os.path.exists(os.path.join("models", "sac_model.zip")):
+        """Предупреждает об отсутствии SAC модели для текущего профиля."""
+        profile = self._runtime_config.get_market_profile()
+        model_path = self._runtime_config.get_sac_model_path()
+
+        if os.path.exists(model_path):
             return
-        if self._runtime_config.is_sac_prompted():
+        if self._runtime_config.is_sac_prompted(profile):
             return
-        self._runtime_config.set_sac_prompted()
+        self._runtime_config.set_sac_prompted(profile)
+
+        profile_labels = {"bluechip": "🔵 Блючипы", "altcoin": "🟡 Альткоины"}
+        profile_str = profile_labels.get(profile, "")
+        profile_note = f" для профиля *{profile_str}*" if profile_str else ""
+
         await self.telegram.notify(
-            "⚠️ *SAC модель не найдена*\n\n"
+            f"⚠️ *SAC модель{profile_note} не найдена*\n\n"
             "Без неё бот работает только на AI + локальных стратегиях.\n"
             "В `hybrid` режиме SAC даёт дополнительный сигнал.\n\n"
+            f"📁 Ожидается: `{model_path}`\n"
             "⏱ Обучение займёт ~60 мин на CPU.\n"
             "_После достаточного числа сделок модель переобучается автоматически._\n\n"
             "Хотите обучить SAC сейчас?",
@@ -432,7 +443,7 @@ class TradingBot:
         """Загружает исторические данные и обучает RegimeDetector."""
         try:
             df = await self.data_loader.get_market_data(
-                Config.SYMBOL, Config.TIMEFRAME, limit=2000
+                Config.SYMBOL, self._runtime_config.get_timeframe(), limit=2000
             )
             if df is not None and not df.empty:
                 self.regime_detector.fit(df)
@@ -565,7 +576,9 @@ class TradingBot:
         :param symbols: Список символов для сканирования.
         :return: Словарь {символ: DataFrame с OHLCV+индикаторами}.
         """
-        market_data = await self.scanner.scan_all(symbols, Config.TIMEFRAME)
+        market_data = await self.scanner.scan_all(
+            symbols, self._runtime_config.get_timeframe()
+        )
         for sym, df in market_data.items():
             self.corr_filter.update_from_df(sym, df)
         self._save_corr_filter()
@@ -681,10 +694,11 @@ class TradingBot:
         self._monitor_task = asyncio.create_task(self._monitor_positions())
         cycle = 0
         ai_status = "on" if self.ai.enabled else "off"
+        scan_n = self._runtime_config.get_scan_top_n()
         logger.info(
             "Starting hybrid loop (interval=%ds, top=%d, ai=%s)",
             Config.TRADING_INTERVAL,
-            Config.SCAN_TOP_N,
+            scan_n,
             ai_status,
         )
         mode = "paper" if Config.PAPER_TRADING else "live"
@@ -693,7 +707,7 @@ class TradingBot:
             f"🤖 *BitbotBY запущен* [{mode}]\n"
             f"Стратегия: `{Config.DEFAULT_STRATEGY}`\n"
             f"Баланс: `${self._paper_balance:,.2f}`\n"
-            f"AI: {ai_status} | Символов: {Config.SCAN_TOP_N}\n\n"
+            f"AI: {ai_status} | Символов: {scan_n}\n\n"
             f"Используй кнопки ниже или набери /help",
             reply_markup=_kb_main(),
         )
@@ -710,7 +724,9 @@ class TradingBot:
                 continue
 
             try:
-                symbols = await self.scanner.get_top_symbols(Config.SCAN_TOP_N)
+                symbols = await self.scanner.get_top_symbols(
+                    self._runtime_config.get_scan_top_n()
+                )
                 market_data = await self._scan_and_update_correlations(symbols)
                 snapshots = await self._cycle.collect_snapshots(
                     list(market_data.keys()), market_data

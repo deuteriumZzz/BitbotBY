@@ -12,6 +12,8 @@ from typing import Any, Dict, List, Type
 
 import pandas as pd
 
+from config import Config
+
 from .redis_client import RedisClient
 
 logger = logging.getLogger(__name__)
@@ -552,6 +554,61 @@ class TrendFollowingStrategy(BaseStrategy):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 10. VOLUME SPIKE
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class VolumeSpikeStrategy(BaseStrategy):
+    """
+    Стратегия на аномальном всплеске объёма.
+
+    Входит в сделку когда объём текущей свечи в N раз превышает
+    среднее за 20 свечей (N = VOLUME_SPIKE_THRESHOLD, по умолчанию 2.5).
+    Направление определяется по EMA и RSI.
+    Эффективна на 5m–15m, особенно на альткоинах.
+    """
+
+    name = "volume_spike"
+    description = (
+        "Вход при аномальном росте объёма (x2.5+ от среднего за 20 свечей). "
+        "Направление по EMA + RSI. Лучший таймфрейм: 5m–15m, альткоины."
+    )
+    recommended_timeframes = ["5m", "15m"]
+    risk_level = "high"
+    market_type = "volatile"
+
+    def generate_signal(self, data: pd.DataFrame) -> Dict[str, Any]:
+        if len(data) < 21:
+            return {"action": "hold", "confidence": 0.50}
+
+        close = self._last(data, "close")
+        ema_s = self._last(data, "ema_short", close)
+        rsi = self._last(data, "rsi", 50)
+
+        threshold = Config.VOLUME_SPIKE_THRESHOLD
+        avg_vol = float(data["volume"].iloc[-21:-1].mean())
+        cur_vol = float(data["volume"].iloc[-1])
+
+        if avg_vol <= 0:
+            return {"action": "hold", "confidence": 0.50}
+
+        ratio = cur_vol / avg_vol
+        if ratio < threshold:
+            return {"action": "hold", "confidence": 0.40}
+
+        # Уверенность растёт пропорционально силе спайка (cap 0.90)
+        spike_bonus = min((ratio - threshold) * 0.05, 0.15)
+
+        if close > ema_s and rsi < 70:
+            conf = round(min(0.75 + spike_bonus, 0.90), 2)
+            return {"action": "buy", "confidence": conf, "price": close}
+        if close < ema_s and rsi > 30:
+            conf = round(min(0.75 + spike_bonus, 0.90), 2)
+            return {"action": "sell", "confidence": conf, "price": close}
+        return {"action": "hold", "confidence": 0.45}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # REGISTRY
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -565,6 +622,7 @@ STRATEGY_REGISTRY: Dict[str, Type[BaseStrategy]] = {
     "breakout": BreakoutStrategy,
     "mean_reversion": MeanReversionStrategy,
     "trend_following": TrendFollowingStrategy,
+    "volume_spike": VolumeSpikeStrategy,
 }
 
 

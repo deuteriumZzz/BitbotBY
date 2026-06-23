@@ -167,6 +167,12 @@ class Config:
     # ── Liquidity filter (УЛУЧШЕНИЕ 5) ────────────────────────────────────
     # Минимальный 24h объём в USDT для допуска к торговле
     MIN_VOLUME_USDT: float = float(os.getenv("MIN_VOLUME_USDT", "1000000"))
+    # Порог volume spike: во сколько раз текущий объём свечи превышает среднее
+    # за последние 20 свечей. 2.5 = аномалия, рекомендуется 2.0–4.0.
+    VOLUME_SPIKE_THRESHOLD: float = float(os.getenv("VOLUME_SPIKE_THRESHOLD", "2.5"))
+    # Максимальный 24h объём в USDT (0 = без ограничения).
+    # Позволяет исключить блючипы при торговле альткоинами.
+    MAX_VOLUME_USDT: float = float(os.getenv("MAX_VOLUME_USDT", "0"))
     # Максимальный допустимый спред (ask-bid)/mid в процентах
     MAX_SPREAD_PCT: float = float(os.getenv("MAX_SPREAD_PCT", "0.3"))
 

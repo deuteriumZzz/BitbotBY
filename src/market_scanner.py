@@ -37,9 +37,10 @@ class MarketScanner:
     4. build_snapshot() — снэпшот монеты для AI-анализатора.
     """
 
-    def __init__(self, api: BybitAPI, data_loader: DataLoader):
+    def __init__(self, api: BybitAPI, data_loader: DataLoader, rc: "Any | None" = None):
         self.api = api
         self.data_loader = data_loader
+        self._rc = rc
         self.logger = logging.getLogger(__name__)
 
     async def get_top_symbols(
@@ -70,7 +71,22 @@ class MarketScanner:
                     continue
                 if base_sym in excluded:
                     continue
-                if (t.get("quoteVolume") or 0) <= 0:
+                qv = t.get("quoteVolume") or 0
+                if qv <= 0:
+                    continue
+                min_vol = (
+                    self._rc.get_min_volume_usdt()
+                    if self._rc is not None
+                    else Config.MIN_VOLUME_USDT
+                )
+                max_vol = (
+                    self._rc.get_max_volume_usdt()
+                    if self._rc is not None
+                    else Config.MAX_VOLUME_USDT
+                )
+                if qv < min_vol:
+                    continue
+                if max_vol > 0 and qv > max_vol:
                     continue
                 usdt[base_sym] = t
 
