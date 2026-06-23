@@ -80,6 +80,7 @@ def _kb_status(paused: bool) -> "InlineKeyboardMarkup":
                 toggle,
                 InlineKeyboardButton("⚙️ Настройки", callback_data="settings"),
             ],
+            [InlineKeyboardButton("« Главная", callback_data="main")],
         ]
     )
 
@@ -184,7 +185,8 @@ def _kb_pnl() -> "InlineKeyboardMarkup":
                 InlineKeyboardButton("📊 Статус", callback_data="status"),
                 InlineKeyboardButton("📋 Позиции", callback_data="pos"),
                 InlineKeyboardButton("🔄 Обновить", callback_data="pnl"),
-            ]
+            ],
+            [InlineKeyboardButton("« Главная", callback_data="main")],
         ]
     )
 
@@ -196,7 +198,8 @@ def _kb_pos() -> "InlineKeyboardMarkup":
                 InlineKeyboardButton("📊 Статус", callback_data="status"),
                 InlineKeyboardButton("📈 P&L", callback_data="pnl"),
                 InlineKeyboardButton("🔄 Обновить", callback_data="pos"),
-            ]
+            ],
+            [InlineKeyboardButton("« Главная", callback_data="main")],
         ]
     )
 
