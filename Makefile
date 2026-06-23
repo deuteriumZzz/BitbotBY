@@ -59,12 +59,12 @@ test:
 	PYTHONPATH=. python3 -m pytest tests/ -v --tb=short --cov=src --cov-report=term-missing
 
 lint:
-	python3 -m flake8 src/ tests/ reinforcement_learning/ config.py dashboard.py supervisor.py supervisor.py
+	python3 -m flake8 src/ tests/ reinforcement_learning/ config.py dashboard.py supervisor.py
 	python3 -m mypy src/
 
 fmt:
-	python3 -m black src/ tests/ reinforcement_learning/ config.py dashboard.py supervisor.py supervisor.py
-	python3 -m isort --profile black src/ tests/ reinforcement_learning/ config.py dashboard.py supervisor.py supervisor.py
+	python3 -m black src/ tests/ reinforcement_learning/ config.py dashboard.py supervisor.py
+	python3 -m isort --profile black src/ tests/ reinforcement_learning/ config.py dashboard.py supervisor.py
 
 # ── Docker ─────────────────────────────────────────────────────────────────────
 up:
@@ -72,6 +72,16 @@ up:
 
 down:
 	docker compose down
+
+rebuild:
+	@echo ">>> Full reset: removing containers, volumes and images..."
+	docker compose down -v
+	docker image rm bitbotby-bot bitbotby-dashboard 2>/dev/null || true
+	docker builder prune -f
+	@echo ">>> Rebuilding from scratch..."
+	docker compose build --no-cache
+	docker compose up -d
+	@echo ">>> Done. Run 'make logs' to watch startup."
 
 logs:
 	docker compose logs -f bot
