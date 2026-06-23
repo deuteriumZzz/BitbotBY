@@ -106,10 +106,16 @@ def _kb_settings(paused: bool, auto_exec: bool) -> "InlineKeyboardMarkup":
             [InlineKeyboardButton("⚖️ Риск-профиль", callback_data="risk_menu")],
             [InlineKeyboardButton("🕐 Часы торговли", callback_data="hours_info")],
             [InlineKeyboardButton("🤖 AI-провайдер", callback_data="provider_menu")],
-            [InlineKeyboardButton("🔬 Тюнинг SAC (~2ч) + обучение", callback_data="tune_sac_menu")],
-            [InlineKeyboardButton(
-                "⏱ Таймаут подтверждения", callback_data="timeout_menu"
-            )],
+            [
+                InlineKeyboardButton(
+                    "🔬 Тюнинг SAC (~2ч) + обучение", callback_data="tune_sac_menu"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "⏱ Таймаут подтверждения", callback_data="timeout_menu"
+                )
+            ],
             [InlineKeyboardButton("🔄 Сброс настроек", callback_data="reset_defaults")],
             [InlineKeyboardButton("« Главная", callback_data="main")],
         ]
@@ -605,6 +611,7 @@ class TelegramCommander:
         ]
         try:
             import asyncio as _asyncio
+
             loop = _asyncio.get_event_loop()
             if loop.is_running():
                 _asyncio.ensure_future(app.bot.set_my_commands(bot_commands))
@@ -1208,10 +1215,12 @@ class TelegramCommander:
         """Запускает train_sac.py как subprocess, не блокируя event loop."""
         import asyncio as _asyncio
         import os
+
         try:
             env = {**os.environ, "PYTHONPATH": "/app"}
             proc = await _asyncio.create_subprocess_exec(
-                "python", "reinforcement_learning/train_sac.py",
+                "python",
+                "reinforcement_learning/train_sac.py",
                 env=env,
                 stdout=_asyncio.subprocess.DEVNULL,
                 stderr=_asyncio.subprocess.PIPE,
@@ -1245,11 +1254,13 @@ class TelegramCommander:
         """Запускает tune_sac.py, затем train_sac.py последовательно."""
         import asyncio as _asyncio
         import os
+
         env = {**os.environ, "PYTHONPATH": "/app"}
         try:
             # ── Этап 1: тюнинг ───────────────────────────────────────────────
             proc = await _asyncio.create_subprocess_exec(
-                "python", "reinforcement_learning/tune_sac.py",
+                "python",
+                "reinforcement_learning/tune_sac.py",
                 env=env,
                 stdout=_asyncio.subprocess.DEVNULL,
                 stderr=_asyncio.subprocess.PIPE,
@@ -1269,7 +1280,8 @@ class TelegramCommander:
             )
             # ── Этап 2: обучение с найденными параметрами ────────────────────
             proc2 = await _asyncio.create_subprocess_exec(
-                "python", "reinforcement_learning/train_sac.py",
+                "python",
+                "reinforcement_learning/train_sac.py",
                 env=env,
                 stdout=_asyncio.subprocess.DEVNULL,
                 stderr=_asyncio.subprocess.PIPE,
@@ -1657,6 +1669,7 @@ class TelegramCommander:
                 _kb_after_action(),
             )
             import asyncio as _asyncio
+
             task = _asyncio.ensure_future(self._run_sac_tune_and_train())
             self._background_tasks.add(task)
             task.add_done_callback(self._background_tasks.discard)
@@ -1664,8 +1677,7 @@ class TelegramCommander:
         elif data == "tune_sac_skip":
             await self._edit(
                 query,
-                "⏭ *Тюнинг отменён*\n\n"
-                "Вернуться к тюнингу можно в ⚙️ Настройки.",
+                "⏭ *Тюнинг отменён*\n\n" "Вернуться к тюнингу можно в ⚙️ Настройки.",
                 _kb_main(),
             )
 
@@ -1686,6 +1698,7 @@ class TelegramCommander:
                 _kb_after_action(),
             )
             import asyncio as _asyncio
+
             task = _asyncio.ensure_future(self._run_sac_training())
             self._background_tasks.add(task)
             task.add_done_callback(self._background_tasks.discard)
