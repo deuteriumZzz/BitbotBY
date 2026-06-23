@@ -39,7 +39,7 @@ from src.risk_management import RiskManager
 from src.runtime_config import RuntimeConfig
 from src.signal_combiner import SignalCombiner
 from src.strategies import TradingStrategy
-from src.telegram_commander import TelegramCommander
+from src.telegram_commander import TelegramCommander, _kb_main
 from src.telegram_notifier import TelegramNotifier
 from src.trade_history import TradeHistory
 from src.types import PositionRecord
@@ -650,7 +650,9 @@ class TradingBot:
             f"🤖 *BitbotBY запущен* [{mode}]\n"
             f"Стратегия: `{Config.DEFAULT_STRATEGY}`\n"
             f"Баланс: `${self._paper_balance:,.2f}`\n"
-            f"AI: {ai_status} | Символов: {Config.SCAN_TOP_N}"
+            f"AI: {ai_status} | Символов: {Config.SCAN_TOP_N}\n\n"
+            f"Используй кнопки ниже или набери /help",
+            reply_markup=_kb_main(),
         )
 
         while self.is_running:
