@@ -235,6 +235,7 @@ class TestPrintRecommendations:
     def test_print_empty_recs_does_not_raise(self, caplog):
         """print_recommendations не падает на пустом списке."""
         import logging
+
         with caplog.at_level(logging.INFO, logger="src.cycle"):
             CycleRunner.print_recommendations([], balance=10000.0, cycle=1)
         assert "No actionable" in caplog.text
@@ -242,6 +243,7 @@ class TestPrintRecommendations:
     def test_print_with_recs_shows_symbol(self, caplog):
         """print_recommendations выводит символ и action."""
         import logging
+
         recs = [
             {
                 "symbol": "BTC/USDT",
@@ -262,6 +264,7 @@ class TestPrintRecommendations:
     def test_print_multiple_recs_does_not_raise(self, caplog):
         """print_recommendations выводит несколько записей без ошибок."""
         import logging
+
         recs = [
             {
                 "symbol": f"SYM{i}",

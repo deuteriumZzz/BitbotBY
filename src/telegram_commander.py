@@ -26,6 +26,7 @@ Telegram-команды и inline-панель управления BitbotBY.
   /add SYM       — добавить символ (напр. /add SOL)
   /remove SYM    — исключить символ из сканирования
 """
+
 from __future__ import annotations
 
 import logging
@@ -44,19 +45,22 @@ except ImportError:
 
 # ── Клавиатуры ────────────────────────────────────────────────────────────────
 
+
 def _kb_main() -> "InlineKeyboardMarkup":
     """Главная панель — появляется после /start и /help."""
-    return InlineKeyboardMarkup([
+    return InlineKeyboardMarkup(
         [
-            InlineKeyboardButton("📊 Статус",    callback_data="status"),
-            InlineKeyboardButton("📈 P&L",       callback_data="pnl"),
-            InlineKeyboardButton("📋 Позиции",   callback_data="pos"),
-        ],
-        [
-            InlineKeyboardButton("⚙️ Настройки", callback_data="settings"),
-            InlineKeyboardButton("❓ Справка",   callback_data="help_menu"),
-        ],
-    ])
+            [
+                InlineKeyboardButton("📊 Статус", callback_data="status"),
+                InlineKeyboardButton("📈 P&L", callback_data="pnl"),
+                InlineKeyboardButton("📋 Позиции", callback_data="pos"),
+            ],
+            [
+                InlineKeyboardButton("⚙️ Настройки", callback_data="settings"),
+                InlineKeyboardButton("❓ Справка", callback_data="help_menu"),
+            ],
+        ]
+    )
 
 
 def _kb_status(paused: bool) -> "InlineKeyboardMarkup":
@@ -65,17 +69,19 @@ def _kb_status(paused: bool) -> "InlineKeyboardMarkup":
         if paused
         else InlineKeyboardButton("⏸ Пауза", callback_data="pause")
     )
-    return InlineKeyboardMarkup([
+    return InlineKeyboardMarkup(
         [
-            InlineKeyboardButton("📈 P&L",       callback_data="pnl"),
-            InlineKeyboardButton("📋 Позиции",   callback_data="pos"),
-            InlineKeyboardButton("🔄 Обновить",  callback_data="status"),
-        ],
-        [
-            toggle,
-            InlineKeyboardButton("⚙️ Настройки", callback_data="settings"),
-        ],
-    ])
+            [
+                InlineKeyboardButton("📈 P&L", callback_data="pnl"),
+                InlineKeyboardButton("📋 Позиции", callback_data="pos"),
+                InlineKeyboardButton("🔄 Обновить", callback_data="status"),
+            ],
+            [
+                toggle,
+                InlineKeyboardButton("⚙️ Настройки", callback_data="settings"),
+            ],
+        ]
+    )
 
 
 def _kb_settings(paused: bool, auto_exec: bool) -> "InlineKeyboardMarkup":
@@ -85,105 +91,125 @@ def _kb_settings(paused: bool, auto_exec: bool) -> "InlineKeyboardMarkup":
         else InlineKeyboardButton("⏸ Поставить на паузу", callback_data="pause")
     )
     exec_label = (
-        "✅ Авто-сделки: ВКЛ  →  выкл"
-        if auto_exec
-        else "❌ Авто-сделки: ВЫКЛ  →  вкл"
+        "✅ Авто-сделки: ВКЛ  →  выкл" if auto_exec else "❌ Авто-сделки: ВЫКЛ  →  вкл"
     )
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton(exec_label, callback_data="toggle_auto_exec")],
-        [pause_btn],
+    return InlineKeyboardMarkup(
         [
-            InlineKeyboardButton("🤖 Режим торговли", callback_data="mode_menu"),
-            InlineKeyboardButton("🔢 Кол-во символов", callback_data="scan_menu"),
-        ],
-        [InlineKeyboardButton("📐 Стратегии",     callback_data="strategies")],
-        [InlineKeyboardButton("⚖️ Риск-профиль", callback_data="risk_menu")],
-        [InlineKeyboardButton("🕐 Часы торговли", callback_data="hours_info")],
-        [InlineKeyboardButton("🤖 AI-провайдер",  callback_data="provider_menu")],
-        [InlineKeyboardButton("🔄 Сброс настроек", callback_data="reset_defaults")],
-        [InlineKeyboardButton("« Главная", callback_data="main")],
-    ])
+            [InlineKeyboardButton(exec_label, callback_data="toggle_auto_exec")],
+            [pause_btn],
+            [
+                InlineKeyboardButton("🤖 Режим торговли", callback_data="mode_menu"),
+                InlineKeyboardButton("🔢 Кол-во символов", callback_data="scan_menu"),
+            ],
+            [InlineKeyboardButton("📐 Стратегии", callback_data="strategies")],
+            [InlineKeyboardButton("⚖️ Риск-профиль", callback_data="risk_menu")],
+            [InlineKeyboardButton("🕐 Часы торговли", callback_data="hours_info")],
+            [InlineKeyboardButton("🤖 AI-провайдер", callback_data="provider_menu")],
+            [InlineKeyboardButton("🔄 Сброс настроек", callback_data="reset_defaults")],
+            [InlineKeyboardButton("« Главная", callback_data="main")],
+        ]
+    )
 
 
 def _kb_mode_menu() -> "InlineKeyboardMarkup":
-    return InlineKeyboardMarkup([
+    return InlineKeyboardMarkup(
         [
-            InlineKeyboardButton("🤖 AI",      callback_data="mode:ai"),
-            InlineKeyboardButton("📐 Local",   callback_data="mode:local"),
-        ],
-        [
-            InlineKeyboardButton("🔀 Hybrid",  callback_data="mode:hybrid"),
-            InlineKeyboardButton("🧠 DQN",     callback_data="mode:dqn"),
-        ],
-        [InlineKeyboardButton("« Настройки",  callback_data="settings")],
-    ])
+            [
+                InlineKeyboardButton("🤖 AI", callback_data="mode:ai"),
+                InlineKeyboardButton("📐 Local", callback_data="mode:local"),
+            ],
+            [
+                InlineKeyboardButton("🔀 Hybrid", callback_data="mode:hybrid"),
+                InlineKeyboardButton("🧠 DQN", callback_data="mode:dqn"),
+            ],
+            [InlineKeyboardButton("« Настройки", callback_data="settings")],
+        ]
+    )
 
 
 def _kb_scan_menu() -> "InlineKeyboardMarkup":
-    return InlineKeyboardMarkup([
+    return InlineKeyboardMarkup(
         [
-            InlineKeyboardButton("10",  callback_data="scan:10"),
-            InlineKeyboardButton("20",  callback_data="scan:20"),
-            InlineKeyboardButton("30",  callback_data="scan:30"),
-            InlineKeyboardButton("50",  callback_data="scan:50"),
-        ],
-        [
-            InlineKeyboardButton("75",  callback_data="scan:75"),
-            InlineKeyboardButton("100", callback_data="scan:100"),
-        ],
-        [InlineKeyboardButton("« Настройки", callback_data="settings")],
-    ])
+            [
+                InlineKeyboardButton("10", callback_data="scan:10"),
+                InlineKeyboardButton("20", callback_data="scan:20"),
+                InlineKeyboardButton("30", callback_data="scan:30"),
+                InlineKeyboardButton("50", callback_data="scan:50"),
+            ],
+            [
+                InlineKeyboardButton("75", callback_data="scan:75"),
+                InlineKeyboardButton("100", callback_data="scan:100"),
+            ],
+            [InlineKeyboardButton("« Настройки", callback_data="settings")],
+        ]
+    )
 
 
 def _kb_help_menu() -> "InlineKeyboardMarkup":
-    return InlineKeyboardMarkup([
+    return InlineKeyboardMarkup(
         [
-            InlineKeyboardButton("📖 О боте",     callback_data="help:about"),
-            InlineKeyboardButton("💡 Режимы",     callback_data="help:modes"),
-        ],
-        [
-            InlineKeyboardButton("⚙️ Настройки",  callback_data="help:settings"),
-            InlineKeyboardButton("📋 Команды",    callback_data="help:commands"),
-        ],
-        [
-            InlineKeyboardButton("💰 Символы",    callback_data="help:symbols"),
-            InlineKeyboardButton("⚖️ Риски",      callback_data="help:risk"),
-        ],
-        [InlineKeyboardButton("🔒 Безопасность", callback_data="help:security")],
-        [InlineKeyboardButton("« Главная",        callback_data="main")],
-    ])
+            [
+                InlineKeyboardButton("📖 О боте", callback_data="help:about"),
+                InlineKeyboardButton("💡 Режимы", callback_data="help:modes"),
+            ],
+            [
+                InlineKeyboardButton("⚙️ Настройки", callback_data="help:settings"),
+                InlineKeyboardButton("📋 Команды", callback_data="help:commands"),
+            ],
+            [
+                InlineKeyboardButton("💰 Символы", callback_data="help:symbols"),
+                InlineKeyboardButton("⚖️ Риски", callback_data="help:risk"),
+            ],
+            [InlineKeyboardButton("🔒 Безопасность", callback_data="help:security")],
+            [InlineKeyboardButton("« Главная", callback_data="main")],
+        ]
+    )
 
 
 def _kb_help_back() -> "InlineKeyboardMarkup":
-    return InlineKeyboardMarkup([
+    return InlineKeyboardMarkup(
         [
-            InlineKeyboardButton("« Справка",  callback_data="help_menu"),
-            InlineKeyboardButton("🏠 Главная", callback_data="main"),
-        ],
-    ])
+            [
+                InlineKeyboardButton("« Справка", callback_data="help_menu"),
+                InlineKeyboardButton("🏠 Главная", callback_data="main"),
+            ],
+        ]
+    )
 
 
 def _kb_pnl() -> "InlineKeyboardMarkup":
-    return InlineKeyboardMarkup([[
-        InlineKeyboardButton("📊 Статус",    callback_data="status"),
-        InlineKeyboardButton("📋 Позиции",  callback_data="pos"),
-        InlineKeyboardButton("🔄 Обновить", callback_data="pnl"),
-    ]])
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("📊 Статус", callback_data="status"),
+                InlineKeyboardButton("📋 Позиции", callback_data="pos"),
+                InlineKeyboardButton("🔄 Обновить", callback_data="pnl"),
+            ]
+        ]
+    )
 
 
 def _kb_pos() -> "InlineKeyboardMarkup":
-    return InlineKeyboardMarkup([[
-        InlineKeyboardButton("📊 Статус",   callback_data="status"),
-        InlineKeyboardButton("📈 P&L",      callback_data="pnl"),
-        InlineKeyboardButton("🔄 Обновить", callback_data="pos"),
-    ]])
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("📊 Статус", callback_data="status"),
+                InlineKeyboardButton("📈 P&L", callback_data="pnl"),
+                InlineKeyboardButton("🔄 Обновить", callback_data="pos"),
+            ]
+        ]
+    )
 
 
 def _kb_after_action() -> "InlineKeyboardMarkup":
-    return InlineKeyboardMarkup([[
-        InlineKeyboardButton("📊 Статус",    callback_data="status"),
-        InlineKeyboardButton("⚙️ Настройки", callback_data="settings"),
-    ]])
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("📊 Статус", callback_data="status"),
+                InlineKeyboardButton("⚙️ Настройки", callback_data="settings"),
+            ]
+        ]
+    )
 
 
 def _kb_risk_menu(drawdown_on: bool) -> "InlineKeyboardMarkup":
@@ -192,31 +218,37 @@ def _kb_risk_menu(drawdown_on: bool) -> "InlineKeyboardMarkup":
         if drawdown_on
         else "❌ Защита просадки: ВЫКЛ  →  вкл"
     )
-    return InlineKeyboardMarkup([
+    return InlineKeyboardMarkup(
         [
-            InlineKeyboardButton("🟢 Консерватив.", callback_data="risk:conservative"),
-            InlineKeyboardButton("🟡 Умеренный",    callback_data="risk:moderate"),
-            InlineKeyboardButton("🔴 Агрессивный",  callback_data="risk:aggressive"),
-        ],
-        [InlineKeyboardButton(dd_label, callback_data="toggle_drawdown")],
-        [InlineKeyboardButton("📊 Управление плечом →", callback_data="lev_menu")],
-        [InlineKeyboardButton("« Настройки", callback_data="settings")],
-    ])
+            [
+                InlineKeyboardButton(
+                    "🟢 Консерватив.", callback_data="risk:conservative"
+                ),
+                InlineKeyboardButton("🟡 Умеренный", callback_data="risk:moderate"),
+                InlineKeyboardButton("🔴 Агрессивный", callback_data="risk:aggressive"),
+            ],
+            [InlineKeyboardButton(dd_label, callback_data="toggle_drawdown")],
+            [InlineKeyboardButton("📊 Управление плечом →", callback_data="lev_menu")],
+            [InlineKeyboardButton("« Настройки", callback_data="settings")],
+        ]
+    )
 
 
 def _kb_hours_info() -> "InlineKeyboardMarkup":
-    return InlineKeyboardMarkup([
+    return InlineKeyboardMarkup(
         [
-            InlineKeyboardButton("🕐 1-10 (Азия)",   callback_data="hours:1-10"),
-            InlineKeyboardButton("🕐 8-20 (Европа)",  callback_data="hours:8-20"),
-        ],
-        [
-            InlineKeyboardButton("🕐 14-22 (США)",    callback_data="hours:14-22"),
-            InlineKeyboardButton("🕐 22-6 (ночь)",    callback_data="hours:22-6"),
-        ],
-        [InlineKeyboardButton("🔄 24/7 (сброс)",    callback_data="hours:")],
-        [InlineKeyboardButton("« Настройки",        callback_data="settings")],
-    ])
+            [
+                InlineKeyboardButton("🕐 1-10 (Азия)", callback_data="hours:1-10"),
+                InlineKeyboardButton("🕐 8-20 (Европа)", callback_data="hours:8-20"),
+            ],
+            [
+                InlineKeyboardButton("🕐 14-22 (США)", callback_data="hours:14-22"),
+                InlineKeyboardButton("🕐 22-6 (ночь)", callback_data="hours:22-6"),
+            ],
+            [InlineKeyboardButton("🔄 24/7 (сброс)", callback_data="hours:")],
+            [InlineKeyboardButton("« Настройки", callback_data="settings")],
+        ]
+    )
 
 
 def _kb_lev_menu(mode: str, target: float, drawdown: float) -> "InlineKeyboardMarkup":
@@ -226,27 +258,33 @@ def _kb_lev_menu(mode: str, target: float, drawdown: float) -> "InlineKeyboardMa
 
     rows = [
         [_m("fixed", "fixed"), _m("volatility", "volatility"), _m("full", "full")],
-        [InlineKeyboardButton(
-            f"── Риск на ATR: {target*100:.1f}% ──", callback_data="noop"
-        )],
+        [
+            InlineKeyboardButton(
+                f"── Риск на ATR: {target*100:.1f}% ──", callback_data="noop"
+            )
+        ],
         [
             InlineKeyboardButton("0.5%", callback_data="lev:target:0.005"),
-            InlineKeyboardButton("1%",   callback_data="lev:target:0.01"),
+            InlineKeyboardButton("1%", callback_data="lev:target:0.01"),
             InlineKeyboardButton("1.5%", callback_data="lev:target:0.015"),
-            InlineKeyboardButton("2%",   callback_data="lev:target:0.02"),
-            InlineKeyboardButton("3%",   callback_data="lev:target:0.03"),
+            InlineKeyboardButton("2%", callback_data="lev:target:0.02"),
+            InlineKeyboardButton("3%", callback_data="lev:target:0.03"),
         ],
     ]
     if mode == "full":
+
         def _d(label: str, val: str) -> "InlineKeyboardButton":
             tick = "✅ " if abs(drawdown - float(val)) < 0.001 else ""
             return InlineKeyboardButton(
                 f"{tick}{label}", callback_data=f"lev:drawdown:{val}"
             )
+
         rows += [
-            [InlineKeyboardButton(
-                f"── Порог просадки: {drawdown*100:.0f}% ──", callback_data="noop"
-            )],
+            [
+                InlineKeyboardButton(
+                    f"── Порог просадки: {drawdown*100:.0f}% ──", callback_data="noop"
+                )
+            ],
             [_d("10%", "0.1"), _d("15%", "0.15"), _d("20%", "0.2"), _d("25%", "0.25")],
         ]
     rows += [
@@ -258,38 +296,40 @@ def _kb_lev_menu(mode: str, target: float, drawdown: float) -> "InlineKeyboardMa
 
 def _kb_provider_menu(current: str) -> "InlineKeyboardMarkup":
     providers = [
-        ("🆓 Groq",    "groq"),
-        ("Claude",     "anthropic"),
-        ("DeepSeek",   "deepseek"),
-        ("OpenAI",     "openai"),
+        ("🆓 Groq", "groq"),
+        ("Claude", "anthropic"),
+        ("DeepSeek", "deepseek"),
+        ("OpenAI", "openai"),
     ]
 
     def _p(label: str, val: str) -> "InlineKeyboardButton":
         tick = "✅ " if val == current else ""
-        return InlineKeyboardButton(
-            f"{tick}{label}", callback_data=f"provider:{val}"
-        )
+        return InlineKeyboardButton(f"{tick}{label}", callback_data=f"provider:{val}")
 
     auto_tick = "✅ " if current == "auto" else ""
-    return InlineKeyboardMarkup([
-        [_p(label, val) for label, val in providers],
-        [InlineKeyboardButton(
-            f"{auto_tick}🔄 auto (цепочка)", callback_data="provider:auto"
-        )],
-        [InlineKeyboardButton("« Настройки", callback_data="settings")],
-    ])
+    return InlineKeyboardMarkup(
+        [
+            [_p(label, val) for label, val in providers],
+            [
+                InlineKeyboardButton(
+                    f"{auto_tick}🔄 auto (цепочка)", callback_data="provider:auto"
+                )
+            ],
+            [InlineKeyboardButton("« Настройки", callback_data="settings")],
+        ]
+    )
 
 
 _RISK_ICON = {"low": "🟢", "medium": "🟡", "high": "🔴"}
 _STRAT_SHORT = {
-    "ema_crossover":   "EMA↕",
-    "rsi_momentum":    "RSI",
-    "macd_crossover":  "MACD↕",
+    "ema_crossover": "EMA↕",
+    "rsi_momentum": "RSI",
+    "macd_crossover": "MACD↕",
     "bollinger_bands": "BB",
-    "scalping":        "Scalp🔴",
-    "swing_trading":   "Swing",
-    "breakout":        "Break🔴",
-    "mean_reversion":  "Mean↩",
+    "scalping": "Scalp🔴",
+    "swing_trading": "Swing",
+    "breakout": "Break🔴",
+    "mean_reversion": "Mean↩",
     "trend_following": "Trend🟢",
 }
 
@@ -301,16 +341,16 @@ def _kb_strategies(strategies: list) -> "InlineKeyboardMarkup":
     for i, s in enumerate(strategies):
         icon = "✅" if s["enabled"] else "❌"
         label = f"{icon} {_STRAT_SHORT.get(s['name'], s['name'])}"
-        row.append(
-            InlineKeyboardButton(label, callback_data=f"strat:{s['name']}")
-        )
+        row.append(InlineKeyboardButton(label, callback_data=f"strat:{s['name']}"))
         if len(row) == 3 or i == len(strategies) - 1:
             buttons.append(row)
             row = []
-    buttons.append([
-        InlineKeyboardButton("🔁 Все ВКЛ", callback_data="strat_reset"),
-        InlineKeyboardButton("« Настройки", callback_data="settings"),
-    ])
+    buttons.append(
+        [
+            InlineKeyboardButton("🔁 Все ВКЛ", callback_data="strat_reset"),
+            InlineKeyboardButton("« Настройки", callback_data="settings"),
+        ]
+    )
     return InlineKeyboardMarkup(buttons)
 
 
@@ -471,24 +511,24 @@ class TelegramCommander:
             return
 
         commands = [
-            ("start",      self._cmd_help),
-            ("help",       self._cmd_help),
-            ("settings",   self._cmd_settings),
-            ("status",     self._cmd_status),
-            ("pause",      self._cmd_pause),
-            ("resume",     self._cmd_resume),
-            ("mode",       self._cmd_mode),
-            ("scan",       self._cmd_scan),
-            ("pnl",        self._cmd_pnl),
-            ("pos",        self._cmd_pos),
-            ("add",        self._cmd_add),
-            ("remove",     self._cmd_remove),
+            ("start", self._cmd_help),
+            ("help", self._cmd_help),
+            ("settings", self._cmd_settings),
+            ("status", self._cmd_status),
+            ("pause", self._cmd_pause),
+            ("resume", self._cmd_resume),
+            ("mode", self._cmd_mode),
+            ("scan", self._cmd_scan),
+            ("pnl", self._cmd_pnl),
+            ("pos", self._cmd_pos),
+            ("add", self._cmd_add),
+            ("remove", self._cmd_remove),
             ("strategies", self._cmd_strategies),
-            ("hours",      self._cmd_hours),
-            ("risk",       self._cmd_risk),
-            ("trainn",     self._cmd_trainn),
-            ("lev",        self._cmd_lev),
-            ("provider",   self._cmd_provider),
+            ("hours", self._cmd_hours),
+            ("risk", self._cmd_risk),
+            ("trainn", self._cmd_trainn),
+            ("lev", self._cmd_lev),
+            ("provider", self._cmd_provider),
         ]
         for name, handler in commands:
             app.add_handler(CommandHandler(name, handler))
@@ -513,9 +553,7 @@ class TelegramCommander:
         if kb is None:
             kb = _kb_main()
         try:
-            await query.edit_message_text(
-                text, parse_mode="Markdown", reply_markup=kb
-            )
+            await query.edit_message_text(text, parse_mode="Markdown", reply_markup=kb)
         except Exception as _e:
             if "message is not modified" not in str(_e).lower():
                 raise
@@ -581,7 +619,11 @@ class TelegramCommander:
         lev_str = f"`{lev_mode}` ({lev_target*100:.1f}% ATR)"
         if lev_mode == "full":
             lev_str += f", просадка `{lev_dd*100:.0f}%`"
-        strats_str = f"❌ выкл: `{', '.join(sorted(disabled_strats))}`" if disabled_strats else "✅ все включены"
+        strats_str = (
+            f"❌ выкл: `{', '.join(sorted(disabled_strats))}`"
+            if disabled_strats
+            else "✅ все включены"
+        )
 
         text = (
             f"⚙️ *Настройки бота*\n\n"
@@ -732,10 +774,14 @@ class TelegramCommander:
             "⏸ *Торговля приостановлена.*\n\n"
             "Открытые позиции продолжают мониториться (SL/TP работают).\n"
             "Новые сделки не открываются.",
-            InlineKeyboardMarkup([[
-                InlineKeyboardButton("▶️ Возобновить", callback_data="resume"),
-                InlineKeyboardButton("📊 Статус",      callback_data="status"),
-            ]]),
+            InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton("▶️ Возобновить", callback_data="resume"),
+                        InlineKeyboardButton("📊 Статус", callback_data="status"),
+                    ]
+                ]
+            ),
         )
 
     async def _cmd_resume(
@@ -747,10 +793,14 @@ class TelegramCommander:
         await self._reply(
             update,
             "▶️ *Торговля возобновлена.*",
-            InlineKeyboardMarkup([[
-                InlineKeyboardButton("⏸ Пауза",     callback_data="pause"),
-                InlineKeyboardButton("📊 Статус",   callback_data="status"),
-            ]]),
+            InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton("⏸ Пауза", callback_data="pause"),
+                        InlineKeyboardButton("📊 Статус", callback_data="status"),
+                    ]
+                ]
+            ),
         )
 
     async def _cmd_mode(
@@ -950,19 +1000,17 @@ class TelegramCommander:
         args = context.args or []
 
         _PROVIDERS = {
-            "auto":      "Авто (Claude → OpenAI → DeepSeek → Groq)",
+            "auto": "Авто (Claude → OpenAI → DeepSeek → Groq)",
             "anthropic": "Claude (Anthropic) — лучшее качество",
-            "openai":    "ChatGPT (OpenAI)",
-            "deepseek":  "DeepSeek — самый дешёвый",
-            "groq":      "Groq / Llama 3.3 70B — бесплатный, быстрый",
+            "openai": "ChatGPT (OpenAI)",
+            "deepseek": "DeepSeek — самый дешёвый",
+            "groq": "Groq / Llama 3.3 70B — бесплатный, быстрый",
         }
 
         if not args:
             current = self._rc.get_ai_provider()
             desc = _PROVIDERS.get(current, current)
-            lines = "\n".join(
-                f"`/provider {k}` — {v}" for k, v in _PROVIDERS.items()
-            )
+            lines = "\n".join(f"`/provider {k}` — {v}" for k, v in _PROVIDERS.items())
             await self._reply(
                 update,
                 f"🤖 *AI провайдер*\n\n"
@@ -1068,10 +1116,7 @@ class TelegramCommander:
                 "❌ Неверный формат. Примеры: `/hours 9-17` или `/hours` для сброса",
             )
             return
-        label = (
-            "24/7 (без ограничений)" if not val or val == "0"
-            else f"`{val}` UTC"
-        )
+        label = "24/7 (без ограничений)" if not val or val == "0" else f"`{val}` UTC"
         await self._reply(
             update,
             f"✅ Часы торговли: {label}",
@@ -1147,15 +1192,21 @@ class TelegramCommander:
                         "💡 Стратегия выбирается автоматически по индикаторам. "
                         "Можно отключить ненужные через меню ниже.\n\n"
                     )
-                    kb_local = InlineKeyboardMarkup([
-                        [InlineKeyboardButton(
-                            "📐 Настроить стратегии →",
-                            callback_data="strategies",
-                        )],
-                        [InlineKeyboardButton(
-                            "⚙️ К настройкам", callback_data="settings"
-                        )],
-                    ])
+                    kb_local = InlineKeyboardMarkup(
+                        [
+                            [
+                                InlineKeyboardButton(
+                                    "📐 Настроить стратегии →",
+                                    callback_data="strategies",
+                                )
+                            ],
+                            [
+                                InlineKeyboardButton(
+                                    "⚙️ К настройкам", callback_data="settings"
+                                )
+                            ],
+                        ]
+                    )
                     await self._edit(query, hint + text, kb_local)
                 else:
                     await self._edit(query, f"✅ Режим → `{mode}`\n\n" + text, kb)
@@ -1330,11 +1381,11 @@ class TelegramCommander:
         elif data == "provider_menu":
             current = self._rc.get_ai_provider()
             desc = {
-                "auto":      "Claude → OpenAI → DeepSeek → Groq",
-                "groq":      "Llama 3.3 70B — бесплатный, быстрый",
+                "auto": "Claude → OpenAI → DeepSeek → Groq",
+                "groq": "Llama 3.3 70B — бесплатный, быстрый",
                 "anthropic": "Claude — лучшее качество",
-                "deepseek":  "Самый дешёвый платный",
-                "openai":    "ChatGPT GPT-4o-mini",
+                "deepseek": "Самый дешёвый платный",
+                "openai": "ChatGPT GPT-4o-mini",
             }.get(current, current)
             await self._edit(
                 query,
@@ -1348,11 +1399,11 @@ class TelegramCommander:
             val = data.split(":", 1)[1]
             self._rc.set_ai_provider(val)
             desc = {
-                "auto":      "Claude → OpenAI → DeepSeek → Groq",
-                "groq":      "Llama 3.3 70B — бесплатный, быстрый",
+                "auto": "Claude → OpenAI → DeepSeek → Groq",
+                "groq": "Llama 3.3 70B — бесплатный, быстрый",
                 "anthropic": "Claude — лучшее качество",
-                "deepseek":  "Самый дешёвый платный",
-                "openai":    "ChatGPT GPT-4o-mini",
+                "deepseek": "Самый дешёвый платный",
+                "openai": "ChatGPT GPT-4o-mini",
             }.get(val, val)
             await self._edit(
                 query,
@@ -1378,9 +1429,7 @@ class TelegramCommander:
             text, kb = self._build_strategies()
             short = _STRAT_SHORT.get(name, name)
             state = "включена" if now_enabled else "отключена"
-            await self._edit(
-                query, f"{icon} `{short}` {state}\n\n" + text, kb
-            )
+            await self._edit(query, f"{icon} `{short}` {state}\n\n" + text, kb)
 
         else:
             await query.answer("Неизвестная команда")

@@ -250,7 +250,9 @@ class OnlineLearner:
                 "TRAIN_TOP_N": str(self._get_train_top_n()),
                 "TRAIN_MIN_CANDLES": os.environ.get("TRAIN_MIN_CANDLES", "2880"),
                 "TOTAL_TIMESTEPS": os.environ.get("TOTAL_TIMESTEPS", "50000"),
-                "EXPERIENCES_PATH": os.environ.get("EXPERIENCES_PATH", "data/experiences.jsonl"),
+                "EXPERIENCES_PATH": os.environ.get(
+                    "EXPERIENCES_PATH", "data/experiences.jsonl"
+                ),
                 "TELEGRAM_BOT_TOKEN": os.environ.get("TELEGRAM_BOT_TOKEN", ""),
                 "TELEGRAM_CHAT_ID": os.environ.get("TELEGRAM_CHAT_ID", ""),
                 "LOG_LEVEL": os.environ.get("LOG_LEVEL", "INFO"),

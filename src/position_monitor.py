@@ -138,10 +138,12 @@ class PositionMonitor:
                             count,
                         )
                         if self._telegram:
-                            asyncio.create_task(self._telegram.notify(
-                                f"⚠️ *{sym}* удалён из мониторинга после {count} ошибок. "
-                                f"Проверь позицию на бирже вручную!"
-                            ))
+                            asyncio.create_task(
+                                self._telegram.notify(
+                                    f"⚠️ *{sym}* удалён из мониторинга после {count} ошибок. "
+                                    f"Проверь позицию на бирже вручную!"
+                                )
+                            )
                         async with lock:
                             monitored.pop(sym, None)
                         error_counts.pop(sym, None)
@@ -164,10 +166,12 @@ class PositionMonitor:
                             count,
                         )
                         if self._telegram:
-                            asyncio.create_task(self._telegram.notify(
-                                f"⚠️ *{sym}* удалён из мониторинга после {count} ошибок. "
-                                f"Проверь позицию на бирже вручную!"
-                            ))
+                            asyncio.create_task(
+                                self._telegram.notify(
+                                    f"⚠️ *{sym}* удалён из мониторинга после {count} ошибок. "
+                                    f"Проверь позицию на бирже вручную!"
+                                )
+                            )
                         async with lock:
                             monitored.pop(sym, None)
                         error_counts.pop(sym, None)
@@ -437,12 +441,20 @@ class PositionMonitor:
                 try:
                     await self._api.cancel_order(sym, exchange_sl_id)
                 except Exception as _ce:
-                    logger.warning("Cancel SL order %s failed: %s — proceeding with close", exchange_sl_id, _ce)
+                    logger.warning(
+                        "Cancel SL order %s failed: %s — proceeding with close",
+                        exchange_sl_id,
+                        _ce,
+                    )
             if exchange_tp_id:
                 try:
                     await self._api.cancel_order(sym, exchange_tp_id)
                 except Exception as _ce:
-                    logger.warning("Cancel TP order %s failed: %s — proceeding with close", exchange_tp_id, _ce)
+                    logger.warning(
+                        "Cancel TP order %s failed: %s — proceeding with close",
+                        exchange_tp_id,
+                        _ce,
+                    )
 
             # Шаг 2: программное закрытие позиции (lock_suffix="close" не конкурирует
             # с order_open:{sym} при открытии новой позиции).
@@ -495,7 +507,9 @@ class PositionMonitor:
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(
                 None,
-                lambda: _exp_save(snap=_snap, action=_side, entry_price=_entry, exit_price=_price),
+                lambda: _exp_save(
+                    snap=_snap, action=_side, entry_price=_entry, exit_price=_price
+                ),
             )
 
         if self._online_learner:

@@ -258,8 +258,10 @@ class Config:
             )
         if self.MODE in ("ai", "hybrid"):
             has_any_key = bool(
-                self.ANTHROPIC_API_KEY or self.OPENAI_API_KEY
-                or self.DEEPSEEK_API_KEY or self.GROQ_API_KEY
+                self.ANTHROPIC_API_KEY
+                or self.OPENAI_API_KEY
+                or self.DEEPSEEK_API_KEY
+                or self.GROQ_API_KEY
             )
             provider_key = {
                 "anthropic": self.ANTHROPIC_API_KEY,

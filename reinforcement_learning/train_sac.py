@@ -269,7 +269,9 @@ def train(
     """
     _min_candles = int(os.getenv("TRAIN_MIN_CANDLES", "2880"))
     if len(df) < _min_candles:
-        raise ValueError(f"DataFrame too short: {len(df)} candles < {_min_candles} minimum")
+        raise ValueError(
+            f"DataFrame too short: {len(df)} candles < {_min_candles} minimum"
+        )
 
     try:
         from stable_baselines3 import SAC
@@ -365,7 +367,9 @@ def train_walk_forward(
     """
     _min_candles = int(os.getenv("TRAIN_MIN_CANDLES", "2880"))
     if len(df) < _min_candles:
-        raise ValueError(f"DataFrame too short: {len(df)} candles < {_min_candles} minimum")
+        raise ValueError(
+            f"DataFrame too short: {len(df)} candles < {_min_candles} minimum"
+        )
 
     train_size = train_months * _CANDLES_PER_MONTH
     step_size = step_months * _CANDLES_PER_MONTH

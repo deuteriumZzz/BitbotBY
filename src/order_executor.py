@@ -113,7 +113,10 @@ def _calc_dynamic_leverage(
         lev = int(max(lev_min, min(lev_max, round(base_lev))))
         logger.debug(
             "Leverage [%s] %s: ATR=%.2f%% → %dx",
-            mode, top.get("symbol", "?"), atr_pct * 100, lev,
+            mode,
+            top.get("symbol", "?"),
+            atr_pct * 100,
+            lev,
         )
         return lev
     except Exception:
@@ -399,7 +402,8 @@ class OrderExecutor:
             # Volatility-targeted leverage: target_risk / (ATR / price)
             # Falls back to Config.LEVERAGE when ATR is unavailable
             dynamic_lev = _calc_dynamic_leverage(
-                top, entry,
+                top,
+                entry,
                 balance=balance,
                 peak_balance=self._peak_balance,
                 runtime_config=self._runtime_config,

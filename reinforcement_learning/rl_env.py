@@ -227,9 +227,7 @@ class TradingEnv(gym.Env):
             * max(0.0, self.peak_value - self.current_value)
             / self.initial_balance
         )
-        reward = float(np.clip(
-            log_ret + sharpe_bonus - 0.01 * drawdown_pct, -5.0, 5.0
-        ))
+        reward = float(np.clip(log_ret + sharpe_bonus - 0.01 * drawdown_pct, -5.0, 5.0))
 
         self.current_step += 1
         if self.current_step >= len(self.data) - 1:

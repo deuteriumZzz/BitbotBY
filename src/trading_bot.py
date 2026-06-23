@@ -69,7 +69,9 @@ class TradingBot:
         self._runtime_config = RuntimeConfig(redis_client=self.redis)
         self.api = BybitAPI()
         self.data_loader = DataLoader()
-        self.portfolio_manager = PortfolioManager(Config.INITIAL_BALANCE, redis_client=self.redis)
+        self.portfolio_manager = PortfolioManager(
+            Config.INITIAL_BALANCE, redis_client=self.redis
+        )
         self.strategy: Optional[TradingStrategy] = None
         self.risk_manager = RiskManager(
             Config.INITIAL_BALANCE,
@@ -353,7 +355,9 @@ class TradingBot:
                 for sym, pos in monitored_state.items():
                     if pos and sym not in self._monitored:
                         self._monitored[sym] = pos
-            logger.info("Restored %d monitored positions from Redis", len(monitored_state))
+            logger.info(
+                "Restored %d monitored positions from Redis", len(monitored_state)
+            )
 
     def _save_monitored_state(self) -> None:
         try:
@@ -744,7 +748,8 @@ class TradingBot:
                 pass
         try:
             await self.telegram.notify(
-                f"⛔ *BitbotBY остановлен*\n" f"Баланс: `${self.portfolio_manager.current_balance:,.2f}`"
+                f"⛔ *BitbotBY остановлен*\n"
+                f"Баланс: `${self.portfolio_manager.current_balance:,.2f}`"
             )
         except Exception:
             pass
