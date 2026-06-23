@@ -1267,25 +1267,35 @@ class TelegramCommander:
                 return
 
             best = max(results, key=lambda r: r.get("expected_value", 0))
+            mode = self._rc.get_mode() if hasattr(self._rc, "get_mode") else "ai"
             lines = [
-                "📊 *Бэктест завершён*",
-                f"Символ: `{data.get('symbol', '?')}` | "
+                "📊 *Бэктест локальных стратегий завершён*",
+                f"`{data.get('symbol', '?')}` | "
                 f"{data.get('timeframe', '?')} | "
                 f"{data.get('months', '?')} мес.\n",
-                f"🏆 Лучшая стратегия: `{best['strategy']}`",
-                f"  Win rate: *{best['win_rate']:.0%}*",
-                f"  Sharpe: *{best['sharpe_ratio']:.2f}*",
-                f"  EV: *{best['expected_value']:.3f}*",
-                f"  Доходность: *{best['total_return_pct']:.1f}%*",
-                f"  Max drawdown: *{best['max_drawdown_pct']:.1f}%*\n",
+                f"🏆 Лучшая: `{best['strategy']}`",
+                f"  Win rate: *{best['win_rate']:.0%}*"
+                f"  |  Sharpe: *{best['sharpe_ratio']:.2f}*",
+                f"  Доходность: *{best['total_return_pct']:.1f}%*"
+                f"  |  Drawdown: *{best['max_drawdown_pct']:.1f}%*\n",
             ]
-            good = best["win_rate"] >= 0.5 and best["sharpe_ratio"] >= 1.0
-            verdict = (
-                "✅ Стратегии работают — можно переходить дальше"
-                if good
-                else "⚠️ Win rate или Sharpe ниже нормы — не спеши с реальными деньгами"
-            )
-            lines.append(verdict)
+            if mode in ("ai", "hybrid"):
+                lines.append(
+                    f"ℹ️ Ты в режиме `{mode}` — AI генерирует сигналы сам,\n"
+                    "локальные стратегии используются как вспомогательный фильтр.\n"
+                    "Бэктест показывает их историческую силу как ориентир."
+                )
+            else:
+                if best["win_rate"] >= 0.5 and best["sharpe_ratio"] >= 1.0:
+                    lines.append(
+                        f"✅ Стратегии работают — можно переходить дальше.\n"
+                        f"Рекомендуем: `DEFAULT_STRATEGY={best['strategy']}`"
+                    )
+                else:
+                    lines.append(
+                        "⚠️ Win rate или Sharpe ниже нормы — "
+                        "не спеши с реальными деньгами"
+                    )
             await self._notifier.notify("\n".join(lines))
         except Exception as e:
             await self._notifier.notify(f"❌ Бэктест: непредвиденная ошибка\n`{e}`")
