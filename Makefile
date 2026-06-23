@@ -1,4 +1,4 @@
-.PHONY: train train-long train-docker tune retrain backtest backtest-eth paper paper-ai live test lint fmt up down logs
+.PHONY: train train-long train-docker tune retrain backtest backtest-eth paper paper-ai live test lint fmt up down logs htpasswd
 
 # ── Training ───────────────────────────────────────────────────────────────────
 train:
@@ -85,3 +85,17 @@ rebuild:
 
 logs:
 	docker compose logs -f bot
+
+htpasswd:
+	@set -a && . ./.env && set +a && \
+	docker run --rm httpd:alpine htpasswd -nb "$$DASHBOARD_USER" "$$DASHBOARD_PASSWORD" > nginx/htpasswd
+	@echo ">>> nginx/htpasswd создан."
+
+setup:
+	@echo ">>> [1/3] Генерирую htpasswd..."
+	@$(MAKE) htpasswd
+	@echo ">>> [2/3] Останавливаю старые контейнеры..."
+	@docker compose down
+	@echo ">>> [3/3] Собираю и запускаю всё..."
+	@docker compose up -d --build
+	@echo ">>> Готово! Dashboard: http://localhost:8080"

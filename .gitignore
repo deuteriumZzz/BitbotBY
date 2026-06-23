@@ -15,3 +15,4 @@ claude/
 .hypothesis/
 .pytest_cache/
 *.egg-info/
+nginx/htpasswd
