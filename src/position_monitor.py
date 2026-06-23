@@ -138,12 +138,11 @@ class PositionMonitor:
                             count,
                         )
                         if self._telegram:
-                            asyncio.create_task(
-                                self._telegram.notify(
-                                    f"⚠️ *{sym}* удалён из мониторинга после {count} ошибок. "
-                                    f"Проверь позицию на бирже вручную!"
-                                )
+                            msg = (
+                                f"⚠️ *{sym}* удалён из мониторинга"
+                                f" после {count} ошибок. Проверь вручную!"
                             )
+                            asyncio.create_task(self._telegram.notify(msg))
                         async with lock:
                             monitored.pop(sym, None)
                         error_counts.pop(sym, None)
@@ -166,12 +165,11 @@ class PositionMonitor:
                             count,
                         )
                         if self._telegram:
-                            asyncio.create_task(
-                                self._telegram.notify(
-                                    f"⚠️ *{sym}* удалён из мониторинга после {count} ошибок. "
-                                    f"Проверь позицию на бирже вручную!"
-                                )
+                            msg = (
+                                f"⚠️ *{sym}* удалён из мониторинга"
+                                f" после {count} ошибок. Проверь вручную!"
                             )
+                            asyncio.create_task(self._telegram.notify(msg))
                         async with lock:
                             monitored.pop(sym, None)
                         error_counts.pop(sym, None)

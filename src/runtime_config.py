@@ -8,7 +8,7 @@ Runtime-конфигурация поверх Redis.
 from __future__ import annotations
 
 import logging
-from typing import Set
+from typing import Any, Set
 
 from config import Config
 
@@ -62,7 +62,7 @@ class RuntimeConfig:
     Fallback: если ключ в Redis отсутствует, возвращает значение из Config (.env).
     """
 
-    def __init__(self, redis_client: object) -> None:
+    def __init__(self, redis_client: Any) -> None:
         self._r = redis_client  # RedisClient instance
 
     def _get(self, key: str) -> str | None:
@@ -222,9 +222,9 @@ class RuntimeConfig:
         preset = _RISK_PRESETS.get(name)
         if not preset:
             return False
-        self.set_max_positions(preset["max_positions"])
-        self.set_risk_per_trade(preset["risk_per_trade"])
-        self.set_drawdown_scale_enabled(preset["drawdown_scale"])
+        self.set_max_positions(int(preset["max_positions"]))
+        self.set_risk_per_trade(float(preset["risk_per_trade"]))
+        self.set_drawdown_scale_enabled(bool(preset["drawdown_scale"]))
         logger.info("Runtime: применён риск-профиль '%s'", name)
         return True
 
@@ -407,9 +407,8 @@ class RuntimeConfig:
         if name in self.get_disabled_strategies():
             self.enable_strategy(name)
             return True
-        else:
-            self.disable_strategy(name)
-            return False
+        self.disable_strategy(name)
+        return False
 
     # ── Startup ───────────────────────────────────────────────────────────────
 
