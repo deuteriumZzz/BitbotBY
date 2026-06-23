@@ -39,7 +39,7 @@ from src.risk_management import RiskManager
 from src.runtime_config import RuntimeConfig
 from src.signal_combiner import SignalCombiner
 from src.strategies import TradingStrategy
-from src.telegram_commander import TelegramCommander, _kb_main, _kb_sac_train
+from src.telegram_commander import TelegramCommander, _kb_main, _kb_sac_train, _kb_tune_sac
 from src.telegram_notifier import TelegramNotifier
 from src.trade_history import TradeHistory
 from src.types import PositionRecord
@@ -230,6 +230,24 @@ class TradingBot:
         except Exception as e:
             logger.error("Bot initialization failed: %s", e)
             raise
+
+    async def _check_tune_reminder(self) -> None:
+        """Напоминает о тюнинге если прошло 60+ дней и tune ещё не запускался."""
+        if self._runtime_config.is_tune_reminded():
+            return
+        if os.path.exists(os.path.join("models", "best_hyperparams.json")):
+            return
+        days = self._runtime_config.days_since_first_start()
+        if days < 60:
+            return
+        self._runtime_config.set_tune_reminded()
+        await self.telegram.notify(
+            f"📅 *Прошло {days} дней с запуска бота*\n\n"
+            "Рекомендуем запустить тюнинг SAC — модель будет обучена\n"
+            "с параметрами оптимальными для твоего рынка.\n\n"
+            "⏱ Займёт ~3 часа, бот продолжает торговать.",
+            reply_markup=_kb_tune_sac(),
+        )
 
     async def _check_sac_model(self) -> None:
         """Однократно предупреждает об отсутствии SAC модели при первом запуске."""
@@ -663,6 +681,7 @@ class TradingBot:
             ai_status,
         )
         mode = "paper" if Config.PAPER_TRADING else "live"
+        self._runtime_config.ensure_first_start_date()
         await self.telegram.notify(
             f"🤖 *BitbotBY запущен* [{mode}]\n"
             f"Стратегия: `{Config.DEFAULT_STRATEGY}`\n"
@@ -672,6 +691,7 @@ class TradingBot:
             reply_markup=_kb_main(),
         )
         await self._check_sac_model()
+        await self._check_tune_reminder()
 
         while self.is_running:
             cycle += 1

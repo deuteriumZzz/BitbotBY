@@ -106,6 +106,7 @@ def _kb_settings(paused: bool, auto_exec: bool) -> "InlineKeyboardMarkup":
             [InlineKeyboardButton("⚖️ Риск-профиль", callback_data="risk_menu")],
             [InlineKeyboardButton("🕐 Часы торговли", callback_data="hours_info")],
             [InlineKeyboardButton("🤖 AI-провайдер", callback_data="provider_menu")],
+            [InlineKeyboardButton("🔬 Тюнинг SAC (~2ч) + обучение", callback_data="tune_sac_menu")],
             [InlineKeyboardButton("🔄 Сброс настроек", callback_data="reset_defaults")],
             [InlineKeyboardButton("« Главная", callback_data="main")],
         ]
@@ -174,6 +175,19 @@ def _kb_help_back() -> "InlineKeyboardMarkup":
                 InlineKeyboardButton("« Справка", callback_data="help_menu"),
                 InlineKeyboardButton("🏠 Главная", callback_data="main"),
             ],
+        ]
+    )
+
+
+def _kb_tune_sac() -> "InlineKeyboardMarkup":
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "✅ Запустить тюнинг (~3 ч)", callback_data="tune_sac_now"
+                ),
+                InlineKeyboardButton("⏭ Отмена", callback_data="tune_sac_skip"),
+            ]
         ]
     )
 
@@ -1210,6 +1224,58 @@ class TelegramCommander:
         finally:
             self._sac_training = False
 
+    async def _run_sac_tune_and_train(self) -> None:
+        """Запускает tune_sac.py, затем train_sac.py последовательно."""
+        import asyncio as _asyncio
+        import os
+        env = {**os.environ, "PYTHONPATH": "/app"}
+        try:
+            # ── Этап 1: тюнинг ───────────────────────────────────────────────
+            proc = await _asyncio.create_subprocess_exec(
+                "python", "reinforcement_learning/tune_sac.py",
+                env=env,
+                stdout=_asyncio.subprocess.DEVNULL,
+                stderr=_asyncio.subprocess.PIPE,
+            )
+            _, stderr = await proc.communicate()
+            if proc.returncode != 0:
+                err = stderr.decode()[-300:] if stderr else "нет деталей"
+                await self._notifier.notify(
+                    f"❌ *Тюнинг завершился с ошибкой*\n\n`{err}`",
+                    reply_markup=_kb_main(),
+                )
+                return
+            await self._notifier.notify(
+                "✅ *Тюнинг завершён!*\n\n"
+                "Лучшие параметры сохранены.\n"
+                "⏳ Запускаю обучение SAC (~60 мин)..."
+            )
+            # ── Этап 2: обучение с найденными параметрами ────────────────────
+            proc2 = await _asyncio.create_subprocess_exec(
+                "python", "reinforcement_learning/train_sac.py",
+                env=env,
+                stdout=_asyncio.subprocess.DEVNULL,
+                stderr=_asyncio.subprocess.PIPE,
+            )
+            _, stderr2 = await proc2.communicate()
+            if proc2.returncode == 0:
+                await self._notifier.notify(
+                    "✅ *Модель обновлена с лучшими параметрами!*\n\n"
+                    "SAC обучен на результатах тюнинга.\n"
+                    "Бот автоматически подхватит новую модель.",
+                    reply_markup=_kb_main(),
+                )
+            else:
+                err2 = stderr2.decode()[-300:] if stderr2 else "нет деталей"
+                await self._notifier.notify(
+                    f"❌ *Ошибка обучения после тюнинга*\n\n`{err2}`",
+                    reply_markup=_kb_main(),
+                )
+        except Exception as e:
+            await self._notifier.notify(f"❌ Тюнинг упал: {e}")
+        finally:
+            self._sac_training = False
+
     async def _handle_callback(
         self, update: Update, _context: ContextTypes.DEFAULT_TYPE
     ) -> None:
@@ -1515,6 +1581,47 @@ class TelegramCommander:
             short = _STRAT_SHORT.get(name, name)
             state = "включена" if now_enabled else "отключена"
             await self._edit(query, f"{icon} `{short}` {state}\n\n" + text, kb)
+
+        # ── Тюнинг SAC ───────────────────────────────────────────────────────
+        elif data == "tune_sac_menu":
+            await self._edit(
+                query,
+                "🔬 *Тюнинг SAC*\n\n"
+                "Optuna перебирает 30 вариантов параметров нейросети,\n"
+                "затем обучает модель с лучшими из них.\n\n"
+                "⏱ Общее время: ~3 часа на CPU.\n"
+                "Бот продолжает торговать.\n\n"
+                "_Рекомендуется запускать раз в 1-2 месяца._",
+                _kb_tune_sac(),
+            )
+
+        elif data == "tune_sac_now":
+            if self._sac_training:
+                await self._edit(
+                    query, "⏳ Обучение уже запущено, ожидайте...", _kb_after_action()
+                )
+                return
+            self._sac_training = True
+            await self._edit(
+                query,
+                "🔬 *Тюнинг SAC запущен...*\n\n"
+                "⏱ Этап 1/2: поиск параметров (~2 ч)\n"
+                "Бот продолжает торговать.\n"
+                "Пришлю уведомления по каждому этапу.",
+                _kb_after_action(),
+            )
+            import asyncio as _asyncio
+            task = _asyncio.ensure_future(self._run_sac_tune_and_train())
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
+
+        elif data == "tune_sac_skip":
+            await self._edit(
+                query,
+                "⏭ *Тюнинг отменён*\n\n"
+                "Вернуться к тюнингу можно в ⚙️ Настройки.",
+                _kb_main(),
+            )
 
         # ── SAC обучение ──────────────────────────────────────────────────────
         elif data == "train_sac_now":
