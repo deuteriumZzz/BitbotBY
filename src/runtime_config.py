@@ -35,6 +35,10 @@ _KEY_CONFIRM_TIMEOUT = "bot:confirm_timeout"
 _KEY_FIRST_START_DATE = "bot:first_start_date"
 _KEY_TUNE_REMINDED = "bot:tune_reminded"
 _KEY_CHRONOS = "bot:chronos_filter"
+_KEY_MARKET_PROFILE = "bot:market_profile"
+_KEY_TIMEFRAME = "bot:timeframe"
+_KEY_MIN_VOLUME = "bot:min_volume_usdt"
+_KEY_MAX_VOLUME = "bot:max_volume_usdt"
 
 _AI_PROVIDERS = frozenset({"auto", "anthropic", "openai", "deepseek", "groq"})
 _LEVERAGE_MODES = frozenset({"fixed", "volatility", "full"})
@@ -54,6 +58,31 @@ _RISK_PRESETS = {
         "max_positions": 5,
         "risk_per_trade": 0.04,
         "drawdown_scale": False,
+    },
+}
+
+_MARKET_PROFILES = {
+    "bluechip": {
+        "label": "🔵 Блючипы",
+        "scan_top_n": 20,
+        "train_top_n": 20,
+        "min_volume_usdt": 3_000_000_000,
+        "max_volume_usdt": 0,
+        "risk_per_trade": 0.02,
+        "timeframe": "15m",
+        "mode": "hybrid",
+        "model_path": "models/sac_model.zip",
+    },
+    "altcoin": {
+        "label": "🟡 Альткоины",
+        "scan_top_n": 50,
+        "train_top_n": 50,
+        "min_volume_usdt": 500_000,
+        "max_volume_usdt": 2_000_000_000,
+        "risk_per_trade": 0.01,
+        "timeframe": "5m",
+        "mode": "ai",
+        "model_path": "models/sac_model_altcoin.zip",
     },
 }
 
@@ -432,13 +461,28 @@ class RuntimeConfig:
         logger.info("Runtime: confirm_timeout → %ds", seconds)
         return True
 
-    def is_sac_prompted(self) -> bool:
-        """True если пользователь уже получал запрос об обучении SAC."""
-        return self._get(_KEY_SAC_PROMPTED) == "1"
+    def is_sac_prompted(self, profile: str = "") -> bool:
+        """True если пользователь уже получал запрос об обучении SAC для профиля."""
+        key = f"{_KEY_SAC_PROMPTED}:{profile}" if profile else _KEY_SAC_PROMPTED
+        return self._get(key) == "1"
 
-    def set_sac_prompted(self) -> None:
-        """Отмечаем что запрос об обучении SAC был отправлен."""
-        self._set(_KEY_SAC_PROMPTED, "1")
+    def set_sac_prompted(self, profile: str = "") -> None:
+        """Отмечаем что запрос об обучении SAC был отправлен для профиля."""
+        key = f"{_KEY_SAC_PROMPTED}:{profile}" if profile else _KEY_SAC_PROMPTED
+        self._set(key, "1")
+
+    def get_sac_model_path(self) -> str:
+        """Путь к SAC модели для текущего профиля. Fallback: Config.SAC_MODEL_PATH."""
+        profile = self.get_market_profile()
+        if profile and profile in _MARKET_PROFILES:
+            return str(_MARKET_PROFILES[profile]["model_path"])
+        return Config.SAC_MODEL_PATH
+
+    def get_sac_model_path_for_profile(self, profile: str) -> str:
+        """Путь к SAC модели для конкретного профиля."""
+        if profile and profile in _MARKET_PROFILES:
+            return str(_MARKET_PROFILES[profile]["model_path"])
+        return Config.SAC_MODEL_PATH
 
     # ── First start & tune reminder ───────────────────────────────────────────
 
@@ -485,6 +529,51 @@ class RuntimeConfig:
         self._set(_KEY_CHRONOS, "1" if enabled else "0")
         logger.info("Chronos filter %s", "ON" if enabled else "OFF")
 
+    # ── Market Profile ────────────────────────────────────────────────────────
+
+    def get_market_profile(self) -> str:
+        """Текущий профиль: 'bluechip' | 'altcoin' | '' (не задан)."""
+        return self._get(_KEY_MARKET_PROFILE) or ""
+
+    def get_timeframe(self) -> str:
+        """Таймфрейм свечей. Fallback: Config.TIMEFRAME."""
+        return self._get(_KEY_TIMEFRAME) or Config.TIMEFRAME
+
+    def get_min_volume_usdt(self) -> float:
+        """Минимальный 24h объём USDT. Fallback: Config.MIN_VOLUME_USDT."""
+        val = self._get(_KEY_MIN_VOLUME)
+        try:
+            return float(val) if val is not None else Config.MIN_VOLUME_USDT
+        except ValueError:
+            return Config.MIN_VOLUME_USDT
+
+    def get_max_volume_usdt(self) -> float:
+        """Максимальный 24h объём USDT (0 = без ограничения). Fallback: Config."""
+        val = self._get(_KEY_MAX_VOLUME)
+        try:
+            return float(val) if val is not None else Config.MAX_VOLUME_USDT
+        except ValueError:
+            return Config.MAX_VOLUME_USDT
+
+    def apply_market_profile(self, name: str) -> bool:
+        """Применяет профиль рынка. Возвращает False если имя неизвестно."""
+        profile = _MARKET_PROFILES.get(name)
+        if not profile:
+            return False
+        self._set(_KEY_MARKET_PROFILE, name)
+        self._set(_KEY_TIMEFRAME, str(profile.get("timeframe", "")))
+        self._set(_KEY_MIN_VOLUME, str(profile.get("min_volume_usdt", 0)))
+        self._set(_KEY_MAX_VOLUME, str(profile.get("max_volume_usdt", 0)))
+        self.set_scan_top_n(int(str(profile.get("scan_top_n", 20))))
+        self.set_train_top_n(int(str(profile.get("train_top_n", 20))))
+        self.set_risk_per_trade(float(str(profile.get("risk_per_trade", 0.02))))
+        self.set_mode(str(profile.get("mode", "ai")))
+        logger.info("Runtime: применён профиль рынка '%s'", name)
+        return True
+
+    def get_market_profiles_info(self) -> dict:
+        return {k: v["label"] for k, v in _MARKET_PROFILES.items()}
+
     # ── Startup ───────────────────────────────────────────────────────────────
 
     _ALL_KEYS = (
@@ -504,6 +593,10 @@ class RuntimeConfig:
         _KEY_LEVERAGE_MODE,
         _KEY_LEVERAGE_TARGET_RISK,
         _KEY_MAX_DRAWDOWN,
+        _KEY_MARKET_PROFILE,
+        _KEY_TIMEFRAME,
+        _KEY_MIN_VOLUME,
+        _KEY_MAX_VOLUME,
     )
 
     def reset_to_defaults(self) -> None:
