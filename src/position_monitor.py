@@ -142,7 +142,9 @@ class PositionMonitor:
                                 f"⚠️ *{sym}* удалён из мониторинга"
                                 f" после {count} ошибок. Проверь вручную!"
                             )
-                            asyncio.create_task(self._telegram.notify(msg))
+                            _t = asyncio.create_task(self._telegram.notify(msg))
+                            self._background_tasks.add(_t)
+                            _t.add_done_callback(self._background_tasks.discard)
                         async with lock:
                             monitored.pop(sym, None)
                         error_counts.pop(sym, None)
@@ -169,7 +171,9 @@ class PositionMonitor:
                                 f"⚠️ *{sym}* удалён из мониторинга"
                                 f" после {count} ошибок. Проверь вручную!"
                             )
-                            asyncio.create_task(self._telegram.notify(msg))
+                            _t = asyncio.create_task(self._telegram.notify(msg))
+                            self._background_tasks.add(_t)
+                            _t.add_done_callback(self._background_tasks.discard)
                         async with lock:
                             monitored.pop(sym, None)
                         error_counts.pop(sym, None)

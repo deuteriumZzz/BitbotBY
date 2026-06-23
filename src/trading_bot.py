@@ -407,7 +407,7 @@ class TradingBot:
                 "symbol": sym,
                 "side": pos.get("side", "buy"),
                 "qty": pos.get("qty", 0),
-                "entry_price": pos.get("entry_price", 0),
+                "entry_price": pos.get("entry", 0),
                 "pnl_pct": pos.get("pnl_pct", 0),
             }
             for sym, pos in self._monitored.items()
@@ -657,6 +657,10 @@ class TradingBot:
             cycle += 1
             loop = asyncio.get_running_loop()
             t0 = loop.time()
+
+            if self._runtime_config.is_paused():
+                await asyncio.sleep(Config.TRADING_INTERVAL)
+                continue
 
             try:
                 symbols = await self.scanner.get_top_symbols(Config.SCAN_TOP_N)

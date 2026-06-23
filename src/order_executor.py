@@ -200,14 +200,18 @@ class OrderExecutor:
             return
 
         # УЛУЧШЕНИЕ 4: фильтр по времени суток (UTC)
-        if Config.TRADING_HOURS:
+        _rc = getattr(self, "_runtime_config", None)
+        _trading_hours = (
+            _rc.get_trading_hours() if _rc is not None else Config.TRADING_HOURS
+        )
+        if _trading_hours:
             hour = datetime.datetime.utcnow().hour
             try:
-                start_h, end_h = map(int, Config.TRADING_HOURS.split("-"))
+                start_h, end_h = map(int, _trading_hours.split("-"))
                 if not (start_h <= hour < end_h):
                     logger.info(
                         "Outside trading hours (%s UTC), skipping %s",
-                        Config.TRADING_HOURS,
+                        _trading_hours,
                         sym,
                     )
                     return
