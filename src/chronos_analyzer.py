@@ -39,7 +39,9 @@ def _load_pipeline() -> None:
         logger.warning("Chronos unavailable — will return 'neutral': %s", exc)
 
 
-def predict_direction(close_prices: Sequence[float], threshold_pct: float = 0.002) -> str:
+def predict_direction(
+    close_prices: Sequence[float], threshold_pct: float = 0.002
+) -> str:
     """
     Предсказывает направление движения цены на 1 шаг вперёд.
 
@@ -67,7 +69,7 @@ def predict_direction(close_prices: Sequence[float], threshold_pct: float = 0.00
         diff_pct = (median - last) / last
         if diff_pct > threshold_pct:
             return "up"
-        elif diff_pct < -threshold_pct:
+        if diff_pct < -threshold_pct:
             return "down"
         return "neutral"
     except Exception as exc:

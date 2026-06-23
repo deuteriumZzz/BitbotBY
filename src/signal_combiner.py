@@ -11,8 +11,8 @@ import logging
 from typing import Any, Dict, List, Tuple
 
 from config import Config
-from src.ai_analyzer import AIAnalyzer
 from src import chronos_analyzer
+from src.ai_analyzer import AIAnalyzer
 from src.dqn_signal import SACSignal
 
 logger = logging.getLogger(__name__)
