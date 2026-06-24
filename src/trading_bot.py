@@ -113,6 +113,7 @@ class TradingBot:
             Config.TELEGRAM_CHAT_ID,
         )
         self._paper_balance: float = Config.INITIAL_BALANCE
+        self._live_balance_cache: float = Config.INITIAL_BALANCE
         # кэш режимов: символ → (режим, timestamp) — обновляется каждые 5 мин
         self._regime_cache: Dict[str, Tuple[str, float]] = {}
         self._regime_ttl: float = float(
@@ -470,8 +471,13 @@ class TradingBot:
             }
             for sym, pos in self._monitored.items()
         ]
+        balance = (
+            self.portfolio_manager.current_balance
+            if Config.PAPER_TRADING
+            else self._live_balance_cache
+        )
         return {
-            "balance": self._paper_balance,
+            "balance": balance,
             "initial_balance": Config.INITIAL_BALANCE,
             "positions": positions,
             "paper_trading": Config.PAPER_TRADING,
@@ -492,16 +498,16 @@ class TradingBot:
         """Свободный баланс в USDT; использует PortfolioManager как запасной
         источник при недоступности биржи."""
         if Config.PAPER_TRADING:
-            # Используем portfolio_manager как единый источник истины:
-            # он обновляется и при открытии (_set_paper_balance) и при закрытии.
             return self.portfolio_manager.current_balance
         try:
             bal = await self.api.get_balance()
             if bal:
-                return float(bal.get("free", {}).get("USDT", 0))
+                value = float(bal.get("free", {}).get("USDT", 0))
+                self._live_balance_cache = value
+                return value
         except (ccxt.NetworkError, ccxt.ExchangeError) as e:
             logger.warning("Balance fetch failed, using cached value: %s", e)
-        return self.portfolio_manager.current_balance
+        return self._live_balance_cache
 
     def _filter_by_balance(self, recs: list, balance: float) -> list:
         """Оставляет только рекомендации, минимальный лот которых укладывается в баланс.
