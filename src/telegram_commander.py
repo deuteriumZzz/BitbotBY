@@ -1029,12 +1029,25 @@ class TelegramCommander:
         total = len(strats)
         enabled_count = sum(1 for s in strats if s["enabled"])
         mode = self._rc.get_mode()
-        note = (
-            "\n_В режиме AI стратегии передаются в промпт._"
-            if mode != "local"
-            else "\n_В режиме Local стратегия выбирается автоматически._"
-        )
-        lines = [f"📐 *Стратегии* — включено {enabled_count}/{total}\n"]
+
+        if mode == "local":
+            header = (
+                "📐 *Стратегии* — включено {}/{}\n\n"
+                "⚠️ Режим *Local* — только математика, без AI.\n"
+                "_Используй на свой страх и риск в реальной торговле._\n"
+            ).format(enabled_count, total)
+            note = (
+                "\n\n🟢 низкий риск · 🟡 средний · 🔴 высокий\n"
+                "_Стратегия выбирается автоматически по индикаторам рынка._"
+            )
+        elif mode == "hybrid":
+            header = f"📐 *Стратегии* — включено {enabled_count}/{total}\n"
+            note = "\n_Hybrid: стратегии комбинируются с AI-сигналом._"
+        else:
+            header = f"📐 *Стратегии* — включено {enabled_count}/{total}\n"
+            note = "\n_В режиме AI стратегии передаются как контекст в промпт._"
+
+        lines = [header]
         for s in strats:
             icon = "✅" if s["enabled"] else "❌"
             risk = _RISK_ICON.get(s.get("risk_level", "medium"), "🟡")
@@ -1066,15 +1079,19 @@ class TelegramCommander:
         lines = ["*Открытые позиции:*\n"]
         for p in positions:
             sym = p.get("symbol", "?")
-            side = p.get("side", "?").upper()
+            side = p.get("side", "buy").upper()
             entry = p.get("entry_price", 0.0)
-            size = p.get("size", 0.0)
-            pnl = p.get("unrealized_pnl", 0.0)
-            icon = "🟢" if pnl >= 0 else "🔴"
+            qty = p.get("qty", 0.0)
+            pnl_pct = p.get("pnl_pct", 0.0)
+            sl = p.get("stop_loss", 0.0)
+            tp = p.get("take_profit", 0.0)
+            icon = "🟢" if pnl_pct >= 0 else "🔴"
+            sl_str = f"  SL `{sl:.4f}`" if sl else ""
+            tp_str = f"  TP `{tp:.4f}`" if tp else ""
             lines.append(
-                f"{icon} `{sym}` {side}  "
-                f"qty `{size}`  entry `{entry:.4f}`  "
-                f"PnL `{pnl:+.2f}$`"
+                f"{icon} *{sym}* {side}\n"
+                f"   qty `{qty:.6f}`  entry `${entry:.4f}`\n"
+                f"   PnL `{pnl_pct*100:+.2f}%`{sl_str}{tp_str}"
             )
         return "\n".join(lines)
 
@@ -1848,28 +1865,16 @@ class TelegramCommander:
                         _kb_chronos_prompt(),
                     )
                 elif mode == "local":
-                    text, _ = self._build_settings()
-                    hint = (
-                        "✅ Режим → `local`\n\n"
-                        "💡 Стратегия выбирается автоматически по индикаторам. "
-                        "Можно отключить ненужные через меню ниже.\n\n"
+                    strat_text, strat_kb = self._build_strategies()
+                    warning = (
+                        "✅ *Режим переключён: Local*\n\n"
+                        "⚠️ *Внимание!* Только математические стратегии — без AI.\n"
+                        "Бот не анализирует новости, макро-события и сентимент.\n"
+                        "🚫 *Не рекомендуется для реальной торговли.* "
+                        "Используй на свой страх и риск.\n\n"
+                        "─────────────\n\n"
                     )
-                    kb_local = InlineKeyboardMarkup(
-                        [
-                            [
-                                InlineKeyboardButton(
-                                    "📐 Настроить стратегии →",
-                                    callback_data="strategies",
-                                )
-                            ],
-                            [
-                                InlineKeyboardButton(
-                                    "⚙️ К настройкам", callback_data="settings"
-                                )
-                            ],
-                        ]
-                    )
-                    await self._edit(query, hint + text, kb_local)
+                    await self._edit(query, warning + strat_text, strat_kb)
                 else:
                     text, kb = self._build_settings()
                     await self._edit(query, f"✅ Режим → `{mode}`\n\n" + text, kb)
