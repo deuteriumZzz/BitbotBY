@@ -580,6 +580,7 @@ class TradingBot:
                     if index:
                         current_profile = self._runtime_config.get_market_profile()
                         signal = self._season_detector.classify(index)
+                        self._runtime_config.set_season_index(signal, index)
                         now = time.time()
 
                         needs_alert = self._season_detector.should_alert(
@@ -592,7 +593,7 @@ class TradingBot:
                                 self._runtime_config.get_season_switch_mode() == "auto"
                             )
                             if auto_switch:
-                                self._runtime_config.set_market_profile(signal)
+                                self._runtime_config.apply_market_profile(signal)
                                 profile_labels = {
                                     "bluechip": "🔵 Блючипы",
                                     "altcoin": "🟡 Альткоины",
