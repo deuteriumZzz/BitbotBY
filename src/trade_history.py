@@ -54,7 +54,11 @@ def get_backtest_stats(strategy: str) -> Dict:
 
 logger = logging.getLogger(__name__)
 
-_DB_PATH = os.path.join("data", "trades.db")
+def _db_path() -> str:
+    from config import Config  # noqa: PLC0415
+
+    suffix = "paper" if Config.PAPER_TRADING else "live"
+    return os.path.join("data", f"trades_{suffix}.db")
 _DDL = """
 CREATE TABLE IF NOT EXISTS trades (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -83,12 +87,14 @@ class TradeHistory:
     Все DB-операции выполняются через run_in_executor чтобы не блокировать event loop.
     """
 
-    def __init__(self, db_path: str = _DB_PATH):
+    def __init__(self, db_path: str = ""):
         """
         Инициализирует хранилище, создаёт таблицу если не существует.
 
         :param db_path: Путь к файлу SQLite БД.
         """
+        if not db_path:
+            db_path = _db_path()
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
         # WAL mode allows concurrent readers (dashboard) alongside the writer (bot)

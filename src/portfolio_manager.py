@@ -124,7 +124,8 @@ class PortfolioManager:
             "positions": self.positions,
             "total_commissions": self.total_commissions,
         }
-        self.redis.save_trading_state("portfolio_state", state)
+        _mode = "paper" if Config.PAPER_TRADING else "live"
+        self.redis.save_trading_state(f"portfolio_state_{_mode}", state)
 
     def get_positions(self) -> Dict[str, float]:
         """

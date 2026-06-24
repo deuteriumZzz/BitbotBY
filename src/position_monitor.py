@@ -582,11 +582,19 @@ class PositionMonitor:
                 )
 
         stats = await self._trade_history.get_summary()
+        pnl_sign = "+" if pnl_pct >= 0 else ""
+        try:
+            bal_val = float(self._portfolio_manager.current_balance)
+            bal_line = f"\n💰 Баланс: ${bal_val:,.2f}" if Config.PAPER_TRADING else ""
+        except (TypeError, ValueError):
+            bal_line = ""
         await self._telegram.notify(
-            f"Closed *{sym}* @ ${price:.4f}\n"
+            f"{'📈' if pnl_pct >= 0 else '📉'} Closed *{sym}* @ ${price:.4f}"
+            f"  ({pnl_sign}{pnl_pct*100:.2f}%)\n"
             f"Trades: {stats['closed_trades']}  "
-            f"Win Rate: {stats['win_rate']:.0%}\n"
+            f"Win Rate: {stats['win_rate']:.0%}  "
             f"Total PnL: ${stats['total_pnl']:+.2f}"
+            f"{bal_line}"
         )
 
         self._update_circuit_breaker(side, price, pos.get("entry", price))
