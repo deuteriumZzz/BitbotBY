@@ -844,9 +844,28 @@ class TelegramCommander:
         state_icon = "⏸" if paused else "🟢"
         exec_icon = "✅" if auto_exec else "❌"
         hours_str = f"`{hours}`" if hours else "`24/7`"
+
+        profile_labels = {"bluechip": "🔵 Блючипы", "altcoin": "🟡 Альткоины"}
+        market_profile = self._rc.get_market_profile()
+        profile_str = profile_labels.get(market_profile, "⚪ не задан")
+        season_data = self._rc.get_season_index()
+        if season_data:
+            _sig = season_data.get("signal")
+            _ai = season_data.get("altcoin_index") or 0.0
+            _sig_label = (
+                "🟡 Альтсезон"
+                if _sig == "altcoin"
+                else "🔵 BTC Season" if _sig == "bluechip" else "⚪ Нейтрально"
+            )
+            season_line = f"🌡 Сезон: {_sig_label} (индекс {_ai:.0f}/100)\n"
+        else:
+            season_line = ""
+
         text = (
             f"{state_icon} *BitbotBY [{paper}]*\n\n"
             f"💰 Баланс: `${balance:,.2f}` ({pnl_pct:+.2f}%)\n"
+            f"📊 Профиль: {profile_str}\n"
+            f"{season_line}"
             f"🤖 Режим: `{mode}` | AI: `{provider}`\n"
             f"🔢 Символов: `{n}` | Позиций: `{len(positions)}`\n"
             f"📊 Плечо: `{lev_mode}` ({lev_target*100:.1f}% ATR)\n"
@@ -901,10 +920,28 @@ class TelegramCommander:
         profile_labels = {"bluechip": "🔵 Блючипы", "altcoin": "🟡 Альткоины"}
         profile_str = profile_labels.get(market_profile, "⚪ не задан")
 
+        season_data = self._rc.get_season_index()
+        if season_data:
+            _sig = season_data.get("signal")
+            _ai = season_data.get("altcoin_index")
+            _dom = season_data.get("btc_dominance")
+            _sig_label = (
+                "🟡 Альтсезон"
+                if _sig == "altcoin"
+                else "🔵 BTC Season" if _sig == "bluechip" else "⚪ Нейтрально"
+            )
+            _bar = "█" * int((_ai or 0) / 10) + "░" * (10 - int((_ai or 0) / 10))
+            season_str = (
+                f"{_sig_label}  `[{_bar}]` *{_ai:.0f}/100*" f"  BTC dom: *{_dom:.1f}%*"
+            )
+        else:
+            season_str = "⏳ ожидание данных CoinGecko"
+
         text = (
             f"⚙️ *Настройки бота*\n\n"
             f"*Статус:* {state_str}\n"
             f"*Профиль рынка:* {profile_str}\n"
+            f"*Сезон (CoinGecko):* {season_str}\n"
             f"*Режим торговли:* `{mode}`\n"
             f"{chronos_str}"
             f"*Таймфрейм:* `{timeframe}`\n"
@@ -1497,10 +1534,9 @@ class TelegramCommander:
         )
 
         try:
-            profiles_info = self._rc.get_market_profiles_info()
-            profile_cfg = profiles_info.get(profile, {})
+            profile_cfg = self._rc.get_market_profile_config(profile)
             train_top_n = str(profile_cfg.get("train_top_n", 20))
-            bt_timeframe = profile_cfg.get("timeframe", "15m")
+            bt_timeframe = str(profile_cfg.get("timeframe", "15m"))
             env = {
                 **os.environ,
                 "PYTHONPATH": "/app",

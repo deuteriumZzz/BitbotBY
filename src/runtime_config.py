@@ -44,6 +44,7 @@ _KEY_PAPER_TRADING = "bot:paper_trading_override"
 _KEY_SAC_BACKUP = "bot:sac_model_backup"
 _KEY_TRAIN_PROGRESS = "bot:train_progress"
 _KEY_SEASON_MODE = "bot:season_switch_mode"
+_KEY_SEASON_INDEX = "bot:season_index"
 
 _AI_PROVIDERS = frozenset({"auto", "anthropic", "openai", "deepseek", "groq"})
 _LEVERAGE_MODES = frozenset({"fixed", "volatility", "full"})
@@ -588,6 +589,10 @@ class RuntimeConfig:
     def get_market_profiles_info(self) -> dict:
         return {k: v["label"] for k, v in _MARKET_PROFILES.items()}
 
+    def get_market_profile_config(self, name: str) -> dict:
+        """Возвращает полный конфиг профиля (train_top_n, timeframe и др.)."""
+        return dict(_MARKET_PROFILES.get(name, {}))
+
     # ── Paper / Live switch ───────────────────────────────────────────────────
 
     def set_awaiting_mode_pin(self, ttl: int = 120) -> None:
@@ -631,6 +636,35 @@ class RuntimeConfig:
             return False
         self._set(_KEY_SEASON_MODE, mode)
         return True
+
+    def set_season_index(self, signal: "str | None", index: dict) -> None:
+        """Сохраняет последний результат CoinGecko (TTL 6 часов)."""
+        import json as _json
+        import time as _time
+
+        data = {
+            "signal": signal,
+            "altcoin_index": index.get("altcoin_index"),
+            "btc_dominance": index.get("btc_dominance"),
+            "btc_30d": index.get("btc_30d"),
+            "checked_at": _time.time(),
+        }
+        try:
+            self._r.redis_client.setex(_KEY_SEASON_INDEX, 6 * 3600, _json.dumps(data))
+        except Exception:
+            pass
+
+    def get_season_index(self) -> "dict | None":
+        """Читает последний результат CoinGecko из Redis."""
+        import json as _json
+
+        raw = self._get(_KEY_SEASON_INDEX)
+        if not raw:
+            return None
+        try:
+            return _json.loads(raw)
+        except Exception:
+            return None
 
     def get_sac_backup_path(self) -> str:
         return self._get(_KEY_SAC_BACKUP) or ""
