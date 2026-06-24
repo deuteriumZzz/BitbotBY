@@ -450,18 +450,22 @@ class RuntimeConfig:
     # ── SAC prompt ────────────────────────────────────────────────────────────
 
     def get_confirm_timeout(self) -> int:
-        """Таймаут подтверждения сделки в секундах (10–300, default 60)."""
+        """Таймаут подтверждения сделки в секундах.
+        0 = ручной режим (авто-исполнения нет, сделка ждёт Trade).
+        10–300 = авто-исполнение через N секунд. Default 60."""
         val = self._get(_KEY_CONFIRM_TIMEOUT)
         try:
-            return max(10, min(int(val), 300)) if val else 60
+            parsed = int(val) if val else 60
+            return 0 if parsed == 0 else max(10, min(parsed, 300))
         except (ValueError, TypeError):
             return 60
 
     def set_confirm_timeout(self, seconds: int) -> bool:
-        if not (10 <= seconds <= 300):
+        if seconds != 0 and not (10 <= seconds <= 300):
             return False
         self._set(_KEY_CONFIRM_TIMEOUT, str(seconds))
-        logger.info("Runtime: confirm_timeout → %ds", seconds)
+        label = "ручной" if seconds == 0 else f"{seconds}с"
+        logger.info("Runtime: confirm_timeout → %s", label)
         return True
 
     def is_sac_prompted(self, profile: str = "") -> bool:

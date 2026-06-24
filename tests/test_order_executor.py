@@ -150,8 +150,8 @@ class TestGuards:
     async def test_skips_when_telegram_rejects(self):
         executor, monitored = _make_executor()
         executor._telegram.ask_confirm = AsyncMock(return_value=False)
-        # AUTO_EXECUTE=False → диалог показывается, Skip отменяет сделку
-        cfg = _make_cfg()
+        # AUTO_EXECUTE=False, live режим → диалог показывается, Skip отменяет сделку
+        cfg = _make_cfg(paper=False)
         cfg.AUTO_EXECUTE = False
         with patch("src.order_executor.Config", cfg):
             with patch("src.trade_history.get_backtest_stats", return_value=_BT_STATS):

@@ -92,13 +92,28 @@ class TelegramNotifier:
         if str(query.from_user.id) != str(self._chat_id):
             await query.answer("Not authorized.")
             return
-        await query.answer()
         mid = query.message.message_id
         data = query.data  # "confirm" or "reject"
+        confirmed = data == "confirm"
         if mid in self._pending:
-            self._decisions[mid] = data == "confirm"
+            self._decisions[mid] = confirmed
             self._pending[mid].set()
-        await query.edit_message_reply_markup(reply_markup=None)
+
+        footer = (
+            "\n\n✅ *Trade — принято*" if confirmed else "\n\n❌ *Skip — пропущено*"
+        )
+        original = query.message.text or ""
+        try:
+            await query.edit_message_text(
+                text=original + footer,
+                parse_mode="Markdown",
+            )
+        except Exception:
+            try:
+                await query.edit_message_reply_markup(reply_markup=None)
+            except Exception:
+                pass
+        await query.answer()
 
     async def ask_confirm(
         self,
@@ -169,7 +184,7 @@ class TelegramNotifier:
             f"AI confidence: *{confidence:.0%}*\n\n"
             f"{bt_line}\n"
             f"{live_line}\n\n"
-            f"⚡ Авто-исполнение через {timeout}с — нажми Skip чтобы пропустить"
+            f"{'🖐 Ручной режим — нажми Trade чтобы войти, иначе сделка не откроется' if not auto_execute else f'⚡ Авто-исполнение через {timeout}с — нажми Skip чтобы пропустить'}"
         )
         keyboard = InlineKeyboardMarkup(
             [
@@ -220,15 +235,6 @@ class TelegramNotifier:
                         message_id=mid,
                         text=text + f"\n\n{timeout_text}",
                         parse_mode="Markdown",
-                    )
-                except Exception:
-                    pass
-            else:
-                try:
-                    await bot.edit_message_reply_markup(
-                        chat_id=self._chat_id,
-                        message_id=mid,
-                        reply_markup=None,
                     )
                 except Exception:
                     pass

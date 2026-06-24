@@ -290,8 +290,8 @@ class OrderExecutor:
             _auto_exec = (
                 _rc.get_auto_execute() if _rc is not None else Config.AUTO_EXECUTE
             )
-            if _auto_exec:
-                # AUTO_EXECUTE=true → без диалога, исполняем сразу
+            if _auto_exec or Config.PAPER_TRADING:
+                # Paper режим и AUTO_EXECUTE=true → без диалога, исполняем сразу
                 confirmed = True
             else:
                 _timeout = (
@@ -299,6 +299,7 @@ class OrderExecutor:
                     if _rc is not None
                     else Config.TELEGRAM_CONFIRM_TIMEOUT
                 )
+                _manual = _timeout == 0
                 confirmed = await self._telegram.ask_confirm(
                     top,
                     live_win_rate=live_wr,
@@ -307,7 +308,8 @@ class OrderExecutor:
                     bt_win_rate=bt["win_rate"],
                     bt_trades=bt["total_trades"],
                     bt_ev=bt["ev"],
-                    timeout=_timeout,
+                    timeout=3600 if _manual else _timeout,
+                    auto_execute=not _manual,
                 )
             if not confirmed:
                 logger.info("Trade rejected via Telegram: %s", sym)

@@ -275,10 +275,12 @@ def _kb_timeout_menu(current: int) -> "InlineKeyboardMarkup":
         label = f"{'✅ ' if sec == current else ''}{sec}с"
         return InlineKeyboardButton(label, callback_data=f"timeout:{sec}")
 
+    manual_label = f"{'✅ ' if current == 0 else ''}🖐 Вручную"
     return InlineKeyboardMarkup(
         [
             [_btn(15), _btn(30), _btn(60)],
             [_btn(120), _btn(180), _btn(300)],
+            [InlineKeyboardButton(manual_label, callback_data="timeout:0")],
             [InlineKeyboardButton("« Настройки", callback_data="settings")],
         ]
     )
@@ -2069,12 +2071,16 @@ class TelegramCommander:
         # ── Таймаут подтверждения ─────────────────────────────────────────────
         elif data == "timeout_menu":
             cur = self._rc.get_confirm_timeout()
-            auto = self._rc.get_auto_execute()
-            mode_hint = "авто-исполнение" if auto else "авто-пропуск"
+            cur_label = "🖐 Вручную" if cur == 0 else f"{cur}с"
+            cur_hint = (
+                "сделка ждёт Trade бессрочно, без ответа — не открывается"
+                if cur == 0
+                else f"авто-исполнение через {cur}с если нет ответа"
+            )
             await self._edit(
                 query,
                 f"⏱ *Таймаут подтверждения сделки*\n\n"
-                f"Сейчас: *{cur}с* → {mode_hint} если нет ответа\n\n"
+                f"Сейчас: *{cur_label}* — {cur_hint}\n\n"
                 f"Выбери новое значение:",
                 _kb_timeout_menu(cur),
             )
@@ -2086,12 +2092,20 @@ class TelegramCommander:
                 return
             ok = self._rc.set_confirm_timeout(sec)
             if ok:
-                auto = self._rc.get_auto_execute()
-                mode_hint = "авто-исполнение" if auto else "авто-пропуск"
+                if sec == 0:
+                    msg = (
+                        "✅ *Ручной режим* — сделка ждёт нажатия Trade.\n"
+                        "Без подтверждения сделка не откроется.\n\n"
+                        "_Применится к следующей сделке._"
+                    )
+                else:
+                    msg = (
+                        f"✅ Таймаут: *{sec}с* → авто-исполнение\n\n"
+                        f"_Применится к следующей сделке._"
+                    )
                 await self._edit(
                     query,
-                    f"✅ Таймаут: *{sec}с* → {mode_hint}\n\n"
-                    f"_Применится к следующей сделке._",
+                    msg,
                     _kb_timeout_menu(sec),
                 )
 
