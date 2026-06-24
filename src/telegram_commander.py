@@ -551,7 +551,7 @@ _HELP_ABOUT = (
     "2️⃣ Загружает OHLCV + технические индикаторы\n"
     "3️⃣ Анализирует через AI (Claude / DeepSeek / Groq)\n"
     "4️⃣ Комбинирует AI-сигнал с локальными стратегиями\n"
-    "5️⃣ При AUTO_EXECUTE — спрашивает подтверждение в Telegram\n"
+    "5️⃣ При `AUTO_EXECUTE` — спрашивает подтверждение в Telegram\n"
     "6️⃣ Управляет позицией: SL/TP, трейлинг-стоп, circuit breaker\n\n"
     "*Paper trading:* виртуальные сделки, реальные данные биржи\n"
     "*Live trading:* реальные ордера через Bybit API"
@@ -666,7 +666,7 @@ _HELP_SECURITY = (
     "Telegram не шифрует историю сообщений.\n"
     "Ключ биржи в чате = риск потерять деньги.\n"
     "Секреты живут только в .env на сервере.\n\n"
-    "🛡 Только ты (твой chat_id) можешь управлять ботом"
+    "🛡 Только ты (твой `chat_id`) можешь управлять ботом"
 )
 
 
@@ -861,11 +861,29 @@ class TelegramCommander:
         else:
             season_line = ""
 
+        fng_data = self._rc.get_fear_greed()
+        if fng_data:
+            _fv = fng_data.get("value", 0)
+            _fl = fng_data.get("label", "")
+            _fng_icon = (
+                "😱"
+                if _fv < 25
+                else (
+                    "😨"
+                    if _fv < 45
+                    else "😐" if _fv < 55 else "😊" if _fv < 75 else "🤑"
+                )
+            )
+            fng_line = f"{_fng_icon} Страх/Жадность: `{_fv}` ({_fl})\n"
+        else:
+            fng_line = ""
+
         text = (
             f"{state_icon} *BitbotBY [{paper}]*\n\n"
             f"💰 Баланс: `${balance:,.2f}` ({pnl_pct:+.2f}%)\n"
             f"📊 Профиль: {profile_str}\n"
             f"{season_line}"
+            f"{fng_line}"
             f"🤖 Режим: `{mode}` | AI: `{provider}`\n"
             f"🔢 Символов: `{n}` | Позиций: `{len(positions)}`\n"
             f"📊 Плечо: `{lev_mode}` ({lev_target*100:.1f}% ATR)\n"
@@ -1461,12 +1479,34 @@ class TelegramCommander:
                 "python",
                 "backtest.py",
                 env=env,
-                stdout=_asyncio.subprocess.DEVNULL,
+                stdout=_asyncio.subprocess.PIPE,
                 stderr=_asyncio.subprocess.PIPE,
             )
-            _, stderr = await proc.communicate()
+            self._rc.clear_backtest_progress()
+
+            stderr_chunks: list[bytes] = []
+
+            async def _read_bt_stdout() -> None:
+                assert proc.stdout
+                async for raw in proc.stdout:
+                    line = raw.decode(errors="replace").strip()
+                    if line.startswith("BACKTEST_PROGRESS:"):
+                        try:
+                            data = json.loads(line[len("BACKTEST_PROGRESS:") :])
+                            self._rc.set_backtest_progress(data)
+                        except Exception:
+                            pass
+
+            async def _read_bt_stderr() -> None:
+                assert proc.stderr
+                async for raw in proc.stderr:
+                    stderr_chunks.append(raw)
+
+            await _asyncio.gather(_read_bt_stdout(), _read_bt_stderr())
+            await proc.wait()
+
             if proc.returncode != 0:
-                err = (stderr or b"").decode()[-300:]
+                err = b"".join(stderr_chunks).decode()[-300:]
                 await self._notifier.notify(f"❌ *Бэктест упал*\n```{err}```")
                 return
 
@@ -1520,6 +1560,7 @@ class TelegramCommander:
             await self._notifier.notify(f"❌ Бэктест: непредвиденная ошибка\n`{e}`")
         finally:
             self._backtesting = False
+            self._rc.clear_backtest_progress()
 
     async def _run_sac_training(self) -> None:
         """Запускает train_sac.py как subprocess, не блокируя event loop."""
@@ -2362,76 +2403,66 @@ class TelegramCommander:
                 _kb_main(),
             )
 
-        # ── SAC обучение ──────────────────────────────────────────────────────
-        elif data == "train_progress":
-            prog = self._rc.get_train_progress()
-            if self._sac_training and prog:
-                pct = prog.get("pct", 0)
-                step = prog.get("step", 0)
-                total = prog.get("total", 1)
-                eta_min = prog.get("eta_min")
-                bar_filled = int(pct / 10)
-                bar = "█" * bar_filled + "░" * (10 - bar_filled)
-                eta_str = f"~{eta_min} мин" if eta_min is not None else "считается..."
-                await self._edit(
-                    query,
-                    f"📈 *Прогресс обучения SAC*\n\n"
-                    f"`[{bar}]` *{pct:.1f}%*\n\n"
-                    f"Шаги: `{step:,}` / `{total:,}`\n"
-                    f"Осталось: *{eta_str}*\n\n"
-                    f"_Бот торгует в фоне._",
-                    InlineKeyboardMarkup(
-                        [
-                            [
-                                InlineKeyboardButton(
-                                    "🔄 Обновить", callback_data="train_progress"
-                                )
-                            ],
-                            [
-                                InlineKeyboardButton(
-                                    "« Настройки", callback_data="settings"
-                                )
-                            ],
-                        ]
-                    ),
+        # ── Прогресс обучения (SAC + бэктест) ────────────────────────────────
+        elif data in ("train_progress", "backtest_progress"):
+            sac_prog = self._rc.get_train_progress()
+            bt_prog = self._rc.get_backtest_progress()
+            anything_running = self._sac_training or self._backtesting
+            sections: list[str] = []
+
+            if self._sac_training:
+                if sac_prog:
+                    pct = sac_prog.get("pct", 0)
+                    bar = "█" * int(pct / 10) + "░" * (10 - int(pct / 10))
+                    eta_min = sac_prog.get("eta_min")
+                    eta_str = f"~{eta_min} мин" if eta_min is not None else "..."
+                    sections.append(
+                        f"🧠 *Обучение SAC*\n"
+                        f"`[{bar}]` *{pct:.1f}%*\n"
+                        f"Шаги: `{sac_prog.get('step', 0):,}` / `{sac_prog.get('total', 0):,}`\n"
+                        f"Осталось: *{eta_str}*"
+                    )
+                else:
+                    sections.append(
+                        "🧠 *Обучение SAC*\n_Запущено, прогресс появится через минуту..._"
+                    )
+
+            if self._backtesting:
+                if bt_prog:
+                    pct = bt_prog.get("pct", 0)
+                    bar = "█" * int(pct / 10) + "░" * (10 - int(pct / 10))
+                    sections.append(
+                        f"📊 *Бэктест*\n"
+                        f"`[{bar}]` *{pct:.1f}%*\n"
+                        f"Символ: `{bt_prog.get('symbol', '...')}`\n"
+                        f"Стратегия: `{bt_prog.get('strategy', '...')}`\n"
+                        f"Шаг: `{bt_prog.get('step', 0)}` / `{bt_prog.get('total', 0)}`"
+                    )
+                else:
+                    sections.append(
+                        "📊 *Бэктест*\n_Запущено, прогресс появится через момент..._"
+                    )
+
+            if not anything_running:
+                sections.append(
+                    "Нет активных процессов.\n\n"
+                    "_Запусти обучение SAC или бэктест из Настроек._"
                 )
-            elif self._sac_training:
-                await self._edit(
-                    query,
-                    "🧠 *Обучение SAC идёт...*\n\n"
-                    "Прогресс появится через несколько минут.\n\n"
-                    "_Нажми Обновить чтобы проверить снова._",
-                    InlineKeyboardMarkup(
-                        [
-                            [
-                                InlineKeyboardButton(
-                                    "🔄 Обновить", callback_data="train_progress"
-                                )
-                            ],
-                            [
-                                InlineKeyboardButton(
-                                    "« Настройки", callback_data="settings"
-                                )
-                            ],
-                        ]
-                    ),
+
+            text = "📈 *Прогресс обучения*\n\n" + "\n\n─────────────\n\n".join(sections)
+            kb_rows = []
+            if anything_running:
+                kb_rows.append(
+                    [
+                        InlineKeyboardButton(
+                            "🔄 Обновить", callback_data="train_progress"
+                        )
+                    ]
                 )
-            else:
-                await self._edit(
-                    query,
-                    "📈 *Прогресс обучения SAC*\n\n"
-                    "Обучение сейчас не запущено.\n\n"
-                    "_Нажми 'Обучить SAC' в Настройках чтобы начать._",
-                    InlineKeyboardMarkup(
-                        [
-                            [
-                                InlineKeyboardButton(
-                                    "« Настройки", callback_data="settings"
-                                )
-                            ]
-                        ]
-                    ),
-                )
+            kb_rows.append(
+                [InlineKeyboardButton("« Настройки", callback_data="settings")]
+            )
+            await self._edit(query, text, InlineKeyboardMarkup(kb_rows))
 
         elif data == "train_sac_now":
             if self._sac_training:

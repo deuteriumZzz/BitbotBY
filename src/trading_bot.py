@@ -569,11 +569,33 @@ class TradingBot:
         check_interval_h = float(_os.getenv("SEASON_CHECK_INTERVAL_H", "4"))
         check_interval_s = int(check_interval_h * 3600)
 
-        # Первая проверка — через 10 мин после старта (не сразу)
-        await asyncio.sleep(600)
+        # Первая проверка сразу — чтобы сезон был виден в статусе с момента старта.
+        # Алерт не сработает: гистерезис требует 2 проверки подряд.
+        await asyncio.sleep(30)
 
         while self.is_running:
             try:
+                # Fear & Greed — один запрос к alternative.me
+                try:
+                    import aiohttp as _aiohttp
+
+                    async with _aiohttp.ClientSession(
+                        timeout=_aiohttp.ClientTimeout(total=10)
+                    ) as _s:
+                        async with _s.get(
+                            "https://api.alternative.me/fng/?limit=1"
+                        ) as _r:
+                            if _r.status == 200:
+                                _fng = await _r.json()
+                                _entry = _fng.get("data", [{}])[0]
+                                _fng_val = int(_entry.get("value", 0))
+                                _fng_label = _entry.get("value_classification", "")
+                                self._runtime_config.set_fear_greed(
+                                    _fng_val, _fng_label
+                                )
+                except Exception as _exc:
+                    logger.debug("FNG fetch failed: %s", _exc)
+
                 data = await self._season_detector.fetch_data()
                 if data:
                     index = self._season_detector.compute_index(data)
