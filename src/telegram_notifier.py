@@ -102,7 +102,11 @@ class TelegramNotifier:
         footer = (
             "\n\n✅ *Trade — принято*" if confirmed else "\n\n❌ *Skip — пропущено*"
         )
-        original = query.message.text or ""  # type: ignore[attr-defined]
+        from telegram import Message as _TGMessage
+
+        original = (
+            query.message.text if isinstance(query.message, _TGMessage) else ""
+        ) or ""
         try:
             await query.edit_message_text(
                 text=original + footer,
