@@ -286,12 +286,32 @@ class DataLoader:
         )
 
         if cached is not None and not cached.empty:
+            first_ts = int(cached["timestamp"].min())
             last_ts = int(cached["timestamp"].max())
             self.logger.info(
                 "CSV-кэш найден для %s %s. Загружаем только новые свечи.",
                 symbol,
                 timeframe,
             )
+            # Кэш может начинаться позже запрошенной глубины (бот запустился недавно).
+            # Дозагружаем историю ДО начала кэша чтобы покрыть полный период.
+            if first_ts > since_ms:
+                self.logger.info(
+                    "Кэш %s начинается с %d, нужна история с %d — дозагружаем",
+                    symbol,
+                    first_ts,
+                    since_ms,
+                )
+                hist_df = await self._fetch_batches(
+                    symbol, timeframe, since_ms=since_ms, until_ms=first_ts
+                )
+                if not hist_df.empty:
+                    cached = (
+                        pd.concat([hist_df, cached], ignore_index=True)
+                        .drop_duplicates(subset=["timestamp"])
+                        .sort_values("timestamp")
+                        .reset_index(drop=True)
+                    )
             new_df = await self._fetch_batches(
                 symbol, timeframe, since_ms=last_ts + 1, until_ms=now_ms
             )
