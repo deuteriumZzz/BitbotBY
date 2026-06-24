@@ -10,7 +10,7 @@ Telegram-команды и inline-панель управления BitbotBY.
   /settings      — все настройки (режим, символы, авто-сделки, пауза)
   /pause         — приостановить торговлю
   /resume        — возобновить торговлю
-  /mode MODE     — сменить режим ai / local / hybrid / dqn
+  /mode MODE     — сменить режим ai / local / hybrid / sac
   /scan N        — кол-во сканируемых символов
   /trainn N      — кол-во символов для обучения SAC (1–100, default 20)
   /lev           — режим плеча: fixed | volatility | full
@@ -600,7 +600,7 @@ _HELP_COMMANDS = (
     "*Управление торговлей:*\n"
     "`/pause`       — поставить на паузу\n"
     "`/resume`      — возобновить торговлю\n"
-    "`/mode ai`     — сменить режим (ai/local/hybrid/dqn)\n"
+    "`/mode ai`     — сменить режим (ai/local/hybrid/sac)\n"
     "`/scan 50`     — сканировать 50 символов\n\n"
     "*Символы:*\n"
     "`/add SOL`     — всегда включать SOL в сканирование\n"
@@ -1185,7 +1185,7 @@ class TelegramCommander:
         else:
             await self._reply(
                 update,
-                "❌ Неверный режим. Доступны: `ai`, `local`, `hybrid`, `dqn`",
+                "❌ Неверный режим. Доступны: `ai`, `local`, `hybrid`, `sac`",
                 _kb_mode_menu(),
             )
 
