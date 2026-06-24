@@ -1497,10 +1497,22 @@ class TelegramCommander:
         )
 
         try:
+            profiles_info = self._rc.get_market_profiles_info()
+            profile_cfg = profiles_info.get(profile, {})
+            train_top_n = str(profile_cfg.get("train_top_n", 20))
+            bt_timeframe = profile_cfg.get("timeframe", "15m")
             env = {
                 **os.environ,
                 "PYTHONPATH": "/app",
                 "SAC_MODEL_PATH": model_path,
+                "TRAIN_TOP_N": train_top_n,
+                "BT_TIMEFRAME": bt_timeframe,
+                "SAC_PROFILE": profile,
+                "EXPERIENCES_PATH": (
+                    f"data/experiences_{profile}.jsonl"
+                    if profile
+                    else "data/experiences.jsonl"
+                ),
             }
             proc = await _asyncio.create_subprocess_exec(
                 "python",

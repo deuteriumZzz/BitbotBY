@@ -566,6 +566,8 @@ class RuntimeConfig:
 
     def apply_market_profile(self, name: str) -> bool:
         """Применяет профиль рынка. Возвращает False если имя неизвестно."""
+        import os as _os
+
         profile = _MARKET_PROFILES.get(name)
         if not profile:
             return False
@@ -577,6 +579,9 @@ class RuntimeConfig:
         self.set_train_top_n(int(str(profile.get("train_top_n", 20))))
         self.set_risk_per_trade(float(str(profile.get("risk_per_trade", 0.02))))
         self.set_mode(str(profile.get("mode", "ai")))
+        # Направляем сохранение сделок в профильный файл
+        _os.environ["EXPERIENCES_PATH"] = f"data/experiences_{name}.jsonl"
+        _os.environ["SAC_PROFILE"] = name
         logger.info("Runtime: применён профиль рынка '%s'", name)
         return True
 
