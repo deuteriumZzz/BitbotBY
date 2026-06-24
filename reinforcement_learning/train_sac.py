@@ -217,9 +217,7 @@ def _finetune_on_experiences(model: Any, norm_stats: Dict[str, Any]) -> None:
 
     _profile = os.getenv("SAC_PROFILE", "")
     exp_path = (
-        f"data/experiences_{_profile}.jsonl"
-        if _profile
-        else "data/experiences.jsonl"
+        f"data/experiences_{_profile}.jsonl" if _profile else "data/experiences.jsonl"
     )
     records = _load_exp(path=exp_path)
     if len(records) < 50:
@@ -401,7 +399,7 @@ def train(
         )
         model.learn(
             total_timesteps=total_timesteps,
-            callback=_ProgressCallback(total_timesteps),
+            callback=_ProgressCallback(total_timesteps),  # type: ignore[arg-type]
         )
     except Exception as e:
         logger.error(f"Ошибка обучения SAC: {e}", exc_info=True)
