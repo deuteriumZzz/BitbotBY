@@ -1920,6 +1920,15 @@ class TelegramCommander:
                 _kb_market_profile_menu(current, bc_has, alt_has),
             )
 
+        elif data == "season_dismiss":
+            await self._edit(
+                query,
+                "👌 Профиль оставлен без изменений.\n\n"
+                "_Следующее уведомление — не раньше чем через 24ч,_\n"
+                "_если сигнал сохранится._",
+                _kb_main(),
+            )
+
         elif data.startswith("market_profile:"):
             import os as _os
 

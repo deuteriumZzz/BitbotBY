@@ -37,6 +37,7 @@ from src.redis_client import RedisClient
 from src.regime_detector import RegimeDetector
 from src.risk_management import RiskManager
 from src.runtime_config import RuntimeConfig
+from src.season_detector import SeasonDetector
 from src.signal_combiner import SignalCombiner
 from src.strategies import TradingStrategy
 from src.telegram_commander import (
@@ -179,6 +180,7 @@ class TradingBot:
         self._market_context = MarketContext()
         # УЛУЧШЕНИЕ 7: макро-событийный blackout фильтр
         self._macro_calendar = MacroCalendar()
+        self._season_detector = SeasonDetector()
 
     async def initialize(self) -> None:
         """
@@ -551,6 +553,88 @@ class TradingBot:
             lock=self._monitored_lock,
         )
 
+    async def _season_check_loop(self) -> None:
+        """Фоновый цикл детектора сезона — проверяет CoinGecko каждые 4 часа."""
+        if Config.PAPER_TRADING:
+            return
+
+        import os as _os
+
+        try:
+            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+        except ImportError:
+            InlineKeyboardButton = None  # type: ignore[assignment,misc]
+            InlineKeyboardMarkup = None  # type: ignore[assignment,misc]
+
+        check_interval_h = float(_os.getenv("SEASON_CHECK_INTERVAL_H", "4"))
+        check_interval_s = int(check_interval_h * 3600)
+        auto_switch = _os.getenv("SEASON_SWITCH_MODE", "alert").lower() == "auto"
+
+        # Первая проверка — через 10 мин после старта (не сразу)
+        await asyncio.sleep(600)
+
+        while self.is_running:
+            try:
+                data = await self._season_detector.fetch_data()
+                if data:
+                    index = self._season_detector.compute_index(data)
+                    if index:
+                        current_profile = self._runtime_config.get_market_profile()
+                        signal = self._season_detector.classify(index)
+                        now = time.time()
+
+                        needs_alert = self._season_detector.should_alert(
+                            signal, current_profile, now
+                        )
+                        if needs_alert:
+                            msg = self._season_detector.format_message(signal, index)
+
+                            if auto_switch:
+                                self._runtime_config.set_market_profile(signal)
+                                profile_labels = {
+                                    "bluechip": "🔵 Блючипы",
+                                    "altcoin": "🟡 Альткоины",
+                                }
+                                label = profile_labels.get(signal, signal)
+                                suffix = f"\n\n✅ *Профиль переключён на {label}.*"
+                                await self.telegram.notify(msg + suffix)
+                            else:
+                                btn_label = (
+                                    "✅ Переключить на Альты"
+                                    if signal == "altcoin"
+                                    else "✅ Переключить на Блючипы"
+                                )
+                                kb = InlineKeyboardMarkup(
+                                    [
+                                        [
+                                            InlineKeyboardButton(
+                                                btn_label,
+                                                callback_data=(
+                                                    f"market_profile:{signal}"
+                                                ),
+                                            ),
+                                            InlineKeyboardButton(
+                                                "❌ Оставить как есть",
+                                                callback_data="season_dismiss",
+                                            ),
+                                        ]
+                                    ]
+                                )
+                                await self.telegram.notify(msg, reply_markup=kb)
+
+                        logger.info(
+                            "Season check: index=%.0f dom=%.1f%% signal=%s profile=%s",
+                            index["altcoin_index"],
+                            index["btc_dominance"],
+                            signal,
+                            current_profile,
+                        )
+
+            except Exception as exc:
+                logger.warning("Season check loop error: %s", exc)
+
+            await asyncio.sleep(check_interval_s)
+
     async def _update_performance_stats(self) -> None:
         try:
             prices = {}
@@ -697,6 +781,7 @@ class TradingBot:
         """
         self.is_running = True
         self._monitor_task = asyncio.create_task(self._monitor_positions())
+        asyncio.create_task(self._season_check_loop())
         cycle = 0
         ai_status = "on" if self.ai.enabled else "off"
         scan_n = self._runtime_config.get_scan_top_n()
