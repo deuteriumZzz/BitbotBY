@@ -54,8 +54,11 @@ except ImportError:
 # ── Клавиатуры ────────────────────────────────────────────────────────────────
 
 
-def _kb_main() -> "InlineKeyboardMarkup":
+def _kb_main(paper: "bool | None" = None) -> "InlineKeyboardMarkup":
     """Главная панель — появляется после /start и /help."""
+    if paper is None:
+        paper = Config.PAPER_TRADING
+    mode_label = "📄 Режим: PAPER  →  Live" if paper else "💰 Режим: LIVE  →  Paper"
     return InlineKeyboardMarkup(
         [
             [
@@ -67,6 +70,7 @@ def _kb_main() -> "InlineKeyboardMarkup":
                 InlineKeyboardButton("⚙️ Настройки", callback_data="settings"),
                 InlineKeyboardButton("❓ Справка", callback_data="help_menu"),
             ],
+            [InlineKeyboardButton(mode_label, callback_data="switch_trading_mode")],
         ]
     )
 
@@ -144,14 +148,9 @@ def _kb_settings(
         rows.append(
             [InlineKeyboardButton(chronos_label, callback_data="toggle_chronos")]
         )
-    if Config.TRADING_MODE_PIN:
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    mode_switch_label, callback_data="switch_trading_mode"
-                )
-            ]
-        )
+    rows.append(
+        [InlineKeyboardButton(mode_switch_label, callback_data="switch_trading_mode")]
+    )
     rows += [
         [
             InlineKeyboardButton(
@@ -270,14 +269,17 @@ def _kb_help_back() -> "InlineKeyboardMarkup":
     )
 
 
-def _kb_timeout_menu(current: int) -> "InlineKeyboardMarkup":
+def _kb_timeout_menu(current: int, auto_exec: bool = False) -> "InlineKeyboardMarkup":
     def _btn(sec: int) -> "InlineKeyboardButton":
-        label = f"{'✅ ' if sec == current else ''}{sec}с"
+        selected = not auto_exec and sec == current
+        label = f"{'✅ ' if selected else ''}{sec}с"
         return InlineKeyboardButton(label, callback_data=f"timeout:{sec}")
 
-    manual_label = f"{'✅ ' if current == 0 else ''}🖐 Вручную"
+    manual_label = f"{'✅ ' if (not auto_exec and current == 0) else ''}🖐 Вручную"
+    auto_label = f"{'✅ ' if auto_exec else ''}🤖 Авто (без диалога)"
     return InlineKeyboardMarkup(
         [
+            [InlineKeyboardButton(auto_label, callback_data="timeout:auto")],
             [_btn(15), _btn(30), _btn(60)],
             [_btn(120), _btn(180), _btn(300)],
             [InlineKeyboardButton(manual_label, callback_data="timeout:0")],
@@ -740,10 +742,9 @@ class TelegramCommander:
         for name, handler in commands:
             app.add_handler(CommandHandler(name, handler))
         app.add_handler(CallbackQueryHandler(self._handle_callback))
-        if Config.TRADING_MODE_PIN:
-            app.add_handler(
-                MessageHandler(filters.TEXT & ~filters.COMMAND, self._handle_text)
-            )
+        app.add_handler(
+            MessageHandler(filters.TEXT & ~filters.COMMAND, self._handle_text)
+        )
 
         bot_commands = [
             ("start", "Главная панель"),
@@ -797,8 +798,17 @@ class TelegramCommander:
         try:
             await query.edit_message_text(text, parse_mode="Markdown", reply_markup=kb)
         except Exception as _e:
-            if "message is not modified" not in str(_e).lower():
-                raise
+            err = str(_e).lower()
+            if "message is not modified" in err:
+                return
+            # Telegram rejected the edit (parse error, too old, etc.) — send new message
+            logger.warning("edit_message_text failed (%s), sending new message", _e)
+            try:
+                await query.message.reply_text(
+                    text, parse_mode="Markdown", reply_markup=kb
+                )
+            except Exception as _e2:
+                logger.error("fallback reply_text also failed: %s", _e2)
 
     # ── Builders ──────────────────────────────────────────────────────────────
 
@@ -1797,16 +1807,62 @@ class TelegramCommander:
                 if Config.PAPER_TRADING
                 else "✅ Бот перейдёт в режим симуляции."
             )
-            self._rc.set_awaiting_mode_pin(ttl=120)
+            if Config.TRADING_MODE_PIN:
+                self._rc.set_awaiting_mode_pin(ttl=120)
+                await self._edit(
+                    query,
+                    f"🔐 *Подтверждение смены режима*\n\n"
+                    f"Вы собираетесь переключиться на: *{target}*\n\n"
+                    f"{warning}\n\n"
+                    f"Введите кодовое слово в чат (у вас есть *2 минуты*):",
+                    InlineKeyboardMarkup(
+                        [[InlineKeyboardButton("❌ Отмена", callback_data="settings")]]
+                    ),
+                )
+            else:
+                await self._edit(
+                    query,
+                    f"🔄 *Смена режима торговли*\n\n"
+                    f"Вы собираетесь переключиться на: *{target}*\n\n"
+                    f"{warning}\n\n"
+                    f"Подтвердите переключение:",
+                    InlineKeyboardMarkup(
+                        [
+                            [
+                                InlineKeyboardButton(
+                                    "✅ Подтвердить",
+                                    callback_data="confirm_mode_switch",
+                                ),
+                                InlineKeyboardButton(
+                                    "❌ Отмена", callback_data="settings"
+                                ),
+                            ]
+                        ]
+                    ),
+                )
+
+        elif data == "confirm_mode_switch":
+            import os as _os
+
+            new_paper = not Config.PAPER_TRADING
+            Config.PAPER_TRADING = new_paper
+            _os.environ["PAPER_TRADING"] = "true" if new_paper else "false"
+            self._rc.set_paper_trading_override(new_paper)
+            mode_name = (
+                "📄 PAPER (симуляция)" if new_paper else "💰 LIVE (реальная торговля)"
+            )
+            detail = (
+                "⚠️ Бот теперь торгует на реальные деньги."
+                if not new_paper
+                else "✅ Бот переведён в режим симуляции. Реальных сделок нет."
+            )
             await self._edit(
                 query,
-                f"🔐 *Подтверждение смены режима*\n\n"
-                f"Вы собираетесь переключиться на: *{target}*\n\n"
-                f"{warning}\n\n"
-                f"Введите кодовое слово в чат (у вас есть *2 минуты*):",
-                InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("❌ Отмена", callback_data="settings")]]
-                ),
+                f"🚨 *ВАЖНО! РЕЖИМ ТОРГОВЛИ ИЗМЕНЁН*\n\n"
+                f"Текущий режим: *{mode_name}*\n\n"
+                f"{detail}\n\n"
+                f"Изменение сохранено и восстановится после перезапуска.",
+                _kb_main(new_paper),
             )
 
         # ── Профиль рынка ────────────────────────────────────────────────────
@@ -2071,27 +2127,46 @@ class TelegramCommander:
         # ── Таймаут подтверждения ─────────────────────────────────────────────
         elif data == "timeout_menu":
             cur = self._rc.get_confirm_timeout()
-            cur_label = "🖐 Вручную" if cur == 0 else f"{cur}с"
-            cur_hint = (
-                "сделка ждёт Trade бессрочно, без ответа — не открывается"
-                if cur == 0
-                else f"авто-исполнение через {cur}с если нет ответа"
-            )
+            auto_exec = self._rc.get_auto_execute()
+            if auto_exec:
+                cur_hint = "сделки исполняются немедленно, без диалога"
+                cur_label = "🤖 Авто"
+            elif cur == 0:
+                cur_label = "🖐 Вручную"
+                cur_hint = "сделка ждёт Trade бессрочно, без ответа — не открывается"
+            else:
+                cur_label = f"{cur}с"
+                cur_hint = f"авто-исполнение через {cur}с если нет ответа"
             await self._edit(
                 query,
                 f"⏱ *Таймаут подтверждения сделки*\n\n"
                 f"Сейчас: *{cur_label}* — {cur_hint}\n\n"
-                f"Выбери новое значение:",
-                _kb_timeout_menu(cur),
+                f"🤖 *Авто* — сделки без диалога Trade/Skip\n"
+                f"🖐 *Вручную* — сделка открывается только по кнопке Trade\n"
+                f"*15–300с* — авто через N секунд, можно отменить\n\n"
+                f"Выбери режим:",
+                _kb_timeout_menu(cur, auto_exec),
             )
 
         elif data.startswith("timeout:"):
+            raw = data.split(":", 1)[1]
+            if raw == "auto":
+                self._rc.set_auto_execute(True)
+                await self._edit(
+                    query,
+                    "✅ *Авто-режим* — сделки исполняются немедленно.\n"
+                    "Кнопки Trade/Skip не показываются.\n\n"
+                    "_Применится к следующей сделке._",
+                    _kb_timeout_menu(self._rc.get_confirm_timeout(), True),
+                )
+                return
             try:
-                sec = int(data.split(":", 1)[1])
+                sec = int(raw)
             except (ValueError, IndexError):
                 return
             ok = self._rc.set_confirm_timeout(sec)
             if ok:
+                self._rc.set_auto_execute(False)
                 if sec == 0:
                     msg = (
                         "✅ *Ручной режим* — сделка ждёт нажатия Trade.\n"
@@ -2106,7 +2181,7 @@ class TelegramCommander:
                 await self._edit(
                     query,
                     msg,
-                    _kb_timeout_menu(sec),
+                    _kb_timeout_menu(sec, False),
                 )
 
         # ── Тюнинг SAC ───────────────────────────────────────────────────────
