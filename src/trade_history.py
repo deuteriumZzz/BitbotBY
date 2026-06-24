@@ -54,11 +54,14 @@ def get_backtest_stats(strategy: str) -> Dict:
 
 logger = logging.getLogger(__name__)
 
+
 def _db_path() -> str:
     from config import Config  # noqa: PLC0415
 
     suffix = "paper" if Config.PAPER_TRADING else "live"
     return os.path.join("data", f"trades_{suffix}.db")
+
+
 _DDL = """
 CREATE TABLE IF NOT EXISTS trades (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
