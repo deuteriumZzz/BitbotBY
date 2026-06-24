@@ -218,10 +218,9 @@ class TradingBot:
                     )
                     if real_balance > 0:
                         self.risk_manager.initial_balance = real_balance
-                        # Обновляем базу дня, чтобы дневной лимит убытка
-                        # считался от реального баланса, а не от INITIAL_BALANCE.
                         self.risk_manager._day_start_balance = real_balance
                         self.portfolio_manager.current_balance = real_balance
+                        self._live_balance_cache = real_balance
                         logger.info(
                             "Live mode: real balance synced — $%.2f", real_balance
                         )
@@ -472,21 +471,30 @@ class TradingBot:
                 "side": pos.get("side", "buy"),
                 "qty": pos.get("qty", 0),
                 "entry_price": pos.get("entry", 0),
+                "stop_loss": pos.get("stop_loss", 0),
+                "take_profit": pos.get("take_profit", 0),
                 "pnl_pct": pos.get("pnl_pct", 0),
             }
             for sym, pos in self._monitored.items()
+            if pos is not None
         ]
         balance = (
             self.portfolio_manager.current_balance
             if Config.PAPER_TRADING
             else self._live_balance_cache
         )
+        from src.strategies import get_all_strategies  # noqa: PLC0415
+
+        disabled = self._runtime_config.get_disabled_strategies()
+        strategies = [
+            {**s, "enabled": s["name"] not in disabled} for s in get_all_strategies()
+        ]
         return {
             "balance": balance,
             "initial_balance": Config.INITIAL_BALANCE,
             "positions": positions,
             "paper_trading": Config.PAPER_TRADING,
-            "strategies": [],
+            "strategies": strategies,
         }
 
     def _set_paper_balance(self, value: float) -> None:
@@ -666,6 +674,8 @@ class TradingBot:
 
             except Exception as exc:
                 logger.warning("Season check loop error: %s", exc)
+                await asyncio.sleep(300)  # быстрый ретрай при ошибке
+                continue
 
             await asyncio.sleep(check_interval_s)
 
