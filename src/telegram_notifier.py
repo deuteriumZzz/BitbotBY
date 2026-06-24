@@ -102,7 +102,7 @@ class TelegramNotifier:
         footer = (
             "\n\n✅ *Trade — принято*" if confirmed else "\n\n❌ *Skip — пропущено*"
         )
-        original = query.message.text or ""
+        original = query.message.text or ""  # type: ignore[attr-defined]
         try:
             await query.edit_message_text(
                 text=original + footer,
@@ -184,7 +184,11 @@ class TelegramNotifier:
             f"AI confidence: *{confidence:.0%}*\n\n"
             f"{bt_line}\n"
             f"{live_line}\n\n"
-            f"{'🖐 Ручной режим — нажми Trade чтобы войти, иначе сделка не откроется' if not auto_execute else f'⚡ Авто-исполнение через {timeout}с — нажми Skip чтобы пропустить'}"
+            + (
+                "🖐 Ручной режим — нажми Trade чтобы войти, иначе сделка не откроется"
+                if not auto_execute
+                else f"⚡ Авто-исполнение через {timeout}с — нажми Skip чтобы пропустить"
+            )
         )
         keyboard = InlineKeyboardMarkup(
             [

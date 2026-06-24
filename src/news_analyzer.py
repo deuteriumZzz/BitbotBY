@@ -42,6 +42,20 @@ _COIN_QUERIES = {
     "NEAR": "NEAR Protocol OR NEAR",
     "OP": "Optimism OR OP token",
     "ARB": "Arbitrum OR ARB",
+    # Altcoin profile
+    "HYPE": "Hyperliquid OR HYPE token",
+    "ENA": "Ethena OR ENA token",
+    "INJ": "Injective Protocol OR INJ",
+    "AERO": "Aerodrome Finance OR AERO",
+    "MNT": "Mantle Network OR MNT token",
+    "WLD": "Worldcoin OR WLD token",
+    "EIGEN": "EigenLayer OR EIGEN token",
+    "SUI": "Sui Network OR SUI blockchain",
+    "ONDO": "Ondo Finance OR ONDO token",
+    "AXS": "Axie Infinity OR AXS token",
+    "IP": "Story Protocol OR IP token",
+    "TNSR": "Tensor Protocol OR TNSR",
+    "BICO": "Biconomy OR BICO token",
 }
 
 
