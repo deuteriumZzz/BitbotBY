@@ -29,6 +29,71 @@ TRAIN_SPLIT = 0.8
 _WF_TRAIN_MONTHS = 4
 _WF_STEP_MONTHS = 1
 _CANDLES_PER_MONTH = 2880  # 15m * 24h * 30d
+_PROGRESS_EVERY = 5000  # шагов между TRAIN_PROGRESS строками
+
+
+class _ProgressCallback:
+    """Minimal stable-baselines3 BaseCallback that emits TRAIN_PROGRESS lines."""
+
+    def __init__(self, total_timesteps: int) -> None:
+        self._total = total_timesteps
+        self._last_report = 0
+        self._start_time: float | None = None
+        self.n_calls = 0
+        self.num_timesteps = 0
+        self.model = None
+        self.training_env = None
+        self.parent = None
+        self.verbose = 0
+        self.locals: dict = {}
+        self.globals: dict = {}
+        self.logger = None
+
+    def init_callback(self, model) -> None:  # noqa: ANN001
+        import time
+
+        self.model = model
+        self._start_time = time.time()
+
+    def on_training_start(self, locals_: dict, globals_: dict) -> None:
+        import time
+
+        self._start_time = time.time()
+
+    def on_step(self) -> bool:
+        import time
+
+        step = self.model.num_timesteps if self.model else self.num_timesteps
+        if step - self._last_report >= _PROGRESS_EVERY:
+            self._last_report = step
+            pct = round(step / self._total * 100, 1)
+            elapsed = time.time() - (self._start_time or time.time())
+            eta_min = (
+                int((elapsed / step) * (self._total - step) / 60) if step > 0 else None
+            )
+            data = {
+                "pct": pct,
+                "step": step,
+                "total": self._total,
+                "eta_min": eta_min,
+            }
+            print(f"TRAIN_PROGRESS:{json.dumps(data)}", file=sys.stdout, flush=True)
+        return True
+
+    def on_training_end(self) -> None:
+        data = {
+            "pct": 100.0,
+            "step": self._total,
+            "total": self._total,
+            "eta_min": 0,
+        }
+        print(f"TRAIN_PROGRESS:{json.dumps(data)}", file=sys.stdout, flush=True)
+
+    def on_rollout_start(self) -> None:
+        pass
+
+    def on_rollout_end(self) -> None:
+        pass
 
 
 def _backup_existing_model(path: str) -> str:
@@ -323,7 +388,10 @@ def train(
             policy_kwargs=policy_kwargs or None,
             **sac_kwargs,
         )
-        model.learn(total_timesteps=total_timesteps)
+        model.learn(
+            total_timesteps=total_timesteps,
+            callback=_ProgressCallback(total_timesteps),
+        )
     except Exception as e:
         logger.error(f"Ошибка обучения SAC: {e}", exc_info=True)
         return None

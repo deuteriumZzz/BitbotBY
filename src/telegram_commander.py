@@ -162,6 +162,7 @@ def _kb_settings(
         ],
         [InlineKeyboardButton("📊 Бэктест стратегий", callback_data="backtest_menu")],
         [InlineKeyboardButton("⏱ Таймаут подтверждения", callback_data="timeout_menu")],
+        [InlineKeyboardButton("📈 Прогресс обучения", callback_data="train_progress")],
         [InlineKeyboardButton("🔄 Сброс настроек", callback_data="reset_defaults")],
         [InlineKeyboardButton("« Главная", callback_data="main")],
     ]
@@ -1491,16 +1492,45 @@ class TelegramCommander:
                 stdout=_asyncio.subprocess.PIPE,
                 stderr=_asyncio.subprocess.PIPE,
             )
+            self._rc.clear_train_progress()
             await self._notifier.notify(
                 f"🧠 *Обучение SAC запущено{profile_note}*\n\n"
                 "Процесс идёт в фоне, бот продолжает торговать.\n"
                 f"📁 Сохранение в: `{model_path}`\n"
                 "⏱ Ожидаемое время: ~60 мин на CPU.\n"
-                "_Пришлю уведомление когда модель будет готова._"
+                "_Пришлю уведомление когда модель будет готова._\n\n"
+                "Нажми *Прогресс обучения* в Настройках чтобы проверить статус.",
             )
-            stdout, stderr = await proc.communicate()
+            stdout_lines: list[str] = []
+            stderr_buf: bytes = b""
+
+            async def _read_stdout() -> None:
+                assert proc.stdout is not None
+                while True:
+                    raw = await proc.stdout.readline()
+                    if not raw:
+                        break
+                    line = raw.decode(errors="replace").strip()
+                    stdout_lines.append(line)
+                    if line.startswith("TRAIN_PROGRESS:"):
+                        try:
+                            import json as _json
+
+                            data = _json.loads(line[len("TRAIN_PROGRESS:") :])
+                            self._rc.set_train_progress(data)
+                        except Exception:
+                            pass
+
+            async def _read_stderr() -> None:
+                nonlocal stderr_buf
+                assert proc.stderr is not None
+                stderr_buf = await proc.stderr.read()
+
+            await _asyncio.gather(_read_stdout(), _read_stderr(), proc.wait())
+
+            stdout_bytes = "\n".join(stdout_lines).encode()
             if proc.returncode == 0:
-                train_res = _parse_train_result(stdout.decode())
+                train_res = _parse_train_result(stdout_bytes.decode())
                 if train_res and train_res.get("backup"):
                     self._rc.set_sac_backup_path(train_res["backup"])
                 worse = _is_worse(train_res)
@@ -1519,7 +1549,11 @@ class TelegramCommander:
                     reply_markup=_kb_after_training(worse=worse),
                 )
             else:
-                err = stderr.decode()[-300:] if stderr else "нет деталей"
+                err = (
+                    stderr_buf.decode(errors="replace")[-300:]
+                    if stderr_buf
+                    else "нет деталей"
+                )
                 await self._notifier.notify(
                     f"❌ *Ошибка обучения SAC*\n\n`{err}`\n\nПроверьте: `make logs`",
                     reply_markup=_kb_main(),
@@ -1528,6 +1562,7 @@ class TelegramCommander:
             await self._notifier.notify(f"❌ SAC обучение упало: {e}")
         finally:
             self._sac_training = False
+            self._rc.clear_train_progress()
 
     async def _run_sac_tune_and_train(self) -> None:
         """Запускает tune_sac.py, затем train_sac.py последовательно."""
@@ -2226,6 +2261,76 @@ class TelegramCommander:
             )
 
         # ── SAC обучение ──────────────────────────────────────────────────────
+        elif data == "train_progress":
+            prog = self._rc.get_train_progress()
+            if self._sac_training and prog:
+                pct = prog.get("pct", 0)
+                step = prog.get("step", 0)
+                total = prog.get("total", 1)
+                eta_min = prog.get("eta_min")
+                bar_filled = int(pct / 10)
+                bar = "█" * bar_filled + "░" * (10 - bar_filled)
+                eta_str = f"~{eta_min} мин" if eta_min is not None else "считается..."
+                await self._edit(
+                    query,
+                    f"📈 *Прогресс обучения SAC*\n\n"
+                    f"`[{bar}]` *{pct:.1f}%*\n\n"
+                    f"Шаги: `{step:,}` / `{total:,}`\n"
+                    f"Осталось: *{eta_str}*\n\n"
+                    f"_Бот торгует в фоне._",
+                    InlineKeyboardMarkup(
+                        [
+                            [
+                                InlineKeyboardButton(
+                                    "🔄 Обновить", callback_data="train_progress"
+                                )
+                            ],
+                            [
+                                InlineKeyboardButton(
+                                    "« Настройки", callback_data="settings"
+                                )
+                            ],
+                        ]
+                    ),
+                )
+            elif self._sac_training:
+                await self._edit(
+                    query,
+                    "🧠 *Обучение SAC идёт...*\n\n"
+                    "Прогресс появится через несколько минут.\n\n"
+                    "_Нажми Обновить чтобы проверить снова._",
+                    InlineKeyboardMarkup(
+                        [
+                            [
+                                InlineKeyboardButton(
+                                    "🔄 Обновить", callback_data="train_progress"
+                                )
+                            ],
+                            [
+                                InlineKeyboardButton(
+                                    "« Настройки", callback_data="settings"
+                                )
+                            ],
+                        ]
+                    ),
+                )
+            else:
+                await self._edit(
+                    query,
+                    "📈 *Прогресс обучения SAC*\n\n"
+                    "Обучение сейчас не запущено.\n\n"
+                    "_Нажми 'Обучить SAC' в Настройках чтобы начать._",
+                    InlineKeyboardMarkup(
+                        [
+                            [
+                                InlineKeyboardButton(
+                                    "« Настройки", callback_data="settings"
+                                )
+                            ]
+                        ]
+                    ),
+                )
+
         elif data == "train_sac_now":
             if self._sac_training:
                 await self._edit(

@@ -42,6 +42,7 @@ _KEY_MAX_VOLUME = "bot:max_volume_usdt"
 _KEY_AWAITING_MODE_PIN = "bot:awaiting_mode_pin"
 _KEY_PAPER_TRADING = "bot:paper_trading_override"
 _KEY_SAC_BACKUP = "bot:sac_model_backup"
+_KEY_TRAIN_PROGRESS = "bot:train_progress"
 
 _AI_PROVIDERS = frozenset({"auto", "anthropic", "openai", "deepseek", "groq"})
 _LEVERAGE_MODES = frozenset({"fixed", "volatility", "full"})
@@ -614,6 +615,33 @@ class RuntimeConfig:
 
     def set_sac_backup_path(self, path: str) -> None:
         self._set(_KEY_SAC_BACKUP, path)
+
+    # ── Train progress ────────────────────────────────────────────────────────
+
+    def set_train_progress(self, data: dict) -> None:
+        import json as _json
+
+        try:
+            self._set(_KEY_TRAIN_PROGRESS, _json.dumps(data))
+        except Exception:
+            pass
+
+    def get_train_progress(self) -> "dict | None":
+        import json as _json
+
+        val = self._get(_KEY_TRAIN_PROGRESS)
+        if not val:
+            return None
+        try:
+            return _json.loads(val)
+        except Exception:
+            return None
+
+    def clear_train_progress(self) -> None:
+        try:
+            self._r.redis_client.delete(_KEY_TRAIN_PROGRESS)
+        except Exception:
+            pass
 
     # ── Startup ───────────────────────────────────────────────────────────────
 
