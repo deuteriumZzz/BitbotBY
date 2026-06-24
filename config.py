@@ -132,6 +132,9 @@ class Config:
     MAX_POSITIONS: int = int(os.getenv("MAX_POSITIONS", "3"))
     # True → симулировать сделки без реальных ордеров
     PAPER_TRADING: bool = os.getenv("PAPER_TRADING", "false").lower() == "true"
+    # Кодовое слово для переключения Paper ↔ Live через Telegram
+    # (пусто = функция отключена)
+    TRADING_MODE_PIN: str = os.getenv("TRADING_MODE_PIN", "")
     # Trailing SL: двигать SL вслед за ценой (кратно ATR)
     TRAILING_STOP_ATR_MULT: float = float(os.getenv("TRAILING_STOP_ATR_MULT", "1.0"))
     # Circuit breaker: остановить бота после N подряд убыточных сделок (0 = выключен)

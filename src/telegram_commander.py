@@ -38,7 +38,13 @@ logger = logging.getLogger(__name__)
 
 try:
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-    from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes
+    from telegram.ext import (
+        CallbackQueryHandler,
+        CommandHandler,
+        ContextTypes,
+        MessageHandler,
+        filters,
+    )
 
     _TG_AVAILABLE = True
 except ImportError:
@@ -101,7 +107,11 @@ def _kb_chronos_prompt() -> "InlineKeyboardMarkup":
 
 
 def _kb_settings(
-    paused: bool, auto_exec: bool, mode: str = "", chronos: bool = False
+    paused: bool,
+    auto_exec: bool,
+    mode: str = "",
+    chronos: bool = False,
+    paper: bool = False,
 ) -> "InlineKeyboardMarkup":
     pause_btn = (
         InlineKeyboardButton("▶️ Возобновить торговлю", callback_data="resume")
@@ -110,6 +120,9 @@ def _kb_settings(
     )
     exec_label = (
         "✅ Авто-сделки: ВКЛ  →  выкл" if auto_exec else "❌ Авто-сделки: ВЫКЛ  →  вкл"
+    )
+    mode_switch_label = (
+        "📄 Режим: PAPER  →  Live" if paper else "💰 Режим: LIVE  →  Paper"
     )
     rows = [
         [InlineKeyboardButton(exec_label, callback_data="toggle_auto_exec")],
@@ -124,21 +137,32 @@ def _kb_settings(
         [InlineKeyboardButton("🕐 Часы торговли", callback_data="hours_info")],
         [InlineKeyboardButton("🤖 AI-провайдер", callback_data="provider_menu")],
     ]
-    if mode == "hybrid":
+    if mode == "hybrid" and not Config.PAPER_TRADING:
         chronos_label = (
             "🛡 Chronos: ВКЛ  →  выкл" if chronos else "⚡ Chronos: ВЫКЛ  →  вкл"
         )
         rows.append(
             [InlineKeyboardButton(chronos_label, callback_data="toggle_chronos")]
         )
+    if Config.TRADING_MODE_PIN:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    mode_switch_label, callback_data="switch_trading_mode"
+                )
+            ]
+        )
     rows += [
         [
             InlineKeyboardButton(
-                "🔬 Тюнинг SAC (~2ч) + обучение", callback_data="tune_sac_menu"
-            )
+                "🧠 Обучить SAC (~60 мин)", callback_data="train_sac_now"
+            ),
+            InlineKeyboardButton(
+                "🔬 Тюнинг + обучение (~3ч)", callback_data="tune_sac_menu"
+            ),
         ],
-        [InlineKeyboardButton("⏱ Таймаут подтверждения", callback_data="timeout_menu")],
         [InlineKeyboardButton("📊 Бэктест стратегий", callback_data="backtest_menu")],
+        [InlineKeyboardButton("⏱ Таймаут подтверждения", callback_data="timeout_menu")],
         [InlineKeyboardButton("🔄 Сброс настроек", callback_data="reset_defaults")],
         [InlineKeyboardButton("« Главная", callback_data="main")],
     ]
@@ -334,6 +358,26 @@ def _kb_after_action() -> "InlineKeyboardMarkup":
             ]
         ]
     )
+
+
+def _kb_after_training(worse: bool = False) -> "InlineKeyboardMarkup":
+    rows = []
+    if worse:
+        rows.append(
+            [InlineKeyboardButton("🔄 Откатить модель", callback_data="rollback_sac")]
+        )
+    rows += [
+        [
+            InlineKeyboardButton(
+                "📊 Запустить бэктест", callback_data="backtest_now"
+            )
+        ],
+        [
+            InlineKeyboardButton("📊 Статус", callback_data="status"),
+            InlineKeyboardButton("⚙️ Настройки", callback_data="settings"),
+        ],
+    ]
+    return InlineKeyboardMarkup(rows)
 
 
 def _kb_risk_menu(drawdown_on: bool, max_pos: int = 3) -> "InlineKeyboardMarkup":
@@ -614,6 +658,37 @@ _HELP_SECURITY = (
 )
 
 
+def _parse_train_result(stdout: str) -> "dict | None":
+    import json as _json
+
+    for line in stdout.splitlines():
+        if line.startswith("TRAIN_RESULT:"):
+            try:
+                return _json.loads(line[len("TRAIN_RESULT:"):])
+            except Exception as exc:
+                logger.warning("Не удалось разобрать TRAIN_RESULT: %s", exc)
+                return None
+    return None
+
+
+def _is_worse(result: "dict | None") -> bool:
+    if not result:
+        return False
+    return result.get("sac_pct", 0) < result.get("bh_pct", 0) - 10
+
+
+def _format_train_result(result: "dict | None") -> str:
+    if not result:
+        return ""
+    sac = result.get("sac_pct", 0)
+    bh = result.get("bh_pct", 0)
+    icon = "✅" if sac >= bh else "⚠️"
+    return (
+        f"\n📊 *Тестовая выборка (holdout 20%):*\n"
+        f"  SAC: `{sac:+.1f}%`  |  Buy\\&Hold: `{bh:+.1f}%`  {icon}"
+    )
+
+
 class TelegramCommander:
     """
     Telegram-панель управления BitbotBY.
@@ -667,6 +742,10 @@ class TelegramCommander:
         for name, handler in commands:
             app.add_handler(CommandHandler(name, handler))
         app.add_handler(CallbackQueryHandler(self._handle_callback))
+        if Config.TRADING_MODE_PIN:
+            app.add_handler(
+                MessageHandler(filters.TEXT & ~filters.COMMAND, self._handle_text)
+            )
 
         bot_commands = [
             ("start", "Главная панель"),
@@ -794,7 +873,7 @@ class TelegramCommander:
 
         chronos = self._rc.get_chronos_enabled() if mode == "hybrid" else False
         chronos_str = ""
-        if mode == "hybrid":
+        if mode == "hybrid" and not Config.PAPER_TRADING:
             chronos_str = (
                 f"  Chronos (усил. контроль): {'✅ ВКЛ' if chronos else '❌ ВЫКЛ'}\n"
             )
@@ -825,7 +904,9 @@ class TelegramCommander:
         if excluded:
             text += f"*Исключены из скан.:* `{', '.join(excluded)}`\n"
         text += "\n_Нажми кнопку для изменения:_"
-        return text, _kb_settings(paused, auto_exec, mode=mode, chronos=chronos)
+        return text, _kb_settings(
+            paused, auto_exec, mode=mode, chronos=chronos, paper=Config.PAPER_TRADING
+        )
 
     def _build_risk(self) -> tuple[str, Any]:
         r = self._rc.get_risk_summary()
@@ -1399,7 +1480,7 @@ class TelegramCommander:
                 "python",
                 "reinforcement_learning/train_sac.py",
                 env=env,
-                stdout=_asyncio.subprocess.DEVNULL,
+                stdout=_asyncio.subprocess.PIPE,
                 stderr=_asyncio.subprocess.PIPE,
             )
             await self._notifier.notify(
@@ -1409,13 +1490,25 @@ class TelegramCommander:
                 "⏱ Ожидаемое время: ~60 мин на CPU.\n"
                 "_Пришлю уведомление когда модель будет готова._"
             )
-            _, stderr = await proc.communicate()
+            stdout, stderr = await proc.communicate()
             if proc.returncode == 0:
+                train_res = _parse_train_result(stdout.decode())
+                if train_res and train_res.get("backup"):
+                    self._rc.set_sac_backup_path(train_res["backup"])
+                worse = _is_worse(train_res)
+                result_str = _format_train_result(train_res)
+                verdict = (
+                    "\n\n⚠️ *Модель показала результат хуже рынка.*"
+                    " Рекомендуется откат или бэктест для анализа."
+                    if worse
+                    else "\n\n✅ Модель превзошла Buy\\&Hold на тестовой выборке."
+                )
                 await self._notifier.notify(
                     f"✅ *SAC модель обучена{profile_note}!*\n\n"
                     f"Модель сохранена в `{model_path}`.\n"
-                    "Бот автоматически подхватит её в следующем цикле.",
-                    reply_markup=_kb_main(),
+                    f"{result_str}{verdict}\n\n"
+                    "Запустить бэктест чтобы проверить результат?",
+                    reply_markup=_kb_after_training(worse=worse),
                 )
             else:
                 err = stderr.decode()[-300:] if stderr else "нет деталей"
@@ -1462,16 +1555,28 @@ class TelegramCommander:
                 "python",
                 "reinforcement_learning/train_sac.py",
                 env=env,
-                stdout=_asyncio.subprocess.DEVNULL,
+                stdout=_asyncio.subprocess.PIPE,
                 stderr=_asyncio.subprocess.PIPE,
             )
-            _, stderr2 = await proc2.communicate()
+            stdout2, stderr2 = await proc2.communicate()
             if proc2.returncode == 0:
+                train_res2 = _parse_train_result(stdout2.decode())
+                if train_res2 and train_res2.get("backup"):
+                    self._rc.set_sac_backup_path(train_res2["backup"])
+                worse2 = _is_worse(train_res2)
+                result_str2 = _format_train_result(train_res2)
+                verdict2 = (
+                    "\n\n⚠️ *Модель показала результат хуже рынка.*"
+                    " Рекомендуется откат или бэктест для анализа."
+                    if worse2
+                    else "\n\n✅ Модель превзошла Buy\\&Hold на тестовой выборке."
+                )
                 await self._notifier.notify(
                     "✅ *Модель обновлена с лучшими параметрами!*\n\n"
                     "SAC обучен на результатах тюнинга.\n"
-                    "Бот автоматически подхватит новую модель.",
-                    reply_markup=_kb_main(),
+                    f"{result_str2}{verdict2}\n\n"
+                    "Запустить бэктест чтобы проверить результат?",
+                    reply_markup=_kb_after_training(worse=worse2),
                 )
             else:
                 err2 = stderr2.decode()[-300:] if stderr2 else "нет деталей"
@@ -1483,6 +1588,42 @@ class TelegramCommander:
             await self._notifier.notify(f"❌ Тюнинг упал: {e}")
         finally:
             self._sac_training = False
+
+    async def _handle_text(
+        self, update: Update, _context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        chat_id = str(getattr(update.effective_chat, "id", ""))
+        if chat_id != str(self._notifier._chat_id):
+            return
+        if not self._rc.is_awaiting_mode_pin():
+            return
+        if not update.message:
+            return
+        text = (update.message.text or "").strip()
+        self._rc.clear_awaiting_mode_pin()
+        if text != Config.TRADING_MODE_PIN:
+            await self._notifier.notify(
+                "❌ Неверное кодовое слово. Переключение отменено."
+            )
+            return
+        new_paper = not Config.PAPER_TRADING
+        Config.PAPER_TRADING = new_paper
+        self._rc.set_paper_trading_override(new_paper)
+        mode_name = (
+            "📄 PAPER (симуляция)" if new_paper else "💰 LIVE (реальная торговля)"
+        )
+        detail = (
+            "⚠️ Бот теперь торгует на реальные деньги."
+            if not new_paper
+            else "✅ Бот переведён в режим симуляции. Реальных сделок нет."
+        )
+        await self._notifier.notify(
+            f"🚨 *ВАЖНО! РЕЖИМ ТОРГОВЛИ ИЗМЕНЁН*\n\n"
+            f"Текущий режим: *{mode_name}*\n\n"
+            f"{detail}\n\n"
+            f"Изменение сохранено и восстановится после перезапуска.",
+            parse_mode="Markdown",
+        )
 
     async def _handle_callback(
         self, update: Update, _context: ContextTypes.DEFAULT_TYPE
@@ -1641,6 +1782,30 @@ class TelegramCommander:
                 query,
                 "🔄 *Настройки сброшены к значениям по умолчанию*\n\n" + text,
                 kb,
+            )
+
+        # ── Переключение Paper ↔ Live ─────────────────────────────────────────
+        elif data == "switch_trading_mode":
+            target = (
+                "💰 LIVE (реальная торговля)"
+                if Config.PAPER_TRADING
+                else "📄 PAPER (симуляция)"
+            )
+            warning = (
+                "⚠️ *ВНИМАНИЕ!* Это включит реальную торговлю с реальными деньгами!"
+                if Config.PAPER_TRADING
+                else "✅ Бот перейдёт в режим симуляции."
+            )
+            self._rc.set_awaiting_mode_pin(ttl=120)
+            await self._edit(
+                query,
+                f"🔐 *Подтверждение смены режима*\n\n"
+                f"Вы собираетесь переключиться на: *{target}*\n\n"
+                f"{warning}\n\n"
+                f"Введите кодовое слово в чат (у вас есть *2 минуты*):",
+                InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("❌ Отмена", callback_data="settings")]]
+                ),
             )
 
         # ── Профиль рынка ────────────────────────────────────────────────────
@@ -2002,6 +2167,28 @@ class TelegramCommander:
                 "Запустить позже: /trainn",
                 _kb_main(),
             )
+
+        elif data == "rollback_sac":
+            import os as _os
+            import shutil as _shutil
+
+            backup = self._rc.get_sac_backup_path()
+            model = self._rc.get_sac_model_path()
+            if not backup or not _os.path.exists(backup):
+                await self._edit(
+                    query,
+                    "❌ *Бэкап не найден*\n\nФайл резервной копии отсутствует.",
+                    _kb_after_action(),
+                )
+            else:
+                _shutil.copy2(backup, model)
+                await self._edit(
+                    query,
+                    f"✅ *Модель откатана*\n\n"
+                    f"Восстановлена из: `{backup}`\n"
+                    "Бот подхватит старую модель в следующем цикле.",
+                    _kb_after_action(),
+                )
 
         else:
             await query.answer("Неизвестная команда")
