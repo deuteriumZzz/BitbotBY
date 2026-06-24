@@ -39,6 +39,9 @@ _KEY_MARKET_PROFILE = "bot:market_profile"
 _KEY_TIMEFRAME = "bot:timeframe"
 _KEY_MIN_VOLUME = "bot:min_volume_usdt"
 _KEY_MAX_VOLUME = "bot:max_volume_usdt"
+_KEY_AWAITING_MODE_PIN = "bot:awaiting_mode_pin"
+_KEY_PAPER_TRADING = "bot:paper_trading_override"
+_KEY_SAC_BACKUP = "bot:sac_model_backup"
 
 _AI_PROVIDERS = frozenset({"auto", "anthropic", "openai", "deepseek", "groq"})
 _LEVERAGE_MODES = frozenset({"fixed", "volatility", "full"})
@@ -573,6 +576,40 @@ class RuntimeConfig:
 
     def get_market_profiles_info(self) -> dict:
         return {k: v["label"] for k, v in _MARKET_PROFILES.items()}
+
+    # ── Paper / Live switch ───────────────────────────────────────────────────
+
+    def set_awaiting_mode_pin(self, ttl: int = 120) -> None:
+        try:
+            self._r.redis_client.setex(_KEY_AWAITING_MODE_PIN, ttl, "1")
+        except Exception:
+            pass
+
+    def is_awaiting_mode_pin(self) -> bool:
+        return self._get(_KEY_AWAITING_MODE_PIN) == "1"
+
+    def clear_awaiting_mode_pin(self) -> None:
+        try:
+            self._r.redis_client.delete(_KEY_AWAITING_MODE_PIN)
+        except Exception:
+            pass
+
+    def get_paper_trading_override(self) -> "bool | None":
+        val = self._get(_KEY_PAPER_TRADING)
+        if val == "1":
+            return True
+        if val == "0":
+            return False
+        return None
+
+    def set_paper_trading_override(self, paper: bool) -> None:
+        self._set(_KEY_PAPER_TRADING, "1" if paper else "0")
+
+    def get_sac_backup_path(self) -> str:
+        return self._get(_KEY_SAC_BACKUP) or ""
+
+    def set_sac_backup_path(self, path: str) -> None:
+        self._set(_KEY_SAC_BACKUP, path)
 
     # ── Startup ───────────────────────────────────────────────────────────────
 

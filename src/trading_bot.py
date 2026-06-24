@@ -72,6 +72,10 @@ class TradingBot:
     def __init__(self) -> None:
         self.redis = RedisClient()
         self._runtime_config = RuntimeConfig(redis_client=self.redis)
+        # Восстанавливаем runtime-переключение Paper/Live после рестарта
+        override = self._runtime_config.get_paper_trading_override()
+        if override is not None:
+            Config.PAPER_TRADING = override
         self.api = BybitAPI()
         self.data_loader = DataLoader()
         self.portfolio_manager = PortfolioManager(

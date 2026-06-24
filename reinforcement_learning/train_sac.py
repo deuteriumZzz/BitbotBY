@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import shutil
+import sys
 from datetime import datetime
 from typing import Any, Dict, Optional
 
@@ -30,22 +31,21 @@ _WF_STEP_MONTHS = 1
 _CANDLES_PER_MONTH = 2880  # 15m * 24h * 30d
 
 
-def _backup_existing_model(path: str) -> None:
+def _backup_existing_model(path: str) -> str:
     """
     Создаёт резервную копию модели перед перезаписью.
 
-    Если файл существует — копирует его с timestamp-суффиксом
-    вида sac_model_20240101_120000.zip.
-
     :param path: Путь к файлу модели (с .zip или без).
+    :return: Путь к бэкапу или пустая строка если модели не было.
     """
     zip_path = path if path.endswith(".zip") else path + ".zip"
     if not os.path.exists(zip_path):
-        return
+        return ""
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     backup = zip_path.replace(".zip", f"_{ts}.zip")
     shutil.copy2(zip_path, backup)
     logger.info(f"Резервная копия модели → {backup}")
+    return backup
 
 
 def _save_norm_stats(model_path: str, stats: Dict[str, Any]) -> None:
@@ -98,14 +98,14 @@ def _evaluate_model(
     model: Any,
     test_df: pd.DataFrame,
     initial_balance: float = 10000.0,
-) -> float:
+) -> Dict[str, float]:
     """
     Прогоняет обученную модель на тестовой выборке (детерминированный инференс).
 
     :param model: Обученная SAC-модель.
     :param test_df: Тестовый DataFrame (out-of-sample).
     :param initial_balance: Начальный баланс.
-    :return: Итоговая стоимость портфеля.
+    :return: {"sac_pct": float, "bh_pct": float, "commission": float}
     """
     from reinforcement_learning.rl_env import TradingEnv
 
@@ -133,7 +133,11 @@ def _evaluate_model(
         bh_pct,
         env.total_commission,
     )
-    return env.current_value
+    return {
+        "sac_pct": round(pnl_pct, 2),
+        "bh_pct": round(bh_pct, 2),
+        "commission": round(float(env.total_commission), 2),
+    }
 
 
 def _finetune_on_experiences(model: Any, norm_stats: Dict[str, Any]) -> None:
@@ -325,15 +329,16 @@ def train(
         return None
 
     # Оценка на тестовой выборке (out-of-sample)
-    _evaluate_model(model, test_df)
+    eval_result = _evaluate_model(model, test_df)
 
     # Дообучение на реальных сделках, накопленных ботом
     norm_stats = _compute_norm_stats(train_df)
     _finetune_on_experiences(model, norm_stats)
 
     # Резервная копия перед перезаписью
+    backup_path = ""
     if save_backup:
-        _backup_existing_model(model_path)
+        backup_path = _backup_existing_model(model_path)
 
     # Сохранение модели (norm_stats уже вычислен выше на train-данных)
     save_path = model_path.replace(".zip", "")
@@ -341,6 +346,9 @@ def train(
     logger.info(f"Модель SAC сохранена → {save_path}.zip")
 
     _save_norm_stats(model_path, norm_stats)
+
+    result = {**eval_result, "backup": backup_path, "model": model_path}
+    print(f"TRAIN_RESULT:{json.dumps(result)}", file=sys.stdout, flush=True)
 
     return model_path
 
@@ -422,7 +430,7 @@ def train_walk_forward(
             logger.error("WF [%d/%d] ошибка обучения: %s", i, len(starts), exc)
             continue
 
-        _evaluate_model(model, val_df)
+        wf_eval = _evaluate_model(model, val_df)
 
         # Финальная итерация — сохраняем как основную модель
         if i == len(starts):
@@ -431,6 +439,11 @@ def train_walk_forward(
             _save_norm_stats(model_path, norm_stats)
             last_saved = model_path
             logger.info("Walk-forward завершён → %s.zip", save_path)
+            backup_wf = _backup_existing_model(model_path)
+            result_wf = {**wf_eval, "backup": backup_wf, "model": model_path}
+            print(
+                f"TRAIN_RESULT:{json.dumps(result_wf)}", file=sys.stdout, flush=True
+            )
 
     return last_saved
 
