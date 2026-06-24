@@ -136,7 +136,6 @@ def _kb_settings(
             InlineKeyboardButton("🤖 Режим торговли", callback_data="mode_menu"),
             InlineKeyboardButton("🔢 Кол-во символов", callback_data="scan_menu"),
         ],
-        [InlineKeyboardButton("📐 Стратегии", callback_data="strategies")],
         [InlineKeyboardButton("🎯 Профиль рынка", callback_data="market_profile_menu")],
         [
             InlineKeyboardButton(
@@ -1872,6 +1871,9 @@ class TelegramCommander:
                         "Бот не анализирует новости, макро-события и сентимент.\n"
                         "🚫 *Не рекомендуется для реальной торговли.* "
                         "Используй на свой страх и риск.\n\n"
+                        "💡 *Совет:* В режиме AI эти же стратегии работают как "
+                        "контекстное меню — передаются в промпт и помогают "
+                        "нейросети принять более точное решение.\n\n"
                         "─────────────\n\n"
                     )
                     await self._edit(query, warning + strat_text, strat_kb)
