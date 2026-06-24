@@ -568,7 +568,6 @@ class TradingBot:
 
         check_interval_h = float(_os.getenv("SEASON_CHECK_INTERVAL_H", "4"))
         check_interval_s = int(check_interval_h * 3600)
-        auto_switch = _os.getenv("SEASON_SWITCH_MODE", "alert").lower() == "auto"
 
         # Первая проверка — через 10 мин после старта (не сразу)
         await asyncio.sleep(600)
@@ -589,6 +588,9 @@ class TradingBot:
                         if needs_alert:
                             msg = self._season_detector.format_message(signal, index)
 
+                            auto_switch = (
+                                self._runtime_config.get_season_switch_mode() == "auto"
+                            )
                             if auto_switch:
                                 self._runtime_config.set_market_profile(signal)
                                 profile_labels = {
