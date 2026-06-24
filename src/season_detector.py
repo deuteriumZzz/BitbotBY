@@ -1,9 +1,9 @@
 """
 Детектор рыночного сезона (BTC Season / Altcoin Season).
 
-Использует CoinGecko бесплатный API:
-  - /global → BTC dominance
-  - /coins/markets → топ-100 монет, 30d возврат
+Источники данных (в порядке приоритета):
+  1. CoinGecko бесплатный API (может лимитировать — 429)
+  2. CoinPaprika (бесплатно, без ключа, запасной источник)
 
 Логика:
   Alt Season:   altcoin_index >= 75  AND btc_dominance < 45%
@@ -27,6 +27,9 @@ _COINGECKO_MARKETS = (
     "&price_change_percentage=30d"
 )
 
+_PAPRIKA_GLOBAL = "https://api.coinpaprika.com/v1/global"
+_PAPRIKA_TICKERS = "https://api.coinpaprika.com/v1/tickers?limit=100"
+
 _ALT_INDEX_HI = 75  # % монет обогнавших BTC за 30d → Alt Season
 _ALT_INDEX_LO = 25  # ниже → BTC Season
 _BTC_DOM_ALT = 45.0  # dominance ниже → поддерживает Alt Season
@@ -47,6 +50,14 @@ class SeasonDetector:
         self._last_alert: dict[str, float] = {"altcoin": 0.0, "bluechip": 0.0}
 
     async def fetch_data(self) -> dict[str, Any] | None:
+        """Забирает данные сезона: CoinGecko первый, CoinPaprika как fallback."""
+        data = await self._fetch_coingecko()
+        if data is not None:
+            return data
+        logger.info("CoinGecko недоступен — переключаюсь на CoinPaprika")
+        return await self._fetch_paprika()
+
+    async def _fetch_coingecko(self) -> dict[str, Any] | None:
         """Забирает BTC dominance и данные топ-100 монет с CoinGecko."""
         try:
             import asyncio as _asyncio
@@ -73,6 +84,55 @@ class SeasonDetector:
 
         except Exception as exc:
             logger.warning("CoinGecko fetch failed: %s", exc)
+            return None
+
+    async def _fetch_paprika(self) -> dict[str, Any] | None:
+        """Забирает данные с CoinPaprika и нормализует под формат CoinGecko."""
+        _STABLECOINS = {"usdt", "usdc", "dai", "tusd", "fdusd", "busd"}
+        try:
+            import aiohttp
+
+            timeout = aiohttp.ClientTimeout(total=15)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(_PAPRIKA_GLOBAL) as r:
+                    if r.status != 200:
+                        logger.warning("CoinPaprika /global status %d", r.status)
+                        return None
+                    g = await r.json()
+
+                async with session.get(_PAPRIKA_TICKERS) as r:
+                    if r.status != 200:
+                        logger.warning("CoinPaprika /tickers status %d", r.status)
+                        return None
+                    tickers = await r.json()
+
+            btc_dom = g.get("bitcoin_dominance_percentage", 0.0)
+
+            # Нормализуем тикеры в формат CoinGecko markets
+            markets = []
+            for t in tickers:
+                sym = (t.get("symbol") or "").lower()
+                if sym in _STABLECOINS:
+                    continue
+                coin_id = "bitcoin" if sym == "btc" else t.get("id", sym)
+                quotes = (t.get("quotes") or {}).get("USD") or {}
+                markets.append(
+                    {
+                        "id": coin_id,
+                        "symbol": sym,
+                        "price_change_percentage_30d_in_currency": quotes.get(
+                            "percent_change_30d", 0.0
+                        ),
+                    }
+                )
+
+            # Собираем структуру совместимую с compute_index
+            global_data = {"data": {"market_cap_percentage": {"btc": btc_dom}}}
+            logger.info("CoinPaprika: btc_dom=%.1f%%, coins=%d", btc_dom, len(markets))
+            return {"global": global_data, "markets": markets}
+
+        except Exception as exc:
+            logger.warning("CoinPaprika fetch failed: %s", exc)
             return None
 
     def compute_index(self, data: dict[str, Any]) -> dict[str, Any] | None:
