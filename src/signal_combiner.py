@@ -51,7 +51,10 @@ class SignalCombiner:
         self.sac = SACSignal()
         self._rc = rc
         self.logger = logging.getLogger(__name__)
-        self.logger.info("SignalCombiner mode=%s", Config.MODE)
+        self.logger.info(
+            "SignalCombiner mode=%s",
+            self._rc.get_mode() if self._rc else Config.MODE,
+        )
 
     async def combine(
         self,
@@ -77,7 +80,7 @@ class SignalCombiner:
             Если None — фильтр не применяется.
         :return: Список рекомендаций.
         """
-        mode = Config.MODE
+        mode = self._rc.get_mode() if self._rc else Config.MODE
 
         if mode == "local":
             return []

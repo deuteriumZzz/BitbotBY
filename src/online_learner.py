@@ -148,7 +148,7 @@ class OnlineLearner:
 
         if self._redis:
             try:
-                val = self._redis.client.get(f"{_WEIGHT_KEY_PREFIX}{strategy}")
+                val = self._redis.redis_client.get(f"{_WEIGHT_KEY_PREFIX}{strategy}")
                 if val is not None:
                     return float(val)
             except Exception:
@@ -222,7 +222,7 @@ class OnlineLearner:
     async def _background_retrain(self) -> None:
         """Запускает _run_full_retrain в thread executor, не блокируя event loop."""
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             await loop.run_in_executor(None, self._run_full_retrain)
         finally:
             self._is_training = False
@@ -319,7 +319,7 @@ class OnlineLearner:
                 continue
             weight = self._compute_weight(strategy)
             try:
-                self._redis.client.setex(
+                self._redis.redis_client.setex(
                     f"{_WEIGHT_KEY_PREFIX}{strategy}",
                     3600,
                     str(weight),
