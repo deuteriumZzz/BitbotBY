@@ -315,21 +315,65 @@ class PositionMonitor:
         partial_qty = qty * fraction
         new_qty = qty * (1.0 - fraction)
 
+        close_side = "sell" if side == "buy" else "buy"
+        new_sl_id: str | None = None
+        new_tp_id: str | None = None
         if not Config.PAPER_TRADING:
-            close_side = "sell" if side == "buy" else "buy"
+            # Отменяем биржевые SL/TP перед частичным закрытием —
+            # иначе биржа попытается закрыть полный объём при достижении TP.
+            exchange_sl_id = pos.get("exchange_sl_id")
+            exchange_tp_id = pos.get("exchange_tp_id")
+            for oid, label in ((exchange_sl_id, "SL"), (exchange_tp_id, "TP")):
+                if oid:
+                    try:
+                        await self._api.cancel_order(sym, oid)
+                    except Exception as exc:
+                        logger.warning(
+                            "Partial TP: cancel %s %s failed: %s", label, oid, exc
+                        )
             try:
                 await self._api.create_order(
                     sym, "market", close_side, partial_qty, lock_suffix="partial_tp"
                 )
             except Exception as exc:
                 logger.error("Partial TP order failed for %s: %s", sym, exc)
+                # SL/TP уже отменены — восстанавливаем защиту для полного объёма
+                sl_orig = float(pos.get("stop_loss") or 0)
+                tp_orig = float(pos.get("take_profit") or 0)
+                if sl_orig or tp_orig:
+                    try:
+                        r_sl, r_tp = await self._api.place_exchange_sl_tp(
+                            sym, close_side, qty, sl_orig, tp_orig
+                        )
+                        async with lock:
+                            if sym in monitored and monitored[sym] is not None:
+                                monitored[sym]["exchange_sl_id"] = r_sl
+                                monitored[sym]["exchange_tp_id"] = r_tp
+                    except Exception as re_exc:
+                        logger.critical(
+                            "Partial TP: restore SL/TP for %s failed: %s", sym, re_exc
+                        )
                 return pos
+            # Выставляем новые SL (breakeven) и TP для оставшегося объёма
+            tp_price = float(pos.get("take_profit") or 0)
+            if entry or tp_price:
+                try:
+                    new_sl_id, new_tp_id = await self._api.place_exchange_sl_tp(
+                        sym, close_side, new_qty, entry, tp_price
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "Partial TP: re-place SL/TP for %s failed: %s", sym, exc
+                    )
 
         async with lock:
             if sym in monitored and monitored[sym] is not None:
                 monitored[sym]["qty"] = new_qty
                 monitored[sym]["stop_loss"] = entry  # breakeven
                 monitored[sym]["partial_tp_triggered"] = True
+                if not Config.PAPER_TRADING:
+                    monitored[sym]["exchange_sl_id"] = new_sl_id
+                    monitored[sym]["exchange_tp_id"] = new_tp_id
 
         logger.info(
             "Partial TP triggered for %s: closed %.1f%% (%.6f units),"

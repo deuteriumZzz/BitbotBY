@@ -1606,8 +1606,10 @@ class TelegramCommander:
                 "❌ Неверное кодовое слово. Переключение отменено."
             )
             return
+        import os as _os
         new_paper = not Config.PAPER_TRADING
         Config.PAPER_TRADING = new_paper
+        _os.environ["PAPER_TRADING"] = "true" if new_paper else "false"
         self._rc.set_paper_trading_override(new_paper)
         mode_name = (
             "📄 PAPER (симуляция)" if new_paper else "💰 LIVE (реальная торговля)"

@@ -205,18 +205,32 @@ class OrderExecutor:
             _rc.get_trading_hours() if _rc is not None else Config.TRADING_HOURS
         )
         if _trading_hours:
-            hour = datetime.datetime.utcnow().hour
-            try:
-                start_h, end_h = map(int, _trading_hours.split("-"))
-                if not (start_h <= hour < end_h):
+            if _rc is not None:
+                if not _rc.is_trading_time():
                     logger.info(
                         "Outside trading hours (%s UTC), skipping %s",
                         _trading_hours,
                         sym,
                     )
                     return
-            except ValueError:
-                pass  # неверный формат — игнорируем
+            else:
+                hour = datetime.datetime.utcnow().hour
+                try:
+                    start_h, end_h = map(int, _trading_hours.split("-"))
+                    in_hours = (
+                        (start_h <= hour < end_h)
+                        if start_h < end_h
+                        else (hour >= start_h or hour < end_h)
+                    )
+                    if not in_hours:
+                        logger.info(
+                            "Outside trading hours (%s UTC), skipping %s",
+                            _trading_hours,
+                            sym,
+                        )
+                        return
+                except ValueError:
+                    pass
 
         # Guard: max positions and duplicate — reserve the slot immediately under
         # lock so a second concurrent cycle can't open the same symbol while

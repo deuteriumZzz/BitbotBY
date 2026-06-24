@@ -9,7 +9,7 @@ import asyncio
 import logging
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, Optional, Tuple
 
 import ccxt
@@ -76,6 +76,7 @@ class TradingBot:
         override = self._runtime_config.get_paper_trading_override()
         if override is not None:
             Config.PAPER_TRADING = override
+            os.environ["PAPER_TRADING"] = "true" if override else "false"
         self.api = BybitAPI()
         self.data_loader = DataLoader()
         self.portfolio_manager = PortfolioManager(
@@ -741,13 +742,24 @@ class TradingBot:
                     not Config.PAPER_TRADING
                     and not self.risk_manager.check_daily_loss_limit(balance)
                 ):
+                    now_utc = datetime.utcnow()
+                    midnight = (now_utc + timedelta(days=1)).replace(
+                        hour=0, minute=0, second=0, microsecond=0
+                    )
+                    sleep_secs = (midnight - now_utc).total_seconds()
                     await self.telegram.notify(
                         "⛔ Дневной лимит потерь достигнут. "
-                        f"Баланс: ${balance:.2f}. Торговля остановлена до завтра."
+                        f"Баланс: ${balance:.2f}. "
+                        f"Торговля возобновится в 00:00 UTC "
+                        f"(через {int(sleep_secs // 3600)}ч"
+                        f" {int((sleep_secs % 3600) // 60)}м)."
                     )
-                    logger.warning("Daily loss limit hit — stopping bot")
-                    self.is_running = False
-                    break
+                    logger.warning(
+                        "Daily loss limit hit — pausing %.0f s until midnight UTC",
+                        sleep_secs,
+                    )
+                    await asyncio.sleep(sleep_secs)
+                    continue
 
                 regimes = await self._detect_regimes(market_data)
                 recs = await self._generate_signals(
