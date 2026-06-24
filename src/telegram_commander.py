@@ -367,11 +367,7 @@ def _kb_after_training(worse: bool = False) -> "InlineKeyboardMarkup":
             [InlineKeyboardButton("🔄 Откатить модель", callback_data="rollback_sac")]
         )
     rows += [
-        [
-            InlineKeyboardButton(
-                "📊 Запустить бэктест", callback_data="backtest_now"
-            )
-        ],
+        [InlineKeyboardButton("📊 Запустить бэктест", callback_data="backtest_now")],
         [
             InlineKeyboardButton("📊 Статус", callback_data="status"),
             InlineKeyboardButton("⚙️ Настройки", callback_data="settings"),
@@ -664,7 +660,7 @@ def _parse_train_result(stdout: str) -> "dict | None":
     for line in stdout.splitlines():
         if line.startswith("TRAIN_RESULT:"):
             try:
-                return _json.loads(line[len("TRAIN_RESULT:"):])
+                return _json.loads(line[len("TRAIN_RESULT:") :])
             except Exception as exc:
                 logger.warning("Не удалось разобрать TRAIN_RESULT: %s", exc)
                 return None
@@ -1607,6 +1603,7 @@ class TelegramCommander:
             )
             return
         import os as _os
+
         new_paper = not Config.PAPER_TRADING
         Config.PAPER_TRADING = new_paper
         _os.environ["PAPER_TRADING"] = "true" if new_paper else "false"

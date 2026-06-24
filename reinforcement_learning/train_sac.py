@@ -441,9 +441,7 @@ def train_walk_forward(
             logger.info("Walk-forward завершён → %s.zip", save_path)
             backup_wf = _backup_existing_model(model_path)
             result_wf = {**wf_eval, "backup": backup_wf, "model": model_path}
-            print(
-                f"TRAIN_RESULT:{json.dumps(result_wf)}", file=sys.stdout, flush=True
-            )
+            print(f"TRAIN_RESULT:{json.dumps(result_wf)}", file=sys.stdout, flush=True)
 
     return last_saved
 
