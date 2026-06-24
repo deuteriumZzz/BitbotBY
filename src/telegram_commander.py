@@ -116,6 +116,7 @@ def _kb_settings(
     mode: str = "",
     chronos: bool = False,
     paper: bool = False,
+    season_mode: str = "alert",
 ) -> "InlineKeyboardMarkup":
     pause_btn = (
         InlineKeyboardButton("▶️ Возобновить торговлю", callback_data="resume")
@@ -137,6 +138,16 @@ def _kb_settings(
         ],
         [InlineKeyboardButton("📐 Стратегии", callback_data="strategies")],
         [InlineKeyboardButton("🎯 Профиль рынка", callback_data="market_profile_menu")],
+        [
+            InlineKeyboardButton(
+                (
+                    "🔔 Сезон: Алерт  →  авто"
+                    if season_mode == "alert"
+                    else "🤖 Сезон: Авто  →  алерт"
+                ),
+                callback_data="toggle_season_mode",
+            )
+        ],
         [InlineKeyboardButton("⚖️ Риск-профиль", callback_data="risk_menu")],
         [InlineKeyboardButton("🕐 Часы торговли", callback_data="hours_info")],
         [InlineKeyboardButton("🤖 AI-провайдер", callback_data="provider_menu")],
@@ -913,8 +924,14 @@ class TelegramCommander:
         if excluded:
             text += f"*Исключены из скан.:* `{', '.join(excluded)}`\n"
         text += "\n_Нажми кнопку для изменения:_"
+        season_mode = self._rc.get_season_switch_mode()
         return text, _kb_settings(
-            paused, auto_exec, mode=mode, chronos=chronos, paper=Config.PAPER_TRADING
+            paused,
+            auto_exec,
+            mode=mode,
+            chronos=chronos,
+            paper=Config.PAPER_TRADING,
+            season_mode=season_mode,
         )
 
     def _build_risk(self) -> tuple[str, Any]:
@@ -1769,6 +1786,34 @@ class TelegramCommander:
                     await self._edit(query, f"✅ Режим → `{mode}`\n\n" + text, kb)
             else:
                 await self._edit(query, "❌ Неверный режим", _kb_mode_menu())
+
+        elif data == "toggle_season_mode":
+            current = self._rc.get_season_switch_mode()
+            new_mode = "auto" if current == "alert" else "alert"
+            self._rc.set_season_switch_mode(new_mode)
+            if new_mode == "auto":
+                text, kb = self._build_settings()
+                await self._edit(
+                    query,
+                    "⚠️ *Авто-переключение сезона включено*\n\n"
+                    "Бот будет самостоятельно менять профиль рынка\n"
+                    "(Блючипы ↔ Альткоины) когда CoinGecko фиксирует смену сезона.\n\n"
+                    "*Возможные риски:*\n"
+                    "— Ложные сигналы могут переключить профиль в неподходящий момент\n"
+                    "— SAC модель обучена на конкретном профиле — после смены\n"
+                    "  торговля идёт на AI/Local до переобучения модели\n"
+                    "— Рекомендуется иметь обученные модели для обоих профилей\n\n"
+                    "_Для отключения нажми кнопку ещё раз._\n\n" + text,
+                    kb,
+                )
+            else:
+                text, kb = self._build_settings()
+                await self._edit(
+                    query,
+                    "✅ *Режим алерт* — бот будет присылать уведомление\n"
+                    "с кнопками когда обнаружит смену сезона.\n\n" + text,
+                    kb,
+                )
 
         elif data in ("chronos_on", "chronos_off", "toggle_chronos"):
             if data == "toggle_chronos":

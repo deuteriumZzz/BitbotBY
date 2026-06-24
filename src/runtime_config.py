@@ -43,6 +43,7 @@ _KEY_AWAITING_MODE_PIN = "bot:awaiting_mode_pin"
 _KEY_PAPER_TRADING = "bot:paper_trading_override"
 _KEY_SAC_BACKUP = "bot:sac_model_backup"
 _KEY_TRAIN_PROGRESS = "bot:train_progress"
+_KEY_SEASON_MODE = "bot:season_switch_mode"
 
 _AI_PROVIDERS = frozenset({"auto", "anthropic", "openai", "deepseek", "groq"})
 _LEVERAGE_MODES = frozenset({"fixed", "volatility", "full"})
@@ -609,6 +610,22 @@ class RuntimeConfig:
 
     def set_paper_trading_override(self, paper: bool) -> None:
         self._set(_KEY_PAPER_TRADING, "1" if paper else "0")
+
+    # ── Season switch mode ────────────────────────────────────────────────────
+
+    def get_season_switch_mode(self) -> str:
+        import os as _os
+
+        val = self._get(_KEY_SEASON_MODE)
+        if val in ("alert", "auto"):
+            return val
+        return _os.getenv("SEASON_SWITCH_MODE", "alert").lower()
+
+    def set_season_switch_mode(self, mode: str) -> bool:
+        if mode not in ("alert", "auto"):
+            return False
+        self._set(_KEY_SEASON_MODE, mode)
+        return True
 
     def get_sac_backup_path(self) -> str:
         return self._get(_KEY_SAC_BACKUP) or ""
