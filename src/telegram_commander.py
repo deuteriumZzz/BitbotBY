@@ -885,7 +885,8 @@ class TelegramCommander:
             f"📊 Профиль: {profile_str}\n"
             f"{season_line}"
             f"{fng_line}"
-            f"🤖 Режим: `{self._MODE_DISPLAY.get(mode, mode.upper())}` | AI: `{provider}`\n"
+            f"🤖 Режим: `{self._MODE_DISPLAY.get(mode, mode.upper())}`"
+            f" | AI: `{provider}`\n"
             f"🔢 Символов: `{n}` | Позиций: `{len(positions)}`\n"
             f"📊 Плечо: `{lev_mode}` ({lev_target*100:.1f}% ATR)\n"
             f"🕐 Часы: {hours_str}\n"
@@ -1844,8 +1845,7 @@ class TelegramCommander:
 
         elif data == "mode_menu":
             mode = self._rc.get_mode()
-            _mode_display = {"dqn": "SAC", "ai": "AI", "hybrid": "Hybrid", "local": "Local"}
-            mode_label = _mode_display.get(mode, mode.upper())
+            mode_label = self._MODE_DISPLAY.get(mode, mode.upper())
             await self._edit(
                 query, f"Текущий режим: `{mode_label}`\nВыбери новый:", _kb_mode_menu()
             )
