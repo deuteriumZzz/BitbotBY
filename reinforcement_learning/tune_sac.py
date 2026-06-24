@@ -18,7 +18,12 @@ import os
 
 logger = logging.getLogger(__name__)
 
-HYPERPARAMS_PATH = "models/best_hyperparams.json"
+_SAC_PROFILE = os.getenv("SAC_PROFILE", "")
+HYPERPARAMS_PATH = (
+    f"models/best_hyperparams_{_SAC_PROFILE}.json"
+    if _SAC_PROFILE
+    else "models/best_hyperparams.json"
+)
 _TUNE_TIMESTEPS = 50_000
 _N_TRIALS = int(os.getenv("OPTUNA_TRIALS", "30"))
 _TRAIN_SPLIT = 0.7

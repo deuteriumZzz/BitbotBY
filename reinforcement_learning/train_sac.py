@@ -207,7 +207,7 @@ def _evaluate_model(
 
 def _finetune_on_experiences(model: Any, norm_stats: Dict[str, Any]) -> None:
     """
-    Дообучает модель на реальных сделках из data/experiences.jsonl.
+    Дообучает модель на реальных сделках из data/experiences_{profile}.jsonl.
 
     Загружает накопленные опыты, конвертирует в obs-векторы,
     добавляет в replay buffer модели и запускает gradient steps.
@@ -215,7 +215,13 @@ def _finetune_on_experiences(model: Any, norm_stats: Dict[str, Any]) -> None:
     """
     from src.experience_buffer import load as _load_exp
 
-    records = _load_exp()
+    _profile = os.getenv("SAC_PROFILE", "")
+    exp_path = (
+        f"data/experiences_{_profile}.jsonl"
+        if _profile
+        else "data/experiences.jsonl"
+    )
+    records = _load_exp(path=exp_path)
     if len(records) < 50:
         logger.info(
             "Experiences: %d записей — пропускаем fine-tune (нужно ≥ 50)",
@@ -368,7 +374,12 @@ def train(
     logger.info("Обучение SAC: %d шагов", total_timesteps)
 
     # Загружаем лучшие гиперпараметры Optuna, если файл существует
-    hp_path = "models/best_hyperparams.json"
+    _profile = os.getenv("SAC_PROFILE", "")
+    hp_path = (
+        f"models/best_hyperparams_{_profile}.json"
+        if _profile
+        else "models/best_hyperparams.json"
+    )
     policy_kwargs: dict = {}
     sac_kwargs: dict = {"verbose": 1}
     if os.path.exists(hp_path):
