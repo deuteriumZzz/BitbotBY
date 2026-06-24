@@ -823,6 +823,8 @@ class TelegramCommander:
 
     # ── Builders ──────────────────────────────────────────────────────────────
 
+    _MODE_DISPLAY = {"dqn": "SAC", "ai": "AI", "hybrid": "Hybrid", "local": "Local"}
+
     def _build_status(self) -> tuple[str, Any]:
         s = self._get_state()
         mode = self._rc.get_mode()
@@ -883,7 +885,7 @@ class TelegramCommander:
             f"📊 Профиль: {profile_str}\n"
             f"{season_line}"
             f"{fng_line}"
-            f"🤖 Режим: `{mode}` | AI: `{provider}`\n"
+            f"🤖 Режим: `{self._MODE_DISPLAY.get(mode, mode.upper())}` | AI: `{provider}`\n"
             f"🔢 Символов: `{n}` | Позиций: `{len(positions)}`\n"
             f"📊 Плечо: `{lev_mode}` ({lev_target*100:.1f}% ATR)\n"
             f"🕐 Часы: {hours_str}\n"
@@ -959,7 +961,7 @@ class TelegramCommander:
             f"*Статус:* {state_str}\n"
             f"*Профиль рынка:* {profile_str}\n"
             f"*Сезон (CoinGecko):* {season_str}\n"
-            f"*Режим торговли:* `{mode}`\n"
+            f"*Режим торговли:* `{self._MODE_DISPLAY.get(mode, mode.upper())}`\n"
             f"{chronos_str}"
             f"*Таймфрейм:* `{timeframe}`\n"
             f"*AI-провайдер:* `{provider}`\n\n"
@@ -1842,8 +1844,10 @@ class TelegramCommander:
 
         elif data == "mode_menu":
             mode = self._rc.get_mode()
+            _mode_display = {"dqn": "SAC", "ai": "AI", "hybrid": "Hybrid", "local": "Local"}
+            mode_label = _mode_display.get(mode, mode.upper())
             await self._edit(
-                query, f"Текущий режим: `{mode}`\nВыбери новый:", _kb_mode_menu()
+                query, f"Текущий режим: `{mode_label}`\nВыбери новый:", _kb_mode_menu()
             )
 
         elif data == "scan_menu":
