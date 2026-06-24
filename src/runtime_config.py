@@ -43,8 +43,10 @@ _KEY_AWAITING_MODE_PIN = "bot:awaiting_mode_pin"
 _KEY_PAPER_TRADING = "bot:paper_trading_override"
 _KEY_SAC_BACKUP = "bot:sac_model_backup"
 _KEY_TRAIN_PROGRESS = "bot:train_progress"
+_KEY_BACKTEST_PROGRESS = "bot:backtest_progress"
 _KEY_SEASON_MODE = "bot:season_switch_mode"
 _KEY_SEASON_INDEX = "bot:season_index"
+_KEY_FEAR_GREED = "bot:fear_greed"
 
 _AI_PROVIDERS = frozenset({"auto", "anthropic", "openai", "deepseek", "groq"})
 _LEVERAGE_MODES = frozenset({"fixed", "volatility", "full"})
@@ -698,6 +700,58 @@ class RuntimeConfig:
             self._r.redis_client.delete(_KEY_TRAIN_PROGRESS)
         except Exception:
             pass
+
+    # ── Backtest progress ─────────────────────────────────────────────────────
+
+    def set_backtest_progress(self, data: dict) -> None:
+        import json as _json
+
+        try:
+            self._set(_KEY_BACKTEST_PROGRESS, _json.dumps(data))
+        except Exception:
+            pass
+
+    def get_backtest_progress(self) -> "dict | None":
+        import json as _json
+
+        val = self._get(_KEY_BACKTEST_PROGRESS)
+        if not val:
+            return None
+        try:
+            return _json.loads(val)
+        except Exception:
+            return None
+
+    def clear_backtest_progress(self) -> None:
+        try:
+            self._r.redis_client.delete(_KEY_BACKTEST_PROGRESS)
+        except Exception:
+            pass
+
+    # ── Fear & Greed ──────────────────────────────────────────────────────────
+
+    def set_fear_greed(self, value: int, label: str) -> None:
+        import json as _json
+
+        try:
+            self._r.redis_client.setex(
+                _KEY_FEAR_GREED,
+                6 * 3600,
+                _json.dumps({"value": value, "label": label}),
+            )
+        except Exception:
+            pass
+
+    def get_fear_greed(self) -> "dict | None":
+        import json as _json
+
+        raw = self._get(_KEY_FEAR_GREED)
+        if not raw:
+            return None
+        try:
+            return _json.loads(raw)
+        except Exception:
+            return None
 
     # ── Startup ───────────────────────────────────────────────────────────────
 

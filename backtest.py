@@ -564,8 +564,14 @@ def run_strategy_with_holdout(
     """
     if holdout_ratio <= 0.0 or len(df) < _WARMUP * 2:
         return run_strategy(
-            name, strategy_cls(), df, initial_balance, risk_per_trade,
-            commission_rate, stop_loss_pct, min_confidence,
+            name,
+            strategy_cls(),
+            df,
+            initial_balance,
+            risk_per_trade,
+            commission_rate,
+            stop_loss_pct,
+            min_confidence,
         )
 
     n = len(df)
@@ -574,12 +580,24 @@ def run_strategy_with_holdout(
     test_df = df.iloc[holdout_start:].copy()
 
     train_result = run_strategy(
-        name, strategy_cls(), train_df, initial_balance, risk_per_trade,
-        commission_rate, stop_loss_pct, min_confidence,
+        name,
+        strategy_cls(),
+        train_df,
+        initial_balance,
+        risk_per_trade,
+        commission_rate,
+        stop_loss_pct,
+        min_confidence,
     )
     test_result = run_strategy(
-        name, strategy_cls(), test_df, initial_balance, risk_per_trade,
-        commission_rate, stop_loss_pct, min_confidence,
+        name,
+        strategy_cls(),
+        test_df,
+        initial_balance,
+        risk_per_trade,
+        commission_rate,
+        stop_loss_pct,
+        min_confidence,
     )
 
     overfit_ratio = train_result.sharpe_ratio / max(test_result.sharpe_ratio, 0.01)
@@ -761,7 +779,9 @@ def save_json(
 async def main() -> None:
     # ── Чтение переопределений из окружения ───────────────────────
     months = int(os.getenv("BT_MONTHS", "6"))
-    holdout_ratio = float(os.getenv("BT_HOLDOUT_RATIO", str(Config.BACKTEST_HOLDOUT_RATIO)))
+    holdout_ratio = float(
+        os.getenv("BT_HOLDOUT_RATIO", str(Config.BACKTEST_HOLDOUT_RATIO))
+    )
     timeframe = os.getenv("BT_TIMEFRAME", Config.TIMEFRAME)
     min_conf = float(os.getenv("BT_MIN_CONF", str(Config.MIN_SIGNAL_CONFIDENCE)))
 
@@ -784,7 +804,24 @@ async def main() -> None:
     )
     print(f"[backtest] symbols: {', '.join(symbols)}")
 
+    import json as _json
+
     results_per_symbol: dict[str, List[BacktestResult]] = {}
+    _total_steps = len(symbols) * len(STRATEGY_REGISTRY)
+    _done_steps = 0
+    print(
+        "BACKTEST_PROGRESS:"
+        + _json.dumps(
+            {
+                "pct": 0.0,
+                "step": 0,
+                "total": _total_steps,
+                "symbol": "",
+                "strategy": "",
+            }
+        ),
+        flush=True,
+    )
 
     for symbol in symbols:
         print(f"\n{'─' * 50}")
@@ -794,6 +831,7 @@ async def main() -> None:
         df = await load_data(symbol, timeframe, months)
         if df.empty:
             print(f"  ОШИБКА: нет данных для {symbol} — пропускаем")
+            _done_steps += len(STRATEGY_REGISTRY)
             continue
 
         print(f"[backtest] {len(df)} свечей загружено")
@@ -813,9 +851,24 @@ async def main() -> None:
                 holdout_ratio=holdout_ratio,
             )
             sym_results.append(result)
+            _done_steps += 1
+            _pct = round(_done_steps / _total_steps * 100, 1) if _total_steps else 100.0
             print(
                 f" done — {result.total_trades} trades,"
                 f" EV={result.expected_value * 100:+.2f}%"
+            )
+            print(
+                "BACKTEST_PROGRESS:"
+                + _json.dumps(
+                    {
+                        "pct": _pct,
+                        "step": _done_steps,
+                        "total": _total_steps,
+                        "symbol": symbol,
+                        "strategy": strat_name,
+                    }
+                ),
+                flush=True,
             )
 
         sym_results.sort(key=lambda r: r.expected_value, reverse=True)
