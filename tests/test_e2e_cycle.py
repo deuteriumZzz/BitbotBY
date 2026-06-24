@@ -251,10 +251,11 @@ class TestExecuteTopRec:
     async def test_telegram_rejection_aborts_trade(self):
         bot = make_bot()
         bot.telegram.ask_confirm = AsyncMock(return_value=False)
+        bot.api.get_balance = AsyncMock(return_value={"free": {"USDT": 1000.0}})
         rec = _buy_rec(sym="ETH/USDT", entry=3000.0)
 
-        # AUTO_EXECUTE=False → диалог показывается, Skip отменяет сделку
-        with _patch_cfg(_make_cfg(auto=False)):
+        # AUTO_EXECUTE=False, live режим → диалог показывается, Skip отменяет сделку
+        with _patch_cfg(_make_cfg(auto=False, paper=False)):
             with patch(
                 "src.trade_history.get_backtest_stats",
                 return_value={"win_rate": 0.5, "total_trades": 0, "ev": 0.0},
