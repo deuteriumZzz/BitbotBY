@@ -402,13 +402,15 @@ class TradingBot:
         state = self.redis.load_trading_state(Config.SYMBOL)
         if state:
             logger.info("Restored state: %s", state)
-        portfolio = self.redis.load_trading_state("portfolio_state")
+        _mode = "paper" if Config.PAPER_TRADING else "live"
+        portfolio = self.redis.load_trading_state(f"portfolio_state_{_mode}")
         if portfolio:
-            self.portfolio_manager.current_balance = portfolio.get(
-                "balance", Config.INITIAL_BALANCE
-            )
+            restored_balance = portfolio.get("balance", Config.INITIAL_BALANCE)
+            self.portfolio_manager.current_balance = restored_balance
             self.portfolio_manager.positions = portfolio.get("positions", {})
-        monitored_state = self.redis.load_trading_state("monitored_positions")
+            self._paper_balance = restored_balance
+            self._live_balance_cache = restored_balance
+        monitored_state = self.redis.load_trading_state(f"monitored_positions_{_mode}")
         if monitored_state and isinstance(monitored_state, dict):
             async with self._monitored_lock:
                 for sym, pos in monitored_state.items():
@@ -419,8 +421,11 @@ class TradingBot:
             )
 
     def _save_monitored_state(self) -> None:
+        _mode = "paper" if Config.PAPER_TRADING else "live"
         try:
-            self.redis.save_trading_state("monitored_positions", dict(self._monitored))
+            self.redis.save_trading_state(
+                f"monitored_positions_{_mode}", dict(self._monitored)
+            )
         except Exception as e:
             logger.warning("Failed to save monitored state: %s", e)
 
