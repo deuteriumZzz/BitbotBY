@@ -2423,15 +2423,18 @@ class TelegramCommander:
                     bar = "█" * int(pct / 10) + "░" * (10 - int(pct / 10))
                     eta_min = sac_prog.get("eta_min")
                     eta_str = f"~{eta_min} мин" if eta_min is not None else "..."
+                    step = sac_prog.get("step", 0)
+                    total = sac_prog.get("total", 0)
                     sections.append(
                         f"🧠 *Обучение SAC*\n"
                         f"`[{bar}]` *{pct:.1f}%*\n"
-                        f"Шаги: `{sac_prog.get('step', 0):,}` / `{sac_prog.get('total', 0):,}`\n"
+                        f"Шаги: `{step:,}` / `{total:,}`\n"
                         f"Осталось: *{eta_str}*"
                     )
                 else:
                     sections.append(
-                        "🧠 *Обучение SAC*\n_Запущено, прогресс появится через минуту..._"
+                        "🧠 *Обучение SAC*\n"
+                        "_Запущено, прогресс появится через минуту..._"
                     )
 
             if self._backtesting:
