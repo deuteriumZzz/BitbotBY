@@ -859,7 +859,7 @@ class TelegramCommander:
             )
             season_line = f"🌡 Сезон: {_sig_label} (индекс {_ai:.0f}/100)\n"
         else:
-            season_line = ""
+            season_line = "🌡 Сезон: ⏳ загружается...\n"
 
         fng_data = self._rc.get_fear_greed()
         if fng_data:
@@ -876,7 +876,7 @@ class TelegramCommander:
             )
             fng_line = f"{_fng_icon} Страх/Жадность: `{_fv}` ({_fl})\n"
         else:
-            fng_line = ""
+            fng_line = "😐 Страх/Жадность: ⏳ загружается...\n"
 
         text = (
             f"{state_icon} *BitbotBY [{paper}]*\n\n"

@@ -555,8 +555,6 @@ class TradingBot:
 
     async def _season_check_loop(self) -> None:
         """Фоновый цикл детектора сезона — проверяет CoinGecko каждые 4 часа."""
-        if Config.PAPER_TRADING:
-            return
 
         import os as _os
 
