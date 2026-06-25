@@ -309,8 +309,7 @@ class TestSacOnly:
             instance.get_signal.return_value = sac_signal
             MockSAC.return_value = instance
             with patch("src.signal_combiner.Config", cfg):
-                c = SignalCombiner(ai=mock_ai)
-        return c
+                return SignalCombiner(ai=mock_ai)
 
     def test_hold_signal_skipped(self):
         c = self._make_combiner({"action": "hold", "confidence": 0.9})
