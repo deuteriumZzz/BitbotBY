@@ -80,6 +80,7 @@ class AIAnalyzer:
         self._deepseek = None
         self._openai = None
         self._groq = None
+        self._gemini = None
 
         if Config.ANTHROPIC_API_KEY:
             import anthropic
@@ -111,8 +112,17 @@ class AIAnalyzer:
             )
             self._groq_model = getattr(Config, "GROQ_MODEL", "llama-3.3-70b-versatile")
 
+        if getattr(Config, "GEMINI_API_KEY", ""):
+            from openai import AsyncOpenAI
+
+            self._gemini = AsyncOpenAI(
+                api_key=Config.GEMINI_API_KEY,
+                base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+            )
+            self._gemini_model = getattr(Config, "GEMINI_MODEL", "gemini-1.5-flash")
+
         # Ordered list of available providers (primary first)
-        _all = ["anthropic", "openai", "deepseek", "groq"]
+        _all = ["anthropic", "openai", "deepseek", "groq", "gemini"]
         available = [p for p in _all if getattr(self, f"_{p}") is not None]
         # Put the configured primary provider first
         if self._provider in available:
@@ -156,7 +166,21 @@ class AIAnalyzer:
         :return: Готовый текст промпта.
         """
         strategy_block = self._build_strategy_list()
-        data_block = json.dumps(snapshots, indent=2, ensure_ascii=False)
+        slim = [
+            {
+                "symbol": s.get("symbol"),
+                "price": s.get("price"),
+                "atr": s.get("atr"),
+                "changes": s.get("changes"),
+                "volume_ratio": s.get("volume_ratio"),
+                "indicators": s.get("indicators"),
+                "levels": s.get("levels"),
+                "news_sentiment": s.get("news_sentiment"),
+                "top_headlines": (s.get("top_headlines") or [])[:2],
+            }
+            for s in snapshots
+        ]
+        data_block = json.dumps(slim, ensure_ascii=False)
         min_conf = Config.MIN_SIGNAL_CONFIDENCE
         return (
             f"Analyze the following crypto market data and provide "
@@ -256,6 +280,18 @@ class AIAnalyzer:
         )
         return response.choices[0].message.content or ""
 
+    async def _call_gemini(self, prompt: str) -> str:
+        """Вызов Google Gemini Flash через OpenAI-совместимый API."""
+        response = await self._gemini.chat.completions.create(
+            model=self._gemini_model,
+            max_tokens=4096,
+            messages=[
+                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+        )
+        return response.choices[0].message.content or ""
+
     async def analyze(
         self,
         snapshots: List[Dict[str, Any]],
@@ -300,6 +336,8 @@ class AIAnalyzer:
                     raw = await self._call_deepseek(prompt)
                 elif provider == "groq":
                     raw = await self._call_groq(prompt)
+                elif provider == "gemini":
+                    raw = await self._call_gemini(prompt)
                 else:
                     raw = await self._call_openai(prompt)
 
