@@ -33,67 +33,61 @@ _PROGRESS_EVERY = 5000  # шагов между TRAIN_PROGRESS строками
 
 
 class _ProgressCallback:
-    """Minimal stable-baselines3 BaseCallback that emits TRAIN_PROGRESS lines."""
+    """stable-baselines3 BaseCallback that emits TRAIN_PROGRESS lines."""
 
-    def __init__(self, total_timesteps: int) -> None:
-        self._total = total_timesteps
-        self._last_report = 0
-        self._start_time: float | None = None
-        self.n_calls = 0
-        self.num_timesteps = 0
-        self.model = None
-        self.training_env = None
-        self.parent = None
-        self.verbose = 0
-        self.locals: dict = {}
-        self.globals: dict = {}
-        self.logger = None
+    def __new__(cls, total_timesteps: int) -> "BaseCallback":  # type: ignore[misc]
+        from stable_baselines3.common.callbacks import BaseCallback
 
-    def init_callback(self, model) -> None:  # noqa: ANN001
-        import time
+        import time as _time
 
-        self.model = model
-        self._start_time = time.time()
+        class _Impl(BaseCallback):
+            def __init__(self) -> None:
+                super().__init__(verbose=0)
+                self._total = total_timesteps
+                self._last_report = 0
+                self._start_time: float | None = None
 
-    def on_training_start(self, locals_: dict, globals_: dict) -> None:
-        import time
+            def _on_training_start(self) -> None:
+                self._start_time = _time.time()
 
-        self._start_time = time.time()
+            def _on_step(self) -> bool:
+                step = self.num_timesteps
+                if step - self._last_report >= _PROGRESS_EVERY:
+                    self._last_report = step
+                    pct = round(step / self._total * 100, 1)
+                    elapsed = _time.time() - (self._start_time or _time.time())
+                    eta_min = (
+                        int((elapsed / step) * (self._total - step) / 60)
+                        if step > 0
+                        else None
+                    )
+                    data = {
+                        "pct": pct,
+                        "step": step,
+                        "total": self._total,
+                        "eta_min": eta_min,
+                    }
+                    print(
+                        f"TRAIN_PROGRESS:{json.dumps(data)}",
+                        file=sys.stdout,
+                        flush=True,
+                    )
+                return True
 
-    def on_step(self) -> bool:
-        import time
+            def _on_training_end(self) -> None:
+                data = {
+                    "pct": 100.0,
+                    "step": self._total,
+                    "total": self._total,
+                    "eta_min": 0,
+                }
+                print(
+                    f"TRAIN_PROGRESS:{json.dumps(data)}",
+                    file=sys.stdout,
+                    flush=True,
+                )
 
-        step = self.model.num_timesteps if self.model else self.num_timesteps
-        if step - self._last_report >= _PROGRESS_EVERY:
-            self._last_report = step
-            pct = round(step / self._total * 100, 1)
-            elapsed = time.time() - (self._start_time or time.time())
-            eta_min = (
-                int((elapsed / step) * (self._total - step) / 60) if step > 0 else None
-            )
-            data = {
-                "pct": pct,
-                "step": step,
-                "total": self._total,
-                "eta_min": eta_min,
-            }
-            print(f"TRAIN_PROGRESS:{json.dumps(data)}", file=sys.stdout, flush=True)
-        return True
-
-    def on_training_end(self) -> None:
-        data = {
-            "pct": 100.0,
-            "step": self._total,
-            "total": self._total,
-            "eta_min": 0,
-        }
-        print(f"TRAIN_PROGRESS:{json.dumps(data)}", file=sys.stdout, flush=True)
-
-    def on_rollout_start(self) -> None:
-        pass
-
-    def on_rollout_end(self) -> None:
-        pass
+        return _Impl()
 
 
 def _backup_existing_model(path: str) -> str:
@@ -579,7 +573,7 @@ if __name__ == "__main__":
 
         if not frames:
             logger.error("Данные не загружены — прерываем")
-            return
+            sys.exit(1)
 
         combined = pd.concat(frames, ignore_index=True)
         logger.info(

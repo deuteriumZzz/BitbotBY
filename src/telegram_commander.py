@@ -20,7 +20,7 @@ Telegram-команды и inline-панель управления BitbotBY.
   /lev target N    — целевой риск на ATR (0.005–0.1, default 0.01)
   /lev drawdown N  — порог просадки для режима full (0.05–0.5, default 0.15)
   /provider      — показать текущий AI провайдер
-  /provider groq — переключить на Groq (auto|anthropic|openai|deepseek|groq)
+  /provider groq — переключить на Groq (auto|anthropic|openai|deepseek|groq|gemini)
   /pnl           — P&L за день и всего
   /pos           — открытые позиции
   /add SYM       — добавить символ (напр. /add SOL)
@@ -483,6 +483,7 @@ def _kb_lev_menu(mode: str, target: float, drawdown: float) -> "InlineKeyboardMa
 def _kb_provider_menu(current: str) -> "InlineKeyboardMarkup":
     providers = [
         ("🆓 Groq", "groq"),
+        ("🆓 Gemini", "gemini"),
         ("Claude", "anthropic"),
         ("DeepSeek", "deepseek"),
         ("OpenAI", "openai"),
@@ -548,7 +549,7 @@ _HELP_ABOUT = (
     "*Как работает:*\n"
     "1️⃣ Сканирует топ-N монет по объёму каждые 30 сек\n"
     "2️⃣ Загружает OHLCV + технические индикаторы\n"
-    "3️⃣ Анализирует через AI (Claude / DeepSeek / Groq)\n"
+    "3️⃣ Анализирует через AI (Claude / DeepSeek / Groq / Gemini)\n"
     "4️⃣ Комбинирует AI-сигнал с локальными стратегиями\n"
     "5️⃣ При `AUTO_EXECUTE` — спрашивает подтверждение в Telegram\n"
     "6️⃣ Управляет позицией: SL/TP, трейлинг-стоп, circuit breaker\n\n"
@@ -558,7 +559,7 @@ _HELP_ABOUT = (
 
 _HELP_MODES = (
     "💡 *Режимы торговли*\n\n"
-    "🤖 *AI* — всё решает Claude / DeepSeek / Groq\n"
+    "🤖 *AI* — всё решает Claude / DeepSeek / Groq / Gemini\n"
     "   Лучший режим при наличии API ключа\n\n"
     "📐 *Local* — локальные стратегии без AI\n"
     "   RSI, EMA, Bollinger, Breakout и др.\n"
@@ -1361,11 +1362,12 @@ class TelegramCommander:
         args = context.args or []
 
         _PROVIDERS = {
-            "auto": "Авто (Claude → OpenAI → DeepSeek → Groq)",
+            "auto": "Авто (Claude → OpenAI → DeepSeek → Groq → Gemini)",
             "anthropic": "Claude (Anthropic) — лучшее качество",
             "openai": "ChatGPT (OpenAI)",
-            "deepseek": "DeepSeek — самый дешёвый",
-            "groq": "Groq / Llama 3.3 70B — бесплатный, быстрый",
+            "deepseek": "DeepSeek — самый дешёвый (~$0.002/запрос)",
+            "groq": "Groq / Llama 3.3 70B — бесплатный, 100k токенов/день",
+            "gemini": "Gemini Flash — бесплатный, 1500 запросов/день",
         }
 
         if not args:
@@ -1654,7 +1656,8 @@ class TelegramCommander:
             await _asyncio.gather(_read_stdout(), _read_stderr(), proc.wait())
 
             stdout_bytes = "\n".join(stdout_lines).encode()
-            if proc.returncode == 0:
+            model_exists = _os.path.exists(model_path)
+            if proc.returncode == 0 and model_exists:
                 train_res = _parse_train_result(stdout_bytes.decode())
                 if train_res and train_res.get("backup"):
                     self._rc.set_sac_backup_path(train_res["backup"])
