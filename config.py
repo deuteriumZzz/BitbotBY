@@ -101,8 +101,14 @@ class Config:
     # ai     → AI-провайдер (Claude / DeepSeek / OpenAI)
     # hybrid → SAC + AI должны согласиться; расхождение → hold
     MODE: str = os.getenv("MODE", "ai")
-    # Путь к SAC-модели (создаётся train_sac.py)
-    SAC_MODEL_PATH: str = os.getenv("SAC_MODEL_PATH", "models/sac_model.zip")
+    # Путь к SAC-модели (создаётся train_sac.py).
+    # bluechip / пусто → sac_model.zip (дефолт), altcoin → sac_model_altcoin.zip
+    SAC_MODEL_PATH: str = os.getenv(
+        "SAC_MODEL_PATH",
+        "models/sac_model_altcoin.zip"
+        if os.getenv("SAC_PROFILE") == "altcoin"
+        else "models/sac_model.zip",
+    )
 
     # ── Market Scanner ─────────────────────────────────────────────────────
     # Сколько монет сканировать (топ по объёму)
