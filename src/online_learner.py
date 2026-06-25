@@ -269,17 +269,22 @@ class OnlineLearner:
 
         tmp_path = Config.SAC_MODEL_PATH + ".new"
         try:
+            _profile = os.environ.get("SAC_PROFILE", "")
+            _exp_path = (
+                f"data/experiences_{_profile}.jsonl"
+                if _profile
+                else "data/experiences.jsonl"
+            )
             env = {
                 "PATH": os.environ.get("PATH", ""),
                 "PYTHONPATH": os.environ.get("PYTHONPATH", ""),
                 "HOME": os.environ.get("HOME", ""),
                 "SAC_MODEL_PATH": tmp_path,
+                "SAC_PROFILE": _profile,
                 "TRAIN_TOP_N": str(self._get_train_top_n()),
                 "TRAIN_MIN_CANDLES": os.environ.get("TRAIN_MIN_CANDLES", "2880"),
                 "TOTAL_TIMESTEPS": os.environ.get("TOTAL_TIMESTEPS", "50000"),
-                "EXPERIENCES_PATH": os.environ.get(
-                    "EXPERIENCES_PATH", "data/experiences.jsonl"
-                ),
+                "EXPERIENCES_PATH": _exp_path,
                 "TELEGRAM_BOT_TOKEN": os.environ.get("TELEGRAM_BOT_TOKEN", ""),
                 "TELEGRAM_CHAT_ID": os.environ.get("TELEGRAM_CHAT_ID", ""),
                 "LOG_LEVEL": os.environ.get("LOG_LEVEL", "INFO"),
