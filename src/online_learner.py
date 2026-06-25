@@ -253,13 +253,22 @@ class OnlineLearner:
         except Exception as exc:
             logger.error("OnlineLearner [online] ошибка: %s", exc)
 
+    # Порог: новая модель должна быть не хуже Buy&Hold минус эта дельта.
+    # 10% — достаточно мягко чтобы не блокировать обучение на боковиках.
+    _RETRAIN_REJECT_DELTA = 10.0
+
     def _run_full_retrain(self) -> None:
-        """Синхронный: полный ретрейн через subprocess с горячей подменой модели."""
+        """Синхронный: полный ретрейн через subprocess с горячей подменой модели.
+
+        Парсит TRAIN_RESULT из stdout и заменяет модель только если
+        SAC >= Buy&Hold - _RETRAIN_REJECT_DELTA. Иначе оставляет текущую.
+        """
+        import json
         import subprocess
         import sys
 
+        tmp_path = Config.SAC_MODEL_PATH + ".new"
         try:
-            tmp_path = Config.SAC_MODEL_PATH + ".new"
             env = {
                 "PATH": os.environ.get("PATH", ""),
                 "PYTHONPATH": os.environ.get("PYTHONPATH", ""),
@@ -276,25 +285,89 @@ class OnlineLearner:
                 "LOG_LEVEL": os.environ.get("LOG_LEVEL", "INFO"),
             }
 
-            subprocess.run(
+            proc = subprocess.run(
                 [sys.executable, "reinforcement_learning/train_sac.py"],
                 env=env,
+                capture_output=True,
+                text=True,
                 check=True,
-                timeout=7200,  # 2 часа максимум
+                timeout=7200,
             )
 
-            # Атомарная подмена: старая → .bak, новая → основной путь
-            bak_path = Config.SAC_MODEL_PATH + ".bak"
-            if os.path.exists(Config.SAC_MODEL_PATH):
-                os.replace(Config.SAC_MODEL_PATH, bak_path)
-            os.replace(tmp_path, Config.SAC_MODEL_PATH)
+            # Разбираем результат бэктеста из вывода train_sac.py
+            train_result: Dict[str, Any] = {}
+            for line in proc.stdout.splitlines():
+                if line.startswith("TRAIN_RESULT:"):
+                    try:
+                        train_result = json.loads(line[len("TRAIN_RESULT:"):])
+                    except json.JSONDecodeError:
+                        pass
+                    break
 
-            logger.info(
-                "OnlineLearner [periodic]: модель обновлена → %s",
-                Config.SAC_MODEL_PATH,
-            )
+            sac_pct: float = train_result.get("sac_pct", 0.0)
+            bh_pct: float = train_result.get("bh_pct", 0.0)
+            accepted = sac_pct >= bh_pct - self._RETRAIN_REJECT_DELTA
+
+            if accepted:
+                bak_path = Config.SAC_MODEL_PATH + ".bak"
+                if os.path.exists(Config.SAC_MODEL_PATH):
+                    os.replace(Config.SAC_MODEL_PATH, bak_path)
+                os.replace(tmp_path, Config.SAC_MODEL_PATH)
+                logger.info(
+                    "OnlineLearner [periodic]: модель обновлена"
+                    " → SAC %.1f%% / BH %.1f%%",
+                    sac_pct,
+                    bh_pct,
+                )
+                self._notify_telegram(
+                    f"✅ *Модель обновлена* (сделок: {self._closed_count})\n"
+                    f"SAC: `{sac_pct:+.1f}%` | Buy&Hold: `{bh_pct:+.1f}%`"
+                )
+            else:
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+                logger.warning(
+                    "OnlineLearner [periodic]: модель отклонена"
+                    " → SAC %.1f%% / BH %.1f%% (разница %.1f%% > порога %.1f%%)",
+                    sac_pct,
+                    bh_pct,
+                    bh_pct - sac_pct,
+                    self._RETRAIN_REJECT_DELTA,
+                )
+                self._notify_telegram(
+                    f"❌ *Модель отклонена* (сделок: {self._closed_count})\n"
+                    f"SAC: `{sac_pct:+.1f}%` хуже Buy&Hold `{bh_pct:+.1f}%`\n"
+                    f"Повтор через {self._trigger} сделок"
+                )
+
         except Exception as exc:
+            if os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
             logger.error("OnlineLearner [periodic] ошибка переобучения: %s", exc)
+
+    def _notify_telegram(self, text: str) -> None:
+        """Отправляет сообщение в Telegram (синхронно, из фонового потока)."""
+        import json
+        import urllib.request
+
+        token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+        chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
+        if not token or not chat_id:
+            return
+        try:
+            url = f"https://api.telegram.org/bot{token}/sendMessage"
+            data = json.dumps(
+                {"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}
+            ).encode()
+            req = urllib.request.Request(
+                url, data=data, headers={"Content-Type": "application/json"}
+            )
+            urllib.request.urlopen(req, timeout=10)
+        except Exception as exc:
+            logger.debug("OnlineLearner: не удалось отправить Telegram: %s", exc)
 
     def _record_strategy_result(self, strategy: str, is_win: bool) -> None:
         """Режим C: фиксирует результат сделки для стратегии."""
