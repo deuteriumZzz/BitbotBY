@@ -35,10 +35,10 @@ _PROGRESS_EVERY = 5000  # шагов между TRAIN_PROGRESS строками
 class _ProgressCallback:
     """stable-baselines3 BaseCallback that emits TRAIN_PROGRESS lines."""
 
-    def __new__(cls, total_timesteps: int) -> "BaseCallback":  # type: ignore[misc]
-        from stable_baselines3.common.callbacks import BaseCallback
-
+    def __new__(cls, total_timesteps: int) -> Any:  # type: ignore[misc]
         import time as _time
+
+        from stable_baselines3.common.callbacks import BaseCallback
 
         class _Impl(BaseCallback):
             def __init__(self) -> None:
