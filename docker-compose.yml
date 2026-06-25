@@ -20,6 +20,11 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
 
   bot:
     build: .
@@ -97,6 +102,11 @@ services:
     depends_on:
       dashboard:
         condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
 
   trainer:
     profiles: [training]
@@ -147,6 +157,11 @@ services:
     depends_on:
       dashboard:
         condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
 
   prometheus:
     image: prom/prometheus:v2.51.0
@@ -167,6 +182,11 @@ services:
         condition: service_healthy
       alertmanager:
         condition: service_started
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
 
   grafana:
     image: grafana/grafana:10.4.2
@@ -186,6 +206,11 @@ services:
       - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/etc/grafana/dashboards/bitbot.json
     depends_on:
       - prometheus
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
 
 networks:
   bitbot_net:
