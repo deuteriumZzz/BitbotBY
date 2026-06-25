@@ -90,13 +90,17 @@ class _ProgressCallback:
         return _Impl()
 
 
-def _backup_existing_model(path: str) -> str:
+def _backup_existing_model(path: str, keep: int = 2) -> str:
     """
     Создаёт резервную копию модели перед перезаписью.
+    Оставляет только последние `keep` бэкапов — старые удаляются.
 
     :param path: Путь к файлу модели (с .zip или без).
+    :param keep: Сколько бэкапов хранить (по умолчанию 2).
     :return: Путь к бэкапу или пустая строка если модели не было.
     """
+    from glob import glob
+
     zip_path = path if path.endswith(".zip") else path + ".zip"
     if not os.path.exists(zip_path):
         return ""
@@ -104,6 +108,17 @@ def _backup_existing_model(path: str) -> str:
     backup = zip_path.replace(".zip", f"_{ts}.zip")
     shutil.copy2(zip_path, backup)
     logger.info(f"Резервная копия модели → {backup}")
+
+    # Удаляем старые бэкапы, оставляем только последние `keep`
+    pattern = zip_path.replace(".zip", "_????????_??????.zip")
+    old_backups = sorted(glob(pattern))[:-keep]
+    for old in old_backups:
+        try:
+            os.remove(old)
+            logger.info(f"Старый бэкап удалён: {old}")
+        except OSError:
+            pass
+
     return backup
 
 

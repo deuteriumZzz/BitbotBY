@@ -16,11 +16,10 @@ Tests target the UNCOVERED branches not touched by test_monitor_positions.py:
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import ccxt
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Factory helpers
@@ -206,9 +205,7 @@ class TestCheckDynamicExit:
         monitor.update_market_state(
             {"BTC/USDT": {"action": "sell", "confidence": 0.75}}, {}, "unknown"
         )
-        should, reason = monitor._check_dynamic_exit(
-            "BTC/USDT", _open_pos(side="buy")
-        )
+        should, reason = monitor._check_dynamic_exit("BTC/USDT", _open_pos(side="buy"))
         assert should is True
         assert "signal_reversal" in reason
 
@@ -217,9 +214,7 @@ class TestCheckDynamicExit:
         monitor.update_market_state(
             {"BTC/USDT": {"action": "buy", "confidence": 0.80}}, {}, "unknown"
         )
-        should, reason = monitor._check_dynamic_exit(
-            "BTC/USDT", _open_pos(side="sell")
-        )
+        should, reason = monitor._check_dynamic_exit("BTC/USDT", _open_pos(side="sell"))
         assert should is True
         assert "signal_reversal" in reason
 
@@ -234,18 +229,14 @@ class TestCheckDynamicExit:
     def test_regime_trending_down_exits_long(self):
         monitor = _make_monitor()
         monitor.update_market_state({"BTC/USDT": {}}, {"BTC/USDT": {}}, "trending_down")
-        should, reason = monitor._check_dynamic_exit(
-            "BTC/USDT", _open_pos(side="buy")
-        )
+        should, reason = monitor._check_dynamic_exit("BTC/USDT", _open_pos(side="buy"))
         assert should is True
         assert "regime_flip" in reason
 
     def test_regime_trending_up_exits_short(self):
         monitor = _make_monitor()
         monitor.update_market_state({"BTC/USDT": {}}, {"BTC/USDT": {}}, "trending_up")
-        should, reason = monitor._check_dynamic_exit(
-            "BTC/USDT", _open_pos(side="sell")
-        )
+        should, reason = monitor._check_dynamic_exit("BTC/USDT", _open_pos(side="sell"))
         assert should is True
         assert "regime_flip" in reason
 
@@ -260,9 +251,7 @@ class TestCheckDynamicExit:
         monitor.update_market_state(
             {}, {"BTC/USDT": {"funding_signal": "short_overheated"}}, "unknown"
         )
-        should, reason = monitor._check_dynamic_exit(
-            "BTC/USDT", _open_pos(side="sell")
-        )
+        should, reason = monitor._check_dynamic_exit("BTC/USDT", _open_pos(side="sell"))
         assert should is True
         assert "short_overheated" in reason
 
@@ -271,39 +260,27 @@ class TestCheckDynamicExit:
         monitor.update_market_state(
             {}, {"BTC/USDT": {"funding_signal": "long_overheated"}}, "unknown"
         )
-        should, reason = monitor._check_dynamic_exit(
-            "BTC/USDT", _open_pos(side="buy")
-        )
+        should, reason = monitor._check_dynamic_exit("BTC/USDT", _open_pos(side="buy"))
         assert should is True
         assert "long_overheated" in reason
 
     def test_extreme_fear_exits_short(self):
         monitor = _make_monitor()
-        monitor.update_market_state(
-            {}, {"BTC/USDT": {"fear_greed": 5}}, "unknown"
-        )
-        should, reason = monitor._check_dynamic_exit(
-            "BTC/USDT", _open_pos(side="sell")
-        )
+        monitor.update_market_state({}, {"BTC/USDT": {"fear_greed": 5}}, "unknown")
+        should, reason = monitor._check_dynamic_exit("BTC/USDT", _open_pos(side="sell"))
         assert should is True
         assert "extreme_fear" in reason
 
     def test_extreme_greed_exits_long(self):
         monitor = _make_monitor()
-        monitor.update_market_state(
-            {}, {"BTC/USDT": {"fear_greed": 95}}, "unknown"
-        )
-        should, reason = monitor._check_dynamic_exit(
-            "BTC/USDT", _open_pos(side="buy")
-        )
+        monitor.update_market_state({}, {"BTC/USDT": {"fear_greed": 95}}, "unknown")
+        should, reason = monitor._check_dynamic_exit("BTC/USDT", _open_pos(side="buy"))
         assert should is True
         assert "extreme_greed" in reason
 
     def test_moderate_fear_greed_no_exit(self):
         monitor = _make_monitor()
-        monitor.update_market_state(
-            {}, {"BTC/USDT": {"fear_greed": 50}}, "unknown"
-        )
+        monitor.update_market_state({}, {"BTC/USDT": {"fear_greed": 50}}, "unknown")
         should, _ = monitor._check_dynamic_exit("BTC/USDT", _open_pos(side="buy"))
         assert should is False
 
@@ -312,9 +289,7 @@ class TestCheckDynamicExit:
         monitor.update_market_state(
             {}, {"BTC/USDT": {"liquidation_pressure": "long_liquidation"}}, "unknown"
         )
-        should, reason = monitor._check_dynamic_exit(
-            "BTC/USDT", _open_pos(side="buy")
-        )
+        should, reason = monitor._check_dynamic_exit("BTC/USDT", _open_pos(side="buy"))
         assert should is True
         assert "long_liquidation" in reason
 
@@ -323,9 +298,7 @@ class TestCheckDynamicExit:
         monitor.update_market_state(
             {}, {"BTC/USDT": {"liquidation_pressure": "short_squeeze"}}, "unknown"
         )
-        should, reason = monitor._check_dynamic_exit(
-            "BTC/USDT", _open_pos(side="sell")
-        )
+        should, reason = monitor._check_dynamic_exit("BTC/USDT", _open_pos(side="sell"))
         assert should is True
         assert "short_squeeze" in reason
 
@@ -351,9 +324,7 @@ class TestCBStatePersistence:
 
     def test_load_cb_state_with_redis(self):
         redis = MagicMock()
-        redis.load_trading_state = MagicMock(
-            return_value={"consecutive_losses": 3}
-        )
+        redis.load_trading_state = MagicMock(return_value={"consecutive_losses": 3})
         cfg = _make_cfg()
         with patch("src.position_monitor.Config", cfg):
             from src.position_monitor import PositionMonitor
@@ -491,7 +462,9 @@ class TestCheckPartialTp:
     async def test_already_triggered_skips(self):
         cfg = _make_cfg(paper=True, partial_tp_trigger=0.6, partial_tp_fraction=0.5)
         monitor = _make_monitor(cfg=cfg)
-        pos = _open_pos(entry=50000, tp=55000, sl=48000, qty=0.1, partial_tp_triggered=True)
+        pos = _open_pos(
+            entry=50000, tp=55000, sl=48000, qty=0.1, partial_tp_triggered=True
+        )
         lock = asyncio.Lock()
         monitored = {"BTC/USDT": dict(pos)}
         with patch("src.position_monitor.Config", cfg):
@@ -713,9 +686,7 @@ class TestCheckAndCloseLive:
         """If close_order has fee.cost, it overrides default exit_commission."""
         cfg = _make_cfg(paper=False)
         monitor = _make_monitor(cfg=cfg)
-        monitor._api.create_order = AsyncMock(
-            return_value={"fee": {"cost": 0.99}}
-        )
+        monitor._api.create_order = AsyncMock(return_value={"fee": {"cost": 0.99}})
         pos = _open_pos(side="buy", sl=49000, tp=55000, qty=0.01, trade_id=77)
         lock = asyncio.Lock()
         monitored = {"BTC/USDT": dict(pos)}
@@ -732,7 +703,9 @@ class TestCheckAndCloseLive:
         """record_close raising should not prevent successful return."""
         cfg = _make_cfg(paper=True)
         monitor = _make_monitor(cfg=cfg)
-        monitor._trade_history.record_close = AsyncMock(side_effect=Exception("db down"))
+        monitor._trade_history.record_close = AsyncMock(
+            side_effect=Exception("db down")
+        )
         pos = _open_pos(side="buy", sl=49000, tp=55000, qty=0.01, trade_id=42)
         lock = asyncio.Lock()
         monitored = {"BTC/USDT": dict(pos)}
@@ -888,7 +861,9 @@ class TestUpdateCircuitBreaker:
         monitor = _make_monitor(cfg=cfg)
         monitor._consecutive_losses = 2
         with patch("src.position_monitor.Config", cfg):
-            monitor._update_circuit_breaker("sell", 48000.0, 50000.0)  # win (price fell)
+            monitor._update_circuit_breaker(
+                "sell", 48000.0, 50000.0
+            )  # win (price fell)
         assert monitor._consecutive_losses == 0
 
     def test_sell_loss_increments_counter(self):
