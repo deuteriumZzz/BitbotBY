@@ -32,6 +32,7 @@ def rc_bundle():
 
     with patch("src.runtime_config.Config", cfg):
         from src.runtime_config import RuntimeConfig
+
         rc = RuntimeConfig(redis_mock)
         yield rc, redis_mock, cfg
 

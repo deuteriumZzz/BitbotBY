@@ -60,11 +60,7 @@ def _make_session(*responses) -> MagicMock:
 # Minimal CoinGecko payloads
 # ---------------------------------------------------------------------------
 
-_CG_GLOBAL = {
-    "data": {
-        "market_cap_percentage": {"btc": 48.0}
-    }
-}
+_CG_GLOBAL = {"data": {"market_cap_percentage": {"btc": 48.0}}}
 
 _CG_MARKETS = [
     {
@@ -326,7 +322,11 @@ class TestFetchPaprika:
     @pytest.mark.asyncio
     async def test_filters_all_known_stablecoins(self, detector):
         stablecoin_tickers = [
-            {"id": f"{sym}-x", "symbol": sym.upper(), "quotes": {"USD": {"percent_change_30d": 0.0}}}
+            {
+                "id": f"{sym}-x",
+                "symbol": sym.upper(),
+                "quotes": {"USD": {"percent_change_30d": 0.0}},
+            }
             for sym in ("usdt", "usdc", "dai", "tusd", "fdusd", "busd")
         ]
         btc_ticker = {
@@ -404,10 +404,10 @@ class TestComputeIndex:
             btc_dom=47.0,
             btc_30d=10.0,
             alts=[
-                _alt("ethereum", 20.0),   # outperforms
-                _alt("solana", 5.0),      # does not
-                _alt("cardano", 15.0),    # outperforms
-                _alt("polkadot", 8.0),    # does not
+                _alt("ethereum", 20.0),  # outperforms
+                _alt("solana", 5.0),  # does not
+                _alt("cardano", 15.0),  # outperforms
+                _alt("polkadot", 8.0),  # does not
             ],
         )
         result = detector.compute_index(data)
@@ -481,7 +481,11 @@ class TestComputeIndex:
 
     def test_none_price_change_treated_as_zero(self, detector):
         alts = [
-            {"id": "ethereum", "symbol": "eth", "price_change_percentage_30d_in_currency": None},
+            {
+                "id": "ethereum",
+                "symbol": "eth",
+                "price_change_percentage_30d_in_currency": None,
+            },
         ]
         data = _make_data(btc_dom=48.0, btc_30d=10.0, alts=alts)
         result = detector.compute_index(data)
@@ -496,7 +500,11 @@ class TestComputeIndex:
     def test_btc_30d_none_treated_as_zero(self, detector):
         """BTC row with None price_change should be treated as 0.0."""
         markets = [
-            {"id": "bitcoin", "symbol": "btc", "price_change_percentage_30d_in_currency": None},
+            {
+                "id": "bitcoin",
+                "symbol": "btc",
+                "price_change_percentage_30d_in_currency": None,
+            },
             _alt("ethereum", 5.0),
         ]
         data = {
@@ -657,8 +665,13 @@ class TestShouldAlert:
 # ===========================================================================
 
 
-def _sample_index(ai: float = 80.0, dom: float = 42.0, btc_30d: float = 5.0,
-                  count: int = 70, total: int = 90) -> dict:
+def _sample_index(
+    ai: float = 80.0,
+    dom: float = 42.0,
+    btc_30d: float = 5.0,
+    count: int = 70,
+    total: int = 90,
+) -> dict:
     return {
         "altcoin_index": ai,
         "btc_dominance": dom,

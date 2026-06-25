@@ -1,11 +1,7 @@
 """Тесты chronos_analyzer — мокаем torch и ChronosPipeline."""
 
 import sys
-import types
 from unittest.mock import MagicMock, patch
-
-import pytest
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -145,7 +141,6 @@ class TestPredictDirection:
     def test_returns_up_when_median_above_threshold(self):
         ca = self._import()
         prices = [100.0] * 20
-        last = prices[-1]  # 100.0
         # median = 100.5 → diff_pct = 0.005 > 0.002
         forecast_mock = _make_forecast_mock(100.5)
         pipeline_mock = MagicMock()

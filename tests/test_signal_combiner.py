@@ -1,5 +1,6 @@
 """Тесты для SignalCombiner — логика объединения сигналов SAC и AI."""
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -232,7 +233,9 @@ async def test_combine_generates_context_signals_when_no_recs(combiner, mock_ai)
 
 async def test_combine_merges_context_with_existing_recs(combiner, mock_ai):
     """Когда recs и context_recs есть — merge происходит."""
-    mock_ai.analyze.return_value = [make_rec(symbol="BTC/USDT", action="buy", confidence=0.80)]
+    mock_ai.analyze.return_value = [
+        make_rec(symbol="BTC/USDT", action="buy", confidence=0.80)
+    ]
     snap = make_snapshot(symbol="BTC/USDT", price=30000.0, atr=300.0)
     ctx = {
         "BTC/USDT": {
@@ -494,11 +497,16 @@ class TestHybrid:
             result = await_sync(combiner.combine([make_snapshot()], balance=10000))
         assert result == []
 
-    def test_hybrid_regime_weights_trending_up(self, combiner, mock_ai, mock_dqn_signal):
+    def test_hybrid_regime_weights_trending_up(
+        self, combiner, mock_ai, mock_dqn_signal
+    ):
         """trending_up → w_sac=0.5, w_ai=0.5."""
         dqn_conf = 0.80
         ai_conf = 0.70
-        mock_dqn_signal.get_signal.return_value = {"action": "buy", "confidence": dqn_conf}
+        mock_dqn_signal.get_signal.return_value = {
+            "action": "buy",
+            "confidence": dqn_conf,
+        }
         mock_ai.analyze.return_value = [make_rec(action="buy", confidence=ai_conf)]
         snap = make_snapshot()
         with patch.object(Config, "MODE", "hybrid"):
@@ -510,11 +518,16 @@ class TestHybrid:
         expected = round(dqn_conf * 0.5 + ai_conf * 0.5, 3)
         assert result[0]["confidence"] == expected
 
-    def test_hybrid_regime_weights_trending_down(self, combiner, mock_ai, mock_dqn_signal):
+    def test_hybrid_regime_weights_trending_down(
+        self, combiner, mock_ai, mock_dqn_signal
+    ):
         """trending_down → w_sac=0.3, w_ai=0.7."""
         dqn_conf = 0.80
         ai_conf = 0.70
-        mock_dqn_signal.get_signal.return_value = {"action": "buy", "confidence": dqn_conf}
+        mock_dqn_signal.get_signal.return_value = {
+            "action": "buy",
+            "confidence": dqn_conf,
+        }
         mock_ai.analyze.return_value = [make_rec(action="buy", confidence=ai_conf)]
         snap = make_snapshot()
         with patch.object(Config, "MODE", "hybrid"):
@@ -526,7 +539,9 @@ class TestHybrid:
         expected = round(dqn_conf * 0.3 + ai_conf * 0.7, 3)
         assert result[0]["confidence"] == expected
 
-    def test_hybrid_combined_below_min_conf_dropped(self, combiner, mock_ai, mock_dqn_signal):
+    def test_hybrid_combined_below_min_conf_dropped(
+        self, combiner, mock_ai, mock_dqn_signal
+    ):
         """combined conf ниже MIN_SIGNAL_CONFIDENCE → пропуск."""
         mock_dqn_signal.get_signal.return_value = {"action": "buy", "confidence": 0.40}
         mock_ai.analyze.return_value = [make_rec(action="buy", confidence=0.50)]
@@ -536,7 +551,9 @@ class TestHybrid:
             result = await_sync(combiner._hybrid([snap], balance=10000))
         assert result == []
 
-    def test_hybrid_reasoning_includes_sac_and_regime(self, combiner, mock_ai, mock_dqn_signal):
+    def test_hybrid_reasoning_includes_sac_and_regime(
+        self, combiner, mock_ai, mock_dqn_signal
+    ):
         mock_dqn_signal.get_signal.return_value = {"action": "buy", "confidence": 0.80}
         mock_ai.analyze.return_value = [
             make_rec(action="buy", confidence=0.80, reasoning="uptrend detected")
@@ -544,14 +561,14 @@ class TestHybrid:
         cfg = _make_config(MIN_SIGNAL_CONFIDENCE=0.65)
         with patch("src.signal_combiner.Config", cfg):
             result = await_sync(
-                combiner._hybrid(
-                    [make_snapshot()], balance=10000, regime="ranging"
-                )
+                combiner._hybrid([make_snapshot()], balance=10000, regime="ranging")
             )
         assert "SAC" in result[0]["reasoning"]
         assert "ranging" in result[0]["reasoning"]
 
-    def test_hybrid_reasoning_ai_silent_format(self, combiner, mock_ai, mock_dqn_signal):
+    def test_hybrid_reasoning_ai_silent_format(
+        self, combiner, mock_ai, mock_dqn_signal
+    ):
         mock_dqn_signal.get_signal.return_value = {"action": "sell", "confidence": 0.85}
         mock_ai.analyze.return_value = []
         cfg = _make_config(MIN_SIGNAL_CONFIDENCE=0.65)
@@ -559,7 +576,9 @@ class TestHybrid:
             result = await_sync(combiner._hybrid([make_snapshot()], balance=10000))
         assert "AI silent" in result[0]["reasoning"]
 
-    def test_hybrid_strategy_includes_hybrid_prefix(self, combiner, mock_ai, mock_dqn_signal):
+    def test_hybrid_strategy_includes_hybrid_prefix(
+        self, combiner, mock_ai, mock_dqn_signal
+    ):
         mock_dqn_signal.get_signal.return_value = {"action": "buy", "confidence": 0.80}
         mock_ai.analyze.return_value = [
             make_rec(action="buy", confidence=0.80, strategy="ema_cross")
@@ -603,7 +622,9 @@ class TestHybrid:
         ) as mock_chronos:
             mock_chronos.predict_direction.return_value = "down"  # buy expects "up"
             c = SignalCombiner(ai=mock_ai, rc=rc)
-            result = await_sync(c._hybrid([make_snapshot()], balance=10000, market_data=market_data))
+            result = await_sync(
+                c._hybrid([make_snapshot()], balance=10000, market_data=market_data)
+            )
 
         assert result == []
 
@@ -626,7 +647,9 @@ class TestHybrid:
         ) as mock_chronos:
             mock_chronos.predict_direction.return_value = "up"  # buy expects "up"
             c = SignalCombiner(ai=mock_ai, rc=rc)
-            result = await_sync(c._hybrid([make_snapshot()], balance=10000, market_data=market_data))
+            result = await_sync(
+                c._hybrid([make_snapshot()], balance=10000, market_data=market_data)
+            )
 
         assert len(result) == 1
 
@@ -649,7 +672,9 @@ class TestHybrid:
         ) as mock_chronos:
             mock_chronos.predict_direction.return_value = "neutral"
             c = SignalCombiner(ai=mock_ai, rc=rc)
-            result = await_sync(c._hybrid([make_snapshot()], balance=10000, market_data=market_data))
+            result = await_sync(
+                c._hybrid([make_snapshot()], balance=10000, market_data=market_data)
+            )
 
         assert len(result) == 1
 
@@ -680,7 +705,9 @@ class TestApplyMarketContextFilter:
     def test_long_overheated_boosts_sell_conf(self):
         recs = [make_rec(action="sell", confidence=0.80)]
         result = self._filter(recs, {"funding_signal": "long_overheated"})
-        assert result[0]["confidence"] == pytest.approx(min(0.95, 0.80 + 0.05), abs=1e-3)
+        assert result[0]["confidence"] == pytest.approx(
+            min(0.95, 0.80 + 0.05), abs=1e-3
+        )
 
     def test_short_overheated_reduces_sell_conf(self):
         recs = [make_rec(action="sell", confidence=0.80)]
@@ -690,7 +717,9 @@ class TestApplyMarketContextFilter:
     def test_short_overheated_boosts_buy_conf(self):
         recs = [make_rec(action="buy", confidence=0.80)]
         result = self._filter(recs, {"funding_signal": "short_overheated"})
-        assert result[0]["confidence"] == pytest.approx(min(0.95, 0.80 + 0.05), abs=1e-3)
+        assert result[0]["confidence"] == pytest.approx(
+            min(0.95, 0.80 + 0.05), abs=1e-3
+        )
 
     # ── fear_greed ────────────────────────────────────────────────────────────
 
@@ -931,7 +960,9 @@ class TestApplySentimentFilter:
         """score > 0.7 → buy conf += 0.05, capped at 0.95."""
         recs = [make_rec(action="buy", confidence=0.80)]
         result = self._filter(recs, {"BTC/USDT": 0.8})
-        assert result[0]["confidence"] == pytest.approx(min(0.95, 0.80 + 0.05), abs=1e-3)
+        assert result[0]["confidence"] == pytest.approx(
+            min(0.95, 0.80 + 0.05), abs=1e-3
+        )
 
     def test_very_positive_buy_capped_at_095(self):
         recs = [make_rec(action="buy", confidence=0.93)]
@@ -1035,7 +1066,11 @@ class TestGenerateContextSignals:
         snap = make_snapshot(price=30000.0, atr=300.0)
         ctx = {"pcr_signal": "greed_calls", "pcr": 0.5}
         result = self._gen([snap], ctx)
-        sells = [r for r in result if r["action"] == "sell" and "PCR" in r.get("reasoning", "")]
+        sells = [
+            r
+            for r in result
+            if r["action"] == "sell" and "PCR" in r.get("reasoning", "")
+        ]
         assert len(sells) == 1
         assert sells[0]["confidence"] == pytest.approx(0.65, abs=1e-3)
 
@@ -1044,7 +1079,11 @@ class TestGenerateContextSignals:
         snap = make_snapshot(price=30000.0, atr=300.0)
         ctx = {"pcr_signal": "fear_puts", "pcr": 1.8}
         result = self._gen([snap], ctx, min_conf=0.60)
-        buys = [r for r in result if r["action"] == "buy" and "PCR" in r.get("reasoning", "")]
+        buys = [
+            r
+            for r in result
+            if r["action"] == "buy" and "PCR" in r.get("reasoning", "")
+        ]
         assert len(buys) == 1
         assert buys[0]["confidence"] == pytest.approx(0.63, abs=1e-3)
 
@@ -1052,7 +1091,11 @@ class TestGenerateContextSignals:
         snap = make_snapshot(price=30000.0, atr=300.0)
         ctx = {"fear_greed": 5}
         result = self._gen([snap], ctx)
-        buys = [r for r in result if r["action"] == "buy" and "Fear" in r.get("reasoning", "")]
+        buys = [
+            r
+            for r in result
+            if r["action"] == "buy" and "Fear" in r.get("reasoning", "")
+        ]
         assert len(buys) == 1
         assert buys[0]["confidence"] == pytest.approx(0.68, abs=1e-3)
 
@@ -1060,7 +1103,11 @@ class TestGenerateContextSignals:
         snap = make_snapshot(price=30000.0, atr=300.0)
         ctx = {"fear_greed": 95}
         result = self._gen([snap], ctx)
-        sells = [r for r in result if r["action"] == "sell" and "Fear" in r.get("reasoning", "")]
+        sells = [
+            r
+            for r in result
+            if r["action"] == "sell" and "Fear" in r.get("reasoning", "")
+        ]
         assert len(sells) == 1
         assert sells[0]["confidence"] == pytest.approx(0.67, abs=1e-3)
 
@@ -1068,28 +1115,44 @@ class TestGenerateContextSignals:
         snap = make_snapshot(price=30000.0, atr=300.0)
         ctx = {"basis_signal": "greed_premium", "basis_pct": 3.0}
         result = self._gen([snap], ctx)
-        sells = [r for r in result if r["action"] == "sell" and "basis" in r.get("reasoning", "")]
+        sells = [
+            r
+            for r in result
+            if r["action"] == "sell" and "basis" in r.get("reasoning", "")
+        ]
         assert len(sells) == 1
 
     def test_basis_greed_premium_below_2pct_no_signal(self):
         snap = make_snapshot(price=30000.0, atr=300.0)
         ctx = {"basis_signal": "greed_premium", "basis_pct": 1.5}
         result = self._gen([snap], ctx)
-        sells = [r for r in result if r["action"] == "sell" and "basis" in r.get("reasoning", "")]
+        sells = [
+            r
+            for r in result
+            if r["action"] == "sell" and "basis" in r.get("reasoning", "")
+        ]
         assert len(sells) == 0
 
     def test_btc_etf_outflow_generates_sell(self):
         snap = make_snapshot(symbol="BTC/USDT", price=30000.0, atr=300.0)
         ctx = {"etf_signal": "etf_outflow", "etf_flow": -200.0}
         result = self._gen([snap], ctx)
-        sells = [r for r in result if r["action"] == "sell" and "ETF" in r.get("reasoning", "")]
+        sells = [
+            r
+            for r in result
+            if r["action"] == "sell" and "ETF" in r.get("reasoning", "")
+        ]
         assert len(sells) == 1
 
     def test_btc_etf_inflow_generates_buy(self):
         snap = make_snapshot(symbol="BTC/USDT", price=30000.0, atr=300.0)
         ctx = {"etf_signal": "etf_inflow", "etf_flow": 200.0}
         result = self._gen([snap], ctx)
-        buys = [r for r in result if r["action"] == "buy" and "ETF" in r.get("reasoning", "")]
+        buys = [
+            r
+            for r in result
+            if r["action"] == "buy" and "ETF" in r.get("reasoning", "")
+        ]
         assert len(buys) == 1
 
     def test_non_btc_etf_no_signal(self):
@@ -1182,7 +1245,9 @@ class TestMergeWithContext:
         context = [make_rec(symbol="BTC/USDT", action="buy", confidence=0.70)]
         result = self._merge(existing, context)
         assert len(result) == 1
-        assert result[0]["confidence"] == pytest.approx(min(0.95, 0.80 + 0.05), abs=1e-3)
+        assert result[0]["confidence"] == pytest.approx(
+            min(0.95, 0.80 + 0.05), abs=1e-3
+        )
 
     def test_same_symbol_different_action_adds_new(self):
         existing = [make_rec(symbol="BTC/USDT", action="buy", confidence=0.80)]
@@ -1245,7 +1310,9 @@ class TestMergeWithContext:
         ]
         result = self._merge(existing, context)
         # Two boosts: 0.80 + 0.05 + 0.05 = 0.90
-        assert result[0]["confidence"] == pytest.approx(min(0.95, 0.80 + 0.05 + 0.05), abs=1e-3)
+        assert result[0]["confidence"] == pytest.approx(
+            min(0.95, 0.80 + 0.05 + 0.05), abs=1e-3
+        )
 
     def test_empty_both_returns_empty(self):
         result = self._merge([], [])
@@ -1255,8 +1322,6 @@ class TestMergeWithContext:
 # ---------------------------------------------------------------------------
 # Async helper (used in sync test classes)
 # ---------------------------------------------------------------------------
-
-import asyncio
 
 
 def await_sync(coro):

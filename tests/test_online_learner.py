@@ -17,11 +17,9 @@ Coverage targets:
 from __future__ import annotations
 
 import os
-import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -51,6 +49,7 @@ def _make_learner(mode: str = "periodic", redis=None, **cfg_kwargs):
     cfg = _make_cfg(mode=mode, **cfg_kwargs)
     # Import first (uses cached module), then patch Config so __init__ sees the mock
     from src.online_learner import OnlineLearner  # ensure module is loaded
+
     with patch("src.online_learner.Config", cfg):
         learner = OnlineLearner(redis_client=redis)
     return learner, cfg
@@ -163,7 +162,9 @@ class TestOnTradeClosed:
         learner._sync_strategy_weights = AsyncMock()
         learner._periodic_retrain_if_needed = AsyncMock()
 
-        await learner.on_trade_closed("BTC/USDT", "sell", -0.03, strategy="rsi_momentum")
+        await learner.on_trade_closed(
+            "BTC/USDT", "sell", -0.03, strategy="rsi_momentum"
+        )
 
         assert learner._strategy_results["rsi_momentum"][0] == 0  # loss
 
@@ -331,6 +332,7 @@ class TestRecordStrategyResult:
 
     def test_window_maxlen_respected(self):
         from src.online_learner import _WEIGHT_WINDOW
+
         learner, _ = _make_learner()
         for _ in range(_WEIGHT_WINDOW + 10):
             learner._record_strategy_result("s", True)
@@ -734,7 +736,12 @@ class TestRunFullRetrain:
                     with patch("os.replace"):
                         learner._run_full_retrain()
 
-        for key in ("SAC_MODEL_PATH", "TRAIN_TOP_N", "TOTAL_TIMESTEPS", "EXPERIENCES_PATH"):
+        for key in (
+            "SAC_MODEL_PATH",
+            "TRAIN_TOP_N",
+            "TOTAL_TIMESTEPS",
+            "EXPERIENCES_PATH",
+        ):
             assert key in captured_env
 
     def test_sac_model_path_has_new_suffix(self):
@@ -836,7 +843,9 @@ class TestHybridWeightFlow:
         learner._periodic_retrain_if_needed = AsyncMock()
 
         for _ in range(10):
-            await learner.on_trade_closed("BTC/USDT", "buy", 0.02, strategy="ema_crossover")
+            await learner.on_trade_closed(
+                "BTC/USDT", "buy", 0.02, strategy="ema_crossover"
+            )
 
         weight = learner._compute_weight("ema_crossover")
         assert weight > 1.0
@@ -848,7 +857,9 @@ class TestHybridWeightFlow:
         learner._periodic_retrain_if_needed = AsyncMock()
 
         for _ in range(10):
-            await learner.on_trade_closed("SOL/USDT", "sell", -0.03, strategy="rsi_momentum")
+            await learner.on_trade_closed(
+                "SOL/USDT", "sell", -0.03, strategy="rsi_momentum"
+            )
 
         weight = learner._compute_weight("rsi_momentum")
         assert weight < 1.0
