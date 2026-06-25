@@ -443,6 +443,48 @@ class TestAnalyze:
         result = await ai.analyze([{"symbol": "BTC/USDT"}], 10000)
         assert result == []
 
+    @pytest.mark.asyncio
+    async def test_analyze_sets_last_ai_provider_on_success(self):
+        cfg = _make_config(MIN_SIGNAL_CONFIDENCE=0.65)
+        with patch("src.ai_analyzer.Config", cfg):
+            ai = self._make_ai(provider_order=["groq"])
+            valid_response = json.dumps(
+                [
+                    {
+                        "symbol": "BTC/USDT",
+                        "action": "buy",
+                        "strategy": "ema_crossover",
+                        "confidence": 0.9,
+                    }
+                ]
+            )
+            ai._call_groq = AsyncMock(return_value=valid_response)
+            ai._build_prompt = MagicMock(return_value="prompt")
+            rc = MagicMock()
+            ai._runtime_config = rc
+            await ai.analyze([{"symbol": "BTC/USDT"}], 10000)
+        rc.set_last_ai_provider.assert_called_once_with("groq")
+
+    @pytest.mark.asyncio
+    async def test_analyze_no_runtime_config_does_not_raise(self):
+        cfg = _make_config(MIN_SIGNAL_CONFIDENCE=0.65)
+        with patch("src.ai_analyzer.Config", cfg):
+            ai = self._make_ai(provider_order=["groq"])
+            valid_response = json.dumps(
+                [
+                    {
+                        "symbol": "SOL/USDT",
+                        "action": "sell",
+                        "strategy": "rsi_momentum",
+                        "confidence": 0.8,
+                    }
+                ]
+            )
+            ai._call_groq = AsyncMock(return_value=valid_response)
+            ai._build_prompt = MagicMock(return_value="prompt")
+            result = await ai.analyze([{"symbol": "SOL/USDT"}], 10000)
+        assert len(result) == 1
+
 
 def _get_analyzer_class():
     """Импортирует класс AIAnalyzer — кэшируется после первого вызова."""

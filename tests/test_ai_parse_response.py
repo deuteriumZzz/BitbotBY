@@ -14,6 +14,7 @@ def analyzer():
         cfg.DEEPSEEK_API_KEY = ""
         cfg.GROQ_API_KEY = ""
         cfg.OPENAI_API_KEY = ""
+        cfg.GEMINI_API_KEY = ""
         cfg.MIN_SIGNAL_CONFIDENCE = 0.65
         cfg.AI_MODEL = "claude-3"
         cfg.DEEPSEEK_MODEL = "deepseek-chat"
