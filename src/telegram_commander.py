@@ -1655,6 +1655,8 @@ class TelegramCommander:
 
             await _asyncio.gather(_read_stdout(), _read_stderr(), proc.wait())
 
+            import os as _os
+
             stdout_bytes = "\n".join(stdout_lines).encode()
             model_exists = _os.path.exists(model_path)
             if proc.returncode == 0 and model_exists:
