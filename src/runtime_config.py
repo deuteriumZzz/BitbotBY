@@ -44,6 +44,7 @@ _KEY_PAPER_TRADING = "bot:paper_trading_override"
 _KEY_SAC_BACKUP = "bot:sac_model_backup"
 _KEY_TRAIN_PROGRESS = "bot:train_progress"
 _KEY_BACKTEST_PROGRESS = "bot:backtest_progress"
+_KEY_LAST_AI_PROVIDER = "bot:last_ai_provider"
 _KEY_SEASON_MODE = "bot:season_switch_mode"
 _KEY_SEASON_INDEX = "bot:season_index"
 _KEY_FEAR_GREED = "bot:fear_greed"
@@ -313,6 +314,13 @@ class RuntimeConfig:
         self._set(_KEY_AI_PROVIDER, provider)
         logger.info("Runtime: ai_provider → %s", provider)
         return True
+
+    def get_last_ai_provider(self) -> str:
+        """Провайдер, который реально ответил последним."""
+        return self._get(_KEY_LAST_AI_PROVIDER) or ""
+
+    def set_last_ai_provider(self, provider: str) -> None:
+        self._set(_KEY_LAST_AI_PROVIDER, provider)
 
     # ── Leverage ──────────────────────────────────────────────────────────────
 

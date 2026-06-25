@@ -840,7 +840,9 @@ class TelegramCommander:
         forced = sorted(self._rc.get_forced_symbols())
         lev_mode = self._rc.get_leverage_mode()
         lev_target = self._rc.get_leverage_target_risk()
-        provider = self._rc.get_ai_provider()
+        configured_provider = self._rc.get_ai_provider()
+        last_provider = self._rc.get_last_ai_provider()
+        provider = last_provider if last_provider else configured_provider
         hours = self._rc.get_trading_hours()
 
         state_icon = "⏸" if paused else "🟢"
@@ -880,14 +882,22 @@ class TelegramCommander:
         else:
             fng_line = "😐 Страх/Жадность: ⏳ загружается...\n"
 
+        chronos_enabled = (
+            mode == "hybrid"
+            and not Config.PAPER_TRADING
+            and self._rc.get_chronos_enabled()
+        )
+        mode_label = self._MODE_DISPLAY.get(mode, mode.upper())
+        if chronos_enabled:
+            mode_label += " +Chronos"
+
         text = (
             f"{state_icon} *BitbotBY [{paper}]*\n\n"
             f"💰 Баланс: `${balance:,.2f}` ({pnl_pct:+.2f}%)\n"
             f"📊 Профиль: {profile_str}\n"
             f"{season_line}"
             f"{fng_line}"
-            f"🤖 Режим: `{self._MODE_DISPLAY.get(mode, mode.upper())}`"
-            f" | AI: `{provider}`\n"
+            f"🤖 Режим: `{mode_label}` | AI: `{provider}`\n"
             f"🔢 Символов: `{n}` | Позиций: `{len(positions)}`\n"
             f"📊 Плечо: `{lev_mode}` ({lev_target*100:.1f}% ATR)\n"
             f"🕐 Часы: {hours_str}\n"
