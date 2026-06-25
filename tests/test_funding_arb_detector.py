@@ -1,17 +1,15 @@
 """Тесты FundingArbDetector."""
 
-import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from src.funding_arb_detector import (
-    FundingArbDetector,
     _FUNDING_ALERT_COOLDOWN,
     _FUNDING_EXTREME,
     _FUNDING_THRESHOLD,
+    FundingArbDetector,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

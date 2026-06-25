@@ -34,7 +34,6 @@ import pytest
 
 from src.order_executor import OrderExecutor, _calc_dynamic_leverage
 
-
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 
@@ -168,7 +167,9 @@ class TestCalcDynamicLeverage:
 
     def test_fixed_mode_returns_fallback(self):
         """mode == 'fixed' branch (line 81)."""
-        cfg = self._cfg(LEVERAGE_MODE="fixed", LEVERAGE=3, LEVERAGE_MIN=1, LEVERAGE_MAX=5)
+        cfg = self._cfg(
+            LEVERAGE_MODE="fixed", LEVERAGE=3, LEVERAGE_MIN=1, LEVERAGE_MAX=5
+        )
         top = {"symbol": "BTC/USDT", "atr": 1.5}
         with patch("src.order_executor.Config", cfg):
             lev = _calc_dynamic_leverage(top, entry=100.0)
@@ -211,13 +212,17 @@ class TestCalcDynamicLeverage:
             "indicators": {"trend": "uptrend"},
         }
         with patch("src.order_executor.Config", cfg):
-            lev = _calc_dynamic_leverage(top, entry=100.0, balance=10000, peak_balance=10000)
+            lev = _calc_dynamic_leverage(
+                top, entry=100.0, balance=10000, peak_balance=10000
+            )
         # uptrend mult=1.0, no drawdown → lev = round(2 * 1.0 * 1.0) = 2
         assert lev == 2
 
     def test_mode_full_downtrend_drawdown(self):
         """mode == 'full', downtrend with drawdown → reduced leverage (lines 97-111)."""
-        cfg = self._cfg(LEVERAGE_MODE="full", LEVERAGE_TARGET_RISK=0.05, MAX_DRAWDOWN_PERCENT=0.20)
+        cfg = self._cfg(
+            LEVERAGE_MODE="full", LEVERAGE_TARGET_RISK=0.05, MAX_DRAWDOWN_PERCENT=0.20
+        )
         top = {
             "symbol": "ETH/USDT",
             "atr": 2.0,  # atr_pct = 0.02
@@ -243,7 +248,9 @@ class TestCalcDynamicLeverage:
             "indicators": {"trend": "sideways"},
         }
         with patch("src.order_executor.Config", cfg):
-            lev = _calc_dynamic_leverage(top, entry=100.0, balance=10000, peak_balance=10000)
+            lev = _calc_dynamic_leverage(
+                top, entry=100.0, balance=10000, peak_balance=10000
+            )
         # sideways mult=0.7; base=2; 2*0.7*1.0=1.4 → round=1
         assert 1 <= lev <= 5
 
@@ -256,7 +263,9 @@ class TestCalcDynamicLeverage:
             "indicators": {"trend": "unknown_regime"},
         }
         with patch("src.order_executor.Config", cfg):
-            lev = _calc_dynamic_leverage(top, entry=100.0, balance=10000, peak_balance=10000)
+            lev = _calc_dynamic_leverage(
+                top, entry=100.0, balance=10000, peak_balance=10000
+            )
         assert isinstance(lev, int)
 
     def test_outer_exception_returns_fallback(self):
@@ -273,7 +282,9 @@ class TestCalcDynamicLeverage:
 
     def test_volatility_mode_clamps_to_max(self):
         """Result clamped to LEVERAGE_MAX."""
-        cfg = self._cfg(LEVERAGE_MODE="volatility", LEVERAGE_TARGET_RISK=0.5, LEVERAGE_MAX=5)
+        cfg = self._cfg(
+            LEVERAGE_MODE="volatility", LEVERAGE_TARGET_RISK=0.5, LEVERAGE_MAX=5
+        )
         top = {"symbol": "BTC/USDT", "atr": 0.1}  # atr_pct=0.001 → base=500
         with patch("src.order_executor.Config", cfg):
             lev = _calc_dynamic_leverage(top, entry=100.0)
@@ -281,7 +292,9 @@ class TestCalcDynamicLeverage:
 
     def test_volatility_mode_clamps_to_min(self):
         """Result clamped to LEVERAGE_MIN."""
-        cfg = self._cfg(LEVERAGE_MODE="volatility", LEVERAGE_TARGET_RISK=0.0001, LEVERAGE_MIN=1)
+        cfg = self._cfg(
+            LEVERAGE_MODE="volatility", LEVERAGE_TARGET_RISK=0.0001, LEVERAGE_MIN=1
+        )
         top = {"symbol": "BTC/USDT", "atr": 10.0}  # atr_pct=0.1 → base=0.001
         with patch("src.order_executor.Config", cfg):
             lev = _calc_dynamic_leverage(top, entry=100.0)
@@ -296,8 +309,12 @@ class TestCalcDynamicLeverage:
             "indicators": {"trend": "uptrend"},
         }
         with patch("src.order_executor.Config", cfg):
-            lev_no_dd = _calc_dynamic_leverage(top, entry=100.0, balance=10000, peak_balance=10000)
-            lev_with_dd = _calc_dynamic_leverage(top, entry=100.0, balance=8000, peak_balance=10000)
+            lev_no_dd = _calc_dynamic_leverage(
+                top, entry=100.0, balance=10000, peak_balance=10000
+            )
+            lev_with_dd = _calc_dynamic_leverage(
+                top, entry=100.0, balance=8000, peak_balance=10000
+            )
         # With drawdown leverage should be <= without drawdown
         assert lev_with_dd <= lev_no_dd
 
@@ -315,13 +332,19 @@ class TestCalcDynamicLeverage:
         }
         with patch("src.order_executor.Config", cfg):
             lev = _calc_dynamic_leverage(
-                top, entry=100.0, balance=9000.0, peak_balance=10000.0, runtime_config=rc
+                top,
+                entry=100.0,
+                balance=9000.0,
+                peak_balance=10000.0,
+                runtime_config=rc,
             )
         assert isinstance(lev, int)
 
     def test_full_mode_max_drawdown_runtime_raises(self):
         """runtime_config.get_max_drawdown_percent() raises → Config fallback (lines 105-106)."""
-        cfg = self._cfg(LEVERAGE_MODE="full", LEVERAGE_TARGET_RISK=0.02, MAX_DRAWDOWN_PERCENT=0.15)
+        cfg = self._cfg(
+            LEVERAGE_MODE="full", LEVERAGE_TARGET_RISK=0.02, MAX_DRAWDOWN_PERCENT=0.15
+        )
         rc = MagicMock()
         rc.get_leverage_mode.return_value = "full"
         rc.get_leverage_target_risk.return_value = 0.02
@@ -333,7 +356,11 @@ class TestCalcDynamicLeverage:
         }
         with patch("src.order_executor.Config", cfg):
             lev = _calc_dynamic_leverage(
-                top, entry=100.0, balance=9000.0, peak_balance=10000.0, runtime_config=rc
+                top,
+                entry=100.0,
+                balance=9000.0,
+                peak_balance=10000.0,
+                runtime_config=rc,
             )
         assert isinstance(lev, int)
 
@@ -370,7 +397,9 @@ class TestTradingHoursFilter:
         executor, monitored, _ = _make_executor(runtime_config=rc)
         with patch("src.order_executor.Config", _make_cfg()):
             with patch("src.order_executor._ac_impact", return_value=0.0):
-                with patch("src.trade_history.get_backtest_stats", return_value=_BT_STATS):
+                with patch(
+                    "src.trade_history.get_backtest_stats", return_value=_BT_STATS
+                ):
                     await executor.execute(_TOP_BUY, {}, 10_000.0)
 
         assert "BTC/USDT" in monitored
@@ -405,7 +434,9 @@ class TestTradingHoursFilter:
             with patch("src.order_executor.datetime") as mock_datetime:
                 mock_datetime.datetime.utcnow.return_value = fake_dt
                 with patch("src.order_executor._ac_impact", return_value=0.0):
-                    with patch("src.trade_history.get_backtest_stats", return_value=_BT_STATS):
+                    with patch(
+                        "src.trade_history.get_backtest_stats", return_value=_BT_STATS
+                    ):
                         await executor.execute(_TOP_BUY, {}, 10_000.0)
 
         assert "BTC/USDT" in monitored
@@ -423,7 +454,9 @@ class TestTradingHoursFilter:
             with patch("src.order_executor.datetime") as mock_datetime:
                 mock_datetime.datetime.utcnow.return_value = fake_dt
                 with patch("src.order_executor._ac_impact", return_value=0.0):
-                    with patch("src.trade_history.get_backtest_stats", return_value=_BT_STATS):
+                    with patch(
+                        "src.trade_history.get_backtest_stats", return_value=_BT_STATS
+                    ):
                         await executor.execute(_TOP_BUY, {}, 10_000.0)
 
         assert "BTC/USDT" in monitored
@@ -457,7 +490,9 @@ class TestTradingHoursFilter:
             with patch("src.order_executor.datetime") as mock_datetime:
                 mock_datetime.datetime.utcnow.return_value = fake_dt
                 with patch("src.order_executor._ac_impact", return_value=0.0):
-                    with patch("src.trade_history.get_backtest_stats", return_value=_BT_STATS):
+                    with patch(
+                        "src.trade_history.get_backtest_stats", return_value=_BT_STATS
+                    ):
                         await executor.execute(_TOP_BUY, {}, 10_000.0)
 
         # ValueError is swallowed → trade is not blocked
@@ -475,7 +510,9 @@ class TestSLTPValidation:
         executor, monitored, _ = _make_executor()
         with patch("src.order_executor.Config", _make_cfg()):
             with patch("src.order_executor._ac_impact", return_value=0.0):
-                with patch("src.trade_history.get_backtest_stats", return_value=_BT_STATS):
+                with patch(
+                    "src.trade_history.get_backtest_stats", return_value=_BT_STATS
+                ):
                     await executor.execute(bad_top, {}, 10_000.0)
         assert "BTC/USDT" not in monitored
 
@@ -486,7 +523,9 @@ class TestSLTPValidation:
         executor, monitored, _ = _make_executor()
         with patch("src.order_executor.Config", _make_cfg()):
             with patch("src.order_executor._ac_impact", return_value=0.0):
-                with patch("src.trade_history.get_backtest_stats", return_value=_BT_STATS):
+                with patch(
+                    "src.trade_history.get_backtest_stats", return_value=_BT_STATS
+                ):
                     await executor.execute(bad_top, {}, 10_000.0)
         assert "BTC/USDT" not in monitored
 
@@ -497,18 +536,27 @@ class TestSLTPValidation:
         executor, monitored, _ = _make_executor()
         with patch("src.order_executor.Config", _make_cfg()):
             with patch("src.order_executor._ac_impact", return_value=0.0):
-                with patch("src.trade_history.get_backtest_stats", return_value=_BT_STATS):
+                with patch(
+                    "src.trade_history.get_backtest_stats", return_value=_BT_STATS
+                ):
                     await executor.execute(bad_top, {}, 10_000.0)
         assert "BTC/USDT" not in monitored
 
     @pytest.mark.asyncio
     async def test_sell_tp_at_or_above_entry_skips(self):
         """sell: tp >= entry → skip (lines 357-364)."""
-        bad_top = {**_TOP_SELL, "entry": 100.0, "stop_loss": 105.0, "take_profit": 100.0}
+        bad_top = {
+            **_TOP_SELL,
+            "entry": 100.0,
+            "stop_loss": 105.0,
+            "take_profit": 100.0,
+        }
         executor, monitored, _ = _make_executor()
         with patch("src.order_executor.Config", _make_cfg()):
             with patch("src.order_executor._ac_impact", return_value=0.0):
-                with patch("src.trade_history.get_backtest_stats", return_value=_BT_STATS):
+                with patch(
+                    "src.trade_history.get_backtest_stats", return_value=_BT_STATS
+                ):
                     await executor.execute(bad_top, {}, 10_000.0)
         assert "BTC/USDT" not in monitored
 
@@ -519,7 +567,9 @@ class TestSLTPValidation:
         executor, monitored, _ = _make_executor()
         with patch("src.order_executor.Config", _make_cfg()):
             with patch("src.order_executor._ac_impact", return_value=0.0):
-                with patch("src.trade_history.get_backtest_stats", return_value=_BT_STATS):
+                with patch(
+                    "src.trade_history.get_backtest_stats", return_value=_BT_STATS
+                ):
                     await executor.execute(top, {}, 10_000.0)
         assert "BTC/USDT" in monitored
 
@@ -537,8 +587,12 @@ class TestPostImpactValidation:
         with patch("src.order_executor.Config", _make_cfg()):
             # Negative impact for buy shifts entry down: entry*(1+(-0.10)) = 90
             with patch("src.order_executor._ac_impact", return_value=-0.10):
-                with patch("src.trade_history.get_backtest_stats", return_value=_BT_STATS):
-                    await executor.execute(top, {"BTC/USDT": pd.DataFrame({"close": [100.0]})}, 10_000.0)
+                with patch(
+                    "src.trade_history.get_backtest_stats", return_value=_BT_STATS
+                ):
+                    await executor.execute(
+                        top, {"BTC/USDT": pd.DataFrame({"close": [100.0]})}, 10_000.0
+                    )
         assert "BTC/USDT" not in monitored
 
     @pytest.mark.asyncio
@@ -550,8 +604,12 @@ class TestPostImpactValidation:
         with patch("src.order_executor.Config", _make_cfg()):
             # impact=0.20 → adj_entry=120 > tp=110
             with patch("src.order_executor._ac_impact", return_value=0.20):
-                with patch("src.trade_history.get_backtest_stats", return_value=_BT_STATS):
-                    await executor.execute(top, {"BTC/USDT": pd.DataFrame({"close": [100.0]})}, 10_000.0)
+                with patch(
+                    "src.trade_history.get_backtest_stats", return_value=_BT_STATS
+                ):
+                    await executor.execute(
+                        top, {"BTC/USDT": pd.DataFrame({"close": [100.0]})}, 10_000.0
+                    )
         assert "BTC/USDT" not in monitored
 
     @pytest.mark.asyncio
@@ -564,8 +622,12 @@ class TestPostImpactValidation:
         with patch("src.order_executor.Config", _make_cfg()):
             # negative impact on sell: entry*(1-(-0.15)) = 115 → sl=105 <= 115 invalid
             with patch("src.order_executor._ac_impact", return_value=-0.15):
-                with patch("src.trade_history.get_backtest_stats", return_value=_BT_STATS):
-                    await executor.execute(top, {"BTC/USDT": pd.DataFrame({"close": [100.0]})}, 10_000.0)
+                with patch(
+                    "src.trade_history.get_backtest_stats", return_value=_BT_STATS
+                ):
+                    await executor.execute(
+                        top, {"BTC/USDT": pd.DataFrame({"close": [100.0]})}, 10_000.0
+                    )
         assert "BTC/USDT" not in monitored
 
     @pytest.mark.asyncio
@@ -578,8 +640,12 @@ class TestPostImpactValidation:
         with patch("src.order_executor.Config", _make_cfg()):
             # impact=0.15 on sell: entry*(1-0.15) = 85 → tp=90 >= 85 invalid
             with patch("src.order_executor._ac_impact", return_value=0.15):
-                with patch("src.trade_history.get_backtest_stats", return_value=_BT_STATS):
-                    await executor.execute(top, {"BTC/USDT": pd.DataFrame({"close": [100.0]})}, 10_000.0)
+                with patch(
+                    "src.trade_history.get_backtest_stats", return_value=_BT_STATS
+                ):
+                    await executor.execute(
+                        top, {"BTC/USDT": pd.DataFrame({"close": [100.0]})}, 10_000.0
+                    )
         assert "BTC/USDT" not in monitored
 
 
@@ -689,15 +755,18 @@ class TestDrawdownScaling:
         cfg.DRAWDOWN_SCALE_FACTOR = 0.5
 
         captured_qty = []
-        original_round = executor._api.round_quantity.side_effect
+
         def capture_round(sym, qty):
             captured_qty.append(qty)
             return round(qty, 6)
+
         executor._api.round_quantity.side_effect = capture_round
 
         with patch("src.order_executor.Config", cfg):
             with patch("src.order_executor._ac_impact", return_value=0.0):
-                with patch("src.trade_history.get_backtest_stats", return_value=_BT_STATS):
+                with patch(
+                    "src.trade_history.get_backtest_stats", return_value=_BT_STATS
+                ):
                     # balance=9000 < peak=10000 → drawdown=10% > threshold=5% → scale=0.5
                     await executor.execute(_TOP_BUY, {}, 9_000.0)
 
@@ -744,7 +813,9 @@ class TestLiquidityFilter:
     async def test_exception_during_fetch_allows(self):
         """Exception in fetch_ticker → returns True (don't block trading, line 568-569)."""
         executor, monitored, _ = _make_executor()
-        executor._api.exchange.fetch_ticker = AsyncMock(side_effect=Exception("timeout"))
+        executor._api.exchange.fetch_ticker = AsyncMock(
+            side_effect=Exception("timeout")
+        )
         cfg = _make_cfg()
         with patch("src.order_executor.Config", cfg):
             result = await executor._check_liquidity("BTC/USDT", 100.0)
@@ -806,7 +877,9 @@ class TestLiveTrading:
         cfg = _make_cfg(paper=False)
         with patch("src.order_executor.Config", cfg):
             with patch("src.order_executor._ac_impact", return_value=0.0):
-                with patch("src.trade_history.get_backtest_stats", return_value=_BT_STATS):
+                with patch(
+                    "src.trade_history.get_backtest_stats", return_value=_BT_STATS
+                ):
                     await executor.execute(_TOP_BUY, {}, 10_000.0)
         executor._api.create_order.assert_called_once()
 
@@ -817,7 +890,9 @@ class TestLiveTrading:
         cfg = _make_cfg(paper=False, market_type="linear")
         with patch("src.order_executor.Config", cfg):
             with patch("src.order_executor._ac_impact", return_value=0.0):
-                with patch("src.trade_history.get_backtest_stats", return_value=_BT_STATS):
+                with patch(
+                    "src.trade_history.get_backtest_stats", return_value=_BT_STATS
+                ):
                     await executor.execute(_TOP_BUY, {}, 10_000.0)
         executor._api.set_leverage.assert_called_once()
 
@@ -828,7 +903,9 @@ class TestLiveTrading:
         cfg = _make_cfg(paper=False, market_type="spot")
         with patch("src.order_executor.Config", cfg):
             with patch("src.order_executor._ac_impact", return_value=0.0):
-                with patch("src.trade_history.get_backtest_stats", return_value=_BT_STATS):
+                with patch(
+                    "src.trade_history.get_backtest_stats", return_value=_BT_STATS
+                ):
                     await executor.execute(_TOP_BUY, {}, 10_000.0)
         executor._api.set_leverage.assert_not_called()
 
@@ -840,7 +917,9 @@ class TestLiveTrading:
         cfg = _make_cfg(paper=False, market_type="linear")
         with patch("src.order_executor.Config", cfg):
             with patch("src.order_executor._ac_impact", return_value=0.0):
-                with patch("src.trade_history.get_backtest_stats", return_value=_BT_STATS):
+                with patch(
+                    "src.trade_history.get_backtest_stats", return_value=_BT_STATS
+                ):
                     await executor.execute(_TOP_BUY, {}, 10_000.0)
         # Position should still be opened despite set_leverage failure
         assert "BTC/USDT" in monitored
@@ -853,7 +932,9 @@ class TestLiveTrading:
         cfg = _make_cfg(paper=False)
         with patch("src.order_executor.Config", cfg):
             with patch("src.order_executor._ac_impact", return_value=0.0):
-                with patch("src.trade_history.get_backtest_stats", return_value=_BT_STATS):
+                with patch(
+                    "src.trade_history.get_backtest_stats", return_value=_BT_STATS
+                ):
                     await executor.execute(_TOP_BUY, {}, 10_000.0)
         assert "BTC/USDT" not in monitored
         executor._trade_history.record_open.assert_not_called()
@@ -868,7 +949,9 @@ class TestLiveTrading:
         cfg = _make_cfg(paper=False)
         with patch("src.order_executor.Config", cfg):
             with patch("src.order_executor._ac_impact", return_value=0.0):
-                with patch("src.trade_history.get_backtest_stats", return_value=_BT_STATS):
+                with patch(
+                    "src.trade_history.get_backtest_stats", return_value=_BT_STATS
+                ):
                     await executor.execute(_TOP_BUY, {}, 10_000.0)
         # Commission from exchange = 0.75; record_open should be called
         executor._trade_history.record_open.assert_called_once()
@@ -882,7 +965,9 @@ class TestLiveTrading:
         cfg = _make_cfg(paper=False)
         with patch("src.order_executor.Config", cfg):
             with patch("src.order_executor._ac_impact", return_value=0.0):
-                with patch("src.trade_history.get_backtest_stats", return_value=_BT_STATS):
+                with patch(
+                    "src.trade_history.get_backtest_stats", return_value=_BT_STATS
+                ):
                     await executor.execute(_TOP_BUY, {}, 10_000.0)
         executor._api.place_exchange_sl_tp.assert_called_once()
         assert monitored["BTC/USDT"]["exchange_sl_id"] == "SL_ID"
@@ -901,7 +986,9 @@ class TestPaperTradingSell:
         cfg = _make_cfg(paper=True, market_type="linear")
         with patch("src.order_executor.Config", cfg):
             with patch("src.order_executor._ac_impact", return_value=0.0):
-                with patch("src.trade_history.get_backtest_stats", return_value=_BT_STATS):
+                with patch(
+                    "src.trade_history.get_backtest_stats", return_value=_BT_STATS
+                ):
                     await executor.execute(_TOP_SELL, {}, 10_000.0)
         # Balance should have decreased (margin + commission reserved)
         assert paper_balance[0] < initial_bal
@@ -914,7 +1001,9 @@ class TestPaperTradingSell:
         cfg = _make_cfg(paper=True, market_type="spot")
         with patch("src.order_executor.Config", cfg):
             with patch("src.order_executor._ac_impact", return_value=0.0):
-                with patch("src.trade_history.get_backtest_stats", return_value=_BT_STATS):
+                with patch(
+                    "src.trade_history.get_backtest_stats", return_value=_BT_STATS
+                ):
                     await executor.execute(_TOP_SELL, {}, 10_000.0)
         # SPOT sell: receives money → balance increases
         assert paper_balance[0] > initial_bal
@@ -931,7 +1020,9 @@ class TestRoundQuantityZero:
         executor._api.round_quantity = MagicMock(return_value=0.0)
         with patch("src.order_executor.Config", _make_cfg()):
             with patch("src.order_executor._ac_impact", return_value=0.0):
-                with patch("src.trade_history.get_backtest_stats", return_value=_BT_STATS):
+                with patch(
+                    "src.trade_history.get_backtest_stats", return_value=_BT_STATS
+                ):
                     await executor.execute(_TOP_BUY, {}, 10_000.0)
         assert "BTC/USDT" not in monitored
         executor._trade_history.record_open.assert_not_called()
@@ -944,7 +1035,9 @@ class TestConfigureRisk:
     def test_configure_risk_updates_risk_manager(self):
         """configure_risk sets risk_manager attributes."""
         executor, _, _ = _make_executor()
-        executor.configure_risk(max_positions=10, risk_per_trade=0.02, drawdown_scale_enabled=False)
+        executor.configure_risk(
+            max_positions=10, risk_per_trade=0.02, drawdown_scale_enabled=False
+        )
         assert executor._risk_manager.max_positions == 10
         assert executor._risk_manager.risk_per_trade == pytest.approx(0.02)
         assert executor._risk_manager.drawdown_scale_enabled is False

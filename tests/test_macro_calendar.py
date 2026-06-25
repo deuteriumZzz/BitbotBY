@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -112,9 +111,7 @@ class TestIsBlackoutBasic:
         """Событие через 2 часа — не в blackout-окне (±30 мин)."""
         cal = _make_calendar()
         future_ts = datetime.now(timezone.utc).timestamp() + 7200  # +2h
-        cal._get_events = AsyncMock(
-            return_value=[{"event": "CPI", "_ts": future_ts}]
-        )
+        cal._get_events = AsyncMock(return_value=[{"event": "CPI", "_ts": future_ts}])
         result = await cal.is_blackout()
         assert result is False
 
@@ -182,8 +179,9 @@ class TestGetEventsCache:
         cal._cache_ts = 0.0  # давно
 
         aiohttp_mock = _mock_aiohttp_response({"economicCalendar": []})
-        with patch.dict("sys.modules", {"aiohttp": aiohttp_mock}), \
-             patch("src.macro_calendar.time.monotonic", return_value=100_000.0):
+        with patch.dict("sys.modules", {"aiohttp": aiohttp_mock}), patch(
+            "src.macro_calendar.time.monotonic", return_value=100_000.0
+        ):
             result = await cal._get_events()
 
         assert result == []
@@ -241,7 +239,9 @@ class TestGetEventsFiltering:
 
     @pytest.mark.asyncio
     async def test_accepts_fomc_event(self):
-        item = _make_event_item("FOMC Meeting Minutes", impact="high", offset_minutes=60)
+        item = _make_event_item(
+            "FOMC Meeting Minutes", impact="high", offset_minutes=60
+        )
         result = await self._fetch([item])
         assert len(result) == 1
 
