@@ -304,7 +304,7 @@ class OnlineLearner:
             for line in proc.stdout.splitlines():
                 if line.startswith("TRAIN_RESULT:"):
                     try:
-                        train_result = json.loads(line[len("TRAIN_RESULT:"):])
+                        train_result = json.loads(line[len("TRAIN_RESULT:") :])
                     except json.JSONDecodeError:
                         pass
                     break
