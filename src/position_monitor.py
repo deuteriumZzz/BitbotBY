@@ -553,8 +553,8 @@ class PositionMonitor:
             _price = price
             _profile = os.environ.get("SAC_PROFILE", "")
             _exp_path = (
-                f"data/experiences_{_profile}.jsonl"
-                if _profile
+                "data/experiences_altcoin.jsonl"
+                if _profile == "altcoin"
                 else "data/experiences.jsonl"
             )
             loop = asyncio.get_running_loop()

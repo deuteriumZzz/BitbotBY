@@ -5,9 +5,15 @@
 Сохраняет лучшие параметры в models/best_hyperparams.json.
 train_sac.py загружает этот файл автоматически, если он существует.
 
+Профили сезонов (SAC_PROFILE):
+  bluechip — BTC, ETH, SOL, BNB, XRP, ADA, AVAX, DOGE (крупные монеты)
+  altcoin  — топ по объёму исключая bluechip (средние монеты)
+  <пусто>  — топ по объёму без фильтра
+
 Использование:
     PYTHONPATH=. python3 reinforcement_learning/tune_sac.py
-    make tune
+    SAC_PROFILE=bluechip make tune
+    SAC_PROFILE=altcoin  make tune
 """
 
 from __future__ import annotations
@@ -15,10 +21,21 @@ from __future__ import annotations
 import json
 import logging
 import os
+from typing import List
 
 logger = logging.getLogger(__name__)
 
 _SAC_PROFILE = os.getenv("SAC_PROFILE", "")
+
+# Фиксированные списки монет по сезону.
+# Можно переопределить через TUNE_SYMBOLS="BTC/USDT,ETH/USDT" в .env
+_BLUECHIP_SYMBOLS: List[str] = [
+    "BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT",
+]
+_ALTCOIN_EXCLUDE: set = {
+    "BTC", "ETH", "BNB", "USDC", "USDT", "BUSD", "TUSD", "DAI",
+}
+_TUNE_TOP_N = int(os.getenv("TUNE_TOP_N", "5"))  # символов для тюнинга
 HYPERPARAMS_PATH = (
     f"models/best_hyperparams_{_SAC_PROFILE}.json"
     if _SAC_PROFILE
@@ -147,28 +164,108 @@ def tune(df: object, n_trials: int = _N_TRIALS) -> dict:
     return best
 
 
+async def _get_tune_symbols(api: "Any", loader: "Any") -> List[str]:
+    """
+    Возвращает список символов для тюнинга согласно SAC_PROFILE.
+
+    bluechip → фиксированный список крупных монет
+    altcoin  → топ TUNE_TOP_N по объёму, исключая bluechip-монеты
+    <пусто>  → топ TUNE_TOP_N по объёму без фильтра
+    Переопределяется через TUNE_SYMBOLS="BTC/USDT,ETH/USDT" в .env.
+    """
+    override = os.getenv("TUNE_SYMBOLS", "").strip()
+    if override:
+        symbols = [s.strip() for s in override.split(",") if s.strip()]
+        logger.info("TUNE_SYMBOLS override: %s", symbols)
+        return symbols
+
+    if _SAC_PROFILE == "bluechip":
+        logger.info("Season=bluechip: using fixed bluechip list %s", _BLUECHIP_SYMBOLS)
+        return _BLUECHIP_SYMBOLS
+
+    # altcoin или пусто — сканируем биржу
+    from src.market_scanner import MarketScanner
+
+    scanner = MarketScanner(api, loader)
+    all_symbols = await scanner.get_top_symbols(50)
+
+    if _SAC_PROFILE == "altcoin":
+        symbols = [
+            s for s in all_symbols
+            if s.split("/")[0] not in _ALTCOIN_EXCLUDE
+        ][:_TUNE_TOP_N]
+        logger.info("Season=altcoin: top %d alts %s", len(symbols), symbols)
+    else:
+        symbols = all_symbols[:_TUNE_TOP_N]
+        logger.info("Season=default: top %d by volume %s", len(symbols), symbols)
+
+    return symbols
+
+
 if __name__ == "__main__":
     import asyncio
     import logging as _logging
+    from typing import Any
 
     _logging.basicConfig(
         level=_logging.INFO,
         format="%(asctime)s %(levelname)-8s %(name)s — %(message)s",
     )
 
+    from src.bybit_api import BybitAPI
     from src.data_loader import DataLoader
 
     async def _run() -> None:
+        api = BybitAPI()
+        await api.initialize(
+            api_key=os.getenv("BYBIT_API_KEY", ""),
+            api_secret=os.getenv("BYBIT_API_SECRET", ""),
+        )
         loader = DataLoader()
         await loader.initialize(
             api_key=os.getenv("BYBIT_API_KEY", ""),
             api_secret=os.getenv("BYBIT_API_SECRET", ""),
         )
-        symbol = os.getenv("TRADING_SYMBOL", "BTC/USDT")
-        df = await loader.get_paginated_history(symbol, "15m", months=3)
-        if df is None or df.empty:
-            logger.error("Нет данных для тюнинга")
+
+        symbols = await _get_tune_symbols(api, loader)
+        await api.close()
+
+        if not symbols:
+            logger.error("No symbols found for tuning — aborting")
             return
-        tune(df, n_trials=_N_TRIALS)
+
+        frames = []
+        import pandas as pd
+        for sym in symbols:
+            try:
+                df_sym = await loader.get_paginated_history(sym, "15m", months=3)
+                if df_sym is None or df_sym.empty:
+                    logger.warning("No data for %s — skipping", sym)
+                    continue
+                # Нормализуем к % доходности как в train_sac.py
+                price_cols = [c for c in ("open", "high", "low", "close") if c in df_sym.columns]
+                base = df_sym[price_cols[0]].iloc[0]
+                if base > 0:
+                    for col in price_cols:
+                        df_sym[col] = df_sym[col] / base
+                frames.append(df_sym)
+                logger.info("Loaded %s: %d candles", sym, len(df_sym))
+            except Exception as exc:
+                logger.warning("Skipping %s: %s", sym, exc)
+
+        await loader.close()
+
+        if not frames:
+            logger.error("No data loaded — aborting")
+            return
+
+        combined = pd.concat(frames, ignore_index=True)
+        logger.info(
+            "Tuning on %d symbols, %d total candles (profile=%r)",
+            len(frames),
+            len(combined),
+            _SAC_PROFILE or "default",
+        )
+        tune(combined, n_trials=_N_TRIALS)
 
     asyncio.run(_run())

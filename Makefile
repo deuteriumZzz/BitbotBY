@@ -1,4 +1,4 @@
-.PHONY: train train-long train-docker tune retrain backtest backtest-eth paper paper-ai live test lint fmt up down logs htpasswd
+.PHONY: train train-long train-docker tune tune-bluechip tune-altcoin retrain backtest backtest-eth paper paper-ai live test lint fmt up down logs htpasswd
 
 # ── Training ───────────────────────────────────────────────────────────────────
 train:
@@ -16,9 +16,21 @@ train-docker:
 	@echo ">>> Trainer done. Model saved to models/sac_model.zip"
 
 tune:
-	@echo ">>> Optuna hyperparameter search (30 trials × 50k steps)..."
+	@echo ">>> Optuna hyperparameter search (30 trials × 50k steps, top-5 by volume)..."
 	PYTHONPATH=. python3 reinforcement_learning/tune_sac.py
 	@echo ">>> Best params saved to models/best_hyperparams.json"
+
+tune-bluechip:
+	@echo ">>> Tuning for BLUECHIP season (BTC/ETH/SOL/BNB/XRP)..."
+	PYTHONPATH=. SAC_PROFILE=bluechip python3 reinforcement_learning/tune_sac.py
+	@echo ">>> Best params saved to models/best_hyperparams_bluechip.json"
+	@echo ">>> Now run: SAC_PROFILE=bluechip make train"
+
+tune-altcoin:
+	@echo ">>> Tuning for ALTCOIN season (top-5 alts by volume, excl. bluechip)..."
+	PYTHONPATH=. SAC_PROFILE=altcoin python3 reinforcement_learning/tune_sac.py
+	@echo ">>> Best params saved to models/best_hyperparams_altcoin.json"
+	@echo ">>> Now run: SAC_PROFILE=altcoin make train"
 
 retrain:
 	@echo ">>> Walk-forward retraining (4-month windows, 1-month step)..."

@@ -591,7 +591,9 @@ class RuntimeConfig:
         self.set_risk_per_trade(float(str(profile.get("risk_per_trade", 0.02))))
         self.set_mode(str(profile.get("mode", "ai")))
         # Направляем сохранение сделок в профильный файл
-        _os.environ["EXPERIENCES_PATH"] = f"data/experiences_{name}.jsonl"
+        _os.environ["EXPERIENCES_PATH"] = (
+            "data/experiences_altcoin.jsonl" if name == "altcoin" else "data/experiences.jsonl"
+        )
         _os.environ["SAC_PROFILE"] = name
         logger.info("Runtime: применён профиль рынка '%s'", name)
         return True

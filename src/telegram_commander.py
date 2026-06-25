@@ -1617,8 +1617,8 @@ class TelegramCommander:
                 "BT_TIMEFRAME": bt_timeframe,
                 "SAC_PROFILE": profile,
                 "EXPERIENCES_PATH": (
-                    f"data/experiences_{profile}.jsonl"
-                    if profile
+                    "data/experiences_altcoin.jsonl"
+                    if profile == "altcoin"
                     else "data/experiences.jsonl"
                 ),
             }
