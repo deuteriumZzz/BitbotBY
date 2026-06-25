@@ -348,6 +348,12 @@ class AIAnalyzer:
                     len(valid),
                     len(snapshots),
                 )
+                _rc = getattr(self, "_runtime_config", None)
+                if _rc is not None:
+                    try:
+                        _rc.set_last_ai_provider(provider)
+                    except Exception:
+                        pass
                 return valid
 
             except json.JSONDecodeError as e:
