@@ -222,7 +222,7 @@ GROQ_MODEL=llama-3.3-70b-versatile
 # ── Google Gemini Flash — БЕСПЛАТНЫЙ тир, 1500 запросов/день ──
 # aistudio.google.com → Get API Key (бесплатно, без карты)
 GEMINI_API_KEY=...
-GEMINI_MODEL=gemini-1.5-flash
+GEMINI_MODEL=gemini-2.0-flash-lite
 
 # ── DeepSeek — САМЫЙ ДЕШЁВЫЙ (~$0.002 за запрос) ──
 # platform.deepseek.com → API Keys → Create
@@ -762,7 +762,7 @@ Chronos (~400MB) скачивается автоматически с HuggingFac
 → [🔄 Откатить модель] [📊 Запустить бэктест] [⚙️ Настройки]
 ```
 
-> **OnlineLearner** (дообучение каждые 50 сделок) работает **тихо в фоне** — никаких уведомлений не присылает. Результаты только в логах.
+> **OnlineLearner** (дообучение каждые 50 сделок) присылает уведомление в Telegram с результатом: принята новая модель или отклонена с причиной.
 
 #### Бэктест после обучения
 
@@ -914,7 +914,7 @@ SOL, цена = 150, ATR = 6 (ATR% = 4%)
 
 ## Онлайн-обучение модели
 
-Бот автоматически учится на своих сделках. Каждая закрытая позиция сохраняется в `data/experiences.jsonl` и `data/trades.db`.
+Бот автоматически учится на своих сделках. Каждая закрытая позиция сохраняется в профильный файл (`data/experiences_bluechip.jsonl` или `data/experiences_altcoin.jsonl`) и `data/trades.db` — опыт каждого сезона не смешивается.
 
 ### Режимы обучения
 
@@ -928,7 +928,9 @@ SOL, цена = 150, ATR = 6 (ATR% = 4%)
 **Режим `periodic`** (рекомендуется для начала):
 - После каждых 50 закрытых сделок → фоновый поток запускает полный ретрейн
 - Торговля не останавливается во время переобучения
-- Новая модель горячо подменяет старую через атомарный `os.replace()`
+- После обучения автоматическая проверка: SAC должен быть не хуже Buy&Hold − 10%
+  - ✅ Прошёл → новая модель горячо подменяет старую, уведомление в Telegram
+  - ❌ Не прошёл → старая модель остаётся, опыт сохранён, повтор через 50 сделок, уведомление в Telegram
 - Старая модель сохраняется как `.bak` на случай отката
 
 **Режим `hybrid`** добавляет динамические веса стратегий:
@@ -1190,8 +1192,8 @@ make test
 # pytest tests/ -v --cov=src --cov-fail-under=50
 ```
 
-**594+ unit-тестов** — индикаторы, стратегии, риск-менеджмент, CVaR, Kelly, Almgren-Chriss, корреляция, SAC-инференс, dynamic leverage, partial TP, drawdown scaling, liquidity filter, dynamic exits, position monitor, online learner, runtime config, e2e торговый цикл.  
-Coverage: **93%**.
+**1244 unit-тестов** — индикаторы, стратегии, риск-менеджмент, CVaR, Kelly, Almgren-Chriss, корреляция, SAC-инференс, dynamic leverage, partial TP, drawdown scaling, liquidity filter, dynamic exits, position monitor, online learner, runtime config, e2e торговый цикл.  
+Coverage: **74%**.
 
 ---
 
