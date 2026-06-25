@@ -12,8 +12,6 @@ Coverage strategy:
 
 from __future__ import annotations
 
-import asyncio
-import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -66,7 +64,9 @@ def _patch_session(json_data=None, text_data=None, status=200):
     Returns a patcher for aiohttp.ClientSession used inside market_context.
     Usage: with _patch_session(json_data={...}) as mock_cls: ...
     """
-    resp_cm = _make_aiohttp_resp(json_data=json_data, text_data=text_data, status=status)
+    resp_cm = _make_aiohttp_resp(
+        json_data=json_data, text_data=text_data, status=status
+    )
     session_cm = _make_aiohttp_session(resp_cm)
     return patch("aiohttp.ClientSession", return_value=session_cm)
 
@@ -280,8 +280,8 @@ class TestGetOiSignal:
             signal, liq = await mc._get_oi_signal("BTC/USDT", 90.0)
         # OI growing + price falling → oi_bearish
         # But no prev_price cached, so prev_price == current → price_falling False
-        # Actually: prev_price = current_price when no cache → price_falling = (90 < 90*0.9995) = False
-        # So signal is oi_neutral (oi_growing=True, price_falling=False)
+        # prev_price = current_price when no cache → price_falling = (90 < 90*0.9995) = False
+        # signal is oi_neutral (oi_growing=True, price_falling=False)
         assert signal == "oi_neutral"
 
     @pytest.mark.asyncio
@@ -514,8 +514,10 @@ class TestGetGoogleTrends:
     @pytest.mark.asyncio
     async def test_retail_fomo(self):
         mc = _make_mc()
-        with patch.dict("sys.modules", {"pytrends": _PYTRENDS_MOCK, "pytrends.request": _PYTRENDS_MOCK.request}), \
-             patch("asyncio.get_running_loop") as mock_loop:
+        with patch.dict(
+            "sys.modules",
+            {"pytrends": _PYTRENDS_MOCK, "pytrends.request": _PYTRENDS_MOCK.request},
+        ), patch("asyncio.get_running_loop") as mock_loop:
             mock_loop.return_value.run_in_executor = AsyncMock(return_value=80)
             val, signal = await mc._get_google_trends("buy bitcoin")
         assert signal == "retail_fomo"
@@ -524,8 +526,10 @@ class TestGetGoogleTrends:
     @pytest.mark.asyncio
     async def test_retail_absent(self):
         mc = _make_mc()
-        with patch.dict("sys.modules", {"pytrends": _PYTRENDS_MOCK, "pytrends.request": _PYTRENDS_MOCK.request}), \
-             patch("asyncio.get_running_loop") as mock_loop:
+        with patch.dict(
+            "sys.modules",
+            {"pytrends": _PYTRENDS_MOCK, "pytrends.request": _PYTRENDS_MOCK.request},
+        ), patch("asyncio.get_running_loop") as mock_loop:
             mock_loop.return_value.run_in_executor = AsyncMock(return_value=10)
             val, signal = await mc._get_google_trends("buy bitcoin")
         assert signal == "retail_absent"
@@ -947,9 +951,9 @@ class TestGetRedditSentiment:
     async def test_reddit_bullish(self):
         mc = _make_mc()
         praw_mock = MagicMock()
-        with patch.dict("sys.modules", {"praw": praw_mock}), \
-             patch.dict("os.environ", {"REDDIT_CLIENT_ID": "cid", "REDDIT_CLIENT_SECRET": "csec"}), \
-             patch("asyncio.get_running_loop") as mock_loop:
+        with patch.dict("sys.modules", {"praw": praw_mock}), patch.dict(
+            "os.environ", {"REDDIT_CLIENT_ID": "cid", "REDDIT_CLIENT_SECRET": "csec"}
+        ), patch("asyncio.get_running_loop") as mock_loop:
             mock_loop.return_value.run_in_executor = AsyncMock(return_value=0.85)
             val, signal = await mc._get_reddit_sentiment("BTC")
         assert signal == "reddit_bullish"
@@ -959,9 +963,9 @@ class TestGetRedditSentiment:
     async def test_reddit_bearish(self):
         mc = _make_mc()
         praw_mock = MagicMock()
-        with patch.dict("sys.modules", {"praw": praw_mock}), \
-             patch.dict("os.environ", {"REDDIT_CLIENT_ID": "cid", "REDDIT_CLIENT_SECRET": "csec"}), \
-             patch("asyncio.get_running_loop") as mock_loop:
+        with patch.dict("sys.modules", {"praw": praw_mock}), patch.dict(
+            "os.environ", {"REDDIT_CLIENT_ID": "cid", "REDDIT_CLIENT_SECRET": "csec"}
+        ), patch("asyncio.get_running_loop") as mock_loop:
             mock_loop.return_value.run_in_executor = AsyncMock(return_value=0.4)
             val, signal = await mc._get_reddit_sentiment("BTC")
         assert signal == "reddit_bearish"

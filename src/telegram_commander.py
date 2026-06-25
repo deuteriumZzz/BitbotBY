@@ -1982,6 +1982,26 @@ class TelegramCommander:
 
         # ── Сброс к .env ─────────────────────────────────────────────────────
         elif data == "reset_defaults":
+            kb = InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "✅ Да, сбросить", callback_data="reset_defaults_confirm"
+                        )
+                    ],
+                    [InlineKeyboardButton("❌ Отмена", callback_data="settings")],
+                ]
+            )
+            await self._edit(
+                query,
+                "⚠️ *Сброс настроек*\n\n"
+                "Все runtime\\-настройки вернутся к значениям из `.env`\\.\n"
+                "Режим, пауза, символы, риск — всё будет сброшено\\.\n\n"
+                "Вы уверены?",
+                kb,
+            )
+
+        elif data == "reset_defaults_confirm":
             self._rc.reset_to_defaults()
             text, kb = self._build_settings()
             await self._edit(
