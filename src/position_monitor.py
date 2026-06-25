@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from typing import TYPE_CHECKING, Callable, Dict, Optional
 
 import ccxt
@@ -550,11 +551,21 @@ class PositionMonitor:
             _side = side
             _entry = entry
             _price = price
+            _profile = os.environ.get("SAC_PROFILE", "")
+            _exp_path = (
+                f"data/experiences_{_profile}.jsonl"
+                if _profile
+                else "data/experiences.jsonl"
+            )
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(
                 None,
                 lambda: _exp_save(
-                    snap=_snap, action=_side, entry_price=_entry, exit_price=_price
+                    snap=_snap,
+                    action=_side,
+                    entry_price=_entry,
+                    exit_price=_price,
+                    path=_exp_path,
                 ),
             )
 
