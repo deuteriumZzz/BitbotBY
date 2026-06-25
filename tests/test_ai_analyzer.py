@@ -19,11 +19,13 @@ def _make_config(**kwargs):
     cfg.DEEPSEEK_API_KEY = kwargs.get("DEEPSEEK_API_KEY", "")
     cfg.GROQ_API_KEY = kwargs.get("GROQ_API_KEY", "")
     cfg.OPENAI_API_KEY = kwargs.get("OPENAI_API_KEY", "")
+    cfg.GEMINI_API_KEY = kwargs.get("GEMINI_API_KEY", "")
     cfg.MIN_SIGNAL_CONFIDENCE = kwargs.get("MIN_SIGNAL_CONFIDENCE", 0.65)
     cfg.AI_MODEL = kwargs.get("AI_MODEL", "claude-sonnet-4-6")
     cfg.DEEPSEEK_MODEL = kwargs.get("DEEPSEEK_MODEL", "deepseek-chat")
     cfg.GROQ_MODEL = kwargs.get("GROQ_MODEL", "llama-3.3-70b-versatile")
     cfg.OPENAI_MODEL = kwargs.get("OPENAI_MODEL", "gpt-4o-mini")
+    cfg.GEMINI_MODEL = kwargs.get("GEMINI_MODEL", "gemini-1.5-flash")
     return cfg
 
 
@@ -207,9 +209,10 @@ class TestAIAnalyzerInit:
             ANTHROPIC_API_KEY="a_key",
             DEEPSEEK_API_KEY="d_key",
             OPENAI_API_KEY="o_key",
+            GEMINI_API_KEY="g_key",
         )
         assert ai._provider_order[0] == "deepseek"
-        assert len(ai._provider_order) == 3
+        assert len(ai._provider_order) == 4
 
 
 # ---------------------------------------------------------------------------
