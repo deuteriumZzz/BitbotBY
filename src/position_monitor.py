@@ -299,10 +299,10 @@ class PositionMonitor:
         current_prices: Dict[str, float],
         reason: str = "hard_drawdown",
     ) -> None:
-        """Hard drawdown: закрывает убыточные позиции, у прибыльных ставит SL на breakeven.
+        """Hard drawdown: закрывает убыточные позиции, у прибыльных SL на breakeven.
 
-        Убыточные (current < entry для buy, current > entry для sell) — закрываем
-        по рынку, они и есть причина просадки.
+        Убыточные (current < entry для buy, current > entry для sell) —
+        закрываем по рынку, они и есть причина просадки.
         Прибыльные — переносим SL на цену входа (breakeven): позиция не может
         уйти в минус, но возьмёт профит если рынок продолжит движение в плюс.
         """
@@ -326,7 +326,11 @@ class PositionMonitor:
             if is_losing:
                 logger.warning(
                     "Drawdown close loser %s [%s] entry=%.4f current=%.4f reason=%s",
-                    sym, side, entry, current, reason,
+                    sym,
+                    side,
+                    entry,
+                    current,
+                    reason,
                 )
                 if not Config.PAPER_TRADING:
                     for oid in filter(
@@ -346,7 +350,9 @@ class PositionMonitor:
                 tp_price = float(pos.get("take_profit") or 0)
                 logger.info(
                     "Drawdown tighten winner %s [%s] entry=%.4f → SL=breakeven",
-                    sym, side, entry,
+                    sym,
+                    side,
+                    entry,
                 )
                 if not Config.PAPER_TRADING:
                     for oid in filter(
