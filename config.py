@@ -5,9 +5,26 @@ from typing import List
 # Стейблкоины, исключённые из сканирования и торговли
 STABLECOIN_BASES: frozenset[str] = frozenset(
     {
-        "USDC", "BUSD", "FDUSD", "TUSD", "DAI", "USDE", "PYUSD",
-        "FRAX", "LUSD", "GUSD", "USDP", "SUSD", "CUSD", "USDJ",
-        "HUSD", "EURS", "EURT", "USDD", "CRVUSD", "MKUSD",
+        "USDC",
+        "BUSD",
+        "FDUSD",
+        "TUSD",
+        "DAI",
+        "USDE",
+        "PYUSD",
+        "FRAX",
+        "LUSD",
+        "GUSD",
+        "USDP",
+        "SUSD",
+        "CUSD",
+        "USDJ",
+        "HUSD",
+        "EURS",
+        "EURT",
+        "USDD",
+        "CRVUSD",
+        "MKUSD",
     }
 )
 
@@ -15,8 +32,16 @@ STABLECOIN_BASES: frozenset[str] = frozenset(
 # leveraged ETF, commodity трекеры, синтетика
 JUNK_BASES: frozenset[str] = frozenset(
     {
-        "SOXL", "SOXS", "TQQQ", "SQQQ", "NVDL", "TSLL", "TSLS",
-        "XAU", "XAG", "XOI",
+        "SOXL",
+        "SOXS",
+        "TQQQ",
+        "SQQQ",
+        "NVDL",
+        "TSLL",
+        "TSLS",
+        "XAU",
+        "XAG",
+        "XOI",
         "SLX",
     }
 )
@@ -101,9 +126,11 @@ class Config:
     # bluechip / пусто → sac_model.zip (дефолт), altcoin → sac_model_altcoin.zip
     SAC_MODEL_PATH: str = os.getenv(
         "SAC_MODEL_PATH",
-        "models/sac_model_altcoin.zip"
-        if os.getenv("SAC_PROFILE") == "altcoin"
-        else "models/sac_model.zip",
+        (
+            "models/sac_model_altcoin.zip"
+            if os.getenv("SAC_PROFILE") == "altcoin"
+            else "models/sac_model.zip"
+        ),
     )
 
     # ── Market Scanner ─────────────────────────────────────────────────────

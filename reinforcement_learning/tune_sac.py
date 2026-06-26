@@ -29,7 +29,7 @@ _SAC_PROFILE = os.getenv("SAC_PROFILE", "")
 
 from src.runtime_config import BLUECHIP_BASES  # noqa: E402
 
-_ALTCOIN_EXCLUDE: set = BLUECHIP_BASES | {"USDC", "USDT", "BUSD", "TUSD", "DAI"}
+_ALTCOIN_EXCLUDE: frozenset = BLUECHIP_BASES | {"USDC", "USDT", "BUSD", "TUSD", "DAI"}
 _TUNE_TOP_N = int(os.getenv("TUNE_TOP_N", "5"))  # символов для тюнинга
 HYPERPARAMS_PATH = (
     "models/best_hyperparams_altcoin.json"
@@ -181,7 +181,9 @@ async def _get_tune_symbols(api: "Any", loader: "Any") -> List[str]:
     if _SAC_PROFILE == "bluechip":
         # Из топ-50 оставляем только те что классифицируются как bluechip
         all_symbols = await scanner.get_top_symbols(50)
-        symbols = [s for s in all_symbols if s.split("/")[0] in BLUECHIP_BASES][:_TUNE_TOP_N]
+        symbols = [s for s in all_symbols if s.split("/")[0] in BLUECHIP_BASES][
+            :_TUNE_TOP_N
+        ]
         logger.info("Season=bluechip: %d symbols from top-50 %s", len(symbols), symbols)
         return symbols
 
@@ -189,10 +191,9 @@ async def _get_tune_symbols(api: "Any", loader: "Any") -> List[str]:
 
     if _SAC_PROFILE == "altcoin":
         # Из топа исключаем все bluechip — только настоящие альты
-        symbols = [
-            s for s in all_symbols
-            if s.split("/")[0] not in _ALTCOIN_EXCLUDE
-        ][:_TUNE_TOP_N]
+        symbols = [s for s in all_symbols if s.split("/")[0] not in _ALTCOIN_EXCLUDE][
+            :_TUNE_TOP_N
+        ]
         logger.info("Season=altcoin: top %d alts %s", len(symbols), symbols)
     else:
         symbols = all_symbols[:_TUNE_TOP_N]
@@ -235,6 +236,7 @@ if __name__ == "__main__":
 
         frames = []
         import pandas as pd
+
         for sym in symbols:
             try:
                 df_sym = await loader.get_paginated_history(sym, "15m", months=3)
@@ -242,7 +244,9 @@ if __name__ == "__main__":
                     logger.warning("No data for %s — skipping", sym)
                     continue
                 # Нормализуем к % доходности как в train_sac.py
-                price_cols = [c for c in ("open", "high", "low", "close") if c in df_sym.columns]
+                price_cols = [
+                    c for c in ("open", "high", "low", "close") if c in df_sym.columns
+                ]
                 base = df_sym[price_cols[0]].iloc[0]
                 if base > 0:
                     for col in price_cols:
