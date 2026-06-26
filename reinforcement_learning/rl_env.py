@@ -133,22 +133,22 @@ class TradingEnv(gym.Env):
 
         return np.array(
             [
-                open_rel,       # [0] откр. относительно close
-                high_rel,       # [1] макс. относительно close
-                low_rel,        # [2] мин. относительно close
-                in_position,    # [3] есть позиция (0/1)
+                open_rel,  # [0] откр. относительно close
+                high_rel,  # [1] макс. относительно close
+                low_rel,  # [2] мин. относительно close
+                in_position,  # [3] есть позиция (0/1)
                 vol_norm,
                 float(row.get("rsi", 50)) / 100.0,
-                macd_norm,      # [6] MACD / close
+                macd_norm,  # [6] MACD / close
                 macd_sig_norm,  # [7] MACD signal / close
-                bb_upper_rel,   # [8] верхняя полоса / close - 1
-                bb_mid_rel,     # [9] средняя полоса / close - 1
-                bb_lower_rel,   # [10] нижняя полоса / close - 1
+                bb_upper_rel,  # [8] верхняя полоса / close - 1
+                bb_mid_rel,  # [9] средняя полоса / close - 1
+                bb_lower_rel,  # [10] нижняя полоса / close - 1
                 balance_norm,
                 pos_value_norm,
                 val_norm,
                 *new_features,
-                atr_norm,       # [21] ATR / close — текущая волатильность
+                atr_norm,  # [21] ATR / close — текущая волатильность
             ],
             dtype=np.float32,
         )

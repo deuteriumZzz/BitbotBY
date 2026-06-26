@@ -20,7 +20,7 @@ from unittest.mock import MagicMock, mock_open, patch
 import numpy as np
 import pytest
 
-from src.dqn_signal import _DISABLE_AFTER_DRIFTS, SACSignal
+from src.dqn_signal import SACSignal
 
 _SNAP = {
     "symbol": "BTC/USDT",
@@ -220,8 +220,6 @@ class TestGetSignal:
 # ---------------------------------------------------------------------------
 # get_signal: drift detection
 # ---------------------------------------------------------------------------
-
-
 
 
 # ---------------------------------------------------------------------------
