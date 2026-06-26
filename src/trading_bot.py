@@ -1021,8 +1021,8 @@ class TradingBot:
                                 Config.DRAWDOWN_HALT_HOURS,
                             )
                             _dd_prices = {
-                                s: float(snap["price"])
-                                for s, snap in snapshots.items()
+                                snap["symbol"]: float(snap["price"])
+                                for snap in snapshots
                                 if snap
                             }
                             await self._position_monitor.close_losers_tighten_winners(
@@ -1058,10 +1058,12 @@ class TradingBot:
                 # В paper режиме: уведомляет но не останавливает торговлю.
                 if Config.PAPER_TRADING:
                     _paper_prices = {
-                        s: float(snap["price"]) for s, snap in snapshots.items() if snap
+                        snap["symbol"]: float(snap["price"])
+                        for snap in snapshots
+                        if snap
                     }
-                    _equity_for_limit = self.portfolio_manager.get_total_value(
-                        _paper_prices
+                    _equity_for_limit = (
+                        await self.portfolio_manager.get_portfolio_value(_paper_prices)
                     )
                 else:
                     _equity_for_limit = self._live_equity_cache
@@ -1108,18 +1110,8 @@ class TradingBot:
                         while _elapsed < sleep_secs:
                             await asyncio.sleep(_check_interval)
                             _elapsed += _check_interval
-                            if Config.PAPER_TRADING:
-                                _rp = {
-                                    s: float(snap["price"])
-                                    for s, snap in snapshots.items()
-                                    if snap
-                                }
-                                _recovery_eq = self.portfolio_manager.get_total_value(
-                                    _rp
-                                )
-                            else:
-                                _recovery_eq = await self._get_balance_usdt()
-                                _recovery_eq = self._live_equity_cache
+                            _recovery_eq = await self._get_balance_usdt()
+                            _recovery_eq = self._live_equity_cache
                             if self.risk_manager.check_daily_loss_limit(_recovery_eq):
                                 logger.info(
                                     "Daily loss limit recovered:"
