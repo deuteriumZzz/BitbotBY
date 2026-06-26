@@ -122,6 +122,40 @@ def objective(trial: object, df: object) -> float:
     return -float(final_value)
 
 
+def _make_progress_callback(n_trials: int, report_every: int = 5) -> "Any":
+    """Optuna callback — печатает TUNE_PROGRESS в stdout после каждых N попыток."""
+    import sys
+    import time
+
+    start = time.time()
+
+    def _cb(study: "Any", trial: "Any") -> None:
+        done = trial.number + 1
+        if done % report_every != 0 and done != n_trials:
+            return
+        elapsed = time.time() - start
+        eta_min = int((elapsed / done) * (n_trials - done) / 60) if done > 0 else None
+        best_val = -study.best_value if study.best_value is not None else None
+        data = {
+            "trial": done,
+            "total": n_trials,
+            "pct": round(done / n_trials * 100, 1),
+            "best_pnl": round(best_val, 0) if best_val is not None else None,
+            "eta_min": eta_min,
+        }
+        print(f"TUNE_PROGRESS:{json.dumps(data)}", file=sys.stdout, flush=True)
+        logger.info(
+            "Прогресс тюнинга: %d/%d (%.0f%%) | лучший PnL: $%.0f | ETA: %s мин",
+            done,
+            n_trials,
+            data["pct"],
+            best_val or 0,
+            eta_min if eta_min is not None else "?",
+        )
+
+    return _cb
+
+
 def tune(df: object, n_trials: int = _N_TRIALS) -> dict:
     """
     Запускает поиск гиперпараметров Optuna и сохраняет лучшие в JSON.
@@ -130,12 +164,22 @@ def tune(df: object, n_trials: int = _N_TRIALS) -> dict:
     :param n_trials: Количество попыток.
     :return: Словарь лучших гиперпараметров.
     """
+    import sys
+
     try:
         import optuna
     except ImportError:
         logger.error("optuna не установлен: pip install optuna>=3.6.0")
         raise
 
+    _init = {
+        "trial": 0,
+        "total": n_trials,
+        "pct": 0.0,
+        "best_pnl": None,
+        "eta_min": None,
+    }
+    print(f"TUNE_PROGRESS:{json.dumps(_init)}", file=sys.stdout, flush=True)
     optuna.logging.set_verbosity(optuna.logging.WARNING)
     study = optuna.create_study(
         direction="minimize",
@@ -144,7 +188,8 @@ def tune(df: object, n_trials: int = _N_TRIALS) -> dict:
     study.optimize(
         lambda trial: objective(trial, df),
         n_trials=n_trials,
-        show_progress_bar=True,
+        show_progress_bar=False,
+        callbacks=[_make_progress_callback(n_trials)],
     )
 
     best = study.best_params
