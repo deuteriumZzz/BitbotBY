@@ -49,6 +49,21 @@ JUNK_BASES: frozenset[str] = frozenset(
 # Тикеры с такими префиксами — мусор (1000PEPE, 1000SHIB и т.д.)
 JUNK_PREFIXES: tuple[str, ...] = ("1000", "10000", "100000")
 
+# Мемкоины — исключаются из всех сканов независимо от режима сезона
+MEME_COIN_BASES: frozenset[str] = frozenset(
+    {
+        "DOGE",
+        "SHIB",
+        "PEPE",
+        "FLOKI",
+        "BONK",
+        "WIF",
+        "MEME",
+        "NEIRO",
+        "MOG",
+    }
+)
+
 
 @dataclass
 class Config:

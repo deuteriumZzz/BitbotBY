@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
-from config import JUNK_BASES, JUNK_PREFIXES, STABLECOIN_BASES, Config
+from config import JUNK_BASES, JUNK_PREFIXES, MEME_COIN_BASES, STABLECOIN_BASES, Config
 from src.bybit_api import BybitAPI
 from src.data_loader import DataLoader
 
@@ -75,6 +75,8 @@ class MarketScanner:
                 if base in STABLECOIN_BASES:
                     continue
                 if base in JUNK_BASES:
+                    continue
+                if base in MEME_COIN_BASES:
                     continue
                 if any(base.startswith(p) for p in JUNK_PREFIXES):
                     continue

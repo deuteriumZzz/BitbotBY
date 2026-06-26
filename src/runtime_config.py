@@ -82,7 +82,6 @@ BLUECHIP_BASES: frozenset[str] = frozenset(
         "SOL",
         "XRP",
         "BNB",
-        "DOGE",
         "ADA",
         "AVAX",
         "LINK",
