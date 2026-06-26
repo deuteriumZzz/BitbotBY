@@ -913,10 +913,11 @@ class TradingBot:
         )
         mode = "paper" if Config.PAPER_TRADING else "live"
         self._runtime_config.ensure_first_start_date()
+        start_balance = await self._get_balance_usdt()
         await self.telegram.notify(
             f"🤖 *BitbotBY запущен* [{mode}]\n"
             f"Стратегия: `{Config.DEFAULT_STRATEGY}`\n"
-            f"Баланс: `${self._paper_balance:,.2f}`\n"
+            f"Баланс: `${start_balance:,.2f}`\n"
             f"AI: {ai_status} | Символов: {scan_n}\n\n"
             f"Используй кнопки ниже или набери /help",
             reply_markup=_kb_main(),
