@@ -1707,6 +1707,7 @@ class TelegramCommander:
     async def _run_sac_tune_and_train(self) -> None:
         """Запускает tune_sac.py, затем train_sac.py последовательно."""
         import asyncio as _asyncio
+        import json as _json
         import os
 
         model_path = self._rc.get_sac_model_path()
@@ -1717,12 +1718,51 @@ class TelegramCommander:
                 "python",
                 "reinforcement_learning/tune_sac.py",
                 env=env,
-                stdout=_asyncio.subprocess.DEVNULL,
+                stdout=_asyncio.subprocess.PIPE,
                 stderr=_asyncio.subprocess.PIPE,
             )
-            _, stderr = await proc.communicate()
+
+            stderr_lines: list = []
+            last_notify_pct = -1
+
+            async def _read_tune_stdout() -> None:
+                nonlocal last_notify_pct
+                assert proc.stdout
+                async for raw in proc.stdout:
+                    line = raw.decode(errors="replace").strip()
+                    if not line.startswith("TUNE_PROGRESS:"):
+                        continue
+                    try:
+                        d = _json.loads(line[len("TUNE_PROGRESS:") :])
+                    except Exception:
+                        continue
+                    pct = d.get("pct", 0)
+                    if pct - last_notify_pct < 25 and pct < 100:
+                        continue
+                    last_notify_pct = pct
+                    trial = d.get("trial", 0)
+                    total = d.get("total", 0)
+                    best_pnl = d.get("best_pnl")
+                    eta = d.get("eta_min")
+                    pnl_str = f"${best_pnl:,.0f}" if best_pnl is not None else "—"
+                    eta_str = f"{eta} мин" if eta is not None else "?"
+                    await self._notifier.notify(
+                        f"🔬 *Тюнинг SAC* — {pct:.0f}%\n\n"
+                        f"Попытка: {trial}/{total}\n"
+                        f"Лучший PnL: {pnl_str}\n"
+                        f"Осталось: ~{eta_str}"
+                    )
+
+            async def _read_tune_stderr() -> None:
+                assert proc.stderr
+                async for raw in proc.stderr:
+                    stderr_lines.append(raw.decode(errors="replace"))
+
+            await _asyncio.gather(_read_tune_stdout(), _read_tune_stderr())
+            await proc.wait()
+
             if proc.returncode != 0:
-                err = stderr.decode()[-300:] if stderr else "нет деталей"
+                err = "".join(stderr_lines)[-400:]
                 await self._notifier.notify(
                     f"❌ *Тюнинг завершился с ошибкой*\n\n`{err}`",
                     reply_markup=_kb_main(),
