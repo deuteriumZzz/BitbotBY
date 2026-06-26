@@ -29,6 +29,7 @@ Telegram-команды и inline-панель управления BitbotBY.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, Callable, Dict, Optional
 
