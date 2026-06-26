@@ -117,6 +117,8 @@ def _kb_settings(
     chronos: bool = False,
     paper: bool = False,
     season_mode: str = "alert",
+    sac_training: bool = False,
+    is_tuning: bool = False,
 ) -> "InlineKeyboardMarkup":
     pause_btn = (
         InlineKeyboardButton("▶️ Возобновить торговлю", callback_data="resume")
@@ -161,15 +163,24 @@ def _kb_settings(
     rows.append(
         [InlineKeyboardButton(mode_switch_label, callback_data="switch_trading_mode")]
     )
+    if sac_training:
+        train_btn = InlineKeyboardButton(
+            "⏳ Идёт тюнинг SAC..." if is_tuning else "⏳ Идёт обучение SAC...",
+            callback_data="train_progress",
+        )
+        rows.append([train_btn])
+    else:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    "🧠 Обучить SAC (~60 мин)", callback_data="train_sac_now"
+                ),
+                InlineKeyboardButton(
+                    "🔬 Тюнинг + обучение (~3ч)", callback_data="tune_sac_menu"
+                ),
+            ]
+        )
     rows += [
-        [
-            InlineKeyboardButton(
-                "🧠 Обучить SAC (~60 мин)", callback_data="train_sac_now"
-            ),
-            InlineKeyboardButton(
-                "🔬 Тюнинг + обучение (~3ч)", callback_data="tune_sac_menu"
-            ),
-        ],
         [InlineKeyboardButton("📊 Бэктест стратегий", callback_data="backtest_menu")],
         [InlineKeyboardButton("⏱ Таймаут подтверждения", callback_data="timeout_menu")],
         [InlineKeyboardButton("📈 Прогресс обучения", callback_data="train_progress")],
@@ -993,6 +1004,7 @@ class TelegramCommander:
             text += f"*Исключены из скан.:* `{', '.join(excluded)}`\n"
         text += "\n_Нажми кнопку для изменения:_"
         season_mode = self._rc.get_season_switch_mode()
+        is_tuning = self._sac_training and bool(self._rc.get_tune_progress())
         return text, _kb_settings(
             paused,
             auto_exec,
@@ -1000,6 +1012,8 @@ class TelegramCommander:
             chronos=chronos,
             paper=Config.PAPER_TRADING,
             season_mode=season_mode,
+            sac_training=self._sac_training,
+            is_tuning=is_tuning,
         )
 
     def _build_risk(self) -> tuple[str, Any]:
@@ -1739,6 +1753,7 @@ class TelegramCommander:
                     pct = d.get("pct", 0)
                     if pct - last_notify_pct < 25 and pct < 100:
                         continue
+                    self._rc.set_tune_progress(d)
                     last_notify_pct = pct
                     trial = d.get("trial", 0)
                     total = d.get("total", 0)
@@ -1811,6 +1826,7 @@ class TelegramCommander:
             await self._notifier.notify(f"❌ Тюнинг упал: {e}")
         finally:
             self._sac_training = False
+            self._rc.clear_tune_progress()
 
     async def _handle_text(
         self, update: Update, _context: ContextTypes.DEFAULT_TYPE
@@ -2491,13 +2507,37 @@ class TelegramCommander:
 
         # ── Прогресс обучения (SAC + бэктест) ────────────────────────────────
         elif data in ("train_progress", "backtest_progress"):
+            # Авто-сброс если все фоновые задачи завершились
+            if self._sac_training and all(t.done() for t in self._background_tasks):
+                self._sac_training = False
+                self._rc.clear_train_progress()
+                self._rc.clear_tune_progress()
+
+            tune_prog = self._rc.get_tune_progress()
             sac_prog = self._rc.get_train_progress()
             bt_prog = self._rc.get_backtest_progress()
             anything_running = self._sac_training or self._backtesting
             sections: list[str] = []
 
             if self._sac_training:
-                if sac_prog:
+                # Показываем тюнинг если он активен
+                if tune_prog:
+                    trial = tune_prog.get("trial", 0)
+                    total = tune_prog.get("total", 0)
+                    pct = tune_prog.get("pct", 0.0)
+                    bar = "█" * int(pct / 10) + "░" * (10 - int(pct / 10))
+                    best_pnl = tune_prog.get("best_pnl")
+                    eta = tune_prog.get("eta_min")
+                    pnl_str = f"${best_pnl:,.0f}" if best_pnl is not None else "—"
+                    eta_str = f"~{eta} мин" if eta is not None else "..."
+                    sections.append(
+                        f"🔬 *Тюнинг SAC*\n"
+                        f"`[{bar}]` *{pct:.1f}%*\n"
+                        f"Попытка: `{trial}` / `{total}`\n"
+                        f"Лучший PnL: *{pnl_str}*\n"
+                        f"Осталось: *{eta_str}*"
+                    )
+                elif sac_prog:
                     pct = sac_prog.get("pct", 0)
                     bar = "█" * int(pct / 10) + "░" * (10 - int(pct / 10))
                     eta_min = sac_prog.get("eta_min")
@@ -2512,7 +2552,7 @@ class TelegramCommander:
                     )
                 else:
                     sections.append(
-                        "🧠 *Обучение SAC*\n"
+                        "🔬 *Тюнинг / Обучение SAC*\n"
                         "_Запущено, прогресс появится через минуту..._"
                     )
 
