@@ -288,7 +288,7 @@ class BybitAPI:
         :return: Словарь с балансом или None при ошибке.
         """
         try:
-            return await self.exchange.fetch_balance()
+            return await self.exchange.fetch_balance({"type": "UNIFIED"})
         except asyncio.CancelledError:
             raise
         except ccxt.AuthenticationError as e:
