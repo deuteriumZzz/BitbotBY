@@ -157,7 +157,8 @@ class Config:
     DAILY_LOSS_LIMIT: float = float(os.getenv("DAILY_LOSS_LIMIT", "0.05"))
     # Hard drawdown halt: пауза N часов если просадка от пика >= MAX_DRAWDOWN_PERCENT
     DRAWDOWN_HALT_HOURS: float = float(os.getenv("DRAWDOWN_HALT_HOURS", "4"))
-    # Сколько циклов подряд просадка должна держаться перед остановкой (защита от flash crash)
+    # Сколько циклов подряд просадка должна держаться перед остановкой
+    # (защита от flash crash)
     DRAWDOWN_CONFIRM_CYCLES: int = int(os.getenv("DRAWDOWN_CONFIRM_CYCLES", "3"))
     # Volatility circuit breaker: ATR вырос в N раз от медианы → закрыть позиции
     ATR_SPIKE_MULT: float = float(os.getenv("ATR_SPIKE_MULT", "3.0"))
