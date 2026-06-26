@@ -1138,8 +1138,32 @@ TRAIN_MIN_CANDLES=2880   # минимум свечей для включения
 ```
 
 **Observation space: 21 фича**
-- 14 рыночных: OHLCV (нормализованы), RSI (0–1), MACD, Bollinger Bands, баланс/позиция/стоимость (относительно начального баланса)
-- 7 контекстных: funding_rate, orderbook_imbalance, put_call_ratio, fear_greed, iv_skew, basis_pct, google_trends
+
+Все ценовые фичи нормализованы относительно текущего close — BTC ($90k) и SOL ($150) дают одинаковый масштаб входных данных, что критично для корректной работы градиентов нейросети.
+
+| Индекс | Фича | Формула |
+|--------|------|---------|
+| [0] | open_rel | `open/close − 1` |
+| [1] | high_rel | `high/close − 1` |
+| [2] | low_rel | `low/close − 1` |
+| [3] | in_position | `1.0` если есть позиция, иначе `0.0` |
+| [4] | vol_norm | `log1p(volume) / 15` |
+| [5] | rsi_norm | `rsi / 100` |
+| [6] | macd_norm | `macd / close` |
+| [7] | macd_sig_norm | `macd_signal / close` |
+| [8] | bb_upper_rel | `bb_upper / close − 1` |
+| [9] | bb_mid_rel | `bb_middle / close − 1` |
+| [10] | bb_lower_rel | `bb_lower / close − 1` |
+| [11] | balance_norm | `balance / initial_balance` |
+| [12] | pos_value_norm | `position × close / initial_balance` |
+| [13] | val_norm | `portfolio_value / initial_balance` |
+| [14] | funding_rate | `funding_rate × 1000` |
+| [15] | ob_imbalance | orderbook bid/ask дисбаланс `[−1, 1]` |
+| [16] | pcr_norm | `put_call_ratio / 3` |
+| [17] | fear_greed | `fear_greed / 100` |
+| [18] | iv_skew_norm | `iv_skew / 20` |
+| [19] | basis_norm | `basis_pct / 5` |
+| [20] | google_trends | `google_trends / 100` |
 
 После обучения — оценка на out-of-sample данных (последние 20%):
 ```
