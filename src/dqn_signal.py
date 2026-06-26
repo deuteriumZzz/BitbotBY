@@ -105,35 +105,33 @@ def _snap_to_obs(
     p = close if close > 0 else 1.0  # защита от деления на 0
     atr_val = float(ind.get("atr", price * 0.01))
 
-    raw = np.array(
+    return np.array(
         [
-            open_ / p - 1.0,                            # [0]  open_rel
-            high / p - 1.0,                             # [1]  high_rel
-            low / p - 1.0,                              # [2]  low_rel
-            1.0 if position > 0 else 0.0,               # [3]  in_position
+            open_ / p - 1.0,  # [0]  open_rel
+            high / p - 1.0,  # [1]  high_rel
+            low / p - 1.0,  # [2]  low_rel
+            1.0 if position > 0 else 0.0,  # [3]  in_position
             float(np.log1p(max(volume, 0.0)) / 15.0),  # [4]  vol_norm
-            float(ind.get("rsi", 50.0)) / 100.0,       # [5]  rsi_norm
-            macd_val / p,                               # [6]  macd_norm
-            macd_signal_val / p,                        # [7]  macd_sig_norm
-            bb_upper / p - 1.0,                         # [8]  bb_upper_rel
+            float(ind.get("rsi", 50.0)) / 100.0,  # [5]  rsi_norm
+            macd_val / p,  # [6]  macd_norm
+            macd_signal_val / p,  # [7]  macd_sig_norm
+            bb_upper / p - 1.0,  # [8]  bb_upper_rel
             float(ind.get("bb_middle", price)) / p - 1.0,  # [9]  bb_mid_rel
-            bb_lower / p - 1.0,                         # [10] bb_lower_rel
-            balance / initial_balance,                  # [11] balance_norm
-            (position * price) / initial_balance,       # [12] pos_value_norm
+            bb_lower / p - 1.0,  # [10] bb_lower_rel
+            balance / initial_balance,  # [11] balance_norm
+            (position * price) / initial_balance,  # [12] pos_value_norm
             (balance + position * price) / initial_balance,  # [13] val_norm
-            funding_raw * 1000.0,                       # [14] funding_rate_norm
-            float(np.clip(ob_imb, -1.0, 1.0)),         # [15] ob_imbalance
+            funding_raw * 1000.0,  # [14] funding_rate_norm
+            float(np.clip(ob_imb, -1.0, 1.0)),  # [15] ob_imbalance
             float(np.clip(pcr_raw / 3.0, 0.0, 1.0)),  # [16] pcr_norm
-            fg_raw / 100.0,                             # [17] fear_greed_norm
-            float(np.clip(iv_raw / 20.0, -1.0, 1.0)), # [18] iv_skew_norm
+            fg_raw / 100.0,  # [17] fear_greed_norm
+            float(np.clip(iv_raw / 20.0, -1.0, 1.0)),  # [18] iv_skew_norm
             float(np.clip(basis_raw / 5.0, -1.0, 1.0)),  # [19] basis_norm
-            gt_raw / 100.0,                             # [20] google_trends_norm
-            atr_val / p,                                # [21] atr_norm
+            gt_raw / 100.0,  # [20] google_trends_norm
+            atr_val / p,  # [21] atr_norm
         ],
         dtype=np.float32,
     )
-
-    return raw
 
 
 _MAX_OUTLIER_FRAC: float = 0.4  # fraction of market features >3σ before skipping

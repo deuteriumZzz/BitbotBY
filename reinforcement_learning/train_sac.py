@@ -277,23 +277,23 @@ def _finetune_on_experiences(model: Any, norm_stats: Dict[str, Any]) -> None:
             0.0,  # [2] low_rel
             0.0 if use_exit else float(rec.get("action") == "buy"),  # [3] in_position
             rec.get("volume_ratio", 1.0) / 15.0,  # [4] vol_norm
-            ind.get("rsi", 50.0) / 100.0,          # [5] rsi_norm
-            ind.get("macd", 0.0) / p,              # [6] macd_norm
-            ind.get("macd_signal", 0.0) / p,       # [7] macd_sig_norm
-            ind.get("bb_upper", p * 1.02) / p - 1.0,   # [8] bb_upper_rel
-            ind.get("bb_middle", p) / p - 1.0,         # [9] bb_mid_rel
-            ind.get("bb_lower", p * 0.98) / p - 1.0,   # [10] bb_lower_rel
-            1.0,                                    # [11] balance_norm
-            pnl if use_exit else 0.0,              # [12] pos_value_norm прокси
-            pnl,                                   # [13] val_norm прокси
-            ind.get("funding_rate", 0.0) * 1000.0, # [14]
-            ind.get("ob_imbalance", 0.0),           # [15]
+            ind.get("rsi", 50.0) / 100.0,  # [5] rsi_norm
+            ind.get("macd", 0.0) / p,  # [6] macd_norm
+            ind.get("macd_signal", 0.0) / p,  # [7] macd_sig_norm
+            ind.get("bb_upper", p * 1.02) / p - 1.0,  # [8] bb_upper_rel
+            ind.get("bb_middle", p) / p - 1.0,  # [9] bb_mid_rel
+            ind.get("bb_lower", p * 0.98) / p - 1.0,  # [10] bb_lower_rel
+            1.0,  # [11] balance_norm
+            pnl if use_exit else 0.0,  # [12] pos_value_norm прокси
+            pnl,  # [13] val_norm прокси
+            ind.get("funding_rate", 0.0) * 1000.0,  # [14]
+            ind.get("ob_imbalance", 0.0),  # [15]
             min(max(ind.get("pcr", 1.0) / 3.0, 0.0), 1.0),  # [16]
-            ind.get("fear_greed", 50.0) / 100.0,   # [17]
-            min(max(ind.get("iv_skew", 0.0) / 20.0, -1.0), 1.0),   # [18]
+            ind.get("fear_greed", 50.0) / 100.0,  # [17]
+            min(max(ind.get("iv_skew", 0.0) / 20.0, -1.0), 1.0),  # [18]
             min(max(ind.get("basis_pct", 0.0) / 5.0, -1.0), 1.0),  # [19]
-            ind.get("google_trends", 50.0) / 100.0, # [20]
-            ind.get("atr", p * 0.01) / p,           # [21] atr_norm
+            ind.get("google_trends", 50.0) / 100.0,  # [20]
+            ind.get("atr", p * 0.01) / p,  # [21] atr_norm
         ]
         obs = np.array(raw, dtype=np.float32)
         # Нормализация только для первых 11 элементов (OHLCV + индикаторы)

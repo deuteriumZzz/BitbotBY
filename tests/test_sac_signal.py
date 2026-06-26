@@ -68,11 +68,11 @@ def test_ohlcv_values_used_when_present():
     assert obs[0] == pytest.approx(49800.0 / close - 1.0)  # open_rel = -0.004
     assert obs[1] == pytest.approx(50500.0 / close - 1.0)  # high_rel = +0.010
     assert obs[2] == pytest.approx(49500.0 / close - 1.0)  # low_rel  = -0.010
-    assert obs[3] == pytest.approx(0.0)                     # in_position = 0
+    assert obs[3] == pytest.approx(0.0)  # in_position = 0
     expected_vol = math.log1p(1234.5) / 15.0
     assert obs[4] == pytest.approx(expected_vol, rel=1e-4)
-    assert obs[6] == pytest.approx(150.0 / close)          # macd_norm
-    assert obs[7] == pytest.approx(120.0 / close)          # macd_sig_norm
+    assert obs[6] == pytest.approx(150.0 / close)  # macd_norm
+    assert obs[7] == pytest.approx(120.0 / close)  # macd_sig_norm
 
 
 def test_fallback_to_price_without_ohlcv():
