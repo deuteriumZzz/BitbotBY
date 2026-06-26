@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
-from config import STABLECOIN_BASES, Config
+from config import JUNK_BASES, JUNK_PREFIXES, STABLECOIN_BASES, Config
 from src.bybit_api import BybitAPI
 from src.data_loader import DataLoader
 
@@ -48,14 +48,18 @@ class MarketScanner:
         n: int = 20,
         forced: set | None = None,
         excluded: set | None = None,
+        bluechip_bases: frozenset | None = None,
+        altcoin_exclude_bases: frozenset | None = None,
     ) -> List[str]:
         """
         Возвращает топ-N символов /USDT по объёму за 24ч.
 
-        :param n: Количество символов из топа по объёму.
+        :param n: Сколько монет вернуть после всех фильтров.
         :param forced: Символы, всегда добавляемые в список (через /add).
         :param excluded: Символы, исключённые из сканирования (через /remove).
-        :return: Символы в формате ccxt ('BTC/USDT').
+        :param bluechip_bases: Если задан — вернуть только монеты из этого набора (bluechip сезон).
+        :param altcoin_exclude_bases: Если задан — исключить эти базы (altcoin сезон).
+        :return: Топ-N монет нужного сезона в формате ccxt ('BTC/USDT').
         """
         forced = forced or set()
         excluded = excluded or set()
@@ -67,9 +71,19 @@ class MarketScanner:
                 if "/USDT" not in sym:
                     continue
                 base_sym = sym.split(":")[0]
-                if base_sym.split("/")[0] in STABLECOIN_BASES:
+                base = base_sym.split("/")[0]
+                if base in STABLECOIN_BASES:
+                    continue
+                if base in JUNK_BASES:
+                    continue
+                if any(base.startswith(p) for p in JUNK_PREFIXES):
                     continue
                 if base_sym in excluded:
+                    continue
+                # Сезонная фильтрация ДО обрезки по N — гарантирует нужное число монет
+                if bluechip_bases is not None and base not in bluechip_bases:
+                    continue
+                if altcoin_exclude_bases is not None and base in altcoin_exclude_bases:
                     continue
                 qv = t.get("quoteVolume") or 0
                 if qv <= 0:

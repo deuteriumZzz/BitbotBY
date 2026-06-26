@@ -70,12 +70,21 @@ _RISK_PRESETS = {
     },
 }
 
+# Классификатор bluechip монет. Используется для разделения сканов:
+# bluechip-сезон: из топа берём только монеты из этого набора
+# altcoin-сезон: из топа исключаем все монеты из этого набора
+BLUECHIP_BASES: frozenset[str] = frozenset({
+    "BTC", "ETH", "SOL", "XRP", "BNB",
+    "DOGE", "ADA", "AVAX", "LINK", "DOT",
+    "LTC", "UNI", "ATOM", "NEAR", "APT",
+})
+
 _MARKET_PROFILES = {
     "bluechip": {
         "label": "🔵 Блючипы",
         "scan_top_n": 20,
         "train_top_n": 20,
-        "min_volume_usdt": 3_000_000_000,
+        "min_volume_usdt": 0,
         "max_volume_usdt": 0,
         "risk_per_trade": 0.02,
         "timeframe": "15m",
@@ -591,9 +600,8 @@ class RuntimeConfig:
         self.set_risk_per_trade(float(str(profile.get("risk_per_trade", 0.02))))
         self.set_mode(str(profile.get("mode", "ai")))
         # Направляем сохранение сделок в профильный файл
-        _os.environ["EXPERIENCES_PATH"] = (
-            "data/experiences_altcoin.jsonl" if name == "altcoin" else "data/experiences.jsonl"
-        )
+        _exp = "data/experiences_altcoin.jsonl" if name == "altcoin" else "data/experiences.jsonl"
+        _os.environ["EXPERIENCES_PATH"] = _exp
         _os.environ["SAC_PROFILE"] = name
         logger.info("Runtime: применён профиль рынка '%s'", name)
         return True

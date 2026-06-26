@@ -36,7 +36,7 @@ from src.position_monitor import PositionMonitor
 from src.redis_client import RedisClient
 from src.regime_detector import RegimeDetector
 from src.risk_management import RiskManager
-from src.runtime_config import RuntimeConfig
+from src.runtime_config import BLUECHIP_BASES, RuntimeConfig
 from src.season_detector import SeasonDetector
 from src.signal_combiner import SignalCombiner
 from src.strategies import TradingStrategy
@@ -858,9 +858,20 @@ class TradingBot:
                 continue
 
             try:
-                symbols = await self.scanner.get_top_symbols(
-                    self._runtime_config.get_scan_top_n()
-                )
+                _profile = self._runtime_config.get_market_profile()
+                _scan_n = self._runtime_config.get_scan_top_n()
+                if _profile == "bluechip":
+                    symbols = await self.scanner.get_top_symbols(
+                        n=_scan_n,
+                        bluechip_bases=BLUECHIP_BASES,
+                    )
+                elif _profile == "altcoin":
+                    symbols = await self.scanner.get_top_symbols(
+                        n=_scan_n,
+                        altcoin_exclude_bases=BLUECHIP_BASES,
+                    )
+                else:
+                    symbols = await self.scanner.get_top_symbols(n=_scan_n)
                 market_data = await self._scan_and_update_correlations(symbols)
                 snapshots = await self._cycle.collect_snapshots(
                     list(market_data.keys()), market_data
