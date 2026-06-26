@@ -1153,9 +1153,10 @@ class TradingBot:
             except asyncio.CancelledError:
                 pass
         try:
+            stop_balance = await self._get_balance_usdt()
             await self.telegram.notify(
                 f"⛔ *BitbotBY остановлен*\n"
-                f"Баланс: `${self.portfolio_manager.current_balance:,.2f}`"
+                f"Баланс: `${stop_balance:,.2f}`"
             )
         except Exception:
             pass
