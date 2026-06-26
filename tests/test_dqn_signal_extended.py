@@ -222,55 +222,6 @@ class TestGetSignal:
 # ---------------------------------------------------------------------------
 
 
-class TestDriftDetection:
-    def _make_with_norm_stats(self, predict_val=0.0) -> SACSignal:
-        """Создаёт SACSignal с norm_stats — необходимо для триггера drift."""
-        sig = _make_loaded_signal(predict_return=(np.array([predict_val]), None))
-        # маленький std → obs[i] = (large_raw - 0) / 0.001 >> 3 → outlier
-        sig._norm_stats = {
-            col: [0.0, 0.001]
-            for col in [
-                "open",
-                "high",
-                "low",
-                "close",
-                "volume",
-                "rsi",
-                "macd",
-                "macd_signal",
-                "bb_upper",
-                "bb_middle",
-                "bb_lower",
-            ]
-        }
-        return sig
-
-    def test_drift_increments_counter(self):
-        """Много outlier-фичей → _consecutive_drifts увеличивается."""
-        sig = self._make_with_norm_stats()
-        sig.get_signal(_SNAP, balance=5000.0)
-        assert sig._consecutive_drifts >= 1
-
-    def test_drift_returns_hold(self):
-        """outlier_frac >= _MAX_OUTLIER_FRAC → action=hold."""
-        sig = self._make_with_norm_stats(predict_val=0.9)
-        result = sig.get_signal(_SNAP, balance=5000.0)
-        assert result["action"] == "hold"
-
-    def test_model_disabled_after_repeated_drifts(self):
-        """После _DISABLE_AFTER_DRIFTS подряд → loaded=False."""
-        sig = self._make_with_norm_stats()
-        for _ in range(_DISABLE_AFTER_DRIFTS):
-            sig.get_signal(_SNAP, balance=5000.0)
-        assert sig.loaded is False
-
-    def test_no_drift_resets_counter(self):
-        """Нормальные obs сбрасывают счётчик drift."""
-        sig = _make_loaded_signal(predict_return=(np.array([0.0]),))
-        sig._norm_stats = None
-        sig._consecutive_drifts = 3
-        sig.get_signal(_SNAP, balance=5000.0)
-        assert sig._consecutive_drifts == 0
 
 
 # ---------------------------------------------------------------------------

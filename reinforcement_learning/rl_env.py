@@ -17,8 +17,8 @@ from gymnasium import spaces
 HOLD_ZONE = float(_os.getenv("SAC_HOLD_ZONE", "0.3"))
 # Комиссия за сделку (синхронизирована с COMMISSION_RATE из .env)
 COMMISSION = float(_os.getenv("COMMISSION_RATE", "0.001"))
-# Размер вектора наблюдения: 11 рыночных + 3 портфельных + 7 контекстных
-OBS_DIM = 21
+# Размер вектора наблюдения: 11 рыночных + 3 портфельных + 7 контекстных + 1 ATR
+OBS_DIM = 22
 
 
 class TradingEnv(gym.Env):
@@ -129,6 +129,7 @@ class TradingEnv(gym.Env):
         bb_mid_rel = float(row.get("bb_middle", price)) / p - 1.0
         bb_lower_rel = float(row.get("bb_lower", price * 0.98)) / p - 1.0
         in_position = 1.0 if self.position > 0 else 0.0
+        atr_norm = float(row.get("atr", price * 0.01)) / p  # волатильность / close
 
         return np.array(
             [
@@ -147,6 +148,7 @@ class TradingEnv(gym.Env):
                 pos_value_norm,
                 val_norm,
                 *new_features,
+                atr_norm,       # [21] ATR / close — текущая волатильность
             ],
             dtype=np.float32,
         )
