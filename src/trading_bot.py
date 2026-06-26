@@ -114,6 +114,10 @@ class TradingBot:
         )
         self._paper_balance: float = Config.INITIAL_BALANCE
         self._live_balance_cache: float = Config.INITIAL_BALANCE
+        # Пик баланса для hard drawdown halt (обновляется в main loop)
+        self._peak_balance: float = 0.0
+        # Счётчик подтверждения просадки: halt только после N циклов подряд
+        self._drawdown_consec: int = 0
         # кэш режимов: символ → (режим, timestamp) — обновляется каждые 5 мин
         self._regime_cache: Dict[str, Tuple[str, float]] = {}
         self._regime_ttl: float = float(
@@ -563,6 +567,43 @@ class TradingBot:
         for rec in filtered[:max_pos]:
             await self._executor.execute(rec, market_data, balance)
 
+    async def _close_all_open_positions(self, reason: str) -> None:
+        """Принудительно закрывает все открытые позиции — делегирует PositionMonitor."""
+        await self._position_monitor.close_all_positions(
+            self._monitored, self._monitored_lock, reason=reason
+        )
+
+    def _is_atr_spike(self, market_data: Dict) -> bool:
+        """Возвращает True если ATR вырос в ATR_SPIKE_MULT раз от медианы.
+
+        Проверяет до 3 символов (BTC, основной символ, первый доступный).
+        """
+        lookback = Config.ATR_SPIKE_LOOKBACK
+        mult = Config.ATR_SPIKE_MULT
+        candidates: list = []
+        for sym in ["BTCUSDT", Config.SYMBOL]:
+            if sym in market_data and sym not in candidates:
+                candidates.append(sym)
+        for sym in market_data:
+            if sym not in candidates:
+                candidates.append(sym)
+            if len(candidates) >= 3:
+                break
+        for sym in candidates:
+            df = market_data.get(sym)
+            if df is None or "atr" not in df.columns or len(df) < lookback + 2:
+                continue
+            baseline = df["atr"].iloc[-(lookback + 1):-1].median()
+            current = df["atr"].iloc[-1]
+            if baseline > 0 and current >= baseline * mult:
+                logger.warning(
+                    "ATR spike on %s: current=%.4f baseline=%.4f"
+                    " (%.1fx >= %.1fx threshold)",
+                    sym, current, baseline, current / baseline, mult,
+                )
+                return True
+        return False
+
     async def _monitor_positions(self) -> None:
         """Фоновый цикл SL/TP/трейлинг/circuit-breaker —
         делегирует PositionMonitor."""
@@ -878,27 +919,118 @@ class TradingBot:
                 )
                 balance = await self._get_balance_usdt()
 
+                # ── Обновляем пик баланса ──────────────────────────────────
+                if balance > self._peak_balance:
+                    self._peak_balance = balance
+
+                # ── [П.2] Hard drawdown halt (с подтверждением) ───────────
+                # Просадка от пика >= MAX_DRAWDOWN_PERCENT должна держаться
+                # DRAWDOWN_CONFIRM_CYCLES циклов подряд (защита от flash crash).
+                # В paper режиме: уведомляет но не останавливает торговлю.
                 if (
-                    not Config.PAPER_TRADING
-                    and not self.risk_manager.check_daily_loss_limit(balance)
+                    self._peak_balance > 0
+                    and (self._peak_balance - balance) / self._peak_balance
+                    >= Config.MAX_DRAWDOWN_PERCENT
                 ):
+                    self._drawdown_consec += 1
+                    dd_pct = (self._peak_balance - balance) / self._peak_balance * 100
+                    confirm = self._runtime_config.get_drawdown_confirm_cycles()
+                    logger.warning(
+                        "Drawdown %.1f%% from peak $%.2f — confirm %d/%d",
+                        dd_pct, self._peak_balance, self._drawdown_consec, confirm,
+                    )
+                    if self._drawdown_consec >= confirm:
+                        if Config.PAPER_TRADING:
+                            logger.warning(
+                                "[PAPER] Hard drawdown halt would trigger:"
+                                " %.1f%% drawdown confirmed %d cycles",
+                                dd_pct, confirm,
+                            )
+                            await self.telegram.notify(
+                                f"⚠️ *[PAPER] Hard drawdown halt*: просадка"
+                                f" {dd_pct:.1f}% от пика"
+                                f" ${self._peak_balance:.2f}"
+                                f" подтверждена {confirm} цикла подряд.\n"
+                                f"В live режиме: позиции закрыты,"
+                                f" пауза {Config.DRAWDOWN_HALT_HOURS:.0f}ч."
+                            )
+                            self._drawdown_consec = 0
+                        else:
+                            halt_secs = Config.DRAWDOWN_HALT_HOURS * 3600
+                            logger.critical(
+                                "Hard drawdown halt: %.1f%% confirmed %d cycles"
+                                " — closing all, pausing %.0fh",
+                                dd_pct, confirm, Config.DRAWDOWN_HALT_HOURS,
+                            )
+                            await self._close_all_open_positions("hard_drawdown")
+                            await self.telegram.notify(
+                                f"🚨 *Hard drawdown halt*: просадка {dd_pct:.1f}%"
+                                f" от пика ${self._peak_balance:.2f}"
+                                f" подтверждена {confirm} цикла подряд.\n"
+                                f"Позиции закрыты. Пауза"
+                                f" {Config.DRAWDOWN_HALT_HOURS:.0f}ч."
+                            )
+                            self._drawdown_consec = 0
+                            await asyncio.sleep(halt_secs)
+                            self._peak_balance = await self._get_balance_usdt()
+                            continue
+                    else:
+                        continue
+                else:
+                    self._drawdown_consec = 0
+
+                # ── [П.3] Дневной лимит потерь ────────────────────────────
+                # Сначала закрываем открытые позиции, потом спим до полуночи.
+                # В paper режиме: уведомляет но не останавливает торговлю.
+                if not self.risk_manager.check_daily_loss_limit(balance):
                     now_utc = datetime.utcnow()
                     midnight = (now_utc + timedelta(days=1)).replace(
                         hour=0, minute=0, second=0, microsecond=0
                     )
                     sleep_secs = (midnight - now_utc).total_seconds()
-                    await self.telegram.notify(
-                        "⛔ Дневной лимит потерь достигнут. "
-                        f"Баланс: ${balance:.2f}. "
-                        f"Торговля возобновится в 00:00 UTC "
-                        f"(через {int(sleep_secs // 3600)}ч"
-                        f" {int((sleep_secs % 3600) // 60)}м)."
-                    )
+                    if Config.PAPER_TRADING:
+                        logger.warning(
+                            "[PAPER] Daily loss limit would trigger:"
+                            " balance $%.2f, would pause %.0f s",
+                            balance, sleep_secs,
+                        )
+                        await self.telegram.notify(
+                            f"⚠️ *[PAPER] Дневной лимит потерь*:"
+                            f" баланс ${balance:.2f}.\n"
+                            f"В live режиме: позиции закрыты, пауза до 00:00 UTC"
+                            f" ({int(sleep_secs // 3600)}ч"
+                            f" {int((sleep_secs % 3600) // 60)}м)."
+                        )
+                    else:
+                        await self._close_all_open_positions("daily_loss_limit")
+                        await self.telegram.notify(
+                            "⛔ Дневной лимит потерь достигнут. "
+                            f"Баланс: ${balance:.2f}. Позиции закрыты.\n"
+                            f"Торговля возобновится в 00:00 UTC "
+                            f"(через {int(sleep_secs // 3600)}ч"
+                            f" {int((sleep_secs % 3600) // 60)}м)."
+                        )
+                        logger.warning(
+                            "Daily loss limit hit — closing positions,"
+                            " pausing %.0f s until midnight UTC",
+                            sleep_secs,
+                        )
+                        await asyncio.sleep(sleep_secs)
+                        continue
+
+                # ── [П.1] ATR spike / volatility circuit breaker ──────────
+                # Если ATR вырос в ATR_SPIKE_MULT раз от нормы → закрыть
+                # позиции и пропустить этот цикл (следующий через 30 с).
+                if self._is_atr_spike(market_data):
                     logger.warning(
-                        "Daily loss limit hit — pausing %.0f s until midnight UTC",
-                        sleep_secs,
+                        "Volatility circuit breaker triggered — skipping cycle"
                     )
-                    await asyncio.sleep(sleep_secs)
+                    await self._close_all_open_positions("atr_spike")
+                    await self.telegram.notify(
+                        "⚡ *Volatility circuit breaker*: скачок ATR в "
+                        f"{Config.ATR_SPIKE_MULT:.0f}x от нормы.\n"
+                        "Позиции закрыты, цикл пропущен."
+                    )
                     continue
 
                 regimes = await self._detect_regimes(market_data)

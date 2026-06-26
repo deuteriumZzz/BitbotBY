@@ -247,6 +247,44 @@ class PositionMonitor:
 
         return False, ""
 
+    # ── Emergency close ───────────────────────────────────────────────────────
+
+    async def close_all_positions(
+        self,
+        monitored: Dict[str, PositionRecord],
+        lock: asyncio.Lock,
+        reason: str = "emergency",
+    ) -> None:
+        """Принудительно закрывает все открытые позиции по рыночной цене.
+
+        Используется при срабатывании защитных механизмов (дневной лимит,
+        hard drawdown halt, ATR spike). Не требует достижения SL/TP.
+        """
+        async with lock:
+            snapshot = list(monitored.items())
+        for sym, pos in snapshot:
+            if pos is None:
+                continue
+            side = pos.get("side", "buy")
+            qty = pos.get("qty", 0.0)
+            if qty <= 0:
+                continue
+            close_side = "sell" if side == "buy" else "buy"
+            logger.warning(
+                "Emergency close %s qty=%.6f side=%s reason=%s",
+                sym, qty, side, reason,
+            )
+            if not Config.PAPER_TRADING:
+                for oid in filter(None, [pos.get("exchange_sl_id"), pos.get("exchange_tp_id")]):
+                    try:
+                        await self._api.cancel_order(sym, oid)
+                    except Exception as _e:
+                        logger.debug("Cancel order %s failed: %s", oid, _e)
+                await self._api.create_order(sym, "market", close_side, qty, lock_suffix="close")
+            async with lock:
+                monitored.pop(sym, None)
+            logger.info("Emergency closed %s [%s]", sym, reason)
+
     # ── Circuit-breaker persistence ───────────────────────────────────────────
 
     def _load_cb_state(self) -> int:

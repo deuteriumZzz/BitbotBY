@@ -30,6 +30,7 @@ _KEY_AI_PROVIDER = "bot:ai_provider"
 _KEY_LEVERAGE_MODE = "bot:leverage_mode"
 _KEY_LEVERAGE_TARGET_RISK = "bot:leverage_target_risk"
 _KEY_MAX_DRAWDOWN = "bot:max_drawdown_percent"
+_KEY_DRAWDOWN_CONFIRM = "bot:drawdown_confirm_cycles"
 _KEY_SAC_PROMPTED = "bot:sac_prompted"
 _KEY_CONFIRM_TIMEOUT = "bot:confirm_timeout"
 _KEY_FIRST_START_DATE = "bot:first_start_date"
@@ -300,7 +301,23 @@ class RuntimeConfig:
             "max_positions": self.get_max_positions(),
             "risk_per_trade": self.get_risk_per_trade(),
             "drawdown_scale_enabled": self.get_drawdown_scale_enabled(),
+            "drawdown_confirm_cycles": self.get_drawdown_confirm_cycles(),
         }
+
+    def get_drawdown_confirm_cycles(self) -> int:
+        """Кол-во циклов подряд для подтверждения просадки перед halt (1–10)."""
+        val = self._get(_KEY_DRAWDOWN_CONFIRM)
+        try:
+            return max(1, min(int(val), 10)) if val else int(getattr(Config, "DRAWDOWN_CONFIRM_CYCLES", 3))
+        except (ValueError, TypeError):
+            return 3
+
+    def set_drawdown_confirm_cycles(self, n: int) -> bool:
+        if not (1 <= n <= 10):
+            return False
+        self._set(_KEY_DRAWDOWN_CONFIRM, str(n))
+        logger.info("Runtime: drawdown_confirm_cycles → %d", n)
+        return True
 
     # ── SAC Training ──────────────────────────────────────────────────────────
 
@@ -834,6 +851,7 @@ class RuntimeConfig:
         _KEY_LEVERAGE_MODE,
         _KEY_LEVERAGE_TARGET_RISK,
         _KEY_MAX_DRAWDOWN,
+        _KEY_DRAWDOWN_CONFIRM,
         _KEY_MARKET_PROFILE,
         _KEY_TIMEFRAME,
         _KEY_MIN_VOLUME,
