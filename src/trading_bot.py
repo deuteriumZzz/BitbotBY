@@ -1057,9 +1057,7 @@ class TradingBot:
                 # В paper режиме: уведомляет но не останавливает торговлю.
                 if Config.PAPER_TRADING:
                     _paper_prices = {
-                        s: float(snap["price"])
-                        for s, snap in snapshots.items()
-                        if snap
+                        s: float(snap["price"]) for s, snap in snapshots.items() if snap
                     }
                     _equity_for_limit = self.portfolio_manager.get_total_value(
                         _paper_prices
@@ -1100,7 +1098,7 @@ class TradingBot:
                         logger.warning(
                             "Daily loss limit hit — blocking new entries,"
                             " checking recovery every 60s until midnight UTC",
-                            )
+                        )
                         _check_interval = 60
                         _elapsed = 0.0
                         while _elapsed < sleep_secs:
@@ -1112,8 +1110,8 @@ class TradingBot:
                                     for s, snap in snapshots.items()
                                     if snap
                                 }
-                                _recovery_eq = (
-                                    self.portfolio_manager.get_total_value(_rp)
+                                _recovery_eq = self.portfolio_manager.get_total_value(
+                                    _rp
                                 )
                             else:
                                 _recovery_eq = await self._get_balance_usdt()
