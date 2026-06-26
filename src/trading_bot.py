@@ -128,6 +128,7 @@ class TradingBot:
         # детектор «тихой смерти»: фиксируем время последней сделки и последнего алерта
         self._last_trade_at: Optional[float] = None
         self._silent_death_alerted_at: float = 0.0
+        self._daily_limit_notified_at: float = 0.0
         self._silent_death_hours: float = float(os.getenv("SILENT_DEATH_HOURS", "6"))
         if Config.PAPER_TRADING:
             logger.warning("*** PAPER TRADING MODE — no real orders will be placed ***")
@@ -1077,13 +1078,16 @@ class TradingBot:
                             _equity_for_limit,
                             sleep_secs,
                         )
-                        await self.telegram.notify(
-                            f"⚠️ *[PAPER] Дневной лимит потерь*:"
-                            f" equity ${_equity_for_limit:.2f}.\n"
-                            f"В live режиме: новые входы заблокированы до 00:00 UTC"
-                            f" ({int(sleep_secs // 3600)}ч"
-                            f" {int((sleep_secs % 3600) // 60)}м)."
-                        )
+                        _now = time.time()
+                        if _now - self._daily_limit_notified_at >= 3600:
+                            self._daily_limit_notified_at = _now
+                            await self.telegram.notify(
+                                f"⚠️ *[PAPER] Дневной лимит потерь*:"
+                                f" equity ${_equity_for_limit:.2f}.\n"
+                                f"В live режиме: новые входы заблокированы до 00:00 UTC"
+                                f" ({int(sleep_secs // 3600)}ч"
+                                f" {int((sleep_secs % 3600) // 60)}м)."
+                            )
                     else:
                         await self.telegram.notify(
                             "⛔ Дневной лимит потерь достигнут. "
