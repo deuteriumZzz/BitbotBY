@@ -2085,7 +2085,7 @@ class TelegramCommander:
             import os as _os
 
             current = self._rc.get_market_profile()
-            bc_has = _os.path.exists("models/sac_model_bluechip.zip")
+            bc_has = _os.path.exists("models/sac_model.zip")
             alt_has = _os.path.exists("models/sac_model_altcoin.zip")
             model_legend = "🧠 — модель есть  |  ⚠️ — нужно обучить"
             await self._edit(
