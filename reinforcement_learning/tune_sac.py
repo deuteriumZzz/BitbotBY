@@ -32,8 +32,8 @@ from src.runtime_config import BLUECHIP_BASES  # noqa: E402
 _ALTCOIN_EXCLUDE: set = BLUECHIP_BASES | {"USDC", "USDT", "BUSD", "TUSD", "DAI"}
 _TUNE_TOP_N = int(os.getenv("TUNE_TOP_N", "5"))  # символов для тюнинга
 HYPERPARAMS_PATH = (
-    f"models/best_hyperparams_{_SAC_PROFILE}.json"
-    if _SAC_PROFILE
+    "models/best_hyperparams_altcoin.json"
+    if _SAC_PROFILE == "altcoin"
     else "models/best_hyperparams.json"
 )
 _TUNE_TIMESTEPS = 50_000
