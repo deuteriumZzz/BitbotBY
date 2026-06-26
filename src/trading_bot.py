@@ -582,11 +582,17 @@ class TradingBot:
         )
 
     async def _handle_restart(self) -> None:
-        """Останавливает бота — Docker с restart: unless-stopped поднимет заново."""
+        """Останавливает бота — Docker с restart: unless-stopped поднимет заново.
+
+        Не вызываем self.stop() изнутри Telegram-хендлера: это дедлок
+        (stop() ждёт завершения хендлеров, хендлер ждёт stop()).
+        Вместо этого ждём 2 с чтобы Telegram успел отправить сообщение,
+        затем SIGTERM — Docker перезапустит контейнер.
+        """
         import os as _os
         import signal as _signal
-        logger.info("Restart requested via Telegram — stopping process")
-        await self.stop()
+        logger.info("Restart requested via Telegram — sending SIGTERM in 2s")
+        await asyncio.sleep(2)
         _os.kill(_os.getpid(), _signal.SIGTERM)
 
     async def _handle_mode_switch(self) -> None:
