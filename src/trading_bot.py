@@ -524,9 +524,15 @@ class TradingBot:
                 if not hasattr(self, "_balance_structure_logged"):
                     self._balance_structure_logged = True
                     usdt = {k: bal.get(k, {}).get("USDT") for k in ("free", "used", "total")}
-                    info_usdt = (bal.get("info") or {})
-                    logger.info("[BALANCE DEBUG] free/used/total USDT: %s", usdt)
-                    logger.info("[BALANCE DEBUG] raw info keys: %s", list(info_usdt.keys())[:20])
+                    info = bal.get("info") or {}
+                    result = info.get("result") or {}
+                    lst = result.get("list") or []
+                    first = lst[0] if lst else {}
+                    coins = first.get("coin") or []
+                    usdt_coin = next((c for c in coins if c.get("coin") == "USDT"), {})
+                    logger.info("[BALANCE DEBUG] free/used/total: %s", usdt)
+                    logger.info("[BALANCE DEBUG] account keys: %s", list(first.keys()))
+                    logger.info("[BALANCE DEBUG] USDT coin: %s", usdt_coin)
                 value = float(bal.get("free", {}).get("USDT", 0))
                 self._live_balance_cache = value
                 return value
