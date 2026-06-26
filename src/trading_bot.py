@@ -1014,17 +1014,29 @@ class TradingBot:
                             halt_secs = Config.DRAWDOWN_HALT_HOURS * 3600
                             logger.critical(
                                 "Hard drawdown halt: %.1f%% confirmed %d cycles"
-                                " — closing all, pausing %.0fh",
+                                " — closing losers, tightening winners, pausing %.0fh",
                                 dd_pct,
                                 confirm,
                                 Config.DRAWDOWN_HALT_HOURS,
                             )
-                            await self._close_all_open_positions("hard_drawdown")
+                            _dd_prices = {
+                                s: float(snap["price"])
+                                for s, snap in snapshots.items()
+                                if snap
+                            }
+                            await self._position_monitor.close_losers_tighten_winners(
+                                self._monitored,
+                                self._monitored_lock,
+                                _dd_prices,
+                                reason="hard_drawdown",
+                            )
                             await self.telegram.notify(
                                 f"🚨 *Hard drawdown halt*: просадка {dd_pct:.1f}%"
                                 f" от пика ${self._peak_balance:.2f}"
                                 f" подтверждена {confirm} цикла подряд.\n"
-                                f"Позиции закрыты. Пауза"
+                                f"Убыточные позиции закрыты."
+                                f" Прибыльные: SL перенесён на breakeven.\n"
+                                f"Новые входы заблокированы на"
                                 f" {Config.DRAWDOWN_HALT_HOURS:.0f}ч."
                             )
                             self._drawdown_consec = 0
@@ -1037,9 +1049,24 @@ class TradingBot:
                     self._drawdown_consec = 0
 
                 # ── [П.3] Дневной лимит потерь ────────────────────────────
-                # Сначала закрываем открытые позиции, потом спим до полуночи.
+                # Считаем по equity (кэш + нереализованный P&L), а не по
+                # свободному балансу — иначе открытие позиций само по себе
+                # выглядит как «убыток» и лимит срабатывает мгновенно.
+                # При срабатывании: блокируем новые входы, открытые позиции
+                # держим до их SL/TP (PositionMonitor управляет ими независимо).
                 # В paper режиме: уведомляет но не останавливает торговлю.
-                if not self.risk_manager.check_daily_loss_limit(balance):
+                if Config.PAPER_TRADING:
+                    _paper_prices = {
+                        s: float(snap["price"])
+                        for s, snap in snapshots.items()
+                        if snap
+                    }
+                    _equity_for_limit = self.portfolio_manager.get_total_value(
+                        _paper_prices
+                    )
+                else:
+                    _equity_for_limit = self._live_equity_cache
+                if not self.risk_manager.check_daily_loss_limit(_equity_for_limit):
                     now_utc = datetime.utcnow()
                     midnight = (now_utc + timedelta(days=1)).replace(
                         hour=0, minute=0, second=0, microsecond=0
@@ -1048,32 +1075,61 @@ class TradingBot:
                     if Config.PAPER_TRADING:
                         logger.warning(
                             "[PAPER] Daily loss limit would trigger:"
-                            " balance $%.2f, would pause %.0f s",
-                            balance,
+                            " equity $%.2f, would pause %.0f s",
+                            _equity_for_limit,
                             sleep_secs,
                         )
                         await self.telegram.notify(
                             f"⚠️ *[PAPER] Дневной лимит потерь*:"
-                            f" баланс ${balance:.2f}.\n"
-                            f"В live режиме: позиции закрыты, пауза до 00:00 UTC"
+                            f" equity ${_equity_for_limit:.2f}.\n"
+                            f"В live режиме: новые входы заблокированы до 00:00 UTC"
                             f" ({int(sleep_secs // 3600)}ч"
                             f" {int((sleep_secs % 3600) // 60)}м)."
                         )
                     else:
-                        await self._close_all_open_positions("daily_loss_limit")
                         await self.telegram.notify(
                             "⛔ Дневной лимит потерь достигнут. "
-                            f"Баланс: ${balance:.2f}. Позиции закрыты.\n"
-                            f"Торговля возобновится в 00:00 UTC "
-                            f"(через {int(sleep_secs // 3600)}ч"
-                            f" {int((sleep_secs % 3600) // 60)}м)."
+                            f"Equity: ${_equity_for_limit:.2f}.\n"
+                            f"Новые входы заблокированы.\n"
+                            f"Торговля возобновится автоматически при восстановлении"
+                            f" equity или в 00:00 UTC"
+                            f" (через {int(sleep_secs // 3600)}ч"
+                            f" {int((sleep_secs % 3600) // 60)}м).\n"
+                            f"Открытые позиции работают по своим SL/TP."
                         )
                         logger.warning(
-                            "Daily loss limit hit — closing positions,"
-                            " pausing %.0f s until midnight UTC",
-                            sleep_secs,
-                        )
-                        await asyncio.sleep(sleep_secs)
+                            "Daily loss limit hit — blocking new entries,"
+                            " checking recovery every 60s until midnight UTC",
+                            )
+                        _check_interval = 60
+                        _elapsed = 0.0
+                        while _elapsed < sleep_secs:
+                            await asyncio.sleep(_check_interval)
+                            _elapsed += _check_interval
+                            if Config.PAPER_TRADING:
+                                _rp = {
+                                    s: float(snap["price"])
+                                    for s, snap in snapshots.items()
+                                    if snap
+                                }
+                                _recovery_eq = (
+                                    self.portfolio_manager.get_total_value(_rp)
+                                )
+                            else:
+                                _recovery_eq = await self._get_balance_usdt()
+                                _recovery_eq = self._live_equity_cache
+                            if self.risk_manager.check_daily_loss_limit(_recovery_eq):
+                                logger.info(
+                                    "Daily loss limit recovered:"
+                                    " equity $%.2f — resuming trading",
+                                    _recovery_eq,
+                                )
+                                await self.telegram.notify(
+                                    f"✅ Equity восстановилась до"
+                                    f" ${_recovery_eq:.2f}.\n"
+                                    f"Торговля возобновлена досрочно."
+                                )
+                                break
                         continue
 
                 # ── [П.1] ATR spike / volatility circuit breaker ──────────

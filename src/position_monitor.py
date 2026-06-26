@@ -292,6 +292,90 @@ class PositionMonitor:
                 monitored.pop(sym, None)
             logger.info("Emergency closed %s [%s]", sym, reason)
 
+    async def close_losers_tighten_winners(
+        self,
+        monitored: Dict[str, PositionRecord],
+        lock: asyncio.Lock,
+        current_prices: Dict[str, float],
+        reason: str = "hard_drawdown",
+    ) -> None:
+        """Hard drawdown: закрывает убыточные позиции, у прибыльных ставит SL на breakeven.
+
+        Убыточные (current < entry для buy, current > entry для sell) — закрываем
+        по рынку, они и есть причина просадки.
+        Прибыльные — переносим SL на цену входа (breakeven): позиция не может
+        уйти в минус, но возьмёт профит если рынок продолжит движение в плюс.
+        """
+        async with lock:
+            snapshot = list(monitored.items())
+        for sym, pos in snapshot:
+            if pos is None:
+                continue
+            qty = pos.get("qty", 0.0)
+            if qty <= 0:
+                continue
+            side = pos.get("side", "buy")
+            entry = pos.get("entry", 0.0)
+            current = current_prices.get(sym, 0.0)
+            if current <= 0 or entry <= 0:
+                continue
+            close_side = "sell" if side == "buy" else "buy"
+            is_losing = (side == "buy" and current < entry) or (
+                side == "sell" and current > entry
+            )
+            if is_losing:
+                logger.warning(
+                    "Drawdown close loser %s [%s] entry=%.4f current=%.4f reason=%s",
+                    sym, side, entry, current, reason,
+                )
+                if not Config.PAPER_TRADING:
+                    for oid in filter(
+                        None, [pos.get("exchange_sl_id"), pos.get("exchange_tp_id")]
+                    ):
+                        try:
+                            await self._api.cancel_order(sym, oid)
+                        except Exception as _e:
+                            logger.debug("Cancel order %s failed: %s", oid, _e)
+                    await self._api.create_order(
+                        sym, "market", close_side, qty, lock_suffix="close"
+                    )
+                async with lock:
+                    monitored.pop(sym, None)
+            else:
+                # Прибыльная позиция — переносим SL на breakeven
+                tp_price = float(pos.get("take_profit") or 0)
+                logger.info(
+                    "Drawdown tighten winner %s [%s] entry=%.4f → SL=breakeven",
+                    sym, side, entry,
+                )
+                if not Config.PAPER_TRADING:
+                    for oid in filter(
+                        None, [pos.get("exchange_sl_id"), pos.get("exchange_tp_id")]
+                    ):
+                        try:
+                            await self._api.cancel_order(sym, oid)
+                        except Exception as _e:
+                            logger.debug("Cancel SL/TP %s failed: %s", oid, _e)
+                    try:
+                        new_sl_id, new_tp_id = await self._api.place_exchange_sl_tp(
+                            sym, close_side, qty, entry, tp_price
+                        )
+                        async with lock:
+                            if sym in monitored and monitored[sym] is not None:
+                                monitored[sym]["stop_loss"] = entry
+                                monitored[sym]["exchange_sl_id"] = new_sl_id
+                                monitored[sym]["exchange_tp_id"] = new_tp_id
+                    except Exception as exc:
+                        logger.warning("Tighten SL for %s failed: %s", sym, exc)
+                else:
+                    async with lock:
+                        if sym in monitored and monitored[sym] is not None:
+                            monitored[sym]["stop_loss"] = entry
+                await self._telegram.notify(
+                    f"🔒 *{sym}* [{side}]: SL перенесён на breakeven"
+                    f" ${entry:.4f} (hard drawdown protection)"
+                )
+
     # ── Circuit-breaker persistence ───────────────────────────────────────────
 
     def _load_cb_state(self) -> int:
