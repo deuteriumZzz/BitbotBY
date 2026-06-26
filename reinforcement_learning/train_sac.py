@@ -269,29 +269,31 @@ def _finetune_on_experiences(model: Any, norm_stats: Dict[str, Any]) -> None:
         exit_price = rec.get("exit_price", entry_price)
         price = exit_price if use_exit else entry_price
         pnl = rec.get("pnl_pct", 0.0)
+        p = price if price > 0 else 1.0
+        # Формат совпадает с TradingEnv._get_observation (OBS_DIM=22)
         raw = [
-            price,
-            price,
-            price,
-            price,  # open/high/low/close приближённые значения
-            rec.get("volume_ratio", 1.0) * 1000,  # прокси для объёма
-            ind.get("rsi", 50.0),
-            ind.get("macd", 0.0),
-            ind.get("macd_signal", 0.0),
-            ind.get("bb_upper", price * 1.02),
-            ind.get("bb_middle", price),
-            ind.get("bb_lower", price * 0.98),
-            0.0 if use_exit else float(rec.get("action") == "buy"),
-            pnl if use_exit else 0.0,
-            pnl,
-            # Новые фичи (14-20) — уже нормализованы, не нормализовать повторно
-            ind.get("funding_rate", 0.0) * 1000.0,
-            ind.get("ob_imbalance", 0.0),
-            min(max(ind.get("pcr", 1.0) / 3.0, 0.0), 1.0),
-            ind.get("fear_greed", 50.0) / 100.0,
-            min(max(ind.get("iv_skew", 0.0) / 20.0, -1.0), 1.0),
-            min(max(ind.get("basis_pct", 0.0) / 5.0, -1.0), 1.0),
-            ind.get("google_trends", 50.0) / 100.0,
+            0.0,  # [0] open_rel — нет данных из experience, ≈0
+            0.0,  # [1] high_rel
+            0.0,  # [2] low_rel
+            0.0 if use_exit else float(rec.get("action") == "buy"),  # [3] in_position
+            rec.get("volume_ratio", 1.0) / 15.0,  # [4] vol_norm
+            ind.get("rsi", 50.0) / 100.0,          # [5] rsi_norm
+            ind.get("macd", 0.0) / p,              # [6] macd_norm
+            ind.get("macd_signal", 0.0) / p,       # [7] macd_sig_norm
+            ind.get("bb_upper", p * 1.02) / p - 1.0,   # [8] bb_upper_rel
+            ind.get("bb_middle", p) / p - 1.0,         # [9] bb_mid_rel
+            ind.get("bb_lower", p * 0.98) / p - 1.0,   # [10] bb_lower_rel
+            1.0,                                    # [11] balance_norm
+            pnl if use_exit else 0.0,              # [12] pos_value_norm прокси
+            pnl,                                   # [13] val_norm прокси
+            ind.get("funding_rate", 0.0) * 1000.0, # [14]
+            ind.get("ob_imbalance", 0.0),           # [15]
+            min(max(ind.get("pcr", 1.0) / 3.0, 0.0), 1.0),  # [16]
+            ind.get("fear_greed", 50.0) / 100.0,   # [17]
+            min(max(ind.get("iv_skew", 0.0) / 20.0, -1.0), 1.0),   # [18]
+            min(max(ind.get("basis_pct", 0.0) / 5.0, -1.0), 1.0),  # [19]
+            ind.get("google_trends", 50.0) / 100.0, # [20]
+            ind.get("atr", p * 0.01) / p,           # [21] atr_norm
         ]
         obs = np.array(raw, dtype=np.float32)
         # Нормализация только для первых 11 элементов (OHLCV + индикаторы)
@@ -579,15 +581,11 @@ if __name__ == "__main__":
                 )
                 if df_sym is None or df_sym.empty:
                     continue
-                # Нормализуем ценовые колонки к % доходности от первой свечи,
-                # чтобы BTC ($64k) и малые монеты ($0.06) были в одном масштабе
-                price_cols = [
-                    c for c in ("open", "high", "low", "close") if c in df_sym.columns
-                ]
-                base = df_sym[price_cols[0]].iloc[0]
-                if base > 0:
-                    for col in price_cols:
-                        df_sym[col] = df_sym[col] / base
+                # Считаем индикаторы (RSI, MACD, BB, ATR) на сырых ценах.
+                # TradingEnv нормализует всё относительно текущего close сам.
+                from src.indicators import add_indicators
+
+                df_sym = add_indicators(df_sym)
                 frames.append(df_sym)
                 logger.info("Загружено %s: %d свечей", sym, len(df_sym))
             except Exception as exc:

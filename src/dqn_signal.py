@@ -102,43 +102,36 @@ def _snap_to_obs(
     gt_raw = float(ctx.get("google_trends", 50.0))
 
     initial_balance = max(Config.INITIAL_BALANCE, 1.0)
+    p = close if close > 0 else 1.0  # защита от деления на 0
+    atr_val = float(ind.get("atr", price * 0.01))
 
     raw = np.array(
         [
-            open_,  # [0]  open
-            high,  # [1]  high
-            low,  # [2]  low
-            close,  # [3]  close
-            float(np.log1p(max(volume, 0.0)) / 15.0),  # [4]  volume (log-transformed)
-            float(ind.get("rsi", 50.0)),  # [5]  rsi
-            macd_val,  # [6]  macd
-            macd_signal_val,  # [7]  macd_signal
-            bb_upper,  # [8]  bb_upper
-            float(ind.get("bb_middle", price)),  # [9]  bb_middle
-            bb_lower,  # [10] bb_lower
-            balance / initial_balance,  # [11] portfolio: balance_norm
-            (position * price) / initial_balance,  # [12] portfolio: pos_value_norm
-            (balance + position * price) / initial_balance,  # [13] portfolio: val_norm
-            funding_raw * 1000.0,  # [14] funding_rate_norm
-            float(np.clip(ob_imb, -1.0, 1.0)),  # [15] ob_imbalance
+            open_ / p - 1.0,                            # [0]  open_rel
+            high / p - 1.0,                             # [1]  high_rel
+            low / p - 1.0,                              # [2]  low_rel
+            1.0 if position > 0 else 0.0,               # [3]  in_position
+            float(np.log1p(max(volume, 0.0)) / 15.0),  # [4]  vol_norm
+            float(ind.get("rsi", 50.0)) / 100.0,       # [5]  rsi_norm
+            macd_val / p,                               # [6]  macd_norm
+            macd_signal_val / p,                        # [7]  macd_sig_norm
+            bb_upper / p - 1.0,                         # [8]  bb_upper_rel
+            float(ind.get("bb_middle", price)) / p - 1.0,  # [9]  bb_mid_rel
+            bb_lower / p - 1.0,                         # [10] bb_lower_rel
+            balance / initial_balance,                  # [11] balance_norm
+            (position * price) / initial_balance,       # [12] pos_value_norm
+            (balance + position * price) / initial_balance,  # [13] val_norm
+            funding_raw * 1000.0,                       # [14] funding_rate_norm
+            float(np.clip(ob_imb, -1.0, 1.0)),         # [15] ob_imbalance
             float(np.clip(pcr_raw / 3.0, 0.0, 1.0)),  # [16] pcr_norm
-            fg_raw / 100.0,  # [17] fear_greed_norm
-            float(np.clip(iv_raw / 20.0, -1.0, 1.0)),  # [18] iv_skew_norm
+            fg_raw / 100.0,                             # [17] fear_greed_norm
+            float(np.clip(iv_raw / 20.0, -1.0, 1.0)), # [18] iv_skew_norm
             float(np.clip(basis_raw / 5.0, -1.0, 1.0)),  # [19] basis_norm
-            gt_raw / 100.0,  # [20] google_trends_norm
+            gt_raw / 100.0,                             # [20] google_trends_norm
+            atr_val / p,                                # [21] atr_norm
         ],
         dtype=np.float32,
     )
-
-    # Нормализация только для первых 11 элементов (OHLCV + индикаторы)
-    # Индексы 11-20 не нормализуются: портфельные и контекстные уже в нужном масштабе
-    # volume (index 4) уже log-трансформирован — пропускаем z-score для него
-    if norm_stats:
-        for i, col in enumerate(_MARKET_COLS):
-            if col in norm_stats and col != "volume":  # volume already log-transformed
-                mu, sd = norm_stats[col]
-                if sd > 0:
-                    raw[i] = (raw[i] - mu) / sd
 
     return raw
 
@@ -240,36 +233,6 @@ class SACSignal:
 
         try:
             obs = _snap_to_obs(snap, self._norm_stats, balance, position, entry_price)
-            # Detect normstats drift: features far outside training distribution
-            if self._norm_stats and np.any(np.abs(obs[:11]) > 3.0):
-                outliers = [_MARKET_COLS[i] for i in range(11) if abs(obs[i]) > 3.0]
-                outlier_frac = len(outliers) / len(_MARKET_COLS)
-                if outlier_frac >= _MAX_OUTLIER_FRAC:
-                    self._consecutive_drifts += 1
-                    self.logger.warning(
-                        "SAC normstats drift for %s: %d/%d features out of range "
-                        "(consecutive=%d/%d): %s",
-                        snap.get("symbol", "?"),
-                        len(outliers),
-                        len(_MARKET_COLS),
-                        self._consecutive_drifts,
-                        _DISABLE_AFTER_DRIFTS,
-                        outliers,
-                    )
-                    if self._consecutive_drifts >= _DISABLE_AFTER_DRIFTS:
-                        self.logger.error(
-                            "SAC disabled: normstats drifted for %d consecutive calls. "
-                            "Retrain the model to restore SAC signals.",
-                            self._consecutive_drifts,
-                        )
-                        self.loaded = False
-                    return default
-                self.logger.warning(
-                    "SAC obs outliers (normstats drift?) for %s: %s",
-                    snap.get("symbol", "?"),
-                    outliers,
-                )
-            self._consecutive_drifts = 0
             action, _ = self._model.predict(obs, deterministic=True)
             a = float(action[0])
 
