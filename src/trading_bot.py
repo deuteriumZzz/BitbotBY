@@ -174,6 +174,8 @@ class TradingBot:
             notifier=self.telegram,
             runtime_config=self._runtime_config,
             get_state=self._get_bot_state,
+            on_mode_switch=self._handle_mode_switch,
+            on_restart=self._handle_restart,
         )
         self._cycle = CycleRunner(
             news=self.news,
@@ -519,6 +521,12 @@ class TradingBot:
         try:
             bal = await self.api.get_balance()
             if bal:
+                if not hasattr(self, "_balance_structure_logged"):
+                    self._balance_structure_logged = True
+                    usdt = {k: bal.get(k, {}).get("USDT") for k in ("free", "used", "total")}
+                    info_usdt = (bal.get("info") or {})
+                    logger.info("[BALANCE DEBUG] free/used/total USDT: %s", usdt)
+                    logger.info("[BALANCE DEBUG] raw info keys: %s", list(info_usdt.keys())[:20])
                 value = float(bal.get("free", {}).get("USDT", 0))
                 self._live_balance_cache = value
                 return value
@@ -572,6 +580,27 @@ class TradingBot:
         await self._position_monitor.close_all_positions(
             self._monitored, self._monitored_lock, reason=reason
         )
+
+    async def _handle_restart(self) -> None:
+        """Останавливает бота — Docker с restart: unless-stopped поднимет заново."""
+        import os as _os
+        import signal as _signal
+        logger.info("Restart requested via Telegram — stopping process")
+        await self.stop()
+        _os.kill(_os.getpid(), _signal.SIGTERM)
+
+    async def _handle_mode_switch(self) -> None:
+        """Вызывается при переключении paper ↔ live через Telegram.
+
+        Очищает _monitored от старых позиций и синхронизирует с биржей
+        чтобы paper-позиции не отображались в live режиме и наоборот.
+        """
+        async with self._monitored_lock:
+            self._monitored.clear()
+        self._peak_balance = 0.0
+        self._drawdown_consec = 0
+        logger.info("Mode switch: _monitored cleared, peak balance reset")
+        await self._reconcile_positions()
 
     def _is_atr_spike(self, market_data: Dict) -> bool:
         """Возвращает True если ATR вырос в ATR_SPIKE_MULT раз от медианы.

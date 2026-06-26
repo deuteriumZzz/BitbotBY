@@ -30,7 +30,7 @@ Telegram-команды и inline-панель управления BitbotBY.
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, Optional
 
 from config import Config
 
@@ -734,10 +734,14 @@ class TelegramCommander:
         notifier: Any,
         runtime_config: Any,
         get_state: Callable[[], Dict[str, Any]],
+        on_mode_switch: "Optional[Callable[[], Any]]" = None,
+        on_restart: "Optional[Callable[[], Any]]" = None,
     ) -> None:
         self._notifier = notifier
         self._rc = runtime_config
         self._get_state = get_state
+        self._on_mode_switch = on_mode_switch
+        self._on_restart = on_restart
         self._sac_training = False
         self._backtesting = False
         self._background_tasks: set = set()
@@ -1920,6 +1924,18 @@ class TelegramCommander:
             text, kb = self._build_settings()
             await self._edit(query, "▶️ *Торговля возобновлена*\n\n" + text, kb)
 
+        elif data == "restart_bot":
+            await self._edit(
+                query,
+                "🔄 *Перезапуск бота...*\n\nБот остановится и Docker поднимет его заново.\n"
+                "Это займёт ~10 секунд.",
+                InlineKeyboardMarkup([]),
+            )
+            if self._on_restart:
+                _t = asyncio.create_task(self._on_restart())
+                self._background_tasks.add(_t)
+                _t.add_done_callback(self._background_tasks.discard)
+
         elif data == "toggle_auto_exec":
             self._rc.set_auto_execute(not self._rc.get_auto_execute())
             text, kb = self._build_settings()
@@ -2130,6 +2146,12 @@ class TelegramCommander:
             Config.PAPER_TRADING = new_paper
             _os.environ["PAPER_TRADING"] = "true" if new_paper else "false"
             self._rc.set_paper_trading_override(new_paper)
+            # Очищаем paper-позиции и синхронизируем с биржей
+            if self._on_mode_switch:
+                try:
+                    await self._on_mode_switch()
+                except Exception as _e:
+                    logger.warning("on_mode_switch callback failed: %s", _e)
             mode_name = (
                 "📄 PAPER (симуляция)" if new_paper else "💰 LIVE (реальная торговля)"
             )
@@ -2143,8 +2165,14 @@ class TelegramCommander:
                 f"🚨 *ВАЖНО! РЕЖИМ ТОРГОВЛИ ИЗМЕНЁН*\n\n"
                 f"Текущий режим: *{mode_name}*\n\n"
                 f"{detail}\n\n"
-                f"Изменение сохранено и восстановится после перезапуска.",
-                _kb_main(new_paper),
+                f"Позиции синхронизированы. Нажми *Перезапустить* чтобы"
+                f" применить все изменения чисто.",
+                InlineKeyboardMarkup([
+                    [InlineKeyboardButton(
+                        "🔄 Перезапустить бота", callback_data="restart_bot"
+                    )],
+                    [InlineKeyboardButton("« Главная", callback_data="main")],
+                ]),
             )
 
         # ── Профиль рынка ────────────────────────────────────────────────────
