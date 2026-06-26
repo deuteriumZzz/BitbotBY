@@ -114,7 +114,9 @@ class TradingBot:
         )
         self._paper_balance: float = Config.INITIAL_BALANCE
         self._live_balance_cache: float = Config.INITIAL_BALANCE
-        # Пик баланса для hard drawdown halt (обновляется в main loop)
+        # Equity (баланс + unrealized PnL) для drawdown halt
+        self._live_equity_cache: float = Config.INITIAL_BALANCE
+        # Пик equity для hard drawdown halt (обновляется в main loop)
         self._peak_balance: float = 0.0
         # Счётчик подтверждения просадки: halt только после N циклов подряд
         self._drawdown_consec: int = 0
@@ -521,19 +523,18 @@ class TradingBot:
         try:
             bal = await self.api.get_balance()
             if bal:
-                if not hasattr(self, "_balance_structure_logged"):
-                    self._balance_structure_logged = True
-                    usdt = {k: bal.get(k, {}).get("USDT") for k in ("free", "used", "total")}
-                    info = bal.get("info") or {}
-                    result = info.get("result") or {}
-                    lst = result.get("list") or []
-                    first = lst[0] if lst else {}
-                    coins = first.get("coin") or []
-                    usdt_coin = next((c for c in coins if c.get("coin") == "USDT"), {})
-                    logger.info("[BALANCE DEBUG] free/used/total: %s", usdt)
-                    logger.info("[BALANCE DEBUG] account keys: %s", list(first.keys()))
-                    logger.info("[BALANCE DEBUG] USDT coin: %s", usdt_coin)
-                value = float(bal.get("free", {}).get("USDT", 0))
+                # Bybit UNIFIED: ccxt не маппит free/total — читаем raw поля
+                info_result = ((bal.get("info") or {}).get("result") or {})
+                account = ((info_result.get("list") or [{}])[0])
+                available = account.get("totalAvailableBalance")
+                equity = account.get("totalEquity")
+                if available is not None:
+                    value = float(available)
+                    self._live_equity_cache = float(equity) if equity else value
+                else:
+                    # fallback: стандартный ccxt путь (не-UNIFIED аккаунты)
+                    value = float((bal.get("free") or {}).get("USDT") or 0)
+                    self._live_equity_cache = value
                 self._live_balance_cache = value
                 return value
         except (ccxt.NetworkError, ccxt.ExchangeError) as e:
@@ -961,21 +962,26 @@ class TradingBot:
                 )
                 balance = await self._get_balance_usdt()
 
-                # ── Обновляем пик баланса ──────────────────────────────────
-                if balance > self._peak_balance:
-                    self._peak_balance = balance
+                # ── Обновляем пик equity ───────────────────────────────────
+                equity = (
+                    self._live_equity_cache
+                    if not Config.PAPER_TRADING
+                    else balance
+                )
+                if equity > self._peak_balance:
+                    self._peak_balance = equity
 
                 # ── [П.2] Hard drawdown halt (с подтверждением) ───────────
-                # Просадка от пика >= MAX_DRAWDOWN_PERCENT должна держаться
-                # DRAWDOWN_CONFIRM_CYCLES циклов подряд (защита от flash crash).
+                # Считаем по equity (включает unrealized PnL) — точнее чем
+                # по свободному балансу. Подтверждение N циклов подряд.
                 # В paper режиме: уведомляет но не останавливает торговлю.
                 if (
                     self._peak_balance > 0
-                    and (self._peak_balance - balance) / self._peak_balance
+                    and (self._peak_balance - equity) / self._peak_balance
                     >= Config.MAX_DRAWDOWN_PERCENT
                 ):
                     self._drawdown_consec += 1
-                    dd_pct = (self._peak_balance - balance) / self._peak_balance * 100
+                    dd_pct = (self._peak_balance - equity) / self._peak_balance * 100
                     confirm = self._runtime_config.get_drawdown_confirm_cycles()
                     logger.warning(
                         "Drawdown %.1f%% from peak $%.2f — confirm %d/%d",
