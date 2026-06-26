@@ -22,9 +22,11 @@ logger = logging.getLogger(__name__)
 # bluechip / пусто → sac_model.zip (дефолт), altcoin → sac_model_altcoin.zip
 MODEL_PATH = os.getenv(
     "SAC_MODEL_PATH",
-    "models/sac_model_altcoin.zip"
-    if os.getenv("SAC_PROFILE") == "altcoin"
-    else "models/sac_model.zip",
+    (
+        "models/sac_model_altcoin.zip"
+        if os.getenv("SAC_PROFILE") == "altcoin"
+        else "models/sac_model.zip"
+    ),
 )
 # Количество шагов обучения (переопределяется env-переменной TOTAL_TIMESTEPS)
 TOTAL_TIMESTEPS = int(os.getenv("TOTAL_TIMESTEPS", "500000"))
@@ -231,7 +233,9 @@ def _finetune_on_experiences(model: Any, norm_stats: Dict[str, Any]) -> None:
 
     _profile = os.getenv("SAC_PROFILE", "")
     exp_path = (
-        "data/experiences_altcoin.jsonl" if _profile == "altcoin" else "data/experiences.jsonl"
+        "data/experiences_altcoin.jsonl"
+        if _profile == "altcoin"
+        else "data/experiences.jsonl"
     )
     records = _load_exp(path=exp_path)
     if len(records) < 50:

@@ -57,7 +57,7 @@ class MarketScanner:
         :param n: Сколько монет вернуть после всех фильтров.
         :param forced: Символы, всегда добавляемые в список (через /add).
         :param excluded: Символы, исключённые из сканирования (через /remove).
-        :param bluechip_bases: Если задан — вернуть только монеты из этого набора (bluechip сезон).
+        :param bluechip_bases: Если задан — вернуть только монеты из этого набора.
         :param altcoin_exclude_bases: Если задан — исключить эти базы (altcoin сезон).
         :return: Топ-N монет нужного сезона в формате ccxt ('BTC/USDT').
         """

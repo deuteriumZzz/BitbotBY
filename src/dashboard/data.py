@@ -17,7 +17,11 @@ logger = logging.getLogger(__name__)
 
 _DB_PATH = os.path.join(
     "data",
-    "trades_paper.db" if os.getenv("PAPER_TRADING", "").lower() == "true" else "trades.db",
+    (
+        "trades_paper.db"
+        if os.getenv("PAPER_TRADING", "").lower() == "true"
+        else "trades.db"
+    ),
 )
 
 # ── Prometheus gauges ─────────────────────────────────────────────────────────
