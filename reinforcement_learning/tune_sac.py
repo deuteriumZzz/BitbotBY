@@ -27,14 +27,9 @@ logger = logging.getLogger(__name__)
 
 _SAC_PROFILE = os.getenv("SAC_PROFILE", "")
 
-# Фиксированные списки монет по сезону.
-# Можно переопределить через TUNE_SYMBOLS="BTC/USDT,ETH/USDT" в .env
-_BLUECHIP_SYMBOLS: List[str] = [
-    "BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT",
-]
-_ALTCOIN_EXCLUDE: set = {
-    "BTC", "ETH", "BNB", "USDC", "USDT", "BUSD", "TUSD", "DAI",
-}
+from src.runtime_config import BLUECHIP_BASES  # noqa: E402
+
+_ALTCOIN_EXCLUDE: set = BLUECHIP_BASES | {"USDC", "USDT", "BUSD", "TUSD", "DAI"}
 _TUNE_TOP_N = int(os.getenv("TUNE_TOP_N", "5"))  # символов для тюнинга
 HYPERPARAMS_PATH = (
     f"models/best_hyperparams_{_SAC_PROFILE}.json"
@@ -179,17 +174,21 @@ async def _get_tune_symbols(api: "Any", loader: "Any") -> List[str]:
         logger.info("TUNE_SYMBOLS override: %s", symbols)
         return symbols
 
-    if _SAC_PROFILE == "bluechip":
-        logger.info("Season=bluechip: using fixed bluechip list %s", _BLUECHIP_SYMBOLS)
-        return _BLUECHIP_SYMBOLS
-
-    # altcoin или пусто — сканируем биржу
     from src.market_scanner import MarketScanner
 
     scanner = MarketScanner(api, loader)
+
+    if _SAC_PROFILE == "bluechip":
+        # Из топ-50 оставляем только те что классифицируются как bluechip
+        all_symbols = await scanner.get_top_symbols(50)
+        symbols = [s for s in all_symbols if s.split("/")[0] in BLUECHIP_BASES][:_TUNE_TOP_N]
+        logger.info("Season=bluechip: %d symbols from top-50 %s", len(symbols), symbols)
+        return symbols
+
     all_symbols = await scanner.get_top_symbols(50)
 
     if _SAC_PROFILE == "altcoin":
+        # Из топа исключаем все bluechip — только настоящие альты
         symbols = [
             s for s in all_symbols
             if s.split("/")[0] not in _ALTCOIN_EXCLUDE

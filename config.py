@@ -5,28 +5,24 @@ from typing import List
 # Стейблкоины, исключённые из сканирования и торговли
 STABLECOIN_BASES: frozenset[str] = frozenset(
     {
-        "USDC",
-        "BUSD",
-        "FDUSD",
-        "TUSD",
-        "DAI",
-        "USDE",
-        "PYUSD",
-        "FRAX",
-        "LUSD",
-        "GUSD",
-        "USDP",
-        "SUSD",
-        "CUSD",
-        "USDJ",
-        "HUSD",
-        "EURS",
-        "EURT",
-        "USDD",
-        "CRVUSD",
-        "MKUSD",
+        "USDC", "BUSD", "FDUSD", "TUSD", "DAI", "USDE", "PYUSD",
+        "FRAX", "LUSD", "GUSD", "USDP", "SUSD", "CUSD", "USDJ",
+        "HUSD", "EURS", "EURT", "USDD", "CRVUSD", "MKUSD",
     }
 )
+
+# Токены не подходящие для нормальной торговли:
+# leveraged ETF, commodity трекеры, синтетика
+JUNK_BASES: frozenset[str] = frozenset(
+    {
+        "SOXL", "SOXS", "TQQQ", "SQQQ", "NVDL", "TSLL", "TSLS",
+        "XAU", "XAG", "XOI",
+        "SLX",
+    }
+)
+
+# Тикеры с такими префиксами — мусор (1000PEPE, 1000SHIB и т.д.)
+JUNK_PREFIXES: tuple[str, ...] = ("1000", "10000", "100000")
 
 
 @dataclass
