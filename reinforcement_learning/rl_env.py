@@ -31,10 +31,14 @@ class TradingEnv(gym.Env):
         else                → HOLD
 
     Пространство наблюдений Box(-inf, inf, shape=(21,)):
-        [open, high, low, close, volume, rsi, macd, macd_signal,
-         bb_upper, bb_middle, bb_lower, balance, position, current_value,
+        [open_rel, high_rel, low_rel, in_position, vol_norm, rsi_norm,
+         macd_norm, macd_sig_norm, bb_upper_rel, bb_mid_rel, bb_lower_rel,
+         balance_norm, pos_value_norm, val_norm,
          funding_rate_norm, ob_imbalance, pcr_norm, fear_greed_norm,
          iv_skew_norm, basis_norm, google_trends_norm]
+
+    Все ценовые фичи нормализованы относительно close — BTC ($90k)
+    и SOL ($150) дают одинаковый масштаб градиентов нейросети.
     """
 
     def __init__(
@@ -115,19 +119,30 @@ class TradingEnv(gym.Env):
         pos_value_norm = (self.position * current_price) / self.initial_balance
         val_norm = self.current_value / self.initial_balance
 
+        p = price if price > 0 else 1.0  # защита от деления на 0
+        open_rel = float(row["open"]) / p - 1.0
+        high_rel = float(row["high"]) / p - 1.0
+        low_rel = float(row["low"]) / p - 1.0
+        macd_norm = float(row.get("macd", 0)) / p
+        macd_sig_norm = float(row.get("macd_signal", 0)) / p
+        bb_upper_rel = float(row.get("bb_upper", price * 1.02)) / p - 1.0
+        bb_mid_rel = float(row.get("bb_middle", price)) / p - 1.0
+        bb_lower_rel = float(row.get("bb_lower", price * 0.98)) / p - 1.0
+        in_position = 1.0 if self.position > 0 else 0.0
+
         return np.array(
             [
-                float(row["open"]),
-                float(row["high"]),
-                float(row["low"]),
-                price,
+                open_rel,       # [0] откр. относительно close
+                high_rel,       # [1] макс. относительно close
+                low_rel,        # [2] мин. относительно close
+                in_position,    # [3] есть позиция (0/1)
                 vol_norm,
-                float(row.get("rsi", 50)) / 100.0,  # 0-100 → 0-1
-                float(row.get("macd", 0)),
-                float(row.get("macd_signal", 0)),
-                float(row.get("bb_upper", price * 1.02)),
-                float(row.get("bb_middle", price)),
-                float(row.get("bb_lower", price * 0.98)),
+                float(row.get("rsi", 50)) / 100.0,
+                macd_norm,      # [6] MACD / close
+                macd_sig_norm,  # [7] MACD signal / close
+                bb_upper_rel,   # [8] верхняя полоса / close - 1
+                bb_mid_rel,     # [9] средняя полоса / close - 1
+                bb_lower_rel,   # [10] нижняя полоса / close - 1
                 balance_norm,
                 pos_value_norm,
                 val_norm,
