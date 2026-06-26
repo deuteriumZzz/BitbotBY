@@ -524,8 +524,8 @@ class TradingBot:
             bal = await self.api.get_balance()
             if bal:
                 # Bybit UNIFIED: ccxt не маппит free/total — читаем raw поля
-                info_result = ((bal.get("info") or {}).get("result") or {})
-                account = ((info_result.get("list") or [{}])[0])
+                info_result = (bal.get("info") or {}).get("result") or {}
+                account = (info_result.get("list") or [{}])[0]
                 available = account.get("totalAvailableBalance")
                 equity = account.get("totalEquity")
                 if available is not None:
@@ -598,6 +598,7 @@ class TradingBot:
         """
         import os as _os
         import signal as _signal
+
         logger.info("Restart requested via Telegram — sending SIGTERM in 2s")
         await asyncio.sleep(2)
         _os.kill(_os.getpid(), _signal.SIGTERM)
@@ -635,13 +636,17 @@ class TradingBot:
             df = market_data.get(sym)
             if df is None or "atr" not in df.columns or len(df) < lookback + 2:
                 continue
-            baseline = df["atr"].iloc[-(lookback + 1):-1].median()
+            baseline = df["atr"].iloc[-(lookback + 1) : -1].median()
             current = df["atr"].iloc[-1]
             if baseline > 0 and current >= baseline * mult:
                 logger.warning(
                     "ATR spike on %s: current=%.4f baseline=%.4f"
                     " (%.1fx >= %.1fx threshold)",
-                    sym, current, baseline, current / baseline, mult,
+                    sym,
+                    current,
+                    baseline,
+                    current / baseline,
+                    mult,
                 )
                 return True
         return False
@@ -964,9 +969,7 @@ class TradingBot:
 
                 # ── Обновляем пик equity ───────────────────────────────────
                 equity = (
-                    self._live_equity_cache
-                    if not Config.PAPER_TRADING
-                    else balance
+                    self._live_equity_cache if not Config.PAPER_TRADING else balance
                 )
                 if equity > self._peak_balance:
                     self._peak_balance = equity
@@ -985,14 +988,18 @@ class TradingBot:
                     confirm = self._runtime_config.get_drawdown_confirm_cycles()
                     logger.warning(
                         "Drawdown %.1f%% from peak $%.2f — confirm %d/%d",
-                        dd_pct, self._peak_balance, self._drawdown_consec, confirm,
+                        dd_pct,
+                        self._peak_balance,
+                        self._drawdown_consec,
+                        confirm,
                     )
                     if self._drawdown_consec >= confirm:
                         if Config.PAPER_TRADING:
                             logger.warning(
                                 "[PAPER] Hard drawdown halt would trigger:"
                                 " %.1f%% drawdown confirmed %d cycles",
-                                dd_pct, confirm,
+                                dd_pct,
+                                confirm,
                             )
                             await self.telegram.notify(
                                 f"⚠️ *[PAPER] Hard drawdown halt*: просадка"
@@ -1008,7 +1015,9 @@ class TradingBot:
                             logger.critical(
                                 "Hard drawdown halt: %.1f%% confirmed %d cycles"
                                 " — closing all, pausing %.0fh",
-                                dd_pct, confirm, Config.DRAWDOWN_HALT_HOURS,
+                                dd_pct,
+                                confirm,
+                                Config.DRAWDOWN_HALT_HOURS,
                             )
                             await self._close_all_open_positions("hard_drawdown")
                             await self.telegram.notify(
@@ -1040,7 +1049,8 @@ class TradingBot:
                         logger.warning(
                             "[PAPER] Daily loss limit would trigger:"
                             " balance $%.2f, would pause %.0f s",
-                            balance, sleep_secs,
+                            balance,
+                            sleep_secs,
                         )
                         await self.telegram.notify(
                             f"⚠️ *[PAPER] Дневной лимит потерь*:"
@@ -1155,8 +1165,7 @@ class TradingBot:
         try:
             stop_balance = await self._get_balance_usdt()
             await self.telegram.notify(
-                f"⛔ *BitbotBY остановлен*\n"
-                f"Баланс: `${stop_balance:,.2f}`"
+                f"⛔ *BitbotBY остановлен*\n" f"Баланс: `${stop_balance:,.2f}`"
             )
         except Exception:
             pass

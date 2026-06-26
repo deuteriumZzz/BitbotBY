@@ -308,7 +308,11 @@ class RuntimeConfig:
         """Кол-во циклов подряд для подтверждения просадки перед halt (1–10)."""
         val = self._get(_KEY_DRAWDOWN_CONFIRM)
         try:
-            return max(1, min(int(val), 10)) if val else int(getattr(Config, "DRAWDOWN_CONFIRM_CYCLES", 3))
+            return (
+                max(1, min(int(val), 10))
+                if val
+                else int(getattr(Config, "DRAWDOWN_CONFIRM_CYCLES", 3))
+            )
         except (ValueError, TypeError):
             return 3
 

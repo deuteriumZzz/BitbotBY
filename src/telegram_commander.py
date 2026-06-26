@@ -426,7 +426,8 @@ def _kb_risk_menu(
         [
             InlineKeyboardButton("➖", callback_data="dd_confirm_less"),
             InlineKeyboardButton(
-                f"🛡 Flash-защита: {confirm_cycles} цикл.", callback_data="dd_confirm_noop"
+                f"🛡 Flash-защита: {confirm_cycles} цикл.",
+                callback_data="dd_confirm_noop",
             ),
             InlineKeyboardButton("➕", callback_data="dd_confirm_more"),
         ],
@@ -1928,7 +1929,8 @@ class TelegramCommander:
         elif data == "restart_bot":
             await self._edit(
                 query,
-                "🔄 *Перезапуск бота...*\n\nБот остановится и Docker поднимет его заново.\n"
+                "🔄 *Перезапуск бота...*\n\n"
+                "Бот остановится и Docker поднимет его заново.\n"
                 "Это займёт ~10 секунд.",
                 InlineKeyboardMarkup([]),
             )
@@ -2168,12 +2170,16 @@ class TelegramCommander:
                 f"{detail}\n\n"
                 f"Позиции синхронизированы. Нажми *Перезапустить* чтобы"
                 f" применить все изменения чисто.",
-                InlineKeyboardMarkup([
-                    [InlineKeyboardButton(
-                        "🔄 Перезапустить бота", callback_data="restart_bot"
-                    )],
-                    [InlineKeyboardButton("« Главная", callback_data="main")],
-                ]),
+                InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "🔄 Перезапустить бота", callback_data="restart_bot"
+                            )
+                        ],
+                        [InlineKeyboardButton("« Главная", callback_data="main")],
+                    ]
+                ),
             )
 
         # ── Профиль рынка ────────────────────────────────────────────────────
@@ -2265,7 +2271,8 @@ class TelegramCommander:
             text, kb = self._build_risk()
             await self._edit(
                 query,
-                f"🛡 Flash-защита: `{new_val}` цикл. × 30с = `{new_val * 30}с`\n\n" + text,
+                f"🛡 Flash-защита: `{new_val}` цикл. × 30с = `{new_val * 30}с`\n\n"
+                + text,
                 kb,
             )
 
