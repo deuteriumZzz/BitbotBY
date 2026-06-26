@@ -402,7 +402,9 @@ def _kb_after_training(worse: bool = False) -> "InlineKeyboardMarkup":
     return InlineKeyboardMarkup(rows)
 
 
-def _kb_risk_menu(drawdown_on: bool, max_pos: int = 3) -> "InlineKeyboardMarkup":
+def _kb_risk_menu(
+    drawdown_on: bool, max_pos: int = 3, confirm_cycles: int = 3
+) -> "InlineKeyboardMarkup":
     dd_label = (
         "✅ Защита просадки: ВКЛ  →  выкл"
         if drawdown_on
@@ -420,6 +422,13 @@ def _kb_risk_menu(drawdown_on: bool, max_pos: int = 3) -> "InlineKeyboardMarkup"
             InlineKeyboardButton("➕", callback_data="pos_more"),
         ],
         [InlineKeyboardButton(dd_label, callback_data="toggle_drawdown")],
+        [
+            InlineKeyboardButton("➖", callback_data="dd_confirm_less"),
+            InlineKeyboardButton(
+                f"🛡 Flash-защита: {confirm_cycles} цикл.", callback_data="dd_confirm_noop"
+            ),
+            InlineKeyboardButton("➕", callback_data="dd_confirm_more"),
+        ],
         [InlineKeyboardButton("📊 Управление плечом →", callback_data="lev_menu")],
         [InlineKeyboardButton("« Настройки", callback_data="settings")],
     ]
@@ -1021,18 +1030,20 @@ class TelegramCommander:
         max_pos = r["max_positions"]
         rpt = r["risk_per_trade"]
         dd = r["drawdown_scale_enabled"]
+        confirm = r["drawdown_confirm_cycles"]
         dd_icon = "✅" if dd else "❌"
         text = (
             f"⚖️ *Риск-профиль*\n\n"
             f"Макс. позиций: `{max_pos}`\n"
             f"Риск на сделку: `{rpt * 100:.1f}%`\n"
-            f"Защита просадки: {dd_icon}\n\n"
+            f"Защита просадки: {dd_icon}\n"
+            f"Flash-защита (циклов): `{confirm}` × 30с = `{confirm * 30}с`\n\n"
             f"_Пресеты:_\n"
             f"🟢 Конс. — 2 поз, 1%, защита ВКЛ\n"
             f"🟡 Умер. — 3 поз, 2%, защита ВКЛ\n"
             f"🔴 Агр. — 5 поз, 4%, защита ВЫКЛ\n"
         )
-        return text, _kb_risk_menu(dd, max_pos)
+        return text, _kb_risk_menu(dd, max_pos, confirm)
 
     def _build_hours_text(self) -> str:
         hours = self._rc.get_trading_hours()
@@ -2214,6 +2225,20 @@ class TelegramCommander:
             text, kb = self._build_risk()
             icon = "✅" if not current else "❌"
             await self._edit(query, f"{icon} Защита просадки изменена\n\n" + text, kb)
+
+        elif data in ("dd_confirm_more", "dd_confirm_less", "dd_confirm_noop"):
+            if data == "dd_confirm_noop":
+                await query.answer()
+                return
+            cur = self._rc.get_drawdown_confirm_cycles()
+            new_val = min(cur + 1, 10) if data == "dd_confirm_more" else max(cur - 1, 1)
+            self._rc.set_drawdown_confirm_cycles(new_val)
+            text, kb = self._build_risk()
+            await self._edit(
+                query,
+                f"🛡 Flash-защита: `{new_val}` цикл. × 30с = `{new_val * 30}с`\n\n" + text,
+                kb,
+            )
 
         elif data in ("pos_more", "pos_less", "pos_paper_max", "pos_noop"):
             if data == "pos_noop":
