@@ -388,8 +388,8 @@ def train(
     # Загружаем лучшие гиперпараметры Optuna, если файл существует
     _profile = os.getenv("SAC_PROFILE", "")
     hp_path = (
-        f"models/best_hyperparams_{_profile}.json"
-        if _profile
+        "models/best_hyperparams_altcoin.json"
+        if _profile == "altcoin"
         else "models/best_hyperparams.json"
     )
     policy_kwargs: dict = {}
