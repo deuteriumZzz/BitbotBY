@@ -871,7 +871,7 @@ class TradingBot:
                     if df is not None and not df.empty:
                         try:
                             _local_strat = create_strategy(strat)
-                            sig = await _local_strat.get_signal(df)
+                            sig = _local_strat.generate_signal(df)
                         except (ValueError, KeyError):
                             pass
                     action = sig.get("action", "hold")
