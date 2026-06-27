@@ -879,12 +879,27 @@ class TradingBot:
                         except (ValueError, KeyError):
                             pass
                     action = sig.get("action", "hold")
+                    _price = float(snap.get("price") or 0.0)
+                    _sl_pct = Config.STOP_LOSS_PERCENT
+                    _sl = (
+                        _price * (1 - _sl_pct)
+                        if action == "buy"
+                        else _price * (1 + _sl_pct)
+                    ) if _price else 0.0
+                    _tp = (
+                        _price * (1 + 2 * _sl_pct)
+                        if action == "buy"
+                        else _price * (1 - 2 * _sl_pct)
+                    ) if _price else 0.0
                     recs.append(
                         {
                             "symbol": sym,
                             "action": action,
                             "strategy": strat,
                             "confidence": conf,
+                            "entry": _price,
+                            "stop_loss": _sl,
+                            "take_profit": _tp,
                             "reasoning": "Local analysis",
                         }
                     )
