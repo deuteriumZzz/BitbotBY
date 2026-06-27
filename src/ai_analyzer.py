@@ -181,7 +181,16 @@ class AIAnalyzer:
             for s in snapshots
         ]
         data_block = json.dumps(slim, ensure_ascii=False)
-        min_conf = Config.MIN_SIGNAL_CONFIDENCE
+        _rc = getattr(self, "_runtime_config", None)
+        min_conf = (
+            _rc.get_signal_confidence(Config.PAPER_TRADING)
+            if _rc is not None
+            else (
+                Config.MIN_SIGNAL_CONFIDENCE_PAPER
+                if Config.PAPER_TRADING
+                else Config.MIN_SIGNAL_CONFIDENCE
+            )
+        )
         return (
             f"Analyze the following crypto market data and provide "
             f"trading recommendations.\n\n"
@@ -227,7 +236,17 @@ class AIAnalyzer:
                 continue
             if not (0.0 <= conf <= 1.0):
                 continue
-            if conf < Config.MIN_SIGNAL_CONFIDENCE:
+            _rc2 = getattr(self, "_runtime_config", None)
+            _min_conf = (
+                _rc2.get_signal_confidence(Config.PAPER_TRADING)
+                if _rc2 is not None
+                else (
+                    Config.MIN_SIGNAL_CONFIDENCE_PAPER
+                    if Config.PAPER_TRADING
+                    else Config.MIN_SIGNAL_CONFIDENCE
+                )
+            )
+            if conf < _min_conf:
                 continue
             r["confidence"] = conf
             valid.append(r)

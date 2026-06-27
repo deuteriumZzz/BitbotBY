@@ -113,6 +113,10 @@ class Config:
     DEFAULT_STRATEGY: str = os.getenv("ACTIVE_STRATEGY", "ema_crossover")
     # Минимальный confidence для исполнения сигнала (0.0–1.0)
     MIN_SIGNAL_CONFIDENCE: float = float(os.getenv("MIN_SIGNAL_CONFIDENCE", "0.65"))
+    # Порог для paper режима — ниже чтобы накопить больше сделок для обучения SAC
+    MIN_SIGNAL_CONFIDENCE_PAPER: float = float(
+        os.getenv("MIN_SIGNAL_CONFIDENCE_PAPER", "0.60")
+    )
 
     # ── Data / Symbols ─────────────────────────────────────────────────────
     DATA_DIR: str = "data"

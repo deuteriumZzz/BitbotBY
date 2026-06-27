@@ -21,6 +21,8 @@ def _make_config(**kwargs):
     cfg.OPENAI_API_KEY = kwargs.get("OPENAI_API_KEY", "")
     cfg.GEMINI_API_KEY = kwargs.get("GEMINI_API_KEY", "")
     cfg.MIN_SIGNAL_CONFIDENCE = kwargs.get("MIN_SIGNAL_CONFIDENCE", 0.65)
+    cfg.MIN_SIGNAL_CONFIDENCE_PAPER = kwargs.get("MIN_SIGNAL_CONFIDENCE_PAPER", 0.60)
+    cfg.PAPER_TRADING = kwargs.get("PAPER_TRADING", False)
     cfg.AI_MODEL = kwargs.get("AI_MODEL", "claude-sonnet-4-6")
     cfg.DEEPSEEK_MODEL = kwargs.get("DEEPSEEK_MODEL", "deepseek-chat")
     cfg.GROQ_MODEL = kwargs.get("GROQ_MODEL", "llama-3.3-70b-versatile")
@@ -461,6 +463,7 @@ class TestAnalyze:
             ai._call_groq = AsyncMock(return_value=valid_response)
             ai._build_prompt = MagicMock(return_value="prompt")
             rc = MagicMock()
+            rc.get_signal_confidence.return_value = 0.65
             ai._runtime_config = rc
             await ai.analyze([{"symbol": "BTC/USDT"}], 10000)
         rc.set_last_ai_provider.assert_called_once_with("groq")

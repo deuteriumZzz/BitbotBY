@@ -50,6 +50,8 @@ _KEY_LAST_AI_PROVIDER = "bot:last_ai_provider"
 _KEY_SEASON_MODE = "bot:season_switch_mode"
 _KEY_SEASON_INDEX = "bot:season_index"
 _KEY_FEAR_GREED = "bot:fear_greed"
+_KEY_CONFIDENCE_LIVE = "bot:signal_confidence_live"
+_KEY_CONFIDENCE_PAPER = "bot:signal_confidence_paper"
 
 _AI_PROVIDERS = frozenset({"auto", "anthropic", "openai", "deepseek", "groq"})
 _LEVERAGE_MODES = frozenset({"fixed", "volatility", "full"})
@@ -272,6 +274,29 @@ class RuntimeConfig:
             return False
         self._set(_KEY_RISK_PER_TRADE, str(v))
         logger.info("Runtime: risk_per_trade → %.1f%%", v * 100)
+        return True
+
+    def get_signal_confidence(self, paper: bool) -> float:
+        key = _KEY_CONFIDENCE_PAPER if paper else _KEY_CONFIDENCE_LIVE
+        default = (
+            Config.MIN_SIGNAL_CONFIDENCE_PAPER
+            if paper
+            else Config.MIN_SIGNAL_CONFIDENCE
+        )
+        val = self._get(key)
+        try:
+            v = float(val) if val else default
+            return max(0.40, min(v, 0.95))
+        except (ValueError, TypeError):
+            return default
+
+    def set_signal_confidence(self, v: float, paper: bool) -> bool:
+        if not (0.40 <= v <= 0.95):
+            return False
+        key = _KEY_CONFIDENCE_PAPER if paper else _KEY_CONFIDENCE_LIVE
+        self._set(key, str(round(v, 2)))
+        mode = "paper" if paper else "live"
+        logger.info("Runtime: signal_confidence[%s] → %.2f", mode, v)
         return True
 
     def get_drawdown_scale_enabled(self) -> bool:

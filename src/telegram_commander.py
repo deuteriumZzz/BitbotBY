@@ -404,7 +404,11 @@ def _kb_after_training(worse: bool = False) -> "InlineKeyboardMarkup":
 
 
 def _kb_risk_menu(
-    drawdown_on: bool, max_pos: int = 3, confirm_cycles: int = 3
+    drawdown_on: bool,
+    max_pos: int = 3,
+    confirm_cycles: int = 3,
+    conf_live: float = 0.65,
+    conf_paper: float = 0.60,
 ) -> "InlineKeyboardMarkup":
     dd_label = (
         "✅ Защита просадки: ВКЛ  →  выкл"
@@ -430,6 +434,22 @@ def _kb_risk_menu(
                 callback_data="dd_confirm_noop",
             ),
             InlineKeyboardButton("➕", callback_data="dd_confirm_more"),
+        ],
+        [
+            InlineKeyboardButton(
+                f"🎯 Live ▼ {conf_live:.2f}", callback_data="conf_live_down"
+            ),
+            InlineKeyboardButton(
+                f"🎯 Live ▲ {conf_live:.2f}", callback_data="conf_live_up"
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                f"📄 Paper ▼ {conf_paper:.2f}", callback_data="conf_paper_down"
+            ),
+            InlineKeyboardButton(
+                f"📄 Paper ▲ {conf_paper:.2f}", callback_data="conf_paper_up"
+            ),
         ],
         [InlineKeyboardButton("📊 Управление плечом →", callback_data="lev_menu")],
         [InlineKeyboardButton("« Настройки", callback_data="settings")],
@@ -1038,18 +1058,21 @@ class TelegramCommander:
         dd = r["drawdown_scale_enabled"]
         confirm = r["drawdown_confirm_cycles"]
         dd_icon = "✅" if dd else "❌"
+        cl = self._rc.get_signal_confidence(paper=False)
+        cp = self._rc.get_signal_confidence(paper=True)
         text = (
             f"⚖️ *Риск-профиль*\n\n"
             f"Макс. позиций: `{max_pos}`\n"
             f"Риск на сделку: `{rpt * 100:.1f}%`\n"
             f"Защита просадки: {dd_icon}\n"
-            f"Flash-защита (циклов): `{confirm}` × 30с = `{confirm * 30}с`\n\n"
+            f"Flash-защита (циклов): `{confirm}` × 30с = `{confirm * 30}с`\n"
+            f"Порог сигнала — Live: `{cl:.2f}` / Paper: `{cp:.2f}`\n\n"
             f"_Пресеты:_\n"
             f"🟢 Конс. — 2 поз, 1%, защита ВКЛ\n"
             f"🟡 Умер. — 3 поз, 2%, защита ВКЛ\n"
             f"🔴 Агр. — 5 поз, 4%, защита ВЫКЛ\n"
         )
-        return text, _kb_risk_menu(dd, max_pos, confirm)
+        return text, _kb_risk_menu(dd, max_pos, confirm, cl, cp)
 
     def _build_hours_text(self) -> str:
         hours = self._rc.get_trading_hours()
@@ -2290,6 +2313,21 @@ class TelegramCommander:
             self._rc.set_max_positions(new_val)
             text, kb = self._build_risk()
             await self._edit(query, f"✅ Макс. позиций: `{new_val}`\n\n" + text, kb)
+
+        # ── Порог сигнала (внутри риск-меню) ────────────────────────────────
+        elif data in (
+            "conf_live_up",
+            "conf_live_down",
+            "conf_paper_up",
+            "conf_paper_down",
+        ):
+            paper = data.startswith("conf_paper")
+            delta = 0.05 if data.endswith("_up") else -0.05
+            current = self._rc.get_signal_confidence(paper=paper)
+            ok = self._rc.set_signal_confidence(round(current + delta, 2), paper=paper)
+            text, kb = self._build_risk()
+            note = "⚠️ Значение за пределами 0.40–0.95\n\n" if not ok else ""
+            await self._edit(query, note + text, kb)
 
         # ── Часы торговли ────────────────────────────────────────────────────
         elif data == "hours_info":

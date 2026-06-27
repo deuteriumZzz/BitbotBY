@@ -862,7 +862,10 @@ class TradingBot:
             for snap in snapshots:
                 sym = snap["symbol"]
                 strat, conf = self.combiner.ai.recommend_strategy_local(snap)
-                if conf >= Config.MIN_SIGNAL_CONFIDENCE:
+                _min_conf = self._runtime_config.get_signal_confidence(
+                    Config.PAPER_TRADING
+                )
+                if conf >= _min_conf:
                     df = market_data.get(sym)
                     sig = {}
                     if df is not None and not df.empty and self.strategy:
