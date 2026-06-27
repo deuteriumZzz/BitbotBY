@@ -70,13 +70,17 @@
 
 ### Торговые стратегии
 
-- **9 технических стратегий** — EMA crossover, RSI, MACD, Bollinger Bands, Scalping, Swing, Breakout, Mean Reversion, Trend Following
-- **Автопереключение стратегии** по режиму рынка:
-  - `trending_up` → Trend Following
-  - `trending_down` → EMA Crossover
-  - `ranging` → Mean Reversion
-- **AI-анализ** — Claude / DeepSeek / OpenAI анализирует OHLCV + контекст, генерирует сигнал
-- **SAC нейросеть** (Stable-Baselines3) — RL-агент, observation space 21 фича
+- **9 технических стратегий** — EMA crossover, RSI, MACD, Bollinger Bands, Scalping, Swing, Breakout, Mean Reversion, Trend Following, Volume Spike
+- **Автовыбор стратегии** по состоянию рынка (local fallback — когда AI недоступен):
+  - Volatile (BB широкие + объём ×2) → Breakout
+  - Цена у BB + RSI экстремум → Bollinger Bands
+  - Uptrend/Downtrend + MACD → Swing / Trend Following
+  - RSI < 30 или > 70 → RSI Momentum
+  - Объём ×3+ → Volume Spike
+  - Боковик + RSI 38–62 → Mean Reversion ← торгует в боковике
+  - Иное → EMA Crossover (confidence 0.60 — не торгует в live)
+- **AI-анализ** — Claude / DeepSeek / OpenAI / Groq анализирует OHLCV + контекст, выбирает из 9 стратегий, генерирует сигнал
+- **SAC нейросеть** (Stable-Baselines3) — RL-агент, observation space 22 признака
 
 ### Кванты
 
@@ -619,7 +623,7 @@ make live
 
 | Режим | Описание | Требования | Когда использовать |
 |-------|----------|------------|-------------------|
-| `local` | 9 стратегий + рыночный контекст | Только Bybit API | Нет ключей AI |
+| `local` | Автовыбор из 9 стратегий по индикаторам, без AI | Только Bybit API | Страховка когда AI недоступен; для live не рекомендуется |
 | `ai` | AI генерирует сигналы | Bybit + AI-ключ (Groq/DeepSeek/Claude/OpenAI) | **Рекомендуется для старта** |
 | `dqn` (SAC) | Только SAC нейросеть | Bybit + обученная модель | После `make train` |
 | `hybrid` | SAC + AI согласуются | Bybit + AI + модель | Консервативный |
@@ -960,7 +964,7 @@ SOL, цена = 150, ATR = 6 (ATR% = 4%)
 
 ## Онлайн-обучение модели
 
-Бот автоматически учится на своих сделках. Каждая закрытая позиция сохраняется в профильный файл (`data/experiences.jsonl` для bluechip/default или `data/experiences_altcoin.jsonl` для altcoin) и `data/trades.db` — опыт каждого сезона не смешивается.
+Бот автоматически учится на своих сделках. Каждая закрытая позиция сохраняется в профильный файл (`data/experiences.jsonl` для bluechip/default или `data/experiences_altcoin.jsonl` для altcoin) и `data/trades_paper.db` / `data/trades_live.db` — опыт каждого сезона не смешивается.
 
 ### Режимы обучения
 
