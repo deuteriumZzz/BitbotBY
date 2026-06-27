@@ -20,7 +20,7 @@ _DB_PATH = os.path.join(
     (
         "trades_paper.db"
         if os.getenv("PAPER_TRADING", "").lower() == "true"
-        else "trades.db"
+        else "trades_live.db"
     ),
 )
 

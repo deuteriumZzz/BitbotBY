@@ -579,13 +579,21 @@ class TestRecommendStrategyLocal:
         assert conf == 0.78
 
     def test_local_default(self):
-        snap = self._snap()  # all defaults → no special condition
+        # sideways + rsi=50 → mean_reversion (боковик с нейтральным RSI)
+        snap = self._snap()
         strategy, conf = self.ai.recommend_strategy_local(snap)
-        assert strategy == "ema_crossover"
-        assert conf == 0.60
+        assert strategy == "mean_reversion"
+        assert conf == 0.65
 
     def test_local_missing_indicators(self):
-        # Empty snapshot → defaults used, should return ema_crossover
+        # Empty snapshot → defaults: trend=sideways, rsi=50 → mean_reversion
         strategy, conf = self.ai.recommend_strategy_local({})
+        assert strategy == "mean_reversion"
+        assert conf == 0.65
+
+    def test_local_ema_crossover_pure_sideways(self):
+        # sideways + RSI вне диапазона 38-62 → ema_crossover
+        snap = self._snap(trend="sideways", rsi=35)
+        strategy, conf = self.ai.recommend_strategy_local(snap)
         assert strategy == "ema_crossover"
         assert conf == 0.60
