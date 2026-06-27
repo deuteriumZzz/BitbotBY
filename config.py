@@ -25,6 +25,12 @@ STABLECOIN_BASES: frozenset[str] = frozenset(
         "USDD",
         "CRVUSD",
         "MKUSD",
+        "USD1",
+        "XAUT",
+        "PAXG",
+        "AEUR",
+        "BIDR",
+        "BVND",
     }
 )
 
@@ -43,6 +49,11 @@ JUNK_BASES: frozenset[str] = frozenset(
         "XAG",
         "XOI",
         "SLX",
+        "SPCXX",
+        "BSB",
+        "BILL",
+        "XPL",
+        "ASTER",
     }
 )
 

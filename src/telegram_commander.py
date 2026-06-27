@@ -1754,7 +1754,7 @@ class TelegramCommander:
             )
 
             stderr_lines: list = []
-            last_notify_pct = -1
+            last_notify_pct = -26
 
             async def _read_tune_stdout() -> None:
                 nonlocal last_notify_pct
