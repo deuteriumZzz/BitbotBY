@@ -220,6 +220,9 @@ class Config:
     # Новый сигнал блокируется если его корреляция с любой открытой позицией
     # превышает порог. 0.0 = фильтр выключен.
     MAX_CORRELATION: float = float(os.getenv("MAX_CORRELATION", "0.7"))
+    # В paper режиме порог выше — крипто сильно коррелирует в боковике,
+    # 0.70 блокирует почти всё; 0.85 позволяет накопить сделки для SAC.
+    MAX_CORRELATION_PAPER: float = float(os.getenv("MAX_CORRELATION_PAPER", "0.85"))
     # Окно расчёта корреляции в свечах
     CORRELATION_WINDOW: int = int(os.getenv("CORRELATION_WINDOW", "50"))
 

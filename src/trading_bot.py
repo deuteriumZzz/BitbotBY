@@ -99,7 +99,11 @@ class TradingBot:
         self.portfolio_optimizer = PortfolioOptimizer()
         self.corr_filter = CorrelationFilter(
             window=Config.CORRELATION_WINDOW,
-            max_corr=Config.MAX_CORRELATION,
+            max_corr=(
+                Config.MAX_CORRELATION_PAPER
+                if Config.PAPER_TRADING
+                else Config.MAX_CORRELATION
+            ),
         )
         self.is_running: bool = False
         # Явная схема через TypedDict — заменяет Dict[str, Any], чтобы ловить
