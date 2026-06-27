@@ -39,7 +39,7 @@ from src.risk_management import RiskManager
 from src.runtime_config import BLUECHIP_BASES, RuntimeConfig
 from src.season_detector import SeasonDetector
 from src.signal_combiner import SignalCombiner
-from src.strategies import TradingStrategy
+from src.strategies import TradingStrategy, create_strategy
 from src.telegram_commander import (
     TelegramCommander,
     _kb_main,
@@ -868,13 +868,11 @@ class TradingBot:
                 if conf >= _min_conf:
                     df = market_data.get(sym)
                     sig = {}
-                    if df is not None and not df.empty and self.strategy:
+                    if df is not None and not df.empty:
                         try:
-                            sig = await self.strategy.get_signal(df)
+                            _local_strat = create_strategy(strat)
+                            sig = await _local_strat.get_signal(df)
                         except (ValueError, KeyError):
-                            # Стратегия может выбросить исключение при
-                            # отсутствии индикаторов; безопасно пропустить —
-                            # отсутствие сигнала здесь правильный фолбек.
                             pass
                     action = sig.get("action", "hold")
                     recs.append(

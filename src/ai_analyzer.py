@@ -431,4 +431,10 @@ class AIAnalyzer:
         if rsi > 70:
             return "rsi_momentum", 0.78
 
+        if vol_ratio > 3.0:
+            return "volume_spike", 0.68
+
+        if trend == "sideways" and 38 <= rsi <= 62:
+            return "mean_reversion", 0.65
+
         return "ema_crossover", 0.60
