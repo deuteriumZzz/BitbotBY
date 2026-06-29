@@ -421,6 +421,14 @@ class RuntimeConfig:
     def set_last_ai_provider(self, provider: str) -> None:
         self._set(_KEY_LAST_AI_PROVIDER, provider)
 
+    def set_provider_status(self, provider: str, status: str) -> None:
+        """Сохраняет статус провайдера: 'ok', 'no_balance', 'rate_limit'."""
+        self._set(f"bot:provider_status:{provider}", status)
+
+    def get_provider_status(self, provider: str) -> str:
+        """Возвращает последний известный статус провайдера."""
+        return self._get(f"bot:provider_status:{provider}") or "unknown"
+
     # ── Leverage ──────────────────────────────────────────────────────────────
 
     def get_max_drawdown_percent(self) -> float:
