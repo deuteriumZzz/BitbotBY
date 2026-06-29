@@ -68,12 +68,20 @@ class AIAnalyzer:
     # HTTP status codes treated as billing/quota exhaustion → try next provider
     _BILLING_CODES: frozenset = frozenset({402, 429})
 
-    def __init__(self, runtime_config: "Any | None" = None) -> None:
+    def __init__(
+        self,
+        runtime_config: "Any | None" = None,
+        telegram: "Any | None" = None,
+    ) -> None:
         self._provider = _resolve_provider()
         self._runtime_config = runtime_config
+        self._telegram = telegram
         self.enabled = self._provider != "none"
         self.strategies = get_all_strategies()
         self.logger = logging.getLogger(__name__)
+        # Кулдаун уведомлений: не спамим одним и тем же сообщением
+        self._notified_at: Dict[str, float] = {}
+        self._NOTIFY_COOLDOWN = 3600.0  # раз в час максимум
 
         # Initialise clients for ALL providers that have keys (for fallback)
         self._anthropic = None
@@ -94,13 +102,19 @@ class AIAnalyzer:
             self._deepseek = AsyncOpenAI(
                 api_key=Config.DEEPSEEK_API_KEY,
                 base_url=_DEEPSEEK_BASE_URL,
+                max_retries=0,
+                timeout=30.0,
             )
             self._deepseek_model = Config.DEEPSEEK_MODEL
 
         if Config.OPENAI_API_KEY:
             from openai import AsyncOpenAI
 
-            self._openai = AsyncOpenAI(api_key=Config.OPENAI_API_KEY)
+            self._openai = AsyncOpenAI(
+                api_key=Config.OPENAI_API_KEY,
+                max_retries=0,
+                timeout=30.0,
+            )
             self._openai_model = Config.OPENAI_MODEL
 
         if getattr(Config, "GROQ_API_KEY", ""):
@@ -109,6 +123,8 @@ class AIAnalyzer:
             self._groq = AsyncOpenAI(
                 api_key=Config.GROQ_API_KEY,
                 base_url="https://api.groq.com/openai/v1",
+                max_retries=0,
+                timeout=30.0,
             )
             self._groq_model = getattr(Config, "GROQ_MODEL", "llama-3.3-70b-versatile")
 
@@ -118,6 +134,8 @@ class AIAnalyzer:
             self._gemini = AsyncOpenAI(
                 api_key=Config.GEMINI_API_KEY,
                 base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+                max_retries=0,  # без авто-ретраев — 429 сразу идёт в fallback
+                timeout=30.0,
             )
             self._gemini_model = getattr(Config, "GEMINI_MODEL", "gemini-1.5-flash")
 
@@ -385,17 +403,102 @@ class AIAnalyzer:
                 if status == 400:
                     self.logger.error("AI [%s] bad request (400): %s", provider, e)
                     return []
-                # Любая другая ошибка (429, 402, 500, таймаут) — пробуем следующего
                 self.logger.warning(
                     "AI [%s] error (HTTP %s) — trying next provider: %s",
                     provider,
                     status or "?",
                     e,
                 )
+                await self._notify_provider_failure(provider, status)
                 continue
 
         self.logger.error("All AI providers exhausted")
+        await self._notify_all_exhausted()
         return []
+
+    async def _notify_provider_failure(
+        self, provider: str, status: "int | None"
+    ) -> None:
+        """Уведомляет в Telegram о сбое провайдера — не чаще раза в час."""
+        import time as _time
+        from datetime import datetime, timezone
+
+        if getattr(self, "_telegram", None) is None:
+            return
+        key = f"fail:{provider}"
+        now = _time.time()
+        _notified = getattr(self, "_notified_at", {})
+        if now - _notified.get(key, 0) < getattr(self, "_NOTIFY_COOLDOWN", 3600.0):
+            return
+        _notified[key] = now
+
+        # Обратный отсчёт до полуночи UTC
+        utc_now = datetime.now(timezone.utc)
+        secs_to_reset = (
+            86400 - utc_now.hour * 3600 - utc_now.minute * 60 - utc_now.second
+        )
+        h, m = divmod(secs_to_reset // 60, 60)
+        reset_str = f"через {h}ч {m}мин (полночь UTC)"
+
+        _MESSAGES = {
+            "deepseek": (
+                "⚠️ *DeepSeek*: баланс исчерпан (402).\n"
+                "Переключаюсь на следующего провайдера.\n"
+                "Пополни на $5–10: platform.deepseek.com"
+            ),
+            "groq": (
+                f"⚠️ *Groq*: дневной лимит токенов исчерпан (429).\n"
+                f"Переключаюсь на следующего провайдера.\n"
+                f"Сброс {reset_str}."
+            ),
+            "gemini": (
+                f"⚠️ *Gemini*: лимит запросов исчерпан (429).\n"
+                f"Переключаюсь на следующего провайдера.\n"
+                f"Сброс {reset_str}."
+            ),
+            "anthropic": (
+                "⚠️ *Claude (Anthropic)*: лимит или нет баланса.\n"
+                "Переключаюсь на следующего провайдера."
+            ),
+            "openai": (
+                "⚠️ *OpenAI*: лимит или нет баланса.\n"
+                "Переключаюсь на следующего провайдера."
+            ),
+        }
+        msg = _MESSAGES.get(provider)
+        if msg:
+            try:
+                await self._telegram.notify(msg)
+            except Exception:
+                pass
+
+    async def _notify_all_exhausted(self) -> None:
+        """Уведомляет когда все провайдеры недоступны — не чаще раза в час."""
+        import time as _time
+        from datetime import datetime, timezone
+
+        if getattr(self, "_telegram", None) is None:
+            return
+        key = "fail:all"
+        now = _time.time()
+        _notified = getattr(self, "_notified_at", {})
+        if now - _notified.get(key, 0) < getattr(self, "_NOTIFY_COOLDOWN", 3600.0):
+            return
+        _notified[key] = now
+
+        utc_now = datetime.now(timezone.utc)
+        secs_to_reset = (
+            86400 - utc_now.hour * 3600 - utc_now.minute * 60 - utc_now.second
+        )
+        h, m = divmod(secs_to_reset // 60, 60)
+        try:
+            await self._telegram.notify(
+                f"🔴 *Все AI провайдеры недоступны.*\n"
+                f"Работаю на локальных стратегиях — качество сигналов снижено.\n"
+                f"Провайдеры восстановятся через {h}ч {m}мин (полночь UTC)."
+            )
+        except Exception:
+            pass
 
     def recommend_strategy_local(self, snapshot: Dict[str, Any]) -> Tuple[str, float]:
         """
