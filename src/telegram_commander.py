@@ -945,7 +945,7 @@ class TelegramCommander:
             f"{fng_line}"
             f"🤖 Режим: `{mode_label}` | AI: `{provider}`\n"
             f"🔢 Символов: `{n}` | Позиций: `{len(positions)}`\n"
-            f"📊 Плечо: `{lev_mode}` ({lev_target*100:.1f}% ATR)\n"
+            f"⏱ Цикл: `{self._rc.get_trading_interval()}с` | Плечо: `{lev_mode}` ({lev_target*100:.1f}% ATR)\n"
             f"🕐 Часы: {hours_str}\n"
             f"{exec_icon} Авто-сделки: `{'ВКЛ' if auto_exec else 'ВЫКЛ'}`\n"
         )
@@ -2217,11 +2217,11 @@ class TelegramCommander:
                 query,
                 "🎯 *Профиль рынка*\n\n"
                 "🔵 *Блючипы* — BTC, ETH, SOL и другие топ-монеты.\n"
-                "Таймфрейм 15m, топ-20, риск 2%, режим Hybrid.\n\n"
-                "🟡 *Альткоины* — середина рынка, топ-50 по объёму.\n"
-                "Таймфрейм 5m, топ-50, риск 1%, режим AI, без BTC/ETH.\n\n"
+                "Таймфрейм 15m · топ-20 · риск 2% · Hybrid · цикл 15 мин\n\n"
+                "🟡 *Альткоины* — середина рынка, топ-100 по объёму.\n"
+                "Таймфрейм 5m · топ-100 (30 лучших → AI) · риск 1% · Hybrid · цикл 5 мин\n\n"
                 f"_{model_legend}_\n"
-                "_Профиль применяется мгновенно. Таймфрейм — со следующего цикла._",
+                "_Профиль применяется мгновенно. Интервал цикла — со следующего цикла._",
                 _kb_market_profile_menu(current, bc_has, alt_has),
             )
 

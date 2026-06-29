@@ -953,6 +953,56 @@ class TradingBot:
                 rec["_regime"] = regimes.get(sym, self._current_regime)
         return recs
 
+    def _prescore_snapshots(
+        self, snapshots: list, regimes: Dict[str, str], limit: int
+    ) -> list:
+        """Выбирает топ-N кандидатов из пула по быстрым метрикам без AI.
+
+        Критерии: объём (momentum), RSI-экстремум, волатильность ATR,
+        совпадение режима рынка. Снижает токены AI в 3-4x при альтсезоне.
+        """
+        if len(snapshots) <= limit:
+            return snapshots
+
+        def _snap_score(snap: dict) -> float:
+            ind = snap.get("indicators") or {}
+            regime = regimes.get(snap.get("symbol", ""), "unknown")
+
+            # Объём: spike = интерес рынка
+            vol_ratio = float(snap.get("volume_ratio") or 1.0)
+            vol_score = min((vol_ratio - 1.0) / 2.0, 1.0)
+            vol_score = max(vol_score, 0.0)
+
+            # RSI: экстремумы = потенциальный сигнал (перекупл./перепродан.)
+            rsi = float(ind.get("rsi") or 50.0)
+            rsi_score = (
+                max(abs(rsi - 50) - 10, 0) / 40.0
+            )  # 0 при RSI 40-60, макс при <20 или >80
+
+            # ATR: волатильность = потенциал движения
+            atr = float(ind.get("atr") or 0.0)
+            price = float(snap.get("price") or 1.0)
+            atr_score = min(atr / price / 0.05, 1.0) if price > 0 else 0.0
+
+            # Режим: трендовые монеты интереснее для входа
+            regime_bonus = 0.3 if regime in ("trending_up", "trending_down") else 0.0
+
+            return (
+                vol_score * 0.35
+                + rsi_score * 0.30
+                + atr_score * 0.20
+                + regime_bonus * 0.15
+            )
+
+        scored = sorted(snapshots, key=_snap_score, reverse=True)
+        logger.debug(
+            "Prescore: %d → %d snapshots for AI (top: %s)",
+            len(snapshots),
+            limit,
+            ", ".join(s.get("symbol", "") for s in scored[:5]),
+        )
+        return scored[:limit]
+
     def _composite_score(self, rec: dict) -> float:
         """Комплексная оценка сигнала для приоритизации сделок.
 
@@ -1252,8 +1302,12 @@ class TradingBot:
                     continue
 
                 regimes = await self._detect_regimes(market_data)
+                # Умный предфильтр: из 100 монет выбираем 30 лучших кандидатов
+                # по быстрым метрикам — до отправки в AI
+                _ai_limit = int(os.getenv("AI_MAX_SYMBOLS", "30"))
+                ai_snapshots = self._prescore_snapshots(snapshots, regimes, _ai_limit)
                 recs = await self._generate_signals(
-                    snapshots, balance, regimes, market_data
+                    ai_snapshots, balance, regimes, market_data
                 )
 
                 # БАГ 1: строим signals_map из реальных рекомендаций (после combine),
@@ -1297,12 +1351,14 @@ class TradingBot:
 
                 cycles_counter.inc()
                 elapsed = loop.time() - t0
-                sleep_for = max(0, Config.TRADING_INTERVAL - elapsed)
+                _interval = self._runtime_config.get_trading_interval()
+                sleep_for = max(0, _interval - elapsed)
                 logger.info(
-                    "Cycle #%d: %.1fs elapsed, sleeping %.1fs",
+                    "Cycle #%d: %.1fs elapsed, sleeping %.1fs (interval=%ds)",
                     cycle,
                     elapsed,
                     sleep_for,
+                    _interval,
                 )
                 await asyncio.sleep(sleep_for)
 

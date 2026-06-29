@@ -105,6 +105,7 @@ _MARKET_PROFILES = {
         "max_volume_usdt": 0,
         "risk_per_trade": 0.02,
         "timeframe": "15m",
+        "trading_interval": 900,  # раз в 15 мин = 96 AI запросов/день
         "mode": "hybrid",
         "model_path": "models/sac_model.zip",
         "sl_percent": 0.05,  # SL 5%
@@ -118,6 +119,7 @@ _MARKET_PROFILES = {
         "max_volume_usdt": 2_000_000_000,
         "risk_per_trade": 0.01,
         "timeframe": "5m",
+        "trading_interval": 300,  # раз в 5 мин = 288 AI запросов/день
         "mode": "hybrid",
         "model_path": "models/sac_model_altcoin.zip",
         "sl_percent": 0.04,  # SL 4%
@@ -295,6 +297,14 @@ class RuntimeConfig:
             return float(val) if val else 2.0
         except (ValueError, TypeError):
             return 2.0
+
+    def get_trading_interval(self) -> int:
+        """Интервал торгового цикла в секундах (из профиля или .env)."""
+        try:
+            val = self._get("bot:trading_interval")
+            return int(val) if val else Config.TRADING_INTERVAL
+        except (ValueError, TypeError):
+            return Config.TRADING_INTERVAL
 
     def get_signal_confidence(self, paper: bool) -> float:
         key = _KEY_CONFIDENCE_PAPER if paper else _KEY_CONFIDENCE_LIVE
@@ -681,6 +691,7 @@ class RuntimeConfig:
         self.set_mode(str(profile.get("mode", "ai")))
         self._set("bot:sl_percent", str(profile.get("sl_percent", 0.05)))
         self._set("bot:tp_multiplier", str(profile.get("tp_multiplier", 2.0)))
+        self._set("bot:trading_interval", str(profile.get("trading_interval", 60)))
         # Направляем сохранение сделок в профильный файл
         _exp = (
             "data/experiences_altcoin.jsonl"
