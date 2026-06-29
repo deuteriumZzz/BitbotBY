@@ -2424,19 +2424,88 @@ class TelegramCommander:
 
         # ── AI-провайдер ─────────────────────────────────────────────────────
         elif data == "provider_menu":
+            import os as _os
+            from datetime import datetime, timezone
+
             current = self._rc.get_ai_provider()
+            last = self._rc.get_last_ai_provider()
+
+            # Динамический порядок auto — зависит от настроенных ключей
+            _AUTO_ORDER = ["anthropic", "openai", "deepseek", "groq", "gemini"]
+            _AUTO_NAMES = {
+                "anthropic": "Claude",
+                "openai": "OpenAI",
+                "deepseek": "DeepSeek",
+                "groq": "Groq",
+                "gemini": "Gemini",
+            }
+            _configured_auto = [
+                _AUTO_NAMES[p]
+                for p in _AUTO_ORDER
+                if _os.getenv(
+                    {
+                        "anthropic": "ANTHROPIC_API_KEY",
+                        "openai": "OPENAI_API_KEY",
+                        "deepseek": "DEEPSEEK_API_KEY",
+                        "groq": "GROQ_API_KEY",
+                        "gemini": "GEMINI_API_KEY",
+                    }[p]
+                )
+            ]
+            _auto_desc = (
+                " → ".join(_configured_auto) if _configured_auto else "нет ключей"
+            )
             desc = {
-                "auto": "Claude → OpenAI → DeepSeek → Groq",
+                "auto": _auto_desc,
                 "groq": "Llama 3.3 70B — бесплатный, быстрый",
                 "anthropic": "Claude — лучшее качество",
                 "deepseek": "Самый дешёвый платный",
                 "openai": "ChatGPT GPT-4o-mini",
+                "gemini": "Gemini 2.0 Flash — бесплатный",
             }.get(current, current)
+
+            _utc = datetime.now(timezone.utc)
+            _secs = 86400 - _utc.hour * 3600 - _utc.minute * 60 - _utc.second
+            _h, _m = divmod(_secs // 60, 60)
+            _reset = f"{_h}ч {_m}мин"
+
+            _STATUS_ICON = {
+                "ok": "✅",
+                "no_balance": "💸",
+                "rate_limit": "⏳",
+                "unknown": "❓",
+            }
+            _STATUS_DESC = {
+                "ok": "работает",
+                "no_balance": "нет баланса — пополни",
+                "rate_limit": f"лимит — сброс через {_reset}",
+                "unknown": "ещё не использовался",
+            }
+            _PROVIDERS = [
+                ("deepseek", "DeepSeek", bool(_os.getenv("DEEPSEEK_API_KEY"))),
+                ("groq", "Groq", bool(_os.getenv("GROQ_API_KEY"))),
+                ("gemini", "Gemini", bool(_os.getenv("GEMINI_API_KEY"))),
+                ("anthropic", "Claude", bool(_os.getenv("ANTHROPIC_API_KEY"))),
+                ("openai", "OpenAI", bool(_os.getenv("OPENAI_API_KEY"))),
+            ]
+            lines = []
+            for _p, _name, _has_key in _PROVIDERS:
+                if _has_key:
+                    _st = self._rc.get_provider_status(_p)
+                    _icon = _STATUS_ICON.get(_st, "❓")
+                    _sdesc = _STATUS_DESC.get(_st, _st)
+                    lines.append(f"{_icon} *{_name}* — {_sdesc}")
+                else:
+                    lines.append(f"❌ *{_name}* — не настроен")
+            providers_text = "\n".join(lines)
+            _last_str = f"Активен сейчас: `{last}`\n\n" if last else ""
             await self._edit(
                 query,
-                f"🤖 *AI-провайдер*\n\n"
-                f"Текущий: *{current}*\n{desc}\n\n"
-                f"_При ошибке основного — автоматически пробует следующий с ключом._",
+                f"🤖 *AI-провайдеры*\n\n"
+                f"{providers_text}\n\n"
+                f"{_last_str}"
+                f"Режим: *{current}* — {desc}\n\n"
+                f"_При сбое — автоматически переходит к следующему._",
                 _kb_provider_menu(current),
             )
 

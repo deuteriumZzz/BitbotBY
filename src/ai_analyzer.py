@@ -389,6 +389,7 @@ class AIAnalyzer:
                 if _rc is not None:
                     try:
                         _rc.set_last_ai_provider(provider)
+                        _rc.set_provider_status(provider, "ok")
                     except Exception:
                         pass
                 return valid
@@ -409,6 +410,15 @@ class AIAnalyzer:
                     status or "?",
                     e,
                 )
+                _rc2 = getattr(self, "_runtime_config", None)
+                if _rc2 is not None:
+                    try:
+                        _rc2.set_provider_status(
+                            provider,
+                            "no_balance" if status == 402 else "rate_limit",
+                        )
+                    except Exception:
+                        pass
                 await self._notify_provider_failure(provider, status)
                 continue
 
