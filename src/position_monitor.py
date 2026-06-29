@@ -115,13 +115,15 @@ class PositionMonitor:
                             self._exit_confirm_counts.pop(sym, None)
                             logger.warning(
                                 "Dynamic exit (force) %s [%s]: %s",
-                                sym, pos.get("side"), reason,
+                                sym,
+                                pos.get("side"),
+                                reason,
                             )
                             await self._force_close_at_market(
                                 sym, pos, price, monitored, lock, reason
                             )
                             continue
-                        elif exit_action == "tighten_sl":
+                        if exit_action == "tighten_sl":
                             count = self._exit_confirm_counts.get(sym, 0) + 1
                             self._exit_confirm_counts[sym] = count
                             if count >= self._EXIT_CONFIRM_THRESHOLD:
@@ -129,18 +131,23 @@ class PositionMonitor:
                                 self._exit_confirm_counts.pop(sym, None)
                                 logger.warning(
                                     "Dynamic exit (confirmed x%d) %s [%s]: %s",
-                                    count, sym, pos.get("side"), reason,
+                                    count,
+                                    sym,
+                                    pos.get("side"),
+                                    reason,
                                 )
                                 await self._force_close_at_market(
                                     sym, pos, price, monitored, lock, reason
                                 )
                                 continue
-                            else:
-                                # Первые N-1 циклов — только подтягиваем SL
+                            # Первые N-1 циклов — только подтягиваем SL
                                 logger.warning(
                                     "Dynamic exit (tighten SL %d/%d) %s [%s]: %s",
-                                    count, self._EXIT_CONFIRM_THRESHOLD,
-                                    sym, pos.get("side"), reason,
+                                    count,
+                                    self._EXIT_CONFIRM_THRESHOLD,
+                                    sym,
+                                    pos.get("side"),
+                                    reason,
                                 )
                                 pos = await self._tighten_sl(
                                     sym, pos, price, monitored, lock
@@ -635,7 +642,12 @@ class PositionMonitor:
 
         logger.info(
             "Tighten SL %s [%s]: %.4f → %.4f (price=%.4f atr=%.4f)",
-            sym, side, current_sl, new_sl, price, atr,
+            sym,
+            side,
+            current_sl,
+            new_sl,
+            price,
+            atr,
         )
         async with lock:
             if sym in monitored and monitored[sym] is not None:
@@ -666,7 +678,11 @@ class PositionMonitor:
         close_side = "sell" if side == "buy" else "buy"
         logger.info(
             "Force-close %s [%s] qty=%.6f price=%.4f reason=%s",
-            sym, side, qty, price, reason,
+            sym,
+            side,
+            qty,
+            price,
+            reason,
         )
 
         if not Config.PAPER_TRADING:
@@ -685,15 +701,15 @@ class PositionMonitor:
                 )
                 return
 
-        await self._portfolio_manager.update_portfolio(
-            sym, close_side, qty, price
-        )
+        await self._portfolio_manager.update_portfolio(sym, close_side, qty, price)
         async with lock:
             monitored.pop(sym, None)
 
         entry = pos.get("entry", price)
         if entry:
-            pnl_pct = (price - entry) / entry if side == "buy" else (entry - price) / entry
+            pnl_pct = (
+                (price - entry) / entry if side == "buy" else (entry - price) / entry
+            )
         else:
             pnl_pct = 0.0
         pnl_sign = "+" if pnl_pct >= 0 else ""

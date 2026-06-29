@@ -107,7 +107,7 @@ _MARKET_PROFILES = {
         "timeframe": "15m",
         "mode": "hybrid",
         "model_path": "models/sac_model.zip",
-        "sl_percent": 0.05,    # SL 5%
+        "sl_percent": 0.05,  # SL 5%
         "tp_multiplier": 2.0,  # TP = 10% (консервативно)
     },
     "altcoin": {
@@ -120,7 +120,7 @@ _MARKET_PROFILES = {
         "timeframe": "5m",
         "mode": "hybrid",
         "model_path": "models/sac_model_altcoin.zip",
-        "sl_percent": 0.04,    # SL 4%
+        "sl_percent": 0.04,  # SL 4%
         "tp_multiplier": 4.0,  # TP = 16% (ловим большие альт-движения)
     },
 }

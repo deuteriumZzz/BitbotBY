@@ -36,7 +36,7 @@ from src.position_monitor import PositionMonitor
 from src.redis_client import RedisClient
 from src.regime_detector import RegimeDetector
 from src.risk_management import RiskManager
-from src.runtime_config import BLUECHIP_BASES, RuntimeConfig
+from src.runtime_config import RuntimeConfig
 from src.season_detector import SeasonDetector
 from src.signal_combiner import SignalCombiner
 from src.strategies import TradingStrategy, create_strategy
@@ -590,7 +590,8 @@ class TradingBot:
         if slots <= 0:
             logger.info(
                 "Max positions reached (%d/%d) — skipping execution",
-                open_count, max_pos,
+                open_count,
+                max_pos,
             )
             return
         for rec in filtered[:slots]:
@@ -871,8 +872,11 @@ class TradingBot:
         recs = self._cycle.optimize_allocation(recs, market_data)
 
         _TRENDING_STRATEGIES = {
-            "trend_following", "ema_crossover", "macd_crossover",
-            "rsi_momentum", "swing_trading",
+            "trend_following",
+            "ema_crossover",
+            "macd_crossover",
+            "rsi_momentum",
+            "swing_trading",
         }
 
         if not recs:
@@ -903,11 +907,11 @@ class TradingBot:
                     _base_mult = self._runtime_config.get_tp_multiplier()
                     # Режим рынка корректирует TP автоматически
                     if sym_regime == "trending_up" and action == "buy":
-                        _tp_mult = max(_base_mult, 5.0)   # TP ≥ 25% при тренде вверх
+                        _tp_mult = max(_base_mult, 5.0)  # TP ≥ 25% при тренде вверх
                     elif sym_regime == "trending_down" and action == "sell":
-                        _tp_mult = max(_base_mult, 5.0)   # TP ≥ 25% при тренде вниз
+                        _tp_mult = max(_base_mult, 5.0)  # TP ≥ 25% при тренде вниз
                     elif sym_regime == "ranging":
-                        _tp_mult = min(_base_mult, 2.0)   # TP ≤ 10% в боковике
+                        _tp_mult = min(_base_mult, 2.0)  # TP ≤ 10% в боковике
                     else:
                         _tp_mult = _base_mult
                     _sl = (
@@ -1061,9 +1065,7 @@ class TradingBot:
                 elif _profile == "altcoin":
                     # Динамически определяем текущий топ 20 bluechip по объёму
                     _bc_syms = await self.scanner.get_top_symbols(n=20)
-                    _bc_bases = frozenset(
-                        s.split("/")[0] for s in _bc_syms
-                    )
+                    _bc_bases = frozenset(s.split("/")[0] for s in _bc_syms)
                     symbols = await self.scanner.get_top_symbols(
                         n=_scan_n,
                         altcoin_exclude_bases=_bc_bases,
