@@ -141,17 +141,17 @@ class PositionMonitor:
                                 )
                                 continue
                             # Первые N-1 циклов — только подтягиваем SL
-                                logger.warning(
-                                    "Dynamic exit (tighten SL %d/%d) %s [%s]: %s",
-                                    count,
-                                    self._EXIT_CONFIRM_THRESHOLD,
-                                    sym,
-                                    pos.get("side"),
-                                    reason,
-                                )
-                                pos = await self._tighten_sl(
-                                    sym, pos, price, monitored, lock
-                                )
+                            logger.warning(
+                                "Dynamic exit (tighten SL %d/%d) %s [%s]: %s",
+                                count,
+                                self._EXIT_CONFIRM_THRESHOLD,
+                                sym,
+                                pos.get("side"),
+                                reason,
+                            )
+                            pos = await self._tighten_sl(
+                                sym, pos, price, monitored, lock
+                            )
                         else:
                             # Условие исчезло — сбрасываем счётчик
                             self._exit_confirm_counts.pop(sym, None)
