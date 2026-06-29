@@ -1301,6 +1301,72 @@ class TradingBot:
                     )
                     continue
 
+                async with self._monitored_lock:
+                    _open_syms = [
+                        s for s, p in self._monitored.items() if p is not None
+                    ]
+                _open = len(_open_syms)
+                _max = self._runtime_config.get_max_positions()
+                _slots = _max - _open
+
+                if _slots <= 0:
+                    # РЕЖИМ МОНИТОРИНГА: слоты заняты — сканируем только открытые монеты
+                    # Это даёт PositionMonitor актуальные сигналы для раннего выхода
+                    # (разворот, смена режима, funding squeeze) без лишних токенов
+                    logger.info(
+                        "Positions full (%d/%d) — monitoring mode (open: %s)",
+                        _open,
+                        _max,
+                        ", ".join(_open_syms),
+                    )
+                    # BTC и ETH всегда добавляем как барометры рынка:
+                    # BTC = главный драйвер (~85% корреляция), ETH = altcoin сектор
+                    _monitor_syms = list(_open_syms)
+                    for _barometer in ("BTC/USDT", "ETH/USDT"):
+                        if (
+                            _barometer not in _monitor_syms
+                            and _barometer in market_data
+                        ):
+                            _monitor_syms.append(_barometer)
+                    _mon_snaps = [
+                        s for s in snapshots if s.get("symbol") in _monitor_syms
+                    ]
+                    if _mon_snaps:
+                        _mon_mdata = {
+                            sym: market_data[sym]
+                            for sym in _monitor_syms
+                            if sym in market_data
+                        }
+                        regimes = await self._detect_regimes(_mon_mdata)
+                        _mon_recs = await self._generate_signals(
+                            _mon_snaps, balance, regimes, _mon_mdata
+                        )
+                        _signals_map = {
+                            r["symbol"]: r for r in _mon_recs if r.get("symbol")
+                        }
+                        _prices = {
+                            sym: df["close"].iloc[-1]
+                            for sym, df in _mon_mdata.items()
+                            if df is not None and not df.empty
+                        }
+                        try:
+                            _market_ctx_map = (
+                                await self._market_context.get_context_for_symbols(
+                                    list(_mon_mdata.keys()), _prices
+                                )
+                            )
+                        except Exception as _mc_exc:
+                            logger.warning("MarketContext fetch failed: %s", _mc_exc)
+                            _market_ctx_map = {}
+                        self._position_monitor.update_market_state(
+                            signals=_signals_map,
+                            market_ctx=_market_ctx_map,
+                            regime=self._current_regime,
+                        )
+                    continue
+
+                # РЕЖИМ ПОИСКА: есть свободные слоты — полный скан + AI
+                logger.info("Slots available (%d/%d) — full scan mode", _open, _max)
                 regimes = await self._detect_regimes(market_data)
                 # Умный предфильтр: из 100 монет выбираем 30 лучших кандидатов
                 # по быстрым метрикам — до отправки в AI
