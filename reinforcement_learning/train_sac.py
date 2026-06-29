@@ -229,7 +229,7 @@ def _finetune_on_experiences(model: Any, norm_stats: Dict[str, Any]) -> None:
     добавляет в replay buffer модели и запускает gradient steps.
     Пропускается если файл пуст или содержит < 50 записей.
     """
-    from src.experience_buffer import load as _load_exp
+    from src.experience_buffer import load_ai_only as _load_exp
 
     _profile = os.getenv("SAC_PROFILE", "")
     exp_path = (
@@ -240,12 +240,15 @@ def _finetune_on_experiences(model: Any, norm_stats: Dict[str, Any]) -> None:
     records = _load_exp(path=exp_path)
     if len(records) < 50:
         logger.info(
-            "Experiences: %d записей — пропускаем fine-tune (нужно ≥ 50)",
+            "AI experiences: %d записей — пропускаем fine-tune (нужно ≥ 50)",
             len(records),
         )
         return
 
-    logger.info("Fine-tune на %d реальных сделках из experiences.jsonl", len(records))
+    logger.info(
+        "Fine-tune на %d AI-сделках из experiences.jsonl (local исключены)",
+        len(records),
+    )
 
     # Преобразуем каждую запись в obs-вектор (21 признак, порядок как в TradingEnv)
     # Колонки для нормализации — только первые 11 (OHLCV + индикаторы)

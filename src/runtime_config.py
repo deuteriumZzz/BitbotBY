@@ -107,17 +107,21 @@ _MARKET_PROFILES = {
         "timeframe": "15m",
         "mode": "hybrid",
         "model_path": "models/sac_model.zip",
+        "sl_percent": 0.05,    # SL 5%
+        "tp_multiplier": 2.0,  # TP = 10% (консервативно)
     },
     "altcoin": {
         "label": "🟡 Альткоины",
-        "scan_top_n": 50,
-        "train_top_n": 50,
+        "scan_top_n": 100,
+        "train_top_n": 100,
         "min_volume_usdt": 500_000,
         "max_volume_usdt": 2_000_000_000,
         "risk_per_trade": 0.01,
         "timeframe": "5m",
-        "mode": "ai",
+        "mode": "hybrid",
         "model_path": "models/sac_model_altcoin.zip",
+        "sl_percent": 0.04,    # SL 4%
+        "tp_multiplier": 4.0,  # TP = 16% (ловим большие альт-движения)
     },
 }
 
@@ -275,6 +279,22 @@ class RuntimeConfig:
         self._set(_KEY_RISK_PER_TRADE, str(v))
         logger.info("Runtime: risk_per_trade → %.1f%%", v * 100)
         return True
+
+    def get_sl_percent(self) -> float:
+        """SL % для текущего профиля (bluechip=5%, altcoin=4%)."""
+        try:
+            val = self._get("bot:sl_percent")
+            return float(val) if val else Config.STOP_LOSS_PERCENT
+        except (ValueError, TypeError):
+            return Config.STOP_LOSS_PERCENT
+
+    def get_tp_multiplier(self) -> float:
+        """Множитель TP относительно SL (bluechip=2x, altcoin=4x)."""
+        try:
+            val = self._get("bot:tp_multiplier")
+            return float(val) if val else 2.0
+        except (ValueError, TypeError):
+            return 2.0
 
     def get_signal_confidence(self, paper: bool) -> float:
         key = _KEY_CONFIDENCE_PAPER if paper else _KEY_CONFIDENCE_LIVE
@@ -659,6 +679,8 @@ class RuntimeConfig:
         self.set_train_top_n(int(str(profile.get("train_top_n", 20))))
         self.set_risk_per_trade(float(str(profile.get("risk_per_trade", 0.02))))
         self.set_mode(str(profile.get("mode", "ai")))
+        self._set("bot:sl_percent", str(profile.get("sl_percent", 0.05)))
+        self._set("bot:tp_multiplier", str(profile.get("tp_multiplier", 2.0)))
         # Направляем сохранение сделок в профильный файл
         _exp = (
             "data/experiences_altcoin.jsonl"

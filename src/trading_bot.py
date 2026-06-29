@@ -584,7 +584,16 @@ class TradingBot:
                 return
         balance = await self._get_balance_usdt()
         max_pos = self._runtime_config.get_max_positions()
-        for rec in filtered[:max_pos]:
+        async with self._monitored_lock:
+            open_count = sum(1 for p in self._monitored.values() if p is not None)
+        slots = max_pos - open_count
+        if slots <= 0:
+            logger.info(
+                "Max positions reached (%d/%d) — skipping execution",
+                open_count, max_pos,
+            )
+            return
+        for rec in filtered[:slots]:
             await self._executor.execute(rec, market_data, balance)
 
     async def _close_all_open_positions(self, reason: str) -> None:
@@ -861,11 +870,21 @@ class TradingBot:
         )
         recs = self._cycle.optimize_allocation(recs, market_data)
 
+        _TRENDING_STRATEGIES = {
+            "trend_following", "ema_crossover", "macd_crossover",
+            "rsi_momentum", "swing_trading",
+        }
+
         if not recs:
             logger.info("MODE=%s, no signals — local fallback", Config.MODE)
             for snap in snapshots:
                 sym = snap["symbol"]
+                sym_regime = regimes.get(sym, self._current_regime)
                 strat, conf = self.combiner.ai.recommend_strategy_local(snap)
+                # В боковом рынке не используем трендовые стратегии
+                if sym_regime == "ranging" and strat in _TRENDING_STRATEGIES:
+                    logger.debug("Skip %s strat=%s in ranging regime", sym, strat)
+                    continue
                 _min_conf = self._runtime_config.get_signal_confidence(
                     Config.PAPER_TRADING
                 )
@@ -880,7 +899,17 @@ class TradingBot:
                             pass
                     action = sig.get("action", "hold")
                     _price = float(snap.get("price") or 0.0)
-                    _sl_pct = Config.STOP_LOSS_PERCENT
+                    _sl_pct = self._runtime_config.get_sl_percent()
+                    _base_mult = self._runtime_config.get_tp_multiplier()
+                    # Режим рынка корректирует TP автоматически
+                    if sym_regime == "trending_up" and action == "buy":
+                        _tp_mult = max(_base_mult, 5.0)   # TP ≥ 25% при тренде вверх
+                    elif sym_regime == "trending_down" and action == "sell":
+                        _tp_mult = max(_base_mult, 5.0)   # TP ≥ 25% при тренде вниз
+                    elif sym_regime == "ranging":
+                        _tp_mult = min(_base_mult, 2.0)   # TP ≤ 10% в боковике
+                    else:
+                        _tp_mult = _base_mult
                     _sl = (
                         (
                             _price * (1 - _sl_pct)
@@ -892,9 +921,9 @@ class TradingBot:
                     )
                     _tp = (
                         (
-                            _price * (1 + 2 * _sl_pct)
+                            _price * (1 + _tp_mult * _sl_pct)
                             if action == "buy"
-                            else _price * (1 - 2 * _sl_pct)
+                            else _price * (1 - _tp_mult * _sl_pct)
                         )
                         if _price
                         else 0.0
@@ -909,9 +938,56 @@ class TradingBot:
                             "stop_loss": _sl,
                             "take_profit": _tp,
                             "reasoning": "Local analysis",
+                            "_regime": sym_regime,
                         }
                     )
+
+        # Проставляем режим для AI-сигналов (у них _regime ещё не задан)
+        for rec in recs:
+            if "_regime" not in rec:
+                sym = rec.get("symbol", "")
+                rec["_regime"] = regimes.get(sym, self._current_regime)
         return recs
+
+    def _composite_score(self, rec: dict) -> float:
+        """Комплексная оценка сигнала для приоритизации сделок.
+
+        confidence — главный фильтр (без него нет сделки).
+        Потенциал TP и объём — множители: усиливают хорошие сигналы,
+        но не могут вытащить слабый сигнал с низким confidence.
+
+        Формула: confidence × (1 + tp_bonus) × (1 + volume_bonus) × regime_mult
+        """
+        confidence = rec.get("confidence", 0.0)
+        if confidence <= 0:
+            return 0.0
+
+        snap = rec.get("_snap") or {}
+        entry = float(rec.get("entry") or 0.0)
+        tp = float(rec.get("take_profit") or 0.0)
+        action = rec.get("action", "hold")
+        regime = rec.get("_regime", "unknown")
+        volume_ratio = float(snap.get("volume_ratio", 1.0) or 1.0)
+
+        # Потенциал: насколько далеко TP от entry (кап в 30%)
+        tp_pct = abs(tp - entry) / entry if entry > 0 else 0.0
+        tp_bonus = min(tp_pct / 0.30, 1.0) * 0.50  # макс +50%
+
+        # Объём: подтверждение тренда (кап в 3x нормы)
+        volume_bonus = min((volume_ratio - 1.0) / 2.0, 1.0) * 0.30  # макс +30%
+        volume_bonus = max(volume_bonus, 0.0)
+
+        # Режим: совпадение направления с трендом = бонус, противоречие = штраф
+        if (action == "buy" and regime == "trending_up") or (
+            action == "sell" and regime == "trending_down"
+        ):
+            regime_mult = 1.15  # +15% за совпадение
+        elif regime == "ranging":
+            regime_mult = 0.90  # -10% в боковике
+        else:
+            regime_mult = 1.0
+
+        return confidence * (1.0 + tp_bonus) * (1.0 + volume_bonus) * regime_mult
 
     async def _check_silent_death(self) -> None:
         """Отправляет Telegram-алерт если бот не совершал сделок
@@ -981,12 +1057,16 @@ class TradingBot:
                 if _profile == "bluechip":
                     symbols = await self.scanner.get_top_symbols(
                         n=_scan_n,
-                        bluechip_bases=BLUECHIP_BASES,
                     )
                 elif _profile == "altcoin":
+                    # Динамически определяем текущий топ 20 bluechip по объёму
+                    _bc_syms = await self.scanner.get_top_symbols(n=20)
+                    _bc_bases = frozenset(
+                        s.split("/")[0] for s in _bc_syms
+                    )
                     symbols = await self.scanner.get_top_symbols(
                         n=_scan_n,
-                        altcoin_exclude_bases=BLUECHIP_BASES,
+                        altcoin_exclude_bases=_bc_bases,
                     )
                 else:
                     symbols = await self.scanner.get_top_symbols(n=_scan_n)
@@ -1202,7 +1282,7 @@ class TradingBot:
                     rec.setdefault("_snap", snap_map.get(rec.get("symbol")))
 
                 filtered = self._filter_by_balance(recs, balance)
-                filtered.sort(key=lambda x: x.get("confidence", 0), reverse=True)
+                filtered.sort(key=self._composite_score, reverse=True)
 
                 self._cycle.print_recommendations(filtered, balance, cycle)
                 await self._cycle.notify_new_signals(filtered, balance, cycle)
