@@ -116,6 +116,7 @@ class TradingBot:
             Config.TELEGRAM_BOT_TOKEN,
             Config.TELEGRAM_CHAT_ID,
         )
+        self.ai._telegram = self.telegram
         self._paper_balance: float = Config.INITIAL_BALANCE
         self._live_balance_cache: float = Config.INITIAL_BALANCE
         # Equity (баланс + unrealized PnL) для drawdown halt
