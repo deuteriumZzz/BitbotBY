@@ -64,10 +64,14 @@ class PositionMonitor:
         self._online_learner = online_learner
         # Load persisted counter so circuit breaker survives bot restarts.
         self._consecutive_losses: int = self._load_cb_state()
-        # State for dynamic exits — updated each cycle via update_market_state().  # noqa: E501
+        # State for dynamic exits — updated each cycle via update_market_state().
         self._current_signals: dict = {}
         self._current_market_ctx: dict = {}
         self._current_regime: str = "unknown"
+        # Счётчик подтверждений для regime_flip/funding: {symbol: count}
+        # При N=3 подряд — escalate to force_close
+        self._exit_confirm_counts: Dict[str, int] = {}
+        self._EXIT_CONFIRM_THRESHOLD = 3
         # Keeps strong references to fire-and-forget tasks so GC can't destroy them.
         self._background_tasks: set = set()
 
@@ -105,15 +109,45 @@ class PositionMonitor:
                     # УЛУЧШЕНИЕ 3: частичная фиксация прибыли
                     pos = await self._check_partial_tp(sym, pos, price, monitored, lock)
                     try:
-                        should_exit, reason = self._check_dynamic_exit(sym, pos)
-                        if should_exit:
+                        exit_action, reason = self._check_dynamic_exit(sym, pos)
+                        if exit_action == "force_close":
+                            # Экстремальные условия — закрываем сразу
+                            self._exit_confirm_counts.pop(sym, None)
                             logger.warning(
-                                "Dynamic exit %s [%s]: %s", sym, pos.get("side"), reason
+                                "Dynamic exit (force) %s [%s]: %s",
+                                sym, pos.get("side"), reason,
                             )
-                            await self._check_and_close(
-                                sym, pos, price, monitored, lock
+                            await self._force_close_at_market(
+                                sym, pos, price, monitored, lock, reason
                             )
                             continue
+                        elif exit_action == "tighten_sl":
+                            count = self._exit_confirm_counts.get(sym, 0) + 1
+                            self._exit_confirm_counts[sym] = count
+                            if count >= self._EXIT_CONFIRM_THRESHOLD:
+                                # Режим стабильно против позиции — закрываем
+                                self._exit_confirm_counts.pop(sym, None)
+                                logger.warning(
+                                    "Dynamic exit (confirmed x%d) %s [%s]: %s",
+                                    count, sym, pos.get("side"), reason,
+                                )
+                                await self._force_close_at_market(
+                                    sym, pos, price, monitored, lock, reason
+                                )
+                                continue
+                            else:
+                                # Первые N-1 циклов — только подтягиваем SL
+                                logger.warning(
+                                    "Dynamic exit (tighten SL %d/%d) %s [%s]: %s",
+                                    count, self._EXIT_CONFIRM_THRESHOLD,
+                                    sym, pos.get("side"), reason,
+                                )
+                                pos = await self._tighten_sl(
+                                    sym, pos, price, monitored, lock
+                                )
+                        else:
+                            # Условие исчезло — сбрасываем счётчик
+                            self._exit_confirm_counts.pop(sym, None)
                     except Exception as _dyn_exc:
                         logger.error(
                             "Dynamic exit check failed for %s: %s", sym, _dyn_exc
@@ -197,55 +231,58 @@ class PositionMonitor:
         self._current_regime = regime
 
     def _check_dynamic_exit(self, sym: str, record: PositionRecord) -> tuple:
-        """Проверяет условия досрочного закрытия позиции.
+        """Проверяет условия досрочного выхода из позиции.
 
-        :return: (should_exit: bool, reason: str).
+        :return: (action: str | None, reason: str)
+            action="force_close" — закрыть по рынку немедленно (сильный сигнал)
+            action="tighten_sl"  — подтянуть SL ближе (дать шанс на отскок)
+            action=None          — ничего не делать
         """
         if not self._current_signals and not self._current_market_ctx:
-            return False, ""
+            return None, ""
 
         side = record.get("side", "buy")
         ctx = self._current_market_ctx.get(sym, {})
         signal = self._current_signals.get(sym, {})
 
-        # 1. Разворот сигнала с высокой уверенностью
+        # 1. Разворот сигнала с высокой уверенностью → закрыть сразу
         sig_action = signal.get("action", "")
         sig_conf = float(signal.get("confidence", 0.0))
-        if sig_action and sig_conf >= 0.72:
+        if sig_action and sig_conf >= 0.80:
             if side == "buy" and sig_action == "sell":
-                return True, f"signal_reversal SELL conf={sig_conf:.2f}"
+                return "force_close", f"signal_reversal SELL conf={sig_conf:.2f}"
             if side == "sell" and sig_action == "buy":
-                return True, f"signal_reversal BUY conf={sig_conf:.2f}"
+                return "force_close", f"signal_reversal BUY conf={sig_conf:.2f}"
 
-        # 2. Смена режима против позиции
+        # 2. Смена режима против позиции → подтянуть SL (цена может отскочить)
         regime = self._current_regime
         if side == "buy" and regime == "trending_down":
-            return True, "regime_flip trending_down vs LONG"
+            return "tighten_sl", "regime_flip trending_down vs LONG"
         if side == "sell" and regime == "trending_up":
-            return True, "regime_flip trending_up vs SHORT"
+            return "tighten_sl", "regime_flip trending_up vs SHORT"
 
-        # 3. Funding развернулся против позиции
+        # 3. Funding развернулся против позиции → подтянуть SL
         funding_signal = ctx.get("funding_signal", "neutral")
         if side == "sell" and funding_signal == "short_overheated":
-            return True, "funding short_overheated — short squeeze risk"
+            return "tighten_sl", "funding short_overheated — short squeeze risk"
         if side == "buy" and funding_signal == "long_overheated":
-            return True, "funding long_overheated — long liquidation risk"
+            return "tighten_sl", "funding long_overheated — long liquidation risk"
 
-        # 4. Экстремальный Fear&Greed
+        # 4. Экстремальный Fear&Greed → закрыть сразу (фиксируем прибыль)
         fear_greed = int(ctx.get("fear_greed", 50))
         if side == "sell" and fear_greed <= 10:
-            return True, f"fear_greed={fear_greed} extreme_fear — take SHORT profit"
+            return "force_close", f"fear_greed={fear_greed} extreme_fear"
         if side == "buy" and fear_greed >= 92:
-            return True, f"fear_greed={fear_greed} extreme_greed — take LONG profit"
+            return "force_close", f"fear_greed={fear_greed} extreme_greed"
 
-        # 5. Ликвидационный каскад против позиции
+        # 5. Ликвидационный каскад → закрыть сразу
         liq = ctx.get("liquidation_pressure", "neutral")
         if side == "buy" and liq == "long_liquidation":
-            return True, "long_liquidation cascade — exit LONG"
+            return "force_close", "long_liquidation cascade — exit LONG"
         if side == "sell" and liq == "short_squeeze":
-            return True, "short_squeeze cascade — exit SHORT"
+            return "force_close", "short_squeeze cascade — exit SHORT"
 
-        return False, ""
+        return None, ""
 
     # ── Emergency close ───────────────────────────────────────────────────────
 
@@ -568,6 +605,122 @@ class PositionMonitor:
                 return {**pos, "stop_loss": trail}  # type: ignore[return-value]
 
         return pos
+
+    async def _tighten_sl(
+        self,
+        sym: str,
+        pos: PositionRecord,
+        price: float,
+        monitored: Dict[str, PositionRecord],
+        lock: asyncio.Lock,
+    ) -> PositionRecord:
+        """Подтягивает SL к текущей цене на 1.5×ATR при смене режима.
+
+        Не закрывает позицию сразу — даёт шанс на отскок, но ограничивает
+        дальнейший убыток. Если новый SL хуже текущего — не трогаем.
+        """
+        side = pos.get("side", "buy")
+        current_sl = pos.get("stop_loss", 0.0)
+        atr = pos.get("atr") or 0.0
+        step = atr * 1.5 if atr > 0 else price * 0.015  # fallback 1.5%
+
+        if side == "buy":
+            new_sl = price - step
+            if current_sl and new_sl <= current_sl:
+                return pos  # уже тише — не двигаем
+        else:
+            new_sl = price + step
+            if current_sl and new_sl >= current_sl:
+                return pos
+
+        logger.info(
+            "Tighten SL %s [%s]: %.4f → %.4f (price=%.4f atr=%.4f)",
+            sym, side, current_sl, new_sl, price, atr,
+        )
+        async with lock:
+            if sym in monitored and monitored[sym] is not None:
+                monitored[sym] = {**monitored[sym], "stop_loss": new_sl}
+        return {**pos, "stop_loss": new_sl}  # type: ignore[return-value]
+
+    async def _force_close_at_market(
+        self,
+        sym: str,
+        pos: PositionRecord,
+        price: float,
+        monitored: Dict[str, PositionRecord],
+        lock: asyncio.Lock,
+        reason: str = "dynamic_exit",
+    ) -> None:
+        """Принудительно закрывает позицию по рынку независимо от SL/TP.
+
+        Используется при срабатывании dynamic exit (regime_flip, signal_reversal
+        и т.д.) — когда нужно выйти немедленно, не дожидаясь уровней SL/TP.
+        """
+        side = pos.get("side", "buy")
+        qty = pos.get("qty", 0.0)
+        if not qty:
+            async with lock:
+                monitored.pop(sym, None)
+            return
+
+        close_side = "sell" if side == "buy" else "buy"
+        logger.info(
+            "Force-close %s [%s] qty=%.6f price=%.4f reason=%s",
+            sym, side, qty, price, reason,
+        )
+
+        if not Config.PAPER_TRADING:
+            sl_tp_ids = [pos.get("exchange_sl_id"), pos.get("exchange_tp_id")]
+            for oid in filter(None, sl_tp_ids):
+                try:
+                    await self._api.cancel_order(sym, oid)
+                except Exception as _e:
+                    logger.debug("Cancel order %s failed: %s", oid, _e)
+            close_order = await self._api.create_order(
+                sym, "market", close_side, qty, lock_suffix="close"
+            )
+            if close_order is None:
+                logger.error(
+                    "Force-close order failed for %s — position left open", sym
+                )
+                return
+
+        await self._portfolio_manager.update_portfolio(
+            sym, close_side, qty, price
+        )
+        async with lock:
+            monitored.pop(sym, None)
+
+        entry = pos.get("entry", price)
+        if entry:
+            pnl_pct = (price - entry) / entry if side == "buy" else (entry - price) / entry
+        else:
+            pnl_pct = 0.0
+        pnl_sign = "+" if pnl_pct >= 0 else ""
+
+        if pos.get("snap") and self._online_learner:
+            strategy = (pos.get("snap") or {}).get("strategy", "unknown")
+            await self._online_learner.on_trade_closed(sym, side, pnl_pct, strategy)
+
+        trade_id = pos.get("trade_id")
+        if trade_id:
+            exit_commission = qty * price * Config.COMMISSION_RATE
+            try:
+                await self._trade_history.record_close(
+                    trade_id=trade_id,
+                    exit_price=price,
+                    commission=exit_commission,
+                )
+            except Exception as exc:
+                logger.error("record_close for trade %s failed: %s", trade_id, exc)
+
+        stats = await self._trade_history.get_summary()
+        await self._telegram.notify(
+            f"{'📈' if pnl_pct >= 0 else '📉'} Force-closed *{sym}* @ ${price:.4f}"
+            f" ({pnl_sign}{pnl_pct*100:.2f}%) — {reason}\n"
+            f"Win Rate: {stats['win_rate']:.0%}  Total PnL: ${stats['total_pnl']:+.2f}"
+        )
+        self._update_circuit_breaker(side, price, entry)
 
     async def _check_and_close(
         self,

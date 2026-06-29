@@ -195,18 +195,17 @@ class TestCheckDynamicExit:
 
     def test_no_signals_returns_false(self):
         monitor = _make_monitor()
-        # empty signals and ctx → early return
-        should, reason = monitor._check_dynamic_exit("BTC/USDT", _open_pos())
-        assert should is False
+        action, reason = monitor._check_dynamic_exit("BTC/USDT", _open_pos())
+        assert action is None
         assert reason == ""
 
     def test_signal_reversal_sell_triggers_buy_exit(self):
         monitor = _make_monitor()
         monitor.update_market_state(
-            {"BTC/USDT": {"action": "sell", "confidence": 0.75}}, {}, "unknown"
+            {"BTC/USDT": {"action": "sell", "confidence": 0.85}}, {}, "unknown"
         )
-        should, reason = monitor._check_dynamic_exit("BTC/USDT", _open_pos(side="buy"))
-        assert should is True
+        action, reason = monitor._check_dynamic_exit("BTC/USDT", _open_pos(side="buy"))
+        assert action == "force_close"
         assert "signal_reversal" in reason
 
     def test_signal_reversal_buy_triggers_sell_exit(self):
@@ -214,8 +213,8 @@ class TestCheckDynamicExit:
         monitor.update_market_state(
             {"BTC/USDT": {"action": "buy", "confidence": 0.80}}, {}, "unknown"
         )
-        should, reason = monitor._check_dynamic_exit("BTC/USDT", _open_pos(side="sell"))
-        assert should is True
+        action, reason = monitor._check_dynamic_exit("BTC/USDT", _open_pos(side="sell"))
+        assert action == "force_close"
         assert "signal_reversal" in reason
 
     def test_signal_reversal_low_confidence_no_exit(self):
@@ -223,74 +222,74 @@ class TestCheckDynamicExit:
         monitor.update_market_state(
             {"BTC/USDT": {"action": "sell", "confidence": 0.50}}, {}, "unknown"
         )
-        should, _ = monitor._check_dynamic_exit("BTC/USDT", _open_pos(side="buy"))
-        assert should is False
+        action, _ = monitor._check_dynamic_exit("BTC/USDT", _open_pos(side="buy"))
+        assert action is None
 
-    def test_regime_trending_down_exits_long(self):
+    def test_regime_trending_down_tightens_sl_long(self):
         monitor = _make_monitor()
         monitor.update_market_state({"BTC/USDT": {}}, {"BTC/USDT": {}}, "trending_down")
-        should, reason = monitor._check_dynamic_exit("BTC/USDT", _open_pos(side="buy"))
-        assert should is True
+        action, reason = monitor._check_dynamic_exit("BTC/USDT", _open_pos(side="buy"))
+        assert action == "tighten_sl"
         assert "regime_flip" in reason
 
-    def test_regime_trending_up_exits_short(self):
+    def test_regime_trending_up_tightens_sl_short(self):
         monitor = _make_monitor()
         monitor.update_market_state({"BTC/USDT": {}}, {"BTC/USDT": {}}, "trending_up")
-        should, reason = monitor._check_dynamic_exit("BTC/USDT", _open_pos(side="sell"))
-        assert should is True
+        action, reason = monitor._check_dynamic_exit("BTC/USDT", _open_pos(side="sell"))
+        assert action == "tighten_sl"
         assert "regime_flip" in reason
 
     def test_regime_sideways_does_not_exit(self):
         monitor = _make_monitor()
         monitor.update_market_state({}, {}, "sideways")
-        should, _ = monitor._check_dynamic_exit("BTC/USDT", _open_pos(side="buy"))
-        assert should is False
+        action, _ = monitor._check_dynamic_exit("BTC/USDT", _open_pos(side="buy"))
+        assert action is None
 
-    def test_funding_short_overheated_exits_short(self):
+    def test_funding_short_overheated_tightens_sl_short(self):
         monitor = _make_monitor()
         monitor.update_market_state(
             {}, {"BTC/USDT": {"funding_signal": "short_overheated"}}, "unknown"
         )
-        should, reason = monitor._check_dynamic_exit("BTC/USDT", _open_pos(side="sell"))
-        assert should is True
+        action, reason = monitor._check_dynamic_exit("BTC/USDT", _open_pos(side="sell"))
+        assert action == "tighten_sl"
         assert "short_overheated" in reason
 
-    def test_funding_long_overheated_exits_long(self):
+    def test_funding_long_overheated_tightens_sl_long(self):
         monitor = _make_monitor()
         monitor.update_market_state(
             {}, {"BTC/USDT": {"funding_signal": "long_overheated"}}, "unknown"
         )
-        should, reason = monitor._check_dynamic_exit("BTC/USDT", _open_pos(side="buy"))
-        assert should is True
+        action, reason = monitor._check_dynamic_exit("BTC/USDT", _open_pos(side="buy"))
+        assert action == "tighten_sl"
         assert "long_overheated" in reason
 
     def test_extreme_fear_exits_short(self):
         monitor = _make_monitor()
         monitor.update_market_state({}, {"BTC/USDT": {"fear_greed": 5}}, "unknown")
-        should, reason = monitor._check_dynamic_exit("BTC/USDT", _open_pos(side="sell"))
-        assert should is True
+        action, reason = monitor._check_dynamic_exit("BTC/USDT", _open_pos(side="sell"))
+        assert action == "force_close"
         assert "extreme_fear" in reason
 
     def test_extreme_greed_exits_long(self):
         monitor = _make_monitor()
         monitor.update_market_state({}, {"BTC/USDT": {"fear_greed": 95}}, "unknown")
-        should, reason = monitor._check_dynamic_exit("BTC/USDT", _open_pos(side="buy"))
-        assert should is True
+        action, reason = monitor._check_dynamic_exit("BTC/USDT", _open_pos(side="buy"))
+        assert action == "force_close"
         assert "extreme_greed" in reason
 
     def test_moderate_fear_greed_no_exit(self):
         monitor = _make_monitor()
         monitor.update_market_state({}, {"BTC/USDT": {"fear_greed": 50}}, "unknown")
-        should, _ = monitor._check_dynamic_exit("BTC/USDT", _open_pos(side="buy"))
-        assert should is False
+        action, _ = monitor._check_dynamic_exit("BTC/USDT", _open_pos(side="buy"))
+        assert action is None
 
     def test_long_liquidation_exits_long(self):
         monitor = _make_monitor()
         monitor.update_market_state(
             {}, {"BTC/USDT": {"liquidation_pressure": "long_liquidation"}}, "unknown"
         )
-        should, reason = monitor._check_dynamic_exit("BTC/USDT", _open_pos(side="buy"))
-        assert should is True
+        action, reason = monitor._check_dynamic_exit("BTC/USDT", _open_pos(side="buy"))
+        assert action == "force_close"
         assert "long_liquidation" in reason
 
     def test_short_squeeze_exits_short(self):
@@ -298,8 +297,8 @@ class TestCheckDynamicExit:
         monitor.update_market_state(
             {}, {"BTC/USDT": {"liquidation_pressure": "short_squeeze"}}, "unknown"
         )
-        should, reason = monitor._check_dynamic_exit("BTC/USDT", _open_pos(side="sell"))
-        assert should is True
+        action, reason = monitor._check_dynamic_exit("BTC/USDT", _open_pos(side="sell"))
+        assert action == "force_close"
         assert "short_squeeze" in reason
 
     def test_neutral_liquidation_no_exit(self):
@@ -307,8 +306,8 @@ class TestCheckDynamicExit:
         monitor.update_market_state(
             {}, {"BTC/USDT": {"liquidation_pressure": "neutral"}}, "unknown"
         )
-        should, _ = monitor._check_dynamic_exit("BTC/USDT", _open_pos(side="buy"))
-        assert should is False
+        action, _ = monitor._check_dynamic_exit("BTC/USDT", _open_pos(side="buy"))
+        assert action is None
 
 
 # ===========================================================================
