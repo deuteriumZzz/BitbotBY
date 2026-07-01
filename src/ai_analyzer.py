@@ -368,6 +368,7 @@ class AIAnalyzer:
                 pass
 
         import time as _time
+
         _now = _time.time()
         for provider in provider_order:
             # Skip provider if it told us to retry later
@@ -425,6 +426,7 @@ class AIAnalyzer:
                 # Parse "retry in Xm Ys" or "retry in Xs" from 429 messages
                 if status == 429:
                     import re as _re
+
                     _msg = str(e)
                     _m = _re.search(
                         r"try again in (\d+)m(\d+(?:\.\d+)?)?s?|"
@@ -437,9 +439,7 @@ class AIAnalyzer:
                             _secs = int(_m.group(1)) * 60 + float(_m.group(2) or 0)
                         else:  # "Xs" form
                             _secs = float(_m.group(3))
-                        self._provider_retry_after[provider] = (
-                            _time.time() + _secs + 5
-                        )
+                        self._provider_retry_after[provider] = _time.time() + _secs + 5
                         self.logger.info(
                             "Provider %s rate-limited — cooldown %.0fs",
                             provider,

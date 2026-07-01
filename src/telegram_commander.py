@@ -1949,7 +1949,11 @@ class TelegramCommander:
         self, update: Update, _context: ContextTypes.DEFAULT_TYPE
     ) -> None:
         query = update.callback_query
-        await query.answer()
+        try:
+            await query.answer()
+        except Exception:
+            # Кнопка устарела (>10 мин после перезапуска бота) — молча игнорируем
+            return
 
         chat_id = str(getattr(update.effective_chat, "id", ""))
         if chat_id != str(self._notifier._chat_id):
