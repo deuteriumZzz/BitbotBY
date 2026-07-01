@@ -184,6 +184,7 @@ class TradingBot:
             get_state=self._get_bot_state,
             on_mode_switch=self._handle_mode_switch,
             on_restart=self._handle_restart,
+            on_close_all=self._handle_close_all,
         )
         self._cycle = CycleRunner(
             news=self.news,
@@ -631,6 +632,22 @@ class TradingBot:
         self._drawdown_consec = 0
         logger.info("Mode switch: _monitored cleared, peak balance reset")
         await self._reconcile_positions()
+
+    async def _handle_close_all(self) -> int:
+        """Закрывает все открытые позиции по команде из Telegram.
+
+        В paper-режиме просто очищает _monitored и сохраняет в Redis.
+        В live-режиме отправляет market-ордера на закрытие через position_monitor.
+        Возвращает кол-во закрытых позиций.
+        """
+        async with self._monitored_lock:
+            count = sum(1 for p in self._monitored.values() if p is not None)
+        if count == 0:
+            return 0
+        await self._close_all_open_positions(reason="telegram_closeall")
+        self._save_monitored_state()
+        logger.info("Telegram /closeall: closed %d positions", count)
+        return count
 
     def _is_atr_spike(self, market_data: Dict) -> bool:
         """Возвращает True если ATR вырос в ATR_SPIKE_MULT раз от медианы.
@@ -1364,6 +1381,7 @@ class TradingBot:
                             market_ctx=_market_ctx_map,
                             regime=self._current_regime,
                         )
+                    self._save_monitored_state()
                     continue
 
                 # РЕЖИМ ПОИСКА: есть свободные слоты — полный скан + AI
