@@ -724,13 +724,13 @@ class TestApplyMarketContextFilter:
 
     def test_extreme_greed_reduces_buy(self):
         recs = [make_rec(action="buy", confidence=0.80)]
-        result = self._filter(recs, {"fear_greed_signal": "extreme_greed"})
-        assert result[0]["confidence"] == pytest.approx(0.80 - 0.10, abs=1e-3)
+        result = self._filter(recs, {"fear_greed": 90})
+        assert result[0]["confidence"] == pytest.approx(round(0.80 * 0.85, 3), abs=1e-3)
 
     def test_extreme_fear_reduces_sell(self):
         recs = [make_rec(action="sell", confidence=0.80)]
-        result = self._filter(recs, {"fear_greed_signal": "extreme_fear"})
-        assert result[0]["confidence"] == pytest.approx(0.80 - 0.10, abs=1e-3)
+        result = self._filter(recs, {"fear_greed": 10})
+        assert result == []  # sell на панике блокируется (conf→0, ниже порога)
 
     def test_extreme_greed_doesnt_affect_sell(self):
         recs = [make_rec(action="sell", confidence=0.80)]

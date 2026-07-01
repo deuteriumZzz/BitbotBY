@@ -351,6 +351,7 @@ class TestAnalyze:
         ai.logger = logging.getLogger("test")
         ai._provider_order = provider_order or []
         ai.strategies = []
+        ai._provider_retry_after = {}
         return ai
 
     @pytest.mark.asyncio
