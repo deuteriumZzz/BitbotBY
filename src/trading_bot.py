@@ -132,7 +132,9 @@ class TradingBot:
         )
         # детектор «тихой смерти»: фиксируем время последней сделки и последнего алерта
         self._last_trade_at: Optional[float] = None
+        self._last_cycle_at: float = time.time()
         self._silent_death_alerted_at: float = 0.0
+        self._cycle_stall_alerted_at: float = 0.0
         self._daily_limit_notified_at: float = 0.0
         self._silent_death_hours: float = float(os.getenv("SILENT_DEATH_HOURS", "6"))
         if Config.PAPER_TRADING:
@@ -1062,20 +1064,39 @@ class TradingBot:
         return confidence * (1.0 + tp_bonus) * (1.0 + volume_bonus) * regime_mult
 
     async def _check_silent_death(self) -> None:
-        """Отправляет Telegram-алерт если бот не совершал сделок
-        дольше порогового времени.
+        """Отправляет Telegram-алерт если цикл завис или нет сделок слишком долго.
 
-        Пропускается в режиме 'local' и когда сделок ещё не было.
+        Проверка 1 — зависание цикла: порог = interval + 5 мин.
+          bluechip (900s): алерт через 20 мин без цикла.
+          altcoin  (300s): алерт через 10 мин без цикла.
+
+        Проверка 2 — тихая смерть: нет сделок дольше SILENT_DEATH_HOURS.
+          Пропускается в режиме 'local' и когда сделок ещё не было.
         """
+        now = time.time()
+        _interval = self._runtime_config.get_trading_interval()
+        cycle_stall_threshold = _interval + 300  # interval + 5 мин буфер
+
+        if (
+            now - self._last_cycle_at > cycle_stall_threshold
+            and now - self._cycle_stall_alerted_at > cycle_stall_threshold
+        ):
+            self._cycle_stall_alerted_at = now
+            stall_min = (now - self._last_cycle_at) / 60
+            await self.telegram.notify(
+                f"⚠️ Торговый цикл завис — нет активности {stall_min:.0f} мин "
+                f"(ожидаемый интервал: {_interval // 60} мин). "
+                f"Проверьте логи: `make logs`"
+            )
+
         if Config.MODE == "local" or self._last_trade_at is None:
             return
-        hours_idle = (time.time() - self._last_trade_at) / _SECONDS_PER_HOUR
+        hours_idle = (now - self._last_trade_at) / _SECONDS_PER_HOUR
         if (
             hours_idle >= self._silent_death_hours
-            and time.time() - self._silent_death_alerted_at
-            > SILENT_DEATH_ALERT_COOLDOWN
+            and now - self._silent_death_alerted_at > SILENT_DEATH_ALERT_COOLDOWN
         ):
-            self._silent_death_alerted_at = time.time()
+            self._silent_death_alerted_at = now
             await self.telegram.notify(
                 f"⚠️ Бот работает, но нет сделок уже "
                 f"{hours_idle:.0f}ч. Проверьте сигналы и баланс AI."
@@ -1431,6 +1452,7 @@ class TradingBot:
                 await self._update_performance_stats()
 
                 self.combiner.sac.reload_if_updated()
+                self._last_cycle_at = time.time()
                 await self._check_silent_death()
                 self._save_monitored_state()
 
