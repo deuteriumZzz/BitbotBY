@@ -133,6 +133,7 @@ class TradingBot:
         # детектор «тихой смерти»: фиксируем время последней сделки и последнего алерта
         self._last_trade_at: Optional[float] = None
         self._last_cycle_at: float = time.time()
+        self._symbol_cooldown: dict = {}
         self._silent_death_alerted_at: float = 0.0
         self._cycle_stall_alerted_at: float = 0.0
         self._daily_limit_notified_at: float = 0.0
@@ -162,6 +163,9 @@ class TradingBot:
             set_running=lambda v: setattr(self, "is_running", v),
             redis=self.redis,
             online_learner=self._online_learner,
+            on_position_closed=lambda sym: self._symbol_cooldown.update(
+                {sym: time.time()}
+            ),
         )
         self._executor = OrderExecutor(
             api=self.api,
@@ -598,7 +602,17 @@ class TradingBot:
                 max_pos,
             )
             return
+        cooldown_secs = Config.SYMBOL_COOLDOWN_HOURS * 3600
+        now = time.time()
         for rec in filtered[:slots]:
+            sym = rec.get("symbol", "")
+            last_closed = self._symbol_cooldown.get(sym, 0.0)
+            if now - last_closed < cooldown_secs:
+                remaining = int((cooldown_secs - (now - last_closed)) / 60)
+                logger.info(
+                    "Symbol cooldown: skipping %s (%d min remaining)", sym, remaining
+                )
+                continue
             await self._executor.execute(rec, market_data, balance)
 
     async def _close_all_open_positions(self, reason: str) -> None:

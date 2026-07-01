@@ -243,6 +243,8 @@ class Config:
     # ── Liquidity filter (УЛУЧШЕНИЕ 5) ────────────────────────────────────
     # Минимальный 24h объём в USDT для допуска к торговле
     MIN_VOLUME_USDT: float = float(os.getenv("MIN_VOLUME_USDT", "1000000"))
+    # Cooldown: не переоткрывать один и тот же символ N часов после закрытия
+    SYMBOL_COOLDOWN_HOURS: float = float(os.getenv("SYMBOL_COOLDOWN_HOURS", "3"))
     # Порог volume spike: во сколько раз текущий объём свечи превышает среднее
     # за последние 20 свечей. 2.5 = аномалия, рекомендуется 2.0–4.0.
     VOLUME_SPIKE_THRESHOLD: float = float(os.getenv("VOLUME_SPIKE_THRESHOLD", "2.5"))

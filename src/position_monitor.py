@@ -52,6 +52,7 @@ class PositionMonitor:
         set_running: Callable[[bool], None],
         redis: "Optional[RedisClient]" = None,
         online_learner: "Optional[OnlineLearner]" = None,
+        on_position_closed: "Optional[Callable[[str], None]]" = None,
     ) -> None:
         self._api = api
         self._trade_history = trade_history
@@ -62,6 +63,7 @@ class PositionMonitor:
         self._set_running = set_running
         self._redis = redis
         self._online_learner = online_learner
+        self._on_position_closed = on_position_closed
         # Load persisted counter so circuit breaker survives bot restarts.
         self._consecutive_losses: int = self._load_cb_state()
         # State for dynamic exits — updated each cycle via update_market_state().
@@ -704,6 +706,8 @@ class PositionMonitor:
         await self._portfolio_manager.update_portfolio(sym, close_side, qty, price)
         async with lock:
             monitored.pop(sym, None)
+        if self._on_position_closed:
+            self._on_position_closed(sym)
 
         entry = pos.get("entry", price)
         if entry:
@@ -839,6 +843,8 @@ class PositionMonitor:
         await self._portfolio_manager.update_portfolio(sym, close_side, qty, price)
         async with lock:
             monitored.pop(sym, None)
+        if self._on_position_closed:
+            self._on_position_closed(sym)
         logger.info("Position closed: %s at %.4f", sym, price)
 
         # Save experience for the next SAC retraining run
