@@ -23,6 +23,7 @@ Telegram-команды и inline-панель управления BitbotBY.
   /provider groq — переключить на Groq (auto|anthropic|openai|deepseek|groq|gemini)
   /pnl           — P&L за день и всего
   /pos           — открытые позиции
+  /closeall      — закрыть все открытые позиции (с подтверждением)
   /add SYM       — добавить символ (напр. /add SOL)
   /remove SYM    — исключить символ из сканирования
 """
@@ -371,6 +372,7 @@ def _kb_pos() -> "InlineKeyboardMarkup":
                 InlineKeyboardButton("📈 P&L", callback_data="pnl"),
                 InlineKeyboardButton("🔄 Обновить", callback_data="pos"),
             ],
+            [InlineKeyboardButton("🗑 Закрыть все позиции", callback_data="closeall")],
             [InlineKeyboardButton("« Главная", callback_data="main")],
         ]
     )
@@ -758,12 +760,14 @@ class TelegramCommander:
         get_state: Callable[[], Dict[str, Any]],
         on_mode_switch: "Optional[Callable[[], Any]]" = None,
         on_restart: "Optional[Callable[[], Any]]" = None,
+        on_close_all: "Optional[Callable[[], Any]]" = None,
     ) -> None:
         self._notifier = notifier
         self._rc = runtime_config
         self._get_state = get_state
         self._on_mode_switch = on_mode_switch
         self._on_restart = on_restart
+        self._on_close_all = on_close_all
         self._sac_training = False
         self._backtesting = False
         self._background_tasks: set = set()
@@ -788,6 +792,7 @@ class TelegramCommander:
             ("scan", self._cmd_scan),
             ("pnl", self._cmd_pnl),
             ("pos", self._cmd_pos),
+            ("closeall", self._cmd_closeall),
             ("add", self._cmd_add),
             ("remove", self._cmd_remove),
             ("strategies", self._cmd_strategies),
@@ -810,6 +815,7 @@ class TelegramCommander:
             ("settings", "Все настройки"),
             ("pnl", "Прибыль и убытки"),
             ("pos", "Открытые позиции"),
+            ("closeall", "Закрыть все позиции"),
             ("pause", "Поставить на паузу"),
             ("resume", "Возобновить торговлю"),
             ("mode", "Сменить режим (ai/local/hybrid)"),
@@ -889,6 +895,8 @@ class TelegramCommander:
         configured_provider = self._rc.get_ai_provider()
         last_provider = self._rc.get_last_ai_provider()
         provider = last_provider if last_provider else configured_provider
+        if provider == "local":
+            provider = "🔴 local"
         hours = self._rc.get_trading_hours()
 
         state_icon = "⏸" if paused else "🟢"
@@ -1474,6 +1482,35 @@ class TelegramCommander:
             return
         await self._reply(update, self._build_pos(), _kb_pos())
 
+    async def _cmd_closeall(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        if not self._authorized(update):
+            return
+        positions = self._get_state().get("positions", [])
+        if not positions:
+            await self._reply(update, "📭 Нет открытых позиций.", _kb_pos())
+            return
+        count = len(positions)
+        paper = self._get_state().get("paper_trading", True)
+        mode_note = " *(paper режим)*" if paper else " ⚠️ *РЕАЛЬНЫЕ ДЕНЬГИ*"
+        await self._reply(
+            update,
+            f"🗑 *Закрыть все позиции?*{mode_note}\n\n"
+            f"Будет закрыто: *{count}* позиций\n\n"
+            f"_Это действие нельзя отменить._",
+            InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "✅ Закрыть все", callback_data="closeall_confirm"
+                        ),
+                        InlineKeyboardButton("❌ Отмена", callback_data="pos"),
+                    ]
+                ]
+            ),
+        )
+
     async def _cmd_add(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
@@ -1934,6 +1971,59 @@ class TelegramCommander:
 
         elif data == "pos":
             await self._edit(query, self._build_pos(), _kb_pos())
+
+        elif data == "closeall":
+            positions = self._get_state().get("positions", [])
+            if not positions:
+                await self._edit(query, "📭 Нет открытых позиций.", _kb_pos())
+                return
+            count = len(positions)
+            paper = self._get_state().get("paper_trading", True)
+            mode_note = " *(paper режим)*" if paper else " ⚠️ *РЕАЛЬНЫЕ ДЕНЬГИ*"
+            await self._edit(
+                query,
+                f"🗑 *Закрыть все позиции?*{mode_note}\n\n"
+                f"Будет закрыто: *{count}* позиций\n\n"
+                f"_Это действие нельзя отменить._",
+                InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "✅ Закрыть все", callback_data="closeall_confirm"
+                            ),
+                            InlineKeyboardButton("❌ Отмена", callback_data="pos"),
+                        ]
+                    ]
+                ),
+            )
+
+        elif data == "closeall_confirm":
+            if not self._on_close_all:
+                await self._edit(query, "❌ Функция закрытия недоступна.", _kb_pos())
+                return
+            await self._edit(
+                query,
+                "⏳ *Закрываю позиции...*",
+                InlineKeyboardMarkup([]),
+            )
+            try:
+                closed = await self._on_close_all()
+            except Exception as _e:
+                await self._edit(
+                    query, f"❌ *Ошибка при закрытии позиций:*\n`{_e}`", _kb_pos()
+                )
+                return
+            if closed:
+                await self._edit(
+                    query,
+                    f"✅ *Закрыто {closed} позиций*\n\n"
+                    f"Redis обновлён. Бот продолжит торговлю.",
+                    _kb_pos(),
+                )
+            else:
+                await self._edit(
+                    query, "📭 Позиций для закрытия не оказалось.", _kb_pos()
+                )
 
         elif data == "settings":
             text, kb = self._build_settings()

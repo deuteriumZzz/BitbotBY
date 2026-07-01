@@ -299,6 +299,7 @@ class SignalCombiner:
 
             funding = ctx.get("funding_signal", "neutral")
             fng = ctx.get("fear_greed_signal", "neutral")
+            fng_value = int(ctx.get("fear_greed", 50))
             oi = ctx.get("oi_signal", "oi_neutral")
             liquidation = ctx.get("liquidation_pressure", "neutral")
             basis = ctx.get("basis_signal", "neutral")
@@ -322,10 +323,21 @@ class SignalCombiner:
                 elif action == "buy":
                     conf = min(0.95, conf + 0.05)
 
-            if fng == "extreme_greed" and action == "buy":
-                conf -= 0.10
-            elif fng == "extreme_fear" and action == "sell":
-                conf -= 0.10
+            # Fear & Greed contrarian modifier
+            if fng_value <= 15:  # extreme fear — contrarian window
+                if action == "buy":
+                    if liquidation == "long_liquidation":
+                        # каскад ещё идёт — не покупаем в падающий нож
+                        conf = 0.0
+                    else:
+                        # каскад закончился — контрарный буст
+                        conf = min(0.95, conf * 1.15)
+                elif action == "sell":
+                    # не шортим на дне паники
+                    conf = 0.0
+            elif fng_value >= 85:  # extreme greed — рынок перегрет
+                if action == "buy":
+                    conf = round(conf * 0.85, 3)
 
             if oi == "oi_bearish" and action == "buy":
                 conf -= 0.08

@@ -82,6 +82,8 @@ class AIAnalyzer:
         # Кулдаун уведомлений: не спамим одним и тем же сообщением
         self._notified_at: Dict[str, float] = {}
         self._NOTIFY_COOLDOWN = 3600.0  # раз в час максимум
+        # Retry-after: провайдер сообщил "retry in Xm" — пропускаем до этого времени
+        self._provider_retry_after: Dict[str, float] = {}
 
         # Initialise clients for ALL providers that have keys (for fallback)
         self._anthropic = None
@@ -365,7 +367,17 @@ class AIAnalyzer:
             except Exception:
                 pass
 
+        import time as _time
+        _now = _time.time()
         for provider in provider_order:
+            # Skip provider if it told us to retry later
+            _retry_at = self._provider_retry_after.get(provider, 0)
+            if _retry_at > _now:
+                _wait = int(_retry_at - _now)
+                self.logger.debug(
+                    "Provider %s on cooldown for %ds — skipping", provider, _wait
+                )
+                continue
             try:
                 if provider == "anthropic":
                     raw = await self._call_anthropic(prompt)
@@ -410,6 +422,29 @@ class AIAnalyzer:
                     status or "?",
                     e,
                 )
+                # Parse "retry in Xm Ys" or "retry in Xs" from 429 messages
+                if status == 429:
+                    import re as _re
+                    _msg = str(e)
+                    _m = _re.search(
+                        r"try again in (\d+)m(\d+(?:\.\d+)?)?s?|"
+                        r"try again in (\d+(?:\.\d+)?)s",
+                        _msg,
+                        _re.IGNORECASE,
+                    )
+                    if _m:
+                        if _m.group(1):  # "Xm Ys" form
+                            _secs = int(_m.group(1)) * 60 + float(_m.group(2) or 0)
+                        else:  # "Xs" form
+                            _secs = float(_m.group(3))
+                        self._provider_retry_after[provider] = (
+                            _time.time() + _secs + 5
+                        )
+                        self.logger.info(
+                            "Provider %s rate-limited — cooldown %.0fs",
+                            provider,
+                            _secs,
+                        )
                 _rc2 = getattr(self, "_runtime_config", None)
                 if _rc2 is not None:
                     try:
@@ -423,6 +458,12 @@ class AIAnalyzer:
                 continue
 
         self.logger.error("All AI providers exhausted")
+        _rc3 = getattr(self, "_runtime_config", None)
+        if _rc3 is not None:
+            try:
+                _rc3.set_last_ai_provider("local")
+            except Exception:
+                pass
         await self._notify_all_exhausted()
         return []
 
