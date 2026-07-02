@@ -840,17 +840,24 @@ class TradingBot:
             logger.error("Error updating performance stats: %s", e)
 
     async def _scan_and_update_correlations(
-        self, symbols: list
+        self, symbols: list, target_n: int = 0
     ) -> Dict[str, pd.DataFrame]:
         """Сканирует рыночные данные, обновляет корреляционный фильтр
         и сохраняет в Redis.
 
-        :param symbols: Список символов для сканирования.
+        :param symbols: Список символов (кандидаты в порядке объёма, может быть
+                        больше target_n — get_top_symbols возвращает N+buffer).
+        :param target_n: Сколько символов оставить после загрузки OHLCV.
+                         0 = без ограничения.
         :return: Словарь {символ: DataFrame с OHLCV+индикаторами}.
         """
         market_data = await self.scanner.scan_all(
             symbols, self._runtime_config.get_timeframe()
         )
+        # Обрезаем до target_n в исходном порядке объёма (symbols уже отсортированы)
+        if target_n > 0 and len(market_data) > target_n:
+            ordered = {s: market_data[s] for s in symbols if s in market_data}
+            market_data = dict(list(ordered.items())[:target_n])
         for sym, df in market_data.items():
             self.corr_filter.update_from_df(sym, df)
         self._save_corr_filter()
@@ -1197,8 +1204,9 @@ class TradingBot:
                         n=_scan_n,
                     )
                 elif _profile == "altcoin":
-                    # Динамически определяем текущий топ 20 bluechip по объёму
-                    _bc_syms = await self.scanner.get_top_symbols(n=20)
+                    # Динамически определяем текущий топ bluechip по объёму
+                    # buffer=0: этот список нужен только для исключения, не для загрузки
+                    _bc_syms = await self.scanner.get_top_symbols(n=20, buffer=0)
                     _bc_bases = frozenset(s.split("/")[0] for s in _bc_syms)
                     symbols = await self.scanner.get_top_symbols(
                         n=_scan_n,
@@ -1206,7 +1214,9 @@ class TradingBot:
                     )
                 else:
                     symbols = await self.scanner.get_top_symbols(n=_scan_n)
-                market_data = await self._scan_and_update_correlations(symbols)
+                market_data = await self._scan_and_update_correlations(
+                    symbols, target_n=_scan_n
+                )
                 snapshots = await self._cycle.collect_snapshots(
                     list(market_data.keys()), market_data
                 )

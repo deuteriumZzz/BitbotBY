@@ -50,16 +50,23 @@ class MarketScanner:
         excluded: set | None = None,
         bluechip_bases: frozenset | None = None,
         altcoin_exclude_bases: frozenset | None = None,
+        buffer: int = 0,
     ) -> List[str]:
         """
-        Возвращает топ-N символов /USDT по объёму за 24ч.
+        Возвращает топ-(N+buffer) кандидатов /USDT по объёму за 24ч.
 
-        :param n: Сколько монет вернуть после всех фильтров.
+        По умолчанию buffer=n (100% запас): для n=20 берём 40 кандидатов,
+        для n=100 берём 200. Один сетевой вызов покрывает практически любой
+        процент провалов при загрузке OHLCV.
+        _scan_and_update_correlations обрезает итог до n в порядке объёма.
+
+        :param n: Целевое количество монет после загрузки данных.
+        :param buffer: Запас сверх n. 0 = использовать n (двойной пул).
         :param forced: Символы, всегда добавляемые в список (через /add).
         :param excluded: Символы, исключённые из сканирования (через /remove).
         :param bluechip_bases: Если задан — вернуть только монеты из этого набора.
         :param altcoin_exclude_bases: Если задан — исключить эти базы (altcoin сезон).
-        :return: Топ-N монет нужного сезона в формате ccxt ('BTC/USDT').
+        :return: До (N+buffer) монет в формате ccxt ('BTC/USDT'), в порядке объёма.
         """
         forced = forced or set()
         excluded = excluded or set()
@@ -111,7 +118,8 @@ class MarketScanner:
                 key=lambda x: x[1].get("quoteVolume", 0),
                 reverse=True,
             )
-            symbols = [sym for sym, _ in ranked[:n]]
+            fetch_n = n + (buffer if buffer > 0 else n)
+            symbols = [sym for sym, _ in ranked[:fetch_n]]
 
             # Forced символы добавляются поверх топа если их там нет
             for sym in forced:
