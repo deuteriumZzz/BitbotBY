@@ -54,6 +54,15 @@ JUNK_BASES: frozenset[str] = frozenset(
         "BILL",
         "XPL",
         "ASTER",
+        # Недоступны на Bybit linear
+        "ZEC",
+        "LAB",
+        "SPCX",
+        "M",
+        "MU",
+        "BEAT",
+        "FARTCOIN",
+        "SNDK",
     }
 )
 
