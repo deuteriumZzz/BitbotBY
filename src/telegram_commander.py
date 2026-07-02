@@ -239,6 +239,12 @@ def _kb_market_profile_menu(
                     callback_data="market_profile:altcoin",
                 ),
             ],
+            [
+                InlineKeyboardButton(
+                    f"{_mark('meme')}🚀 Мемкоины",
+                    callback_data="market_profile:meme",
+                ),
+            ],
             [InlineKeyboardButton("« Настройки", callback_data="settings")],
         ]
     )
@@ -939,7 +945,11 @@ class TelegramCommander:
         exec_icon = "✅" if auto_exec else "❌"
         hours_str = f"`{hours}`" if hours else "`24/7`"
 
-        profile_labels = {"bluechip": "🔵 Блючипы", "altcoin": "🟡 Альткоины"}
+        profile_labels = {
+            "bluechip": "🔵 Блючипы",
+            "altcoin": "🟡 Альткоины",
+            "meme": "🚀 Мемкоины",
+        }
         market_profile = self._rc.get_market_profile()
         profile_str = profile_labels.get(market_profile, "⚪ не задан")
         season_data = self._rc.get_season_index()
@@ -1039,7 +1049,11 @@ class TelegramCommander:
                 f"  Chronos (усил. контроль): {'✅ ВКЛ' if chronos else '❌ ВЫКЛ'}\n"
             )
 
-        profile_labels = {"bluechip": "🔵 Блючипы", "altcoin": "🟡 Альткоины"}
+        profile_labels = {
+            "bluechip": "🔵 Блючипы",
+            "altcoin": "🟡 Альткоины",
+            "meme": "🚀 Мемкоины",
+        }
         profile_str = profile_labels.get(market_profile, "⚪ не задан")
 
         season_data = self._rc.get_season_index()
@@ -1735,7 +1749,11 @@ class TelegramCommander:
 
         model_path = self._rc.get_sac_model_path()
         profile = self._rc.get_market_profile()
-        profile_labels = {"bluechip": "🔵 Блючипы", "altcoin": "🟡 Альткоины"}
+        profile_labels = {
+            "bluechip": "🔵 Блючипы",
+            "altcoin": "🟡 Альткоины",
+            "meme": "🚀 Мемкоины",
+        }
         profile_note = (
             f" ({profile_labels[profile]})" if profile in profile_labels else ""
         )
@@ -1754,7 +1772,11 @@ class TelegramCommander:
                 "EXPERIENCES_PATH": (
                     "data/experiences_altcoin.jsonl"
                     if profile == "altcoin"
-                    else "data/experiences.jsonl"
+                    else (
+                        "data/experiences_meme.jsonl"
+                        if profile == "meme"
+                        else "data/experiences.jsonl"
+                    )
                 ),
             }
             proc = await _asyncio.create_subprocess_exec(
@@ -2400,19 +2422,29 @@ class TelegramCommander:
 
             profile_name = data.split(":", 1)[1]
             if self._rc.apply_market_profile(profile_name):
-                labels = {"bluechip": "🔵 Блючипы", "altcoin": "🟡 Альткоины"}
+                labels = {
+                    "bluechip": "🔵 Блючипы",
+                    "altcoin": "🟡 Альткоины",
+                    "meme": "🚀 Мемкоины",
+                }
                 label = labels.get(profile_name, profile_name)
+                profile_cfg = self._rc.get_market_profile_config(profile_name)
+                profile_mode = profile_cfg.get("mode", "hybrid")
                 model_path = self._rc.get_sac_model_path()
                 model_exists = _os.path.exists(model_path)
-                model_note = (
-                    ""
-                    if model_exists
-                    else f"\n\n⚠️ SAC модель для этого профиля не найдена.\n"
-                    f"📁 `{model_path}`\n"
-                    "_Используй кнопку обучения в настройках._"
-                )
+                # local-mode profiles don't use SAC — skip the missing-model warning
+                if profile_mode == "local":
+                    model_note = ""
+                elif not model_exists:
+                    model_note = (
+                        f"\n\n⚠️ SAC модель для этого профиля не найдена.\n"
+                        f"📁 `{model_path}`\n"
+                        "_Используй кнопку обучения в настройках._"
+                    )
+                else:
+                    model_note = ""
                 # предупреждение уже показано inline — фоновый check не нужен
-                if not model_exists:
+                if not model_exists and profile_mode != "local":
                     self._rc.set_sac_prompted(profile_name)
                 text, kb = self._build_settings()
                 await self._edit(

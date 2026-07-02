@@ -174,6 +174,36 @@ class Config:
     # Интервал обновления новостей в секундах (900 = 15 мин)
     NEWS_UPDATE_INTERVAL: int = int(os.getenv("NEWS_UPDATE_INTERVAL", "900"))
 
+    # ── Twitter/X Sentiment ────────────────────────────────────────────────
+    # Bearer Token из Twitter Developer Portal (Basic план $100/мес)
+    # Без токена — TwitterAnalyzer молча возвращает 0.0
+    TWITTER_BEARER_TOKEN: str = os.getenv("TWITTER_BEARER_TOKEN", "")
+    # Максимум твитов на запрос (экономим лимит Basic: 10K/мес)
+    TWITTER_MAX_RESULTS: int = int(os.getenv("TWITTER_MAX_RESULTS", "10"))
+
+    # ── Telegram Sentiment (Telethon MTProto) ──────────────────────────────
+    # Получить на my.telegram.org → API development tools
+    TELEGRAM_SENTIMENT_API_ID: str = os.getenv("TELEGRAM_SENTIMENT_API_ID", "")
+    TELEGRAM_SENTIMENT_API_HASH: str = os.getenv("TELEGRAM_SENTIMENT_API_HASH", "")
+    # Номер телефона для авторизации Telethon (формат: +375291234567)
+    TELEGRAM_SENTIMENT_PHONE: str = os.getenv("TELEGRAM_SENTIMENT_PHONE", "")
+    # Публичные каналы через запятую (без @)
+    TELEGRAM_SENTIMENT_CHANNELS: str = os.getenv(
+        "TELEGRAM_SENTIMENT_CHANNELS",
+        "CryptoMoonAlerts,pumpsignalscrypto,memecoinsnews",
+    )
+
+    # ── Sentiment Poller ───────────────────────────────────────────────────
+    # Интервал опроса Twitter + Telegram в секундах
+    SENTIMENT_POLL_INTERVAL: int = int(os.getenv("SENTIMENT_POLL_INTERVAL", "300"))
+    # TTL кэша сентимента в Redis в секундах
+    SENTIMENT_CACHE_TTL: int = int(os.getenv("SENTIMENT_CACHE_TTL", "600"))
+    # Порог buy/sell для SentimentStrategy (-1.0..1.0)
+    SENTIMENT_BUY_THRESHOLD: float = float(os.getenv("SENTIMENT_BUY_THRESHOLD", "0.4"))
+    SENTIMENT_SELL_THRESHOLD: float = float(
+        os.getenv("SENTIMENT_SELL_THRESHOLD", "-0.4")
+    )
+
     # ── Telegram ───────────────────────────────────────────────────────────
     # Токен BotFather: /newbot → скопировать токен
     TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")

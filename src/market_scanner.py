@@ -83,7 +83,10 @@ class MarketScanner:
                     continue
                 if base in JUNK_BASES:
                     continue
-                if base in MEME_COIN_BASES:
+                is_meme = (
+                    self._rc is not None and self._rc.get_market_profile() == "meme"
+                )
+                if not is_meme and base in MEME_COIN_BASES:
                     continue
                 if any(base.startswith(p) for p in JUNK_PREFIXES):
                     continue

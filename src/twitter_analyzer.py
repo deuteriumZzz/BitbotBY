@@ -6,31 +6,14 @@ Skips silently when TWITTER_BEARER_TOKEN is not set.
 from __future__ import annotations
 
 import logging
-import os
 import time
 from typing import Dict, Tuple
+
+from config import Config
 
 logger = logging.getLogger(__name__)
 
 _TWITTER_SEARCH_URL = "https://api.twitter.com/2/tweets/search/recent"
-
-# Только крупные монеты — по мелким твитов мало, сигнал шумный.
-# Twitter Basic ~500k твитов/мес: 10 монет × 20 твитов × 48/день = 9600/день → OK
-# 20 монет × тот же расчёт = 19200/день → лимит заканчивается за 26 дней
-_MAJOR_TICKERS = frozenset(
-    {
-        "BTC",
-        "ETH",
-        "SOL",
-        "XRP",
-        "BNB",
-        "AVAX",
-        "MATIC",
-        "DOT",
-        "ADA",
-        "LINK",
-    }
-)
 
 
 class TwitterAnalyzer:
@@ -39,15 +22,18 @@ class TwitterAnalyzer:
 
     Использует Twitter API v2 и VADER для быстрого sentiment-scoring.
     Если TWITTER_BEARER_TOKEN не задан — молча возвращает 0.0 без ошибок.
-    Результаты кэшируются на 15 минут.
+    Результаты кэшируются на SENTIMENT_CACHE_TTL секунд.
+
+    Лимиты Basic плана ($100/мес): ~10 000 твитов/мес.
+    Экономия: опрашиваем только топ-N монет раз в 5 мин через SentimentPoller.
     """
 
     def __init__(self) -> None:
-        self._token = os.getenv("TWITTER_BEARER_TOKEN", "")
+        self._token = Config.TWITTER_BEARER_TOKEN
+        self._max_results = Config.TWITTER_MAX_RESULTS
         self._enabled = bool(self._token)
-        # {symbol: (score, timestamp)}
         self._cache: Dict[str, Tuple[float, float]] = {}
-        self._cache_ttl = 900.0  # 15 минут
+        self._cache_ttl = float(Config.SENTIMENT_CACHE_TTL)
 
         if not self._enabled:
             logger.debug(
@@ -63,22 +49,10 @@ class TwitterAnalyzer:
         Возвращает sentiment score -1.0..1.0 для символа.
         0.0 если TWITTER_BEARER_TOKEN не задан или ошибка.
 
-        Логика:
-        1. Берёт тикер из символа: "BTC/USDT" → "BTC" → "#BTC OR $BTC"
-        2. Ищет твиты за последние 15 минут через Twitter API v2
-        3. Считает sentiment через VADER (без AI, быстро)
-        4. Возвращает нормализованный score
-
-        :param symbol: Символ в формате ccxt ('BTC/USDT').
+        :param symbol: Символ в формате ccxt ('PEPE/USDT').
         :return: Sentiment score -1.0..1.0, 0.0 при ошибке или без токена.
         """
         if not self._enabled:
-            return 0.0
-
-        ticker = self._ticker_from_symbol(symbol)
-        if ticker not in _MAJOR_TICKERS:
-            # Мелкие монеты: твитов мало → сигнал шумный + экономим rate limit
-            logger.debug("TwitterAnalyzer: %s not in major tickers — skip", ticker)
             return 0.0
 
         now = time.monotonic()
@@ -110,7 +84,7 @@ class TwitterAnalyzer:
         headers = {"Authorization": f"Bearer {self._token}"}
         params = {
             "query": query,
-            "max_results": "20",
+            "max_results": str(self._max_results),
             "tweet.fields": "created_at,public_metrics",
         }
 
@@ -147,7 +121,7 @@ class TwitterAnalyzer:
         avg_score = sum(scores) / len(scores)
         logger.debug(
             "TwitterAnalyzer: %s — %d tweets, avg_score=%.3f",
-            symbol,
+            ticker,
             len(scores),
             avg_score,
         )
