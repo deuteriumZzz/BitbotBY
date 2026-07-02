@@ -41,6 +41,7 @@ _KEY_TIMEFRAME = "bot:timeframe"
 _KEY_MIN_VOLUME = "bot:min_volume_usdt"
 _KEY_MAX_VOLUME = "bot:max_volume_usdt"
 _KEY_AWAITING_MODE_PIN = "bot:awaiting_mode_pin"
+_KEY_AWAITING_ALERT_COOLDOWN = "bot:awaiting_alert_cooldown"
 _KEY_PAPER_TRADING = "bot:paper_trading_override"
 _KEY_SAC_BACKUP = "bot:sac_model_backup"
 _KEY_TRAIN_PROGRESS = "bot:train_progress"
@@ -949,6 +950,53 @@ class RuntimeConfig:
             "forced_symbols": sorted(self.get_forced_symbols()),
             "excluded_symbols": sorted(self.get_excluded_symbols()),
         }
+
+    # ── Alert settings ────────────────────────────────────────────────────────
+
+    _ALERT_DEFAULTS: dict = {
+        "atr_spike": {"label": "⚡ ATR Spike", "cooldown": 10},
+        "drawdown": {"label": "📉 Drawdown", "cooldown": 5},
+        "daily_limit": {"label": "🔒 Daily limit", "cooldown": 60},
+        "bot_stalled": {"label": "🔇 BotStalled", "cooldown": 20},
+        "new_signal": {"label": "📊 Новые сигналы", "cooldown": 0},
+        "position_open": {"label": "📈 Открытие позиции", "cooldown": 0},
+        "position_close": {"label": "💰 Закрытие позиции", "cooldown": 0},
+    }
+
+    def get_alert_enabled(self, name: str) -> bool:
+        val = self._get(f"bot:alert:enabled:{name}")
+        return val != "0"  # включено по умолчанию
+
+    def set_alert_enabled(self, name: str, enabled: bool) -> None:
+        self._set(f"bot:alert:enabled:{name}", "1" if enabled else "0")
+
+    def get_alert_cooldown_mins(self, name: str) -> int:
+        val = self._get(f"bot:alert:cooldown:{name}")
+        if val is not None:
+            try:
+                return max(0, int(val))
+            except ValueError:
+                pass
+        return self._ALERT_DEFAULTS.get(name, {}).get("cooldown", 5)
+
+    def set_alert_cooldown_mins(self, name: str, minutes: int) -> None:
+        self._set(f"bot:alert:cooldown:{name}", str(max(0, minutes)))
+
+    def set_awaiting_alert_cooldown(self, alert_name: str, ttl: int = 60) -> None:
+        try:
+            self._r.redis_client.setex(_KEY_AWAITING_ALERT_COOLDOWN, ttl, alert_name)
+        except Exception:
+            pass
+
+    def get_awaiting_alert_cooldown(self) -> str | None:
+        val = self._get(_KEY_AWAITING_ALERT_COOLDOWN)
+        return val if val else None
+
+    def clear_awaiting_alert_cooldown(self) -> None:
+        try:
+            self._r.redis_client.delete(_KEY_AWAITING_ALERT_COOLDOWN)
+        except Exception:
+            pass
 
     def format_full_status(self, balance: float, paper: bool, all_strats: list) -> str:
         """Форматирует полный статус всех параметров для Telegram."""

@@ -55,6 +55,7 @@ def _make_cfg(paper: bool = True, auto: bool = True, max_pos: int = 3):
     cfg.SILENT_DEATH_HOURS = 6.0
     cfg.REGIME_CACHE_TTL = "300"
     cfg.CORRELATION_WINDOW = 50
+    cfg.SYMBOL_COOLDOWN_HOURS = 3.0
     cfg.MODE = "local"
     cfg.BYBIT_API_KEY = cfg.BYBIT_API_SECRET = ""
     cfg.ANTHROPIC_API_KEY = cfg.DEEPSEEK_API_KEY = cfg.OPENAI_API_KEY = ""
@@ -81,6 +82,7 @@ def make_bot(balance: float = 1000.0):
             cfg.SILENT_DEATH_HOURS = 6.0
             cfg.REGIME_CACHE_TTL = "300"
             cfg.CORRELATION_WINDOW = 50
+            cfg.SYMBOL_COOLDOWN_HOURS = 3.0
             cfg.MODE = "local"
             cfg.BYBIT_API_KEY = cfg.BYBIT_API_SECRET = ""
             cfg.ANTHROPIC_API_KEY = cfg.DEEPSEEK_API_KEY = cfg.OPENAI_API_KEY = ""

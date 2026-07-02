@@ -49,6 +49,7 @@ class TelegramNotifier:
         self._pending: dict = {}  # message_id → asyncio.Event
         self._decisions: dict = {}  # message_id → bool
         self._enabled = bool(_TG_AVAILABLE and token and chat_id)
+        self._live_msg_ids: dict = {}  # key → message_id for edit_notify
 
     async def start(self) -> None:
         """Инициализирует и запускает polling Telegram в фоновом режиме."""
@@ -251,6 +252,88 @@ class TelegramNotifier:
         except Exception as e:
             logger.error("Telegram error: %s", e)
             return False  # C3: fail-closed — skip trade on Telegram errors
+
+    async def edit_notify(
+        self,
+        key: str,
+        text: str,
+        parse_mode: str = "Markdown",
+    ) -> None:
+        """Send or silently edit a recurring alert identified by key.
+
+        First call sends a new message and stores its ID.
+        Subsequent calls edit that same message in-place — no new chat entry.
+        If the stored message was deleted, falls back to sending a new one.
+        """
+        if not self._enabled:
+            return
+        try:
+            bot = self._app.bot
+            msg_id = self._live_msg_ids.get(key)
+            if msg_id:
+                try:
+                    await bot.edit_message_text(
+                        chat_id=self._chat_id,
+                        message_id=msg_id,
+                        text=text,
+                        parse_mode=parse_mode,
+                    )
+                    return
+                except Exception:
+                    self._live_msg_ids.pop(key, None)
+            msg = await bot.send_message(
+                chat_id=self._chat_id,
+                text=text,
+                parse_mode=parse_mode,
+            )
+            self._live_msg_ids[key] = msg.message_id
+        except Exception as e:
+            logger.error("Telegram edit_notify error: %s", e)
+
+    async def pin_live_msg(self, key: str) -> None:
+        """Pin the live message stored under key, if any."""
+        if not self._enabled:
+            return
+        msg_id = self._live_msg_ids.get(key)
+        if not msg_id:
+            return
+        try:
+            await self._app.bot.pin_chat_message(
+                chat_id=self._chat_id,
+                message_id=msg_id,
+                disable_notification=True,
+            )
+        except Exception as e:
+            logger.warning("Telegram pin error: %s", e)
+
+    async def unpin_live_msg(self, key: str, resolved_text: str = "") -> None:
+        """Edit live message to resolved state and unpin it.
+
+        No-op if the key was never sent (nothing to unpin).
+        """
+        if not self._enabled:
+            return
+        msg_id = self._live_msg_ids.pop(key, None)
+        if not msg_id:
+            return
+        try:
+            bot = self._app.bot
+            if resolved_text:
+                try:
+                    await bot.edit_message_text(
+                        chat_id=self._chat_id,
+                        message_id=msg_id,
+                        text=resolved_text,
+                        parse_mode="Markdown",
+                    )
+                except Exception:
+                    pass
+            await bot.unpin_chat_message(
+                chat_id=self._chat_id,
+                message_id=msg_id,
+            )
+        except Exception as e:
+            logger.warning("Telegram unpin error: %s", e)
 
     async def notify(
         self,
