@@ -184,6 +184,7 @@ def _kb_settings(
         )
     rows += [
         [InlineKeyboardButton("📊 Бэктест стратегий", callback_data="backtest_menu")],
+        [InlineKeyboardButton("🔔 Уведомления", callback_data="alerts_menu")],
         [InlineKeyboardButton("⏱ Таймаут подтверждения", callback_data="timeout_menu")],
         [InlineKeyboardButton("📈 Прогресс обучения", callback_data="train_progress")],
         [InlineKeyboardButton("🔄 Сброс настроек", callback_data="reset_defaults")],
@@ -565,6 +566,39 @@ _STRAT_SHORT = {
 }
 
 
+_ALERTS_MENU_TEXT = (
+    "🔔 *Управление уведомлениями*\n\n"
+    "⚡ ATR Spike и 🔇 BotStalled работают в *обоих* режимах (paper и live).\n\n"
+    "📉 Drawdown и 🔒 Daily limit — только в *paper*: "
+    "в live-режиме бот сам закрывает позиции или блокирует входы "
+    "и отправляет одно сообщение о действии — повторных алертов нет."
+)
+
+
+def _kb_alerts(rc: "Any") -> "InlineKeyboardMarkup":
+    """Клавиатура управления уведомлениями: вкл/выкл + настройка cooldown."""
+    defaults = rc._ALERT_DEFAULTS
+    rows = []
+    for name, meta in defaults.items():
+        enabled = rc.get_alert_enabled(name)
+        cooldown = rc.get_alert_cooldown_mins(name)
+        toggle_icon = "✅" if enabled else "❌"
+        toggle_btn = InlineKeyboardButton(
+            f"{toggle_icon} {meta['label']}",
+            callback_data=f"alert_toggle:{name}",
+        )
+        if cooldown > 0:
+            cooldown_btn = InlineKeyboardButton(
+                f"⏱ {cooldown} мин",
+                callback_data=f"alert_cooldown:{name}",
+            )
+            rows.append([toggle_btn, cooldown_btn])
+        else:
+            rows.append([toggle_btn])
+    rows.append([InlineKeyboardButton("« Настройки", callback_data="settings")])
+    return InlineKeyboardMarkup(rows)
+
+
 def _kb_strategies(strategies: list) -> "InlineKeyboardMarkup":
     """Кнопка на каждую стратегию — нажатие переключает вкл/выкл."""
     buttons = []
@@ -801,6 +835,7 @@ class TelegramCommander:
             ("trainn", self._cmd_trainn),
             ("lev", self._cmd_lev),
             ("provider", self._cmd_provider),
+            ("alerts", self._cmd_alerts),
         ]
         for name, handler in commands:
             app.add_handler(CommandHandler(name, handler))
@@ -827,6 +862,7 @@ class TelegramCommander:
             ("add", "Добавить символ"),
             ("remove", "Удалить символ"),
             ("strategies", "Стратегии"),
+            ("alerts", "Управление уведомлениями"),
             ("trainn", "Переобучить SAC"),
             ("help", "Справка"),
         ]
@@ -1557,6 +1593,13 @@ class TelegramCommander:
         text, kb = self._build_strategies()
         await self._reply(update, text, kb)
 
+    async def _cmd_alerts(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        if not self._authorized(update):
+            return
+        await self._reply(update, _ALERTS_MENU_TEXT, _kb_alerts(self._rc))
+
     async def _cmd_risk(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
@@ -1912,11 +1955,32 @@ class TelegramCommander:
         chat_id = str(getattr(update.effective_chat, "id", ""))
         if chat_id != str(self._notifier._chat_id):
             return
-        if not self._rc.is_awaiting_mode_pin():
-            return
         if not update.message:
             return
         text = (update.message.text or "").strip()
+
+        alert_name = self._rc.get_awaiting_alert_cooldown()
+        if alert_name:
+            self._rc.clear_awaiting_alert_cooldown()
+            try:
+                mins = int(text)
+                if mins < 1 or mins > 1440:
+                    raise ValueError
+            except ValueError:
+                await self._notifier.notify("❌ Введите число минут от 1 до 1440.")
+                return
+            self._rc.set_alert_cooldown_mins(alert_name, mins)
+            label = self._rc._ALERT_DEFAULTS.get(alert_name, {}).get(
+                "label", alert_name
+            )
+            await self._notifier.notify(
+                f"✅ Cooldown для *{label}* установлен: *{mins} мин*",
+                parse_mode="Markdown",
+            )
+            return
+
+        if not self._rc.is_awaiting_mode_pin():
+            return
         self._rc.clear_awaiting_mode_pin()
         if text != Config.TRADING_MODE_PIN:
             await self._notifier.notify(
@@ -2887,6 +2951,39 @@ class TelegramCommander:
                 "Запустить позже: /trainn",
                 _kb_main(),
             )
+
+        # ── Уведомления ──────────────────────────────────────────────────────
+        elif data == "alerts_menu":
+            await self._edit(query, _ALERTS_MENU_TEXT, _kb_alerts(self._rc))
+
+        elif data.startswith("alert_toggle:"):
+            name = data[len("alert_toggle:") :]
+            if name in self._rc._ALERT_DEFAULTS:
+                current = self._rc.get_alert_enabled(name)
+                self._rc.set_alert_enabled(name, not current)
+            await self._edit(query, _ALERTS_MENU_TEXT, _kb_alerts(self._rc))
+
+        elif data.startswith("alert_cooldown:"):
+            name = data[len("alert_cooldown:") :]
+            if name in self._rc._ALERT_DEFAULTS:
+                self._rc.set_awaiting_alert_cooldown(name)
+                label = self._rc._ALERT_DEFAULTS[name]["label"]
+                current = self._rc.get_alert_cooldown_mins(name)
+                await self._edit(
+                    query,
+                    f"⏱ *Cooldown для {label}*\n\n"
+                    f"Текущее: *{current} мин*\n\n"
+                    "Введите новое значение в минутах (1–1440):",
+                    InlineKeyboardMarkup(
+                        [
+                            [
+                                InlineKeyboardButton(
+                                    "« Отмена", callback_data="alerts_menu"
+                                )
+                            ]
+                        ]
+                    ),
+                )
 
         elif data == "rollback_sac":
             import os as _os

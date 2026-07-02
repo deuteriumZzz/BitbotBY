@@ -134,6 +134,8 @@ class TradingBot:
         self._last_trade_at: Optional[float] = None
         self._last_cycle_at: float = time.time()
         self._symbol_cooldown: dict = {}
+        self._atr_spike_alerted_at: float = 0.0
+        self._drawdown_log_at: float = 0.0
         self._silent_death_alerted_at: float = 0.0
         self._cycle_stall_alerted_at: float = 0.0
         self._daily_limit_notified_at: float = 0.0
@@ -1091,17 +1093,43 @@ class TradingBot:
         _interval = self._runtime_config.get_trading_interval()
         cycle_stall_threshold = _interval + 300  # interval + 5 мин буфер
 
+        # Unpin cycle_stall if it was active — cycle just ran successfully
+        if self._cycle_stall_alerted_at > 0 and (
+            now - self._last_cycle_at <= cycle_stall_threshold
+        ):
+            self._cycle_stall_alerted_at = 0.0
+            await self.telegram.unpin_live_msg(
+                "cycle_stall",
+                "✅ *Торговый цикл восстановлен* — бот снова активен.",
+            )
+
+        # Unpin silent_death if trading resumed
+        if (
+            self._silent_death_alerted_at > 0
+            and self._last_trade_at is not None
+            and (now - self._last_trade_at) / _SECONDS_PER_HOUR
+            < self._silent_death_hours
+        ):
+            self._silent_death_alerted_at = 0.0
+            await self.telegram.unpin_live_msg(
+                "silent_death",
+                "✅ *Торговля возобновлена* — бот снова открывает сделки.",
+            )
+
         if (
             now - self._last_cycle_at > cycle_stall_threshold
             and now - self._cycle_stall_alerted_at > cycle_stall_threshold
         ):
             self._cycle_stall_alerted_at = now
-            stall_min = (now - self._last_cycle_at) / 60
-            await self.telegram.notify(
-                f"⚠️ Торговый цикл завис — нет активности {stall_min:.0f} мин "
-                f"(ожидаемый интервал: {_interval // 60} мин). "
-                f"Проверьте логи: `make logs`"
-            )
+            if self._runtime_config.get_alert_enabled("bot_stalled"):
+                stall_min = (now - self._last_cycle_at) / 60
+                await self.telegram.edit_notify(
+                    "cycle_stall",
+                    f"⚠️ Торговый цикл завис — нет активности {stall_min:.0f} мин "
+                    f"(ожидаемый интервал: {_interval // 60} мин). "
+                    f"Проверьте логи: `make logs`",
+                )
+                await self.telegram.pin_live_msg("cycle_stall")
 
         if Config.MODE == "local" or self._last_trade_at is None:
             return
@@ -1111,10 +1139,13 @@ class TradingBot:
             and now - self._silent_death_alerted_at > SILENT_DEATH_ALERT_COOLDOWN
         ):
             self._silent_death_alerted_at = now
-            await self.telegram.notify(
-                f"⚠️ Бот работает, но нет сделок уже "
-                f"{hours_idle:.0f}ч. Проверьте сигналы и баланс AI."
-            )
+            if self._runtime_config.get_alert_enabled("bot_stalled"):
+                await self.telegram.edit_notify(
+                    "silent_death",
+                    f"⚠️ Бот работает, но нет сделок уже "
+                    f"{hours_idle:.0f}ч. Проверьте сигналы и баланс AI.",
+                )
+                await self.telegram.pin_live_msg("silent_death")
 
     async def trading_loop(self) -> None:
         """
@@ -1200,13 +1231,22 @@ class TradingBot:
                     self._drawdown_consec += 1
                     dd_pct = (self._peak_balance - equity) / self._peak_balance * 100
                     confirm = self._runtime_config.get_drawdown_confirm_cycles()
-                    logger.warning(
-                        "Drawdown %.1f%% from peak $%.2f — confirm %d/%d",
-                        dd_pct,
-                        self._peak_balance,
-                        self._drawdown_consec,
-                        confirm,
+                    _now = time.time()
+                    _dd_cool = (
+                        self._runtime_config.get_alert_cooldown_mins("drawdown") * 60
                     )
+                    if (
+                        self._runtime_config.get_alert_enabled("drawdown")
+                        and _now - self._drawdown_log_at >= _dd_cool
+                    ):
+                        self._drawdown_log_at = _now
+                        logger.warning(
+                            "Drawdown %.1f%% from peak $%.2f — confirm %d/%d",
+                            dd_pct,
+                            self._peak_balance,
+                            self._drawdown_consec,
+                            confirm,
+                        )
                     if self._drawdown_consec >= confirm:
                         if Config.PAPER_TRADING:
                             logger.warning(
@@ -1215,14 +1255,16 @@ class TradingBot:
                                 dd_pct,
                                 confirm,
                             )
-                            await self.telegram.notify(
-                                f"⚠️ *[PAPER] Hard drawdown halt*: просадка"
-                                f" {dd_pct:.1f}% от пика"
-                                f" ${self._peak_balance:.2f}"
-                                f" подтверждена {confirm} цикла подряд.\n"
-                                f"В live режиме: позиции закрыты,"
-                                f" пауза {Config.DRAWDOWN_HALT_HOURS:.0f}ч."
-                            )
+                            if self._runtime_config.get_alert_enabled("drawdown"):
+                                await self.telegram.edit_notify(
+                                    "drawdown",
+                                    f"⚠️ *[PAPER] Hard drawdown halt*: просадка"
+                                    f" {dd_pct:.1f}% от пика"
+                                    f" ${self._peak_balance:.2f}"
+                                    f" подтверждена {confirm} цикла подряд.\n"
+                                    f"В live режиме: позиции закрыты,"
+                                    f" пауза {Config.DRAWDOWN_HALT_HOURS:.0f}ч.",
+                                )
                             self._drawdown_consec = 0
                         else:
                             halt_secs = Config.DRAWDOWN_HALT_HOURS * 3600
@@ -1287,21 +1329,36 @@ class TradingBot:
                     )
                     sleep_secs = (midnight - now_utc).total_seconds()
                     if Config.PAPER_TRADING:
-                        logger.warning(
-                            "[PAPER] Daily loss limit would trigger:"
-                            " equity $%.2f, would pause %.0f s",
-                            _equity_for_limit,
-                            sleep_secs,
-                        )
                         _now = time.time()
-                        if _now - self._daily_limit_notified_at >= 3600:
+                        _dl_cool = (
+                            self._runtime_config.get_alert_cooldown_mins("daily_limit")
+                            * 60
+                        )
+                        _dl_enabled = self._runtime_config.get_alert_enabled(
+                            "daily_limit"
+                        )
+                        if (
+                            _dl_enabled
+                            and _now - self._daily_limit_notified_at >= _dl_cool
+                        ):
+                            logger.warning(
+                                "[PAPER] Daily loss limit would trigger:"
+                                " equity $%.2f, would pause %.0f s",
+                                _equity_for_limit,
+                                sleep_secs,
+                            )
+                        if (
+                            _dl_enabled
+                            and _now - self._daily_limit_notified_at >= _dl_cool
+                        ):
                             self._daily_limit_notified_at = _now
-                            await self.telegram.notify(
+                            await self.telegram.edit_notify(
+                                "daily_limit",
                                 f"⚠️ *[PAPER] Дневной лимит потерь*:"
                                 f" equity ${_equity_for_limit:.2f}.\n"
                                 f"В live режиме: новые входы заблокированы до 00:00 UTC"
                                 f" ({int(sleep_secs // 3600)}ч"
-                                f" {int((sleep_secs % 3600) // 60)}м)."
+                                f" {int((sleep_secs % 3600) // 60)}м).",
                             )
                     else:
                         await self.telegram.notify(
@@ -1343,15 +1400,23 @@ class TradingBot:
                 # Если ATR вырос в ATR_SPIKE_MULT раз от нормы → закрыть
                 # позиции и пропустить этот цикл (следующий через 30 с).
                 if self._is_atr_spike(market_data):
-                    logger.warning(
-                        "Volatility circuit breaker triggered — skipping cycle"
+                    _now = time.time()
+                    _atr_cool = (
+                        self._runtime_config.get_alert_cooldown_mins("atr_spike") * 60
                     )
-                    await self._close_all_open_positions("atr_spike")
-                    await self.telegram.notify(
-                        "⚡ *Volatility circuit breaker*: скачок ATR в "
-                        f"{Config.ATR_SPIKE_MULT:.0f}x от нормы.\n"
-                        "Позиции закрыты, цикл пропущен."
-                    )
+                    if _now - self._atr_spike_alerted_at >= _atr_cool:
+                        self._atr_spike_alerted_at = _now
+                        logger.warning(
+                            "Volatility circuit breaker triggered — skipping cycle"
+                        )
+                        await self._close_all_open_positions("atr_spike")
+                        if self._runtime_config.get_alert_enabled("atr_spike"):
+                            await self.telegram.edit_notify(
+                                "atr_spike",
+                                "⚡ *Volatility circuit breaker*: скачок ATR в "
+                                f"{Config.ATR_SPIKE_MULT:.0f}x от нормы.\n"
+                                "Позиции закрыты, цикл пропущен.",
+                            )
                     continue
 
                 async with self._monitored_lock:
