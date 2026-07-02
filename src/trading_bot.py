@@ -323,9 +323,12 @@ class TradingBot:
         - Удаляет из _monitored позиции, которых больше нет на бирже.
         - Добавляет позиции, которые есть на бирже, но потеряны при крэше бота.
 
-        Пропускается в PAPER_TRADING режиме (нечего сверять).
+        В PAPER_TRADING режиме сверяет вместо этого с БД (см.
+        _reconcile_paper_positions) — там нет биржи, но есть SQLite,
+        который может расходиться с _monitored после рестарта/краша.
         """
         if Config.PAPER_TRADING:
+            await self._reconcile_paper_positions()
             return
         try:
             exchange_positions = await self.api.fetch_positions()
@@ -423,6 +426,92 @@ class TradingBot:
             len(added),
             len(active),
         )
+
+    async def _reconcile_paper_positions(self) -> None:
+        """
+        Сверяет _monitored (восстановленный из Redis в _restore_state) с
+        SQLite после рестарта в paper-режиме.
+
+        Redis может не сохранить monitored_positions_paper (сбой, ручной
+        рестарт между циклами) — тогда сделки, открытые в БД, становятся
+        "зомби": PositionMonitor их не видит, SL/TP не проверяются, PnL
+        никогда не фиксируется, а зарезервированный капитал не возвращается.
+        На каждый символ восстанавливаем самую свежую открытую запись из БД
+        (с запасным SL от процентного отступа, TP не восстанавливаем — как
+        и в живой реконсиляции выше), более старые дубликаты по тому же
+        символу помечаем status='orphaned' — без выдуманного PnL, но и без
+        вечного зависания в 'open'.
+        """
+        try:
+            open_trades = await self.trade_history.get_open_trades()
+        except Exception as exc:
+            logger.warning("Paper reconciliation skipped: %s", exc)
+            return
+        if not open_trades:
+            return
+
+        by_symbol: Dict[str, list] = {}
+        for t in open_trades:
+            by_symbol.setdefault(t["symbol"], []).append(t)
+
+        sl_pct = getattr(Config, "STOP_LOSS_PERCENT", 0.02)
+        restored = 0
+        orphaned = 0
+
+        async with self._monitored_lock:
+            for sym, trades in by_symbol.items():
+                if sym in self._monitored:
+                    # уже восстановлен из Redis — лишние только те DB-строки,
+                    # чей id не совпадает с уже отслеживаемым trade_id
+                    # (иначе легитимная открытая позиция помечается orphaned).
+                    active_id = self._monitored[sym].get("trade_id")
+                    for t in trades:
+                        if t["id"] != active_id:
+                            await self.trade_history.mark_orphaned(t["id"])
+                            orphaned += 1
+                    continue
+
+                # берём самую свежую запись, остальные — дубликаты/зомби
+                trades.sort(key=lambda t: t["entry_time"])
+                latest = trades[-1]
+                for t in trades[:-1]:
+                    await self.trade_history.mark_orphaned(t["id"])
+                    orphaned += 1
+
+                side = latest["action"]
+                entry = float(latest["entry_price"])
+                sl = entry * (1.0 - sl_pct) if side == "buy" else entry * (1.0 + sl_pct)
+
+                self._monitored[sym] = {
+                    "trade_id": latest["id"],
+                    "qty": float(latest["quantity"]),
+                    "entry": entry,
+                    "stop_loss": sl,
+                    "take_profit": 0.0,
+                    "side": side,
+                    "atr": 0.0,
+                    "peak_price": entry,
+                    "exchange_sl_id": None,
+                    "exchange_tp_id": None,
+                }
+                restored += 1
+                logger.warning(
+                    "Paper reconcile: восстановлена потерянная позиция %s %s"
+                    " %.6f @ %.4f sl=%.4f (fallback %.0f%%)",
+                    sym,
+                    side,
+                    latest["quantity"],
+                    entry,
+                    sl,
+                    sl_pct * 100,
+                )
+
+        if restored or orphaned:
+            logger.info(
+                "Paper reconciliation: восстановлено=%d, orphaned=%d",
+                restored,
+                orphaned,
+            )
 
     async def _restore_state(self) -> None:
         state = self.redis.load_trading_state(Config.SYMBOL)

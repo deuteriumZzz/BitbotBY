@@ -235,6 +235,50 @@ class TradeHistory:
 
             await self._run_db(_write)
 
+    async def get_open_trades(self) -> list[Dict]:
+        """
+        Возвращает все сделки со статусом 'open' — используется для сверки
+        _monitored с БД после рестарта бота в paper-режиме.
+
+        :return: Список словарей с id, symbol, action, entry_price,
+            quantity, confidence, entry_time.
+        """
+        async with self._lock:
+
+            def _read():
+                cur = self._conn.execute(
+                    "SELECT id, symbol, action, entry_price, quantity, "
+                    "confidence, entry_time FROM trades WHERE status='open' "
+                    "ORDER BY entry_time ASC"
+                )
+                cols = [d[0] for d in cur.description]
+                return [dict(zip(cols, row)) for row in cur.fetchall()]
+
+            return await self._run_db(_read)
+
+    async def mark_orphaned(self, trade_id: int) -> None:
+        """
+        Помечает сделку как потерянную (не найдена в _monitored после
+        рестарта, либо дубликат по тому же символу).
+
+        Статус 'orphaned' исключён из win-rate/EV/summary — те фильтруют
+        status='closed' — поэтому запись не искажает статистику, но и не
+        зависает в 'open' навсегда без выдуманного PnL.
+
+        :param trade_id: ID записи в таблице.
+        """
+        now_iso = datetime.now().isoformat()
+        async with self._lock:
+
+            def _write():
+                self._conn.execute(
+                    "UPDATE trades SET status='orphaned', exit_time=? WHERE id=?",
+                    (now_iso, trade_id),
+                )
+                self._conn.commit()
+
+            await self._run_db(_write)
+
     # ── Read ──────────────────────────────────────────────
 
     async def get_win_rate(

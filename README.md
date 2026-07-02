@@ -75,7 +75,8 @@
 | **ETF Flows** (farside.co.uk) | Outflow <-$100M → SELL; Inflow >$150M → BUY | BUY BTC conf=0.65 |
 | **Google Trends** | >75 = retail FOMO пик → SELL | SELL BTC conf=0.67 |
 | **Reddit** (r/CryptoCurrency) | sentiment < -0.3 → SELL | опционально |
-| **Twitter/X** | VADER по монетам профиля Meme (Basic API, ~10K твитов/мес) | опционально |
+| **News sentiment** (NewsAPI/RSS + Claude/DeepSeek/VADER) | Корректирует confidence сигналов по новостному фону монеты | все профили |
+| **Twitter/X** | VADER по монетам профиля Meme (Basic API, ~10K твитов/мес) | только Meme |
 | **Telegram памп-каналы** | Мониторинг публичных каналов через Telethon MTProto, Telegram весит 2× в combined score | только Meme |
 | **Stablecoin Supply** (CoinGecko) | USDT market cap упал → риск оттока | фильтр |
 
@@ -945,7 +946,8 @@ cp models/sac_model_20260620_143000.zip models/sac_model.zip
 | **Режим AI** | hybrid (SAC + LLM) | hybrid (SAC + LLM) | hybrid (SAC + LLM) |
 | **SAC модель** | `models/sac_model.zip` | `models/sac_model_altcoin.zip` | `models/sac_model_meme.zip` |
 | **Профильные стратегии** | volume_spike_bluechip | volume_spike_altcoin | volume_spike_meme, momentum_burst, pump_exit, sentiment |
-| **Сентимент** | — | — | Twitter/X + Telegram памп-каналы |
+| **Соц-сентимент** (стратегия `sentiment`) | — | — | Twitter/X + Telegram памп-каналы |
+| **Новостной сентимент** (фильтр confidence) | ✅ NewsAPI/RSS + AI/VADER | ✅ NewsAPI/RSS + AI/VADER | ✅ NewsAPI/RSS + AI/VADER |
 
 Значок **🧠** рядом с кнопкой означает что SAC-модель для этого профиля уже обучена. **⚠️** — модели нет, бот будет работать только на AI-сигналах.
 
