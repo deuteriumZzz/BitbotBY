@@ -213,6 +213,7 @@ def _kb_market_profile_menu(
     current: str = "",
     bluechip_model: bool = False,
     altcoin_model: bool = False,
+    meme_model: bool = False,
 ) -> "InlineKeyboardMarkup":
     import os as _os
 
@@ -224,6 +225,7 @@ def _kb_market_profile_menu(
 
     bc_has = bluechip_model or _os.path.exists("models/sac_model.zip")
     alt_has = altcoin_model or _os.path.exists("models/sac_model_altcoin.zip")
+    meme_has = meme_model or _os.path.exists("models/sac_model_meme.zip")
 
     return InlineKeyboardMarkup(
         [
@@ -241,7 +243,7 @@ def _kb_market_profile_menu(
             ],
             [
                 InlineKeyboardButton(
-                    f"{_mark('meme')}🚀 Мемкоины",
+                    f"{_mark('meme')}🚀 Мемкоины {_model_icon(meme_has)}",
                     callback_data="market_profile:meme",
                 ),
             ],
@@ -648,10 +650,15 @@ _HELP_MODES = (
     "📐 *Local* — локальные стратегии без AI\n"
     "   RSI, EMA, Bollinger, Breakout и др.\n"
     "   Работает без интернет-зависимостей\n\n"
-    "🔀 *Hybrid* — AI + локальные стратегии совместно\n"
+    "🔀 *Hybrid* — AI + SAC + локальные стратегии совместно\n"
     "   Сигналы комбинируются и взвешиваются\n\n"
     "🧠 *SAC* — нейросеть (Soft Actor-Critic), обученная на истории\n"
     "   Требует предварительного обучения тренером\n\n"
+    "🎯 *Профили рынка* (Настройки → Профиль рынка):\n"
+    "   🔵 Блючипы — топ-20, 15m, риск 2%\n"
+    "   🟡 Альткоины — топ-100, 5m, риск 1%\n"
+    "   🚀 Мемкоины — топ-200, 3m, риск 0.5%\n"
+    "   + памп-стратегии + Twitter/Telegram сентимент\n\n"
     "Менять режим: кнопка *Режим торговли* в Настройках\n"
     "или команда `/mode ai`"
 )
@@ -723,9 +730,12 @@ _HELP_SYMBOLS = (
 _HELP_RISK = (
     "⚖️ *Стратегии и риск-менеджмент*\n\n"
     "*Стратегии* (`/strategies`):\n"
-    "9 встроенных стратегий — каждую можно вкл/выкл:\n"
-    "EMA↕ · RSI · MACD↕ · BB · Scalp🔴 · Swing · Break🔴 · Mean↩ · Trend🟢\n"
+    "10 базовых стратегий — каждую можно вкл/выкл:\n"
+    "EMA↕ · RSI · MACD↕ · BB · Scalp🔴 · Swing · Break🔴 · Mean↩ · Trend🟢 · VolumeSpike\n"
     "🟢 низкий риск · 🟡 средний · 🔴 высокий\n"
+    "Профильные (авто при смене профиля):\n"
+    "🔵 volume\\_spike\\_bluechip · 🟡 volume\\_spike\\_altcoin\n"
+    "🚀 volume\\_spike\\_meme · momentum\\_burst · pump\\_exit · sentiment\n"
     "В режиме AI — передаются в промпт\n"
     "В режиме Local — выбираются автоматически по индикаторам\n\n"
     "*Риск-профиль* (`/risk`):\n"
@@ -2393,6 +2403,7 @@ class TelegramCommander:
             current = self._rc.get_market_profile()
             bc_has = _os.path.exists("models/sac_model.zip")
             alt_has = _os.path.exists("models/sac_model_altcoin.zip")
+            meme_has = _os.path.exists("models/sac_model_meme.zip")
             model_legend = "🧠 — модель есть  |  ⚠️ — нужно обучить"
             await self._edit(
                 query,
@@ -2402,10 +2413,13 @@ class TelegramCommander:
                 "🟡 *Альткоины* — середина рынка, топ-100 по объёму.\n"
                 "Таймфрейм 5m · топ-100 (30 лучших → AI)"
                 " · риск 1% · Hybrid · цикл 5 мин\n\n"
+                "🚀 *Мемкоины* — памп-монеты, топ-200 по объёму.\n"
+                "Таймфрейм 3m · топ-200 · риск 0.5% · Hybrid · цикл 90 сек\n"
+                "SL 12% · TP 72% · сентимент Twitter+Telegram\n\n"
                 f"_{model_legend}_\n"
                 "_Профиль применяется мгновенно."
                 " Интервал цикла — со следующего цикла._",
-                _kb_market_profile_menu(current, bc_has, alt_has),
+                _kb_market_profile_menu(current, bc_has, alt_has, meme_has),
             )
 
         elif data == "season_dismiss":

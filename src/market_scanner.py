@@ -112,7 +112,7 @@ class MarketScanner:
                 )
                 if qv < min_vol:
                     continue
-                if max_vol > 0 and qv > max_vol:
+                if max_vol > 0 and qv > max_vol and base not in MEME_COIN_BASES:
                     continue
                 usdt[base_sym] = t
 

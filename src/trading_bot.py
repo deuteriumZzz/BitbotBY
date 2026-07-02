@@ -38,6 +38,7 @@ from src.regime_detector import RegimeDetector
 from src.risk_management import RiskManager
 from src.runtime_config import RuntimeConfig
 from src.season_detector import SeasonDetector
+from src.sentiment_poller import SentimentPoller
 from src.signal_combiner import SignalCombiner
 from src.strategies import TradingStrategy, create_strategy
 from src.telegram_commander import (
@@ -47,7 +48,9 @@ from src.telegram_commander import (
     _kb_tune_sac,
 )
 from src.telegram_notifier import TelegramNotifier
+from src.telegram_sentiment import TelegramSentiment
 from src.trade_history import TradeHistory
+from src.twitter_analyzer import TwitterAnalyzer
 from src.types import PositionRecord
 
 _SECONDS_PER_HOUR: int = 3_600
@@ -92,6 +95,7 @@ class TradingBot:
             self.api, self.data_loader, rc=self._runtime_config
         )
         self.news = NewsAnalyzer()
+        self._sentiment_poller: Optional[SentimentPoller] = None
         self.ai = AIAnalyzer(runtime_config=self._runtime_config)
         self.combiner = SignalCombiner(self.ai, rc=self._runtime_config)
         self.regime_detector = RegimeDetector()
@@ -863,6 +867,30 @@ class TradingBot:
         self._save_corr_filter()
         return market_data
 
+    async def _sync_sentiment_poller(self, profile: str, symbols: list) -> None:
+        """Запускает/останавливает SentimentPoller при смене профиля на meme."""
+        if profile == "meme":
+            if self._sentiment_poller is None:
+                twitter = TwitterAnalyzer()
+                telegram = TelegramSentiment()
+                self._sentiment_poller = SentimentPoller(twitter, telegram, self.redis)
+                await self._sentiment_poller.start(symbols)
+                logger.info("SentimentPoller: started for %d symbols", len(symbols))
+            else:
+                self._sentiment_poller.update_symbols(symbols)
+        elif self._sentiment_poller is not None:
+            await self._sentiment_poller.stop()
+            self._sentiment_poller = None
+            logger.info("SentimentPoller: stopped (profile switched to %s)", profile)
+
+    async def _inject_sentiment(self, market_data: Dict[str, pd.DataFrame]) -> None:
+        """Инжектирует колонку social_sentiment в DataFrame для мем-профиля."""
+        if self._sentiment_poller is None:
+            return
+        for sym, df in market_data.items():
+            score = await self._sentiment_poller.get_score(sym)
+            df["social_sentiment"] = score
+
     async def _detect_regimes(
         self, market_data: Dict[str, pd.DataFrame]
     ) -> Dict[str, str]:
@@ -1217,6 +1245,8 @@ class TradingBot:
                 market_data = await self._scan_and_update_correlations(
                     symbols, target_n=_scan_n
                 )
+                await self._sync_sentiment_poller(_profile, list(market_data.keys()))
+                await self._inject_sentiment(market_data)
                 snapshots = await self._cycle.collect_snapshots(
                     list(market_data.keys()), market_data
                 )
@@ -1581,6 +1611,9 @@ class TradingBot:
             )
         except Exception:
             pass
+        if self._sentiment_poller is not None:
+            await self._sentiment_poller.stop()
+            self._sentiment_poller = None
         await self.telegram.stop()
         await self.api.close()
         await self.data_loader.close()
