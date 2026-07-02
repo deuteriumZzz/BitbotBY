@@ -126,6 +126,20 @@ _MARKET_PROFILES = {
         "sl_percent": 0.04,  # SL 4%
         "tp_multiplier": 4.0,  # TP = 16% (ловим большие альт-движения)
     },
+    "meme": {
+        "label": "🚀 Мемкоины",
+        "scan_top_n": 200,
+        "train_top_n": 50,
+        "min_volume_usdt": 50_000,
+        "max_volume_usdt": 500_000_000,
+        "risk_per_trade": 0.005,
+        "timeframe": "3m",
+        "trading_interval": 90,  # раз в 90 сек — быстрый цикл на коротком ТФ
+        "mode": "hybrid",
+        "model_path": "models/sac_model_meme.zip",
+        "sl_percent": 0.12,  # SL 12% — широкий стоп для волатильных монет
+        "tp_multiplier": 6.0,  # TP = 72% (6×SL — ловим памп)
+    },
 }
 
 _VALID_MODES = {"ai", "local", "hybrid", "dqn"}
@@ -705,10 +719,33 @@ class RuntimeConfig:
         _exp = (
             "data/experiences_altcoin.jsonl"
             if name == "altcoin"
-            else "data/experiences.jsonl"
+            else (
+                "data/experiences_meme.jsonl"
+                if name == "meme"
+                else "data/experiences.jsonl"
+            )
         )
         _os.environ["EXPERIENCES_PATH"] = _exp
         _os.environ["SAC_PROFILE"] = name
+
+        # Переключаем профиль-специфичные стратегии
+        _VS_VARIANTS = {
+            "bluechip": "volume_spike_bluechip",
+            "altcoin": "volume_spike_altcoin",
+            "meme": "volume_spike_meme",
+        }
+        _MEME_ONLY = {"momentum_burst", "pump_exit", "sentiment"}
+        for profile_key, strat_name in _VS_VARIANTS.items():
+            if profile_key == name:
+                self.enable_strategy(strat_name)
+            else:
+                self.disable_strategy(strat_name)
+        for strat_name in _MEME_ONLY:
+            if name == "meme":
+                self.enable_strategy(strat_name)
+            else:
+                self.disable_strategy(strat_name)
+
         logger.info("Runtime: применён профиль рынка '%s'", name)
         return True
 

@@ -577,6 +577,9 @@ class VolumeSpikeStrategy(BaseStrategy):
     risk_level = "high"
     market_type = "volatile"
 
+    # Переопределяется подклассами для профиль-специфичных порогов (0 = из Config)
+    _threshold: float = 0.0
+
     def generate_signal(self, data: pd.DataFrame) -> Dict[str, Any]:
         if len(data) < 21:
             return {"action": "hold", "confidence": 0.50}
@@ -585,7 +588,7 @@ class VolumeSpikeStrategy(BaseStrategy):
         ema_s = self._last(data, "ema_short", close)
         rsi = self._last(data, "rsi", 50)
 
-        threshold = Config.VOLUME_SPIKE_THRESHOLD
+        threshold = self._threshold or Config.VOLUME_SPIKE_THRESHOLD
         avg_vol = float(data["volume"].iloc[-21:-1].mean())
         cur_vol = float(data["volume"].iloc[-1])
 
@@ -609,6 +612,242 @@ class VolumeSpikeStrategy(BaseStrategy):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 11. VOLUME SPIKE BLUECHIP
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class VolumeSpikeBlueChipStrategy(VolumeSpikeStrategy):
+    """
+    Volume spike для блючип-профиля.
+
+    Порог 2.0x — BTC/ETH торгуются миллиарды в сутки, даже 2x превышение
+    среднего уже означает нетипичную активность (новость, институционал).
+    Оптимальный таймфрейм: 15m–1h.
+    """
+
+    name = "volume_spike_bluechip"
+    description = (
+        "Вход при 2x+ всплеске объёма на блючипах. "
+        "Направление по EMA + RSI. Лучший таймфрейм: 15m–1h."
+    )
+    recommended_timeframes = ["15m", "1h"]
+    risk_level = "medium"
+    market_type = "volatile"
+
+    _threshold: float = 2.0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 12. VOLUME SPIKE ALTCOIN
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class VolumeSpikeAltcoinStrategy(VolumeSpikeStrategy):
+    """
+    Volume spike для альткоин-профиля.
+
+    Порог 3.0x — у альткоинов больше случайного шума в объёме,
+    нужен более строгий фильтр чтобы не входить на ложных спайках.
+    Оптимальный таймфрейм: 5m–15m.
+    """
+
+    name = "volume_spike_altcoin"
+    description = (
+        "Вход при 3x+ всплеске объёма на альткоинах. "
+        "Направление по EMA + RSI. Лучший таймфрейм: 5m–15m."
+    )
+    recommended_timeframes = ["5m", "15m"]
+    risk_level = "high"
+    market_type = "volatile"
+
+    _threshold: float = 3.0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 13. VOLUME SPIKE MEME
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class VolumeSpikeMemStrategy(VolumeSpikeStrategy):
+    """
+    Агрессивный volume spike для мемкоинов.
+
+    Порог 5x вместо 2.5x — мемы часто имеют фоновый «шум» объёма,
+    настоящий памп виден только при кратном превышении.
+    Оптимальный таймфрейм: 1m–3m.
+    """
+
+    name = "volume_spike_meme"
+    description = (
+        "Вход при 5x+ всплеске объёма. Порог вдвое агрессивнее стандартного. "
+        "Направление по EMA + RSI. Лучший таймфрейм: 1m–3m, мемкоины."
+    )
+    recommended_timeframes = ["1m", "3m"]
+    risk_level = "high"
+    market_type = "volatile"
+
+    _threshold: float = 5.0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 12. MOMENTUM BURST
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class MomentumBurstStrategy(BaseStrategy):
+    """
+    Стратегия резкого ценового импульса за 3 свечи.
+
+    Входим в продолжение памп-движения (+4%+ за 3 свечи) при подтверждении
+    объёмом. Предназначена для 1m–3m, мемкоины и высоковолатильные альткоины.
+    """
+
+    name = "momentum_burst"
+    description = (
+        "Вход при резком ценовом импульсе (+4%+ за 3 свечи) с объёмным подтверждением. "
+        "Предназначена для 1m–3m таймфреймов, мемкоины."
+    )
+    recommended_timeframes = ["1m", "3m"]
+    risk_level = "high"
+    market_type = "volatile"
+
+    def generate_signal(self, data: pd.DataFrame) -> Dict[str, Any]:
+        if len(data) < 4:
+            return {"action": "hold", "confidence": 0.50}
+
+        close = self._last(data, "close")
+        close_3 = float(data["close"].iloc[-4])
+        if close_3 <= 0:
+            return {"action": "hold", "confidence": 0.50}
+
+        move_3 = (close - close_3) / close_3
+
+        avg_vol = (
+            float(data["volume"].iloc[-21:-1].mean())
+            if len(data) >= 21
+            else float(data["volume"].mean())
+        )
+        cur_vol = self._last(data, "volume")
+        vol_ratio = cur_vol / avg_vol if avg_vol > 0 else 0.0
+
+        rsi = self._last(data, "rsi", 50)
+
+        # Сильный импульс вверх с объёмным подтверждением — входим в продолжение
+        if move_3 >= 0.04 and vol_ratio >= 2.0 and rsi < 80:
+            bonus = min((move_3 - 0.04) * 5, 0.15)
+            conf = round(min(0.72 + bonus, 0.90), 2)
+            return {"action": "buy", "confidence": conf, "price": close}
+        if move_3 >= 0.02 and vol_ratio >= 1.5 and rsi < 75:
+            return {"action": "buy", "confidence": 0.62, "price": close}
+
+        # Резкое падение с объёмом → шорт
+        if move_3 <= -0.04 and vol_ratio >= 2.0 and rsi > 20:
+            bonus = min((abs(move_3) - 0.04) * 5, 0.15)
+            conf = round(min(0.72 + bonus, 0.90), 2)
+            return {"action": "sell", "confidence": conf, "price": close}
+
+        return {"action": "hold", "confidence": 0.40}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 13. PUMP EXIT
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class PumpExitStrategy(BaseStrategy):
+    """
+    Стратегия выхода из памп-позиции при угасании объёма.
+
+    Когда объём падает ниже 40% от пикового значения за последние 5 свечей,
+    а цена уже выросла на 5%+ — вероятен дамп. Сигнализирует sell.
+    Работает как exit-стратегия в паре с volume_spike_meme и momentum_burst.
+    """
+
+    name = "pump_exit"
+    description = (
+        "Sell-сигнал при угасании памп-объёма: объём < 40% от пика последних 5 свечей "
+        "и цена выросла на 5%+. Используется совместно с volume_spike_meme."
+    )
+    recommended_timeframes = ["1m", "3m", "5m"]
+    risk_level = "high"
+    market_type = "volatile"
+
+    def generate_signal(self, data: pd.DataFrame) -> Dict[str, Any]:
+        if len(data) < 5:
+            return {"action": "hold", "confidence": 0.50}
+
+        close = self._last(data, "close")
+        vols = list(data["volume"].iloc[-5:])
+        peak_vol = max(vols[:-1])
+        cur_vol = vols[-1]
+
+        if peak_vol <= 0:
+            return {"action": "hold", "confidence": 0.50}
+
+        vol_decline = cur_vol / peak_vol
+
+        avg_vol = (
+            float(data["volume"].iloc[-21:-1].mean())
+            if len(data) >= 21
+            else float(data["volume"].mean())
+        )
+
+        recent_low = float(data["close"].iloc[-10:].min()) if len(data) >= 10 else close
+        pump_move = (close - recent_low) / recent_low if recent_low > 0 else 0.0
+
+        rsi = self._last(data, "rsi", 50)
+
+        # Объём упал до <40% от пика + цена выросла на 5%+ → памп выдыхается
+        if vol_decline < 0.4 and pump_move >= 0.05 and rsi > 60:
+            return {"action": "sell", "confidence": 0.85, "price": close}
+
+        # Объём упал до <60% от пика + умеренный рост + ниже среднего → предупреждение
+        if vol_decline < 0.6 and pump_move >= 0.03 and cur_vol < avg_vol:
+            return {"action": "sell", "confidence": 0.68, "price": close}
+
+        return {"action": "hold", "confidence": 0.40}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 14. SENTIMENT
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class SentimentStrategy(BaseStrategy):
+    """
+    Стратегия сентимента для мемкоинов.
+
+    Читает колонку social_sentiment, инжектированную TradingBot из SentimentPoller
+    (взвешенная оценка Twitter + Telegram, -1.0..1.0).
+    Hold если колонка отсутствует или оценка близка к нулю.
+    """
+
+    name = "sentiment"
+    description = (
+        "Сигнал buy/sell из оценки сентимента Twitter + Telegram. "
+        "Предназначена для профиля мемкоинов. Требует запущенный SentimentPoller."
+    )
+    recommended_timeframes = ["1m", "3m", "5m"]
+    risk_level = "high"
+    market_type = "volatile"
+
+    def generate_signal(self, data: pd.DataFrame) -> Dict[str, Any]:
+        close = self._last(data, "close")
+        score = self._last(data, "social_sentiment", 0.0)
+
+        buy_threshold = Config.SENTIMENT_BUY_THRESHOLD
+        sell_threshold = Config.SENTIMENT_SELL_THRESHOLD
+
+        if score >= buy_threshold:
+            conf = round(min(0.60 + (score - buy_threshold) * 0.5, 0.88), 2)
+            return {"action": "buy", "confidence": conf, "price": close}
+        if score <= sell_threshold:
+            conf = round(min(0.60 + (abs(score) - abs(sell_threshold)) * 0.5, 0.85), 2)
+            return {"action": "sell", "confidence": conf, "price": close}
+        return {"action": "hold", "confidence": 0.40}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # REGISTRY
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -623,6 +862,14 @@ STRATEGY_REGISTRY: Dict[str, Type[BaseStrategy]] = {
     "mean_reversion": MeanReversionStrategy,
     "trend_following": TrendFollowingStrategy,
     "volume_spike": VolumeSpikeStrategy,
+    # profile-specific volume spike variants
+    "volume_spike_bluechip": VolumeSpikeBlueChipStrategy,
+    "volume_spike_altcoin": VolumeSpikeAltcoinStrategy,
+    "volume_spike_meme": VolumeSpikeMemStrategy,
+    # meme-profile strategies
+    "momentum_burst": MomentumBurstStrategy,
+    "pump_exit": PumpExitStrategy,
+    "sentiment": SentimentStrategy,
 }
 
 

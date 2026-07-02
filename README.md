@@ -1,7 +1,8 @@
 # BitbotBY — AI-торговый бот для Bybit
 
-Гибридный крипто-трейдинг бот на Python: **Claude / DeepSeek / OpenAI / Groq / Gemini** + SAC нейросеть + **Amazon Chronos** (time-series forecasting) + рыночные сигналы реального времени + кванты (CVaR, Almgren-Chriss, Kelly) + 9 стратегий.  
-Автоматически сканирует топ-20 (bluechip) или топ-100 (altcoin) монет по объёму, торгует на perpetual фьючерсах (long + short), открывает до N позиций одновременно (1–20, настраивается в Telegram), присылает сигналы в Telegram.
+Гибридный крипто-трейдинг бот на Python: **Claude / DeepSeek / OpenAI / Groq / Gemini** + SAC нейросеть + **Amazon Chronos** (time-series forecasting) + рыночные сигналы реального времени + кванты (CVaR, Almgren-Chriss, Kelly) + 16 стратегий.  
+Три рыночных профиля: **Bluechip** (топ-20), **Altcoin** (топ-100), **Meme** (топ-200 с памп-стратегиями + Twitter/Telegram сентимент).  
+Торгует на perpetual фьючерсах (long + short), открывает до N позиций одновременно (1–20, настраивается в Telegram), присылает сигналы в Telegram.
 
 ---
 
@@ -33,7 +34,7 @@
 
 ```
 ── ПОЛНЫЙ СКАН (есть свободные слоты) ──────────────────────────────────────
-1.  Сканирует монеты на Bybit: bluechip → топ-20, altcoin → топ-100 (без топ-20)
+1.  Сканирует монеты на Bybit: bluechip → топ-20, altcoin → топ-100, meme → топ-200
 2.  Prescore-фильтр отбирает 30 самых активных (RSI, объём, ATR, тренд) → AI
 3.  Загружает OHLCV, рассчитывает индикаторы
 4.  Получает рыночный контекст (funding, OI, F&G, orderbook ...)
@@ -74,23 +75,37 @@
 | **ETF Flows** (farside.co.uk) | Outflow <-$100M → SELL; Inflow >$150M → BUY | BUY BTC conf=0.65 |
 | **Google Trends** | >75 = retail FOMO пик → SELL | SELL BTC conf=0.67 |
 | **Reddit** (r/CryptoCurrency) | sentiment < -0.3 → SELL | опционально |
-| **Twitter/X** | VADER по топ-10 монетам | опционально |
+| **Twitter/X** | VADER по монетам профиля Meme (Basic API, ~10K твитов/мес) | опционально |
+| **Telegram памп-каналы** | Мониторинг публичных каналов через Telethon MTProto, Telegram весит 2× в combined score | только Meme |
 | **Stablecoin Supply** (CoinGecko) | USDT market cap упал → риск оттока | фильтр |
 
 Все источники кэшированы (5 мин — 4 часа), работают независимо и gracefully degradируют при недоступности.
 
 ### Торговые стратегии
 
-- **9 технических стратегий** — EMA crossover, RSI, MACD, Bollinger Bands, Scalping, Swing, Breakout, Mean Reversion, Trend Following, Volume Spike
+**10 базовых стратегий** (работают во всех профилях):
+EMA crossover, RSI, MACD, Bollinger Bands, Scalping, Swing, Breakout, Mean Reversion, Trend Following, Volume Spike
+
+**6 профильных стратегий** (автоматически активируются при смене профиля):
+
+| Стратегия | Профиль | Логика |
+|---|---|---|
+| `volume_spike_bluechip` | 🔵 Bluechip | Аномальный объём ×2.0 (огромная база объёма) |
+| `volume_spike_altcoin` | 🟡 Altcoin | Аномальный объём ×3.0 (выше шум) |
+| `volume_spike_meme` | 🚀 Meme | Аномальный объём ×5.0 (фейк-памп частый) |
+| `momentum_burst` | 🚀 Meme | +4%+ за 3 свечи + объём ×2 + RSI<80 → buy |
+| `pump_exit` | 🚀 Meme | Объём упал <40% пика + движение ≥5% + RSI>60 → sell |
+| `sentiment` | 🚀 Meme | Twitter+Telegram score ≥0.4 → buy; ≤-0.4 → sell |
+
 - **Автовыбор стратегии** по состоянию рынка (local fallback — когда AI недоступен):
   - Volatile (BB широкие + объём ×2) → Breakout
   - Цена у BB + RSI экстремум → Bollinger Bands
   - Uptrend/Downtrend + MACD → Swing / Trend Following
   - RSI < 30 или > 70 → RSI Momentum
   - Объём ×3+ → Volume Spike
-  - Боковик + RSI 38–62 → Mean Reversion ← торгует в боковике
+  - Боковик + RSI 38–62 → Mean Reversion
   - Иное → EMA Crossover (confidence 0.60 — не торгует в live)
-- **AI-анализ** — Claude / DeepSeek / OpenAI / Groq анализирует OHLCV + контекст, выбирает из 9 стратегий, генерирует сигнал
+- **AI-анализ** — Claude / DeepSeek / OpenAI / Groq анализирует OHLCV + контекст, выбирает стратегию, генерирует сигнал
 - **SAC нейросеть** (Stable-Baselines3) — RL-агент, observation space 22 признака
 
 ### Кванты
@@ -523,9 +538,26 @@ SAC_MODEL_PATH=models/sac_model.zip  # Путь к файлу SAC-модели.
 Все ключи опциональны. Без них бот работает, просто без этих источников сигналов.
 
 ```env
-# Twitter/X sentiment — VADER по твитам топ-10 монет
+# Twitter/X sentiment — VADER по твитам монет (активен только при профиле Meme)
+# Тариф Basic: $100/мес, ~10 000 твитов/мес. Free-тир READ не поддерживает.
 # developer.twitter.com → Projects & Apps → Keys and Tokens → Bearer Token
+# Если не задан — TwitterAnalyzer молча возвращает 0.0
 TWITTER_BEARER_TOKEN=
+TWITTER_MAX_RESULTS=10   # Твитов на запрос (10 = экономия лимита Basic)
+
+# Telegram sentiment — мониторинг публичных памп-каналов (только профиль Meme)
+# Бесплатно через Telethon MTProto. Получить: my.telegram.org → API development tools
+# Если не задан — TelegramSentiment молча возвращает 0.0
+TELEGRAM_SENTIMENT_API_ID=
+TELEGRAM_SENTIMENT_API_HASH=
+TELEGRAM_SENTIMENT_PHONE=+375291234567   # Формат с кодом страны
+TELEGRAM_SENTIMENT_CHANNELS=CryptoMoonAlerts,pumpsignalscrypto,memecoinsnews
+
+# Параметры опросчика (SentimentPoller, активен только при профиле Meme)
+SENTIMENT_POLL_INTERVAL=300   # Интервал опроса в секундах (каждые 5 мин)
+SENTIMENT_CACHE_TTL=600       # TTL кэша в Redis (10 мин)
+SENTIMENT_BUY_THRESHOLD=0.4   # Score ≥0.4 → buy-сигнал
+SENTIMENT_SELL_THRESHOLD=-0.4 # Score ≤-0.4 → sell-сигнал
 
 # Reddit sentiment — r/CryptoCurrency
 # reddit.com/prefs/apps → create app (тип: script)
@@ -780,8 +812,9 @@ Chronos (~400MB) скачивается автоматически с HuggingFac
 > |---------|--------|------------------------|-----------------------------|
 > | Bluechip / Default | `models/sac_model.zip` | `models/best_hyperparams.json` | `data/experiences.jsonl` |
 > | Altcoin | `models/sac_model_altcoin.zip` | `models/best_hyperparams_altcoin.json` | `data/experiences_altcoin.jsonl` |
+> | Meme | `models/sac_model_meme.zip` | `models/best_hyperparams_meme.json` | `data/experiences_meme.jsonl` |
 >
-> При смене профиля через Telegram бот автоматически переключает пути — тюнинг и сделки BTC-сезона никогда не влияют на модель альткоинов и наоборот.
+> При смене профиля через Telegram бот автоматически переключает пути — опыт сделок мемкоинов никогда не влияет на модели bluechip/altcoin и наоборот.
 
 ---
 
@@ -901,19 +934,18 @@ cp models/sac_model_20260620_143000.zip models/sac_model.zip
 
 **🌐 Профиль рынка** — адаптирует весь стек настроек под текущий сезон одним нажатием:
 
-| | 🔵 Блючипы | 🟡 Альткоины |
-|---|-----------|-------------|
-| **Когда** | BTC-доминация высокая, рынок консолидируется | Сезон альткоинов, BTC доминация падает |
-| **Монеты** | Динамический топ-20 по объёму (мемкоины и стейблы исключены) | Динамический топ-100, минус текущий топ-20 bluechip, фильтр $500K–$2B |
-| **Таймфрейм** | 15m | 5m |
-| **Интервал цикла** | 15 мин (96 AI запросов/день) | 5 мин (288 AI запросов/день) |
-| **В AI отправляется** | все 20 монет | 30 лучших из 100 (prescore-фильтр) |
-| **Риск/сделку** | 2% | 1% |
-| **SL / TP базовый** | SL 5%, TP 10% (2×SL) | SL 4%, TP 16% (4×SL) |
-| **TP при тренде** | 25% при trending_up/down | 25% при trending_up/down |
-| **TP в боковике** | 10% при ranging | 10% при ranging |
-| **Режим AI** | hybrid (SAC + LLM) | hybrid (SAC + LLM) |
-| **SAC модель** | `models/sac_model.zip` | `models/sac_model_altcoin.zip` |
+| | 🔵 Блючипы | 🟡 Альткоины | 🚀 Мемкоины |
+|---|-----------|-------------|-------------|
+| **Когда** | BTC-доминация высокая | Сезон альткоинов | Памп-активность, мемы в тренде |
+| **Монеты** | Топ-20 (мемы и стейблы исключены) | Топ-100, объём $500K–$2B | Топ-200, объём $50K–$500M, мемы включены |
+| **Таймфрейм** | 15m | 5m | 3m |
+| **Интервал цикла** | 15 мин | 5 мин | 90 сек |
+| **Риск/сделку** | 2% | 1% | 0.5% |
+| **SL / TP базовый** | SL 5%, TP 10% (2×SL) | SL 4%, TP 16% (4×SL) | SL 12%, TP 72% (6×SL) |
+| **Режим AI** | hybrid (SAC + LLM) | hybrid (SAC + LLM) | hybrid (SAC + LLM) |
+| **SAC модель** | `models/sac_model.zip` | `models/sac_model_altcoin.zip` | `models/sac_model_meme.zip` |
+| **Профильные стратегии** | volume_spike_bluechip | volume_spike_altcoin | volume_spike_meme, momentum_burst, pump_exit, sentiment |
+| **Сентимент** | — | — | Twitter/X + Telegram памп-каналы |
 
 Значок **🧠** рядом с кнопкой означает что SAC-модель для этого профиля уже обучена. **⚠️** — модели нет, бот будет работать только на AI-сигналах.
 
@@ -1451,7 +1483,9 @@ supervisor.py
         ├── PortfolioOptimizer  — CVaR / Markowitz (scipy)
         ├── CorrelationFilter   — блокировка коррелированных позиций
         ├── NewsAnalyzer        — NewsAPI + RSS (CoinDesk/CoinTelegraph) + VADER
-        ├── TwitterAnalyzer     — Twitter API v2 VADER, топ-10 монет
+        ├── TwitterAnalyzer     — Twitter API v2 + VADER (профиль Meme, graceful fallback)
+        ├── TelegramSentiment   — Telethon MTProto, публичные памп-каналы (профиль Meme)
+        ├── SentimentPoller     — фоновый asyncio-опросчик Twitter+Telegram → Redis
         ├── FundingArbDetector  — delta-neutral арбитраж алерты
         ├── MacroCalendar       — blackout за 30 мин до/после FOMC/CPI/NFP
         ├── SignalCombiner      — SAC + AI [+ Chronos] + контекстные сигналы → топ-3 по composite score
