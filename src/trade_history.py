@@ -77,7 +77,8 @@ CREATE TABLE IF NOT EXISTS trades (
     commission  REAL    NOT NULL DEFAULT 0.0,
     entry_time  TEXT    NOT NULL,
     exit_time   TEXT,
-    status      TEXT    NOT NULL DEFAULT 'open'
+    status      TEXT    NOT NULL DEFAULT 'open',
+    context_flags TEXT  NOT NULL DEFAULT ''
 );
 """
 
@@ -105,6 +106,13 @@ class TradeHistory:
         self._lock = asyncio.Lock()
         with self._conn:
             self._conn.execute(_DDL)
+            try:
+                self._conn.execute(
+                    "ALTER TABLE trades ADD COLUMN context_flags "
+                    "TEXT NOT NULL DEFAULT ''"
+                )
+            except sqlite3.OperationalError:
+                pass  # column already exists (pre-existing DB)
 
     # ── Executor helper ───────────────────────────────────────────────────────
 
@@ -127,6 +135,7 @@ class TradeHistory:
         quantity: float,
         confidence: float,
         commission: float = 0.0,
+        context_flags: str = "",
     ) -> int:
         """
         Записывает открытие сделки в БД.
@@ -138,6 +147,9 @@ class TradeHistory:
         :param quantity: Количество актива.
         :param confidence: Уверенность сигнала [0, 1].
         :param commission: Комиссия при открытии.
+        :param context_flags: JSON со сработавшими контекстными фильтрами
+            (funding/OI/liquidation/ETF/etc.) на момент входа — для
+            последующей корреляции с исходом сделки (win/loss).
         :return: ID новой записи в таблице.
         """
         now_iso = datetime.now().isoformat()
@@ -149,8 +161,8 @@ class TradeHistory:
                     INSERT INTO trades
                       (symbol, strategy, action, entry_price,
                        quantity, confidence, commission,
-                       entry_time)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                       entry_time, context_flags)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         symbol,
@@ -161,6 +173,7 @@ class TradeHistory:
                         confidence,
                         commission,
                         now_iso,
+                        context_flags,
                     ),
                 )
                 self._conn.commit()

@@ -7,6 +7,7 @@ ai (только Claude API), hybrid (согласие обоих источни
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any, Dict, List, Tuple
 
@@ -25,6 +26,15 @@ _REGIME_WEIGHTS: dict[str, tuple[float, float]] = {
     "ranging": (0.4, 0.6),  # default balance
     "unknown": (0.4, 0.6),
 }
+
+# Chronos — soft confidence modifier (не hard veto), тот же порядок величины
+# штрафа/бонуса, что и у остальных контекстных фильтров (funding и т.д.).
+_CHRONOS_AGREE_BONUS = 0.05
+_CHRONOS_DISAGREE_PENALTY = 0.15
+# Порог направления — доля от ATR/price, а не фиксированный %, чтобы не
+# путать шум волатильного альта с сигналом на спокойном BTC.
+_CHRONOS_ATR_MULT = 0.3
+_CHRONOS_MIN_THRESHOLD = 0.001
 
 
 class SignalCombiner:
@@ -182,13 +192,12 @@ class SignalCombiner:
         trending_up → SAC 50%/AI 50%, trending_down → SAC 30%/AI 70%,
         ranging / unknown → SAC 40%/AI 60%.
         """
-        use_chronos = (
-            not Config.PAPER_TRADING
-            and self._rc is not None
-            and self._rc.get_chronos_enabled()
-        )
+        use_chronos = self._rc is not None and self._rc.get_chronos_enabled()
         if use_chronos:
-            self.logger.info("Hybrid+Chronos: enhanced triple-confirmation active")
+            self.logger.info(
+                "Hybrid+Chronos: enhanced triple-confirmation active (paper=%s)",
+                Config.PAPER_TRADING,
+            )
 
         ai_recs = await self.ai.analyze(snapshots, balance)
         ai_map: Dict[str, Dict] = {r["symbol"]: r for r in ai_recs}
@@ -236,25 +245,44 @@ class SignalCombiner:
                 if combined < Config.MIN_SIGNAL_CONFIDENCE:
                     continue
 
-                # Chronos — третья точка зрения (только live + enhanced режим)
+                # Chronos — третья, независимая от LLM/RL точка зрения.
+                # Мягкий модификатор confidence (не hard veto) — согласуется
+                # с остальными контекстными фильтрами и не даёт одной
+                # непроверенной модели единолично отменять consensus SAC+AI.
+                chronos_dir = "off"
                 if use_chronos and market_data:
                     df = market_data.get(sym)
                     if df is not None and not df.empty and "close" in df.columns:
+                        price = snap.get("price", 0)
+                        atr = snap.get("atr", price * 0.02)
+                        atr_pct = (atr / price) if price else 0.0
+                        threshold_pct = max(
+                            _CHRONOS_MIN_THRESHOLD, _CHRONOS_ATR_MULT * atr_pct
+                        )
                         chronos_dir = chronos_analyzer.predict_direction(
-                            df["close"].tolist()
+                            df["close"].tolist(), threshold_pct=threshold_pct
                         )
                         expected = "up" if d_action == "buy" else "down"
-                        if chronos_dir not in (expected, "neutral"):
+                        if chronos_dir == expected:
+                            combined = min(
+                                0.95, round(combined + _CHRONOS_AGREE_BONUS, 3)
+                            )
+                        elif chronos_dir != "neutral":
+                            combined = round(combined - _CHRONOS_DISAGREE_PENALTY, 3)
                             self.logger.info(
-                                "%s: Chronos disagrees (expects %s, got %s) → hold",
+                                "%s: Chronos disagrees (expects %s, got %s) "
+                                "→ conf %.3f",
                                 sym,
                                 expected,
                                 chronos_dir,
+                                combined,
                             )
+                        if combined < Config.MIN_SIGNAL_CONFIDENCE:
                             continue
 
                 rec = dict(ai)
                 rec["confidence"] = combined
+                rec["chronos_signal"] = chronos_dir
                 base_strat = ai.get("strategy", "ai")
                 enhanced = "+chronos" if use_chronos else ""
                 rec["strategy"] = f"hybrid({base_strat}+sac{enhanced})"
@@ -387,6 +415,35 @@ class SignalCombiner:
                 conf -= 0.06
 
             conf = round(conf, 3)
+
+            # Инструментация: сохраняем, какие контекстные сигналы были
+            # НЕ нейтральными на момент входа — чтобы после накопления
+            # 100+ сделок можно было сопоставить сработавшие фильтры
+            # с фактическим исходом (win/loss), а не гадать.
+            _neutral = {"neutral", "oi_neutral", "balanced"}
+            fired = {
+                name: val
+                for name, val in (
+                    ("funding", funding),
+                    ("fng", fng),
+                    ("oi", oi),
+                    ("liquidation", liquidation),
+                    ("basis", basis),
+                    ("trends", google_trends),
+                    ("pcr", pcr),
+                    ("ob", ob),
+                    ("iv", iv),
+                    ("macro", macro),
+                    ("etf", etf),
+                    ("reddit", reddit),
+                    ("stablecoin", stablecoin),
+                )
+                if val not in _neutral
+            }
+            chronos_signal = rec.get("chronos_signal")
+            if chronos_signal not in (None, "off", "neutral"):
+                fired["chronos"] = chronos_signal
+
             if conf < min_conf:
                 self.logger.info(
                     "Context filter dropped %s %s: conf %.3f→%.3f < %.2f "
@@ -423,6 +480,9 @@ class SignalCombiner:
                 )
             rec = dict(rec)
             rec["confidence"] = conf
+            rec["context_flags"] = (
+                json.dumps(fired, ensure_ascii=False) if fired else ""
+            )
             result.append(rec)
 
         return result

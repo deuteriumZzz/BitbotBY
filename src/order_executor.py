@@ -491,6 +491,7 @@ class OrderExecutor:
                 quantity=quantity,
                 confidence=top.get("confidence", 0.0),
                 commission=commission,
+                context_flags=top.get("context_flags", ""),
             )
 
             pos: PositionRecord = {

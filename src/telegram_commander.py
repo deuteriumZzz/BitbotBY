@@ -155,7 +155,7 @@ def _kb_settings(
         [InlineKeyboardButton("🕐 Часы торговли", callback_data="hours_info")],
         [InlineKeyboardButton("🤖 AI-провайдер", callback_data="provider_menu")],
     ]
-    if mode == "hybrid" and not Config.PAPER_TRADING:
+    if mode == "hybrid":
         chronos_label = (
             "🛡 Chronos: ВКЛ  →  выкл" if chronos else "⚡ Chronos: ВЫКЛ  →  вкл"
         )
@@ -992,11 +992,7 @@ class TelegramCommander:
         else:
             fng_line = "😐 Страх/Жадность: ⏳ загружается...\n"
 
-        chronos_enabled = (
-            mode == "hybrid"
-            and not Config.PAPER_TRADING
-            and self._rc.get_chronos_enabled()
-        )
+        chronos_enabled = mode == "hybrid" and self._rc.get_chronos_enabled()
         mode_label = self._MODE_DISPLAY.get(mode, mode.upper())
         if chronos_enabled:
             mode_label += " +Chronos"
@@ -1054,7 +1050,7 @@ class TelegramCommander:
 
         chronos = self._rc.get_chronos_enabled() if mode == "hybrid" else False
         chronos_str = ""
-        if mode == "hybrid" and not Config.PAPER_TRADING:
+        if mode == "hybrid":
             chronos_str = (
                 f"  Chronos (усил. контроль): {'✅ ВКЛ' if chronos else '❌ ВЫКЛ'}\n"
             )
@@ -2178,8 +2174,9 @@ class TelegramCommander:
                         "🔀 *Режим переключён: Hybrid*\n\n"
                         "Включить *усиленный контроль*?\n"
                         "SAC + LLM + Chronos — тройное подтверждение.\n"
-                        "Меньше сделок, выше точность.\n\n"
-                        "_(В paper режиме Chronos автоматически игнорируется)_",
+                        "Chronos мягко корректирует confidence "
+                        "(не отменяет сделку жёстко) и работает "
+                        "в paper и live одинаково.",
                         _kb_chronos_prompt(),
                     )
                 elif mode == "local":

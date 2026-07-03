@@ -588,22 +588,38 @@ class TestHybrid:
         assert result[0]["strategy"].startswith("hybrid(")
         assert "sac" in result[0]["strategy"]
 
-    def test_hybrid_chronos_disabled_paper_trading(self, mock_ai, mock_dqn_signal):
-        """PAPER_TRADING=True → Chronos не используется."""
+    def test_hybrid_chronos_active_in_paper_trading(self, mock_ai, mock_dqn_signal):
+        """PAPER_TRADING=True больше не блокирует Chronos (гейт снят)."""
+        import pandas as pd
+
         rc = MagicMock()
         rc.get_mode.return_value = "hybrid"
         rc.get_chronos_enabled.return_value = True
         mock_dqn_signal.get_signal.return_value = {"action": "buy", "confidence": 0.80}
         mock_ai.analyze.return_value = [make_rec(action="buy", confidence=0.80)]
-        cfg = _make_config(PAPER_TRADING=True, MIN_SIGNAL_CONFIDENCE=0.65)
-        with patch("src.signal_combiner.Config", cfg):
-            c = SignalCombiner(ai=mock_ai, rc=rc)
-            result = await_sync(c._hybrid([make_snapshot()], balance=10000))
-        # Should still return result (Chronos not triggered)
-        assert len(result) == 1
 
-    def test_hybrid_chronos_disagrees_drops_signal(self, mock_ai, mock_dqn_signal):
-        """Chronos disagrees → сигнал пропускается."""
+        df = pd.DataFrame({"close": [1.0, 2.0, 3.0]})
+        market_data = {"BTC/USDT": df}
+
+        cfg = _make_config(PAPER_TRADING=True, MIN_SIGNAL_CONFIDENCE=0.65)
+        with patch("src.signal_combiner.Config", cfg), patch(
+            "src.signal_combiner.chronos_analyzer"
+        ) as mock_chronos:
+            mock_chronos.predict_direction.return_value = "up"
+            c = SignalCombiner(ai=mock_ai, rc=rc)
+            result = await_sync(
+                c._hybrid([make_snapshot()], balance=10000, market_data=market_data)
+            )
+
+        assert len(result) == 1
+        assert result[0]["chronos_signal"] == "up"
+        mock_chronos.predict_direction.assert_called_once()
+
+    def test_hybrid_chronos_disagrees_reduces_confidence(
+        self, mock_ai, mock_dqn_signal
+    ):
+        """Chronos disagrees → confidence снижается (soft modifier), сигнал не
+        отбрасывается hard-veto'м, если остаётся выше MIN_SIGNAL_CONFIDENCE."""
         import pandas as pd
 
         rc = MagicMock()
@@ -625,10 +641,40 @@ class TestHybrid:
                 c._hybrid([make_snapshot()], balance=10000, market_data=market_data)
             )
 
+        assert len(result) == 1
+        assert result[0]["confidence"] == 0.65  # 0.80 combined - 0.15 penalty
+        assert result[0]["chronos_signal"] == "down"
+
+    def test_hybrid_chronos_disagrees_drops_below_threshold(
+        self, mock_ai, mock_dqn_signal
+    ):
+        """Chronos disagrees и итоговый confidence уходит ниже
+        MIN_SIGNAL_CONFIDENCE → сигнал всё же отбрасывается (порогом, не veto)."""
+        import pandas as pd
+
+        rc = MagicMock()
+        rc.get_mode.return_value = "hybrid"
+        rc.get_chronos_enabled.return_value = True
+        mock_dqn_signal.get_signal.return_value = {"action": "buy", "confidence": 0.80}
+        mock_ai.analyze.return_value = [make_rec(action="buy", confidence=0.70)]
+
+        df = pd.DataFrame({"close": [1.0, 2.0, 3.0]})
+        market_data = {"BTC/USDT": df}
+
+        cfg = _make_config(PAPER_TRADING=False, MIN_SIGNAL_CONFIDENCE=0.65)
+        with patch("src.signal_combiner.Config", cfg), patch(
+            "src.signal_combiner.chronos_analyzer"
+        ) as mock_chronos:
+            mock_chronos.predict_direction.return_value = "down"  # buy expects "up"
+            c = SignalCombiner(ai=mock_ai, rc=rc)
+            result = await_sync(
+                c._hybrid([make_snapshot()], balance=10000, market_data=market_data)
+            )
+
         assert result == []
 
-    def test_hybrid_chronos_agrees_keeps_signal(self, mock_ai, mock_dqn_signal):
-        """Chronos agrees → сигнал проходит."""
+    def test_hybrid_chronos_agrees_boosts_confidence(self, mock_ai, mock_dqn_signal):
+        """Chronos agrees → сигнал проходит, confidence немного растёт."""
         import pandas as pd
 
         rc = MagicMock()
@@ -651,9 +697,11 @@ class TestHybrid:
             )
 
         assert len(result) == 1
+        assert result[0]["confidence"] == 0.85  # 0.80 combined + 0.05 bonus
+        assert result[0]["chronos_signal"] == "up"
 
     def test_hybrid_chronos_neutral_keeps_signal(self, mock_ai, mock_dqn_signal):
-        """Chronos neutral → сигнал проходит."""
+        """Chronos neutral → сигнал проходит без изменения confidence."""
         import pandas as pd
 
         rc = MagicMock()
@@ -676,6 +724,8 @@ class TestHybrid:
             )
 
         assert len(result) == 1
+        assert result[0]["confidence"] == 0.80
+        assert result[0]["chronos_signal"] == "neutral"
 
 
 # ---------------------------------------------------------------------------
