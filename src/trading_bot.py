@@ -1620,6 +1620,9 @@ class TradingBot:
                             regime=self._current_regime,
                         )
                     self._save_monitored_state()
+                    elapsed = loop.time() - t0
+                    _interval = self._runtime_config.get_trading_interval()
+                    await asyncio.sleep(max(0, _interval - elapsed))
                     continue
 
                 # РЕЖИМ ПОИСКА: есть свободные слоты — полный скан + AI

@@ -429,8 +429,8 @@ class AIAnalyzer:
 
                     _msg = str(e)
                     _m = _re.search(
-                        r"try again in (\d+)m(\d+(?:\.\d+)?)?s?|"
-                        r"try again in (\d+(?:\.\d+)?)s",
+                        r"(?:try again|retry) in (\d+)m(\d+(?:\.\d+)?)?s?|"
+                        r"(?:try again|retry) in (\d+(?:\.\d+)?)s",
                         _msg,
                         _re.IGNORECASE,
                     )
