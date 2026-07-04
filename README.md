@@ -37,7 +37,8 @@
 1.  Сканирует монеты на Bybit: bluechip → топ-20, altcoin → топ-100, meme → топ-200
 2.  Prescore-фильтр отбирает 30 самых активных (RSI, объём, ATR, тренд) → AI
 3.  Загружает OHLCV, рассчитывает индикаторы
-4.  Получает рыночный контекст (funding, OI, F&G, orderbook ...)
+4.  Получает рыночный контекст (funding, OI, F&G, orderbook, ETF, Reddit ...) —
+    влияет и на выбор новых сделок, и на выход из открытых позиций
 5.  SeasonDetector: BTC доминация + Altcoin Index → текущий сезон рынка
 6.  Определяет режим per-символ (trending_up / ranging / trending_down)
 7.  Генерирует сигналы (16 стратегий + AI + SAC, профильные активируются автоматически)
@@ -58,6 +59,62 @@
 
 ---
 
+### Полная цепочка принятия решения — от скана до открытой позиции
+
+Ниже — детальный путь одного цикла в режиме полного скана, шаг за шагом, с точными формулами/порогами из кода. Раздел общий для всех трёх профилей — где логика отличается по профилю, это указано явно; где отличаются только параметры (таймфрейм, риск/сделку, SL/TP) — см. таблицу **🌐 Профиль рынка** в разделе [Управление через Telegram](#управление-через-telegram) ниже, здесь не дублируется.
+
+**1. Сбор снэпшотов** ([cycle.py](src/cycle.py) `collect_snapshots`)
+Для каждого символа параллельно: OHLCV → индикаторы (RSI/MACD/BB/ATR/тренд) + `NewsAnalyzer.get_sentiment()` (VADER-fallback или AI-скоринг заголовков NewsAPI/RSS) → всё собирается в один снэпшот-словарь на монету.
+
+**2. Prescore — отбор кандидатов для AI** (`_prescore_snapshots`, только если монет больше `AI_MAX_SYMBOLS`, по умолчанию 30)
+`score = vol_score×0.35 + rsi_score×0.30 + atr_score×0.20 + regime_bonus×0.15`, где `regime_bonus=0.3` если режим трендовый. Берутся топ-30 — экономия токенов AI без потери лучших кандидатов.
+
+**3. Рыночный контекст** (`MarketContext.get_context_for_symbols`, параллельно с шагом 2)
+13 сигналов на символ: funding rate, OI+ликвидации, Fear&Greed, futures basis, orderbook imbalance, Google Trends, Deribit PCR+IV skew, Glassnode macro, BTC ETF flows, **Reddit-сентимент через CryptoBERT**, stablecoin supply. Кэш 5 мин – 4 часа на сигнал.
+*(Meme-профиль дополнительно)*: `SentimentPoller` — Twitter/X + Telegram памп-каналы → колонка `social_sentiment` в DataFrame, отдельный вход для SAC и стратегии `sentiment`.
+
+**4. Генерация сигналов** (`SignalCombiner.combine()`) — зависит от `MODE`, не от профиля рынка:
+- `local` — пустой список, дальше работает только локальный fallback (шаг 7)
+- `ai` — только `AIAnalyzer.analyze()` (news_sentiment и заголовки — часть промпта, с инструкцией "score > 0.3 boosts buy")
+- `dqn` — только SAC
+- `hybrid` (рекомендуется для всех профилей) — SAC и AI должны согласиться по направлению; вес смешивания зависит от режима рынка (trending_up 50/50, trending_down 30/70, ranging/unknown 40/60); при AI-молчании берётся SAC-сигнал, если его confidence ≥0.80
+- `hybrid + Chronos` — поверх согласия SAC+AI применяется мягкий модификатор confidence (+0.05 согласен / −0.15 не согласен, порог направления = `0.3 × ATR/price`)
+
+**5. Контекстный фильтр confidence** (`_apply_market_context_filter`) — только если `MODE=hybrid`/`ai`/`dqn` дали хоть один сигнал. Каждый из 13 сигналов из шага 3 двигает confidence уже существующего SAC/AI-сигнала на ±0.05…0.15 (например funding `long_overheated` + buy → −0.15; Fear&Greed ≤15 + каскад ликвидаций ещё идёт → confidence обнуляется полностью — не покупаем в падающий нож). Сработавшие сигналы логируются в `context_flags` для последующего анализа корреляции с исходом сделки.
+
+**6. Прямые контекстные сигналы** (`_generate_context_signals` + `_merge_with_context`) — независимо от AI/SAC, из **экстремальных** значений контекста генерируются отдельные сигналы: funding overheated (contrarian), liquidation cascade / short squeeze (momentum), orderbook imbalance >0.4, PCR extremes, Fear&Greed ≤10/≥92, basis premium >2%, BTC ETF flow ±. Если по тому же символу+направлению уже есть сигнал от AI/SAC — confidence усиливается на +0.05 (не дублируется); если сигнала не было — добавляется как отдельная рекомендация со strategy=`context_signal`.
+
+**7. Локальный fallback** — если после шагов 4-6 сигналов нет, для каждого символа считается стратегия по включённым индикаторам (`create_strategy`), TP автоматически расширяется в тренде (≥25%) и сужается в боковике (≤10%).
+
+**8. Приоритизация** — фильтр по балансу, затем сортировка по `composite_score = confidence × (1+tp_bonus) × (1+volume_bonus) × regime_mult` (макс бонусы: TP-потенциал +50%, объём +30%, совпадение с трендом +15%/−10% в боковике).
+
+**9. Portfolio allocation** (`optimize_allocation`, CVaR/Markowitz) — если ≥2 buy-сигналов одновременно, каждому назначается `alloc_fraction` вместо фиксированного `RISK_PER_TRADE`, с капом ×3.
+
+**10. Execution guards** (`_execute_top_rec` → `OrderExecutor.execute()`, по порядку, любой fail = skip):
+1. Macro blackout (±30 мин от FOMC/CPI/NFP, если включено)
+2. Свободные слоты (`MAX_POSITIONS`) и symbol cooldown после последнего закрытия
+3. Торговые часы (если заданы)
+4. Max positions + дубликат по символу (под локом — резервирует слот сразу)
+5. **Correlation guard** — `CorrelationFilter.is_allowed`, блокирует если корреляция с открытой позицией ≥ `MAX_CORRELATION`
+6. Подтверждение — paper/`AUTO_EXECUTE=true` исполняют сразу, иначе диалог в Telegram с live win-rate/EV и бэктест-статистикой по стратегии, таймаут `TELEGRAM_CONFIRM_TIMEOUT`
+7. **Liquidity filter** — spread% и 24ч объём против `MAX_SPREAD_PCT`/`MIN_VOLUME_USDT`
+8. Валидация SL/TP (инвертированный уровень = skip)
+9. **Sizing**: Half-Kelly (если ≥10 живых сделок по стратегии, капается `alloc_fraction×balance/entry`) или консервативный фиксированный процент (пока сделок мало)
+10. Масштабирование при просадке от пика баланса
+11. **Almgren-Chriss** — поправка entry на маркет-импакт от размера ордера относительно объёма; SL/TP перепроверяются повторно после поправки
+12. Динамическое плечо (fixed/volatility/full — ATR-based)
+13. Размещение ордера (paper — симуляция баланса; live — биржевой ордер + SL/TP на бирже)
+14. `TradeHistory.record_open()` — сохраняет сделку **и** `context_flags` (какие из 13 сигналов шага 3 были не-нейтральны на входе)
+
+**11. После открытия** — `PositionMonitor` каждые 5 сек проверяет SL/TP/trailing/частичный TP, плюс те же 13 сигналов контекста (уже для управления открытой позицией): разворот сигнала с confidence ≥0.80 → force_close, funding squeeze/ликвидационный каскад против позиции → tighten_sl или force_close. При закрытии — `record_close()` с PnL, который позже сопоставляется с `context_flags` для анализа "какие фильтры реально коррелируют с выигрышем".
+
+**Что отличается по профилям именно в логике решения** (не просто в параметрах):
+- **Meme** — единственный профиль с реальным Twitter/Telegram сентиментом как входом (шаг 3) и профильными стратегиями `momentum_burst`/`pump_exit`/`sentiment`, которых нет у bluechip/altcoin
+- **BTC ETF flows** (шаг 3 и 6) применяются только к символу BTC/USDT, независимо от профиля
+- Всё остальное (contrarian-логика funding/PCR/FNG, Kelly-сайзинг, correlation guard, Almgren-Chriss) работает идентично во всех трёх профилях — разница только в цифрах (таймфрейм/риск/SL-TP из таблицы профилей), не в самой логике принятия решения
+
+---
+
 ## Возможности
 
 ### Рыночный Edge — сигналы реального времени
@@ -74,7 +131,7 @@
 | **Deribit PCR + IV Skew** | PCR <0.5 = all-in calls → SELL | SELL ETH conf=0.65 |
 | **ETF Flows** (farside.co.uk) | Outflow <-$100M → SELL; Inflow >$150M → BUY | BUY BTC conf=0.65 |
 | **Google Trends** | >75 = retail FOMO пик → SELL | SELL BTC conf=0.67 |
-| **Reddit** (r/CryptoCurrency) | sentiment < -0.3 → SELL | опционально |
+| **Reddit** (r/CryptoCurrency, CryptoBERT) | NLP-классификация текста постов (title+selftext) Bullish/Bearish/Neutral — не upvote_ratio | опционально |
 | **News sentiment** (NewsAPI/RSS + Claude/DeepSeek/VADER) | Корректирует confidence сигналов по новостному фону монеты | все профили |
 | **Twitter/X** | VADER по монетам профиля Meme (Basic API, ~10K твитов/мес) | только Meme |
 | **Telegram памп-каналы** | Мониторинг публичных каналов через Telethon MTProto, Telegram весит 2× в combined score | только Meme |
@@ -955,7 +1012,8 @@ cp models/sac_model_20260620_143000.zip models/sac_model.zip
 | **SAC модель** | `models/sac_model.zip` | `models/sac_model_altcoin.zip` | `models/sac_model_meme.zip` |
 | **Профильные стратегии** | volume_spike_bluechip | volume_spike_altcoin | volume_spike_meme, momentum_burst, pump_exit, sentiment |
 | **Соц-сентимент** (стратегия `sentiment`) | — | — | Twitter/X + Telegram памп-каналы |
-| **Новостной сентимент** (фильтр confidence) | ✅ NewsAPI/RSS + AI/VADER | ✅ NewsAPI/RSS + AI/VADER | ✅ NewsAPI/RSS + AI/VADER |
+
+**Новостной сентимент** (NewsAPI/RSS + AI/VADER) применяется **одинаково ко всем профилям** — это фильтр confidence в `SignalCombiner` ([cycle.py:70](src/cycle.py#L70)), не привязан к профилю рынка, поэтому убран из таблицы различий выше (там были одинаковые значения во всех трёх колонках — не различие, а константа).
 
 Значок **🧠** рядом с кнопкой означает что SAC-модель для этого профиля уже обучена. **⚠️** — модели нет, бот будет работать только на AI-сигналах.
 
@@ -1500,6 +1558,7 @@ supervisor.py
         ├── MacroCalendar       — blackout за 30 мин до/после FOMC/CPI/NFP
         ├── SignalCombiner      — SAC + AI [+ Chronos] + контекстные сигналы → топ-3 по composite score
         ├── ChronosAnalyzer     — amazon/chronos-t5-small, предсказание направления цены
+        ├── CryptoSentimentAnalyzer — ElKulako/cryptobert, sentiment постов Reddit
         ├── OrderExecutor       — CVaR→Kelly→AC + лимитный ордер + dynamic leverage
         │     liquidity filter · drawdown scaling
         ├── PositionMonitor     — SL/TP/trailing + partial TP + dynamic exits

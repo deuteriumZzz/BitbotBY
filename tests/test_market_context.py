@@ -954,10 +954,12 @@ class TestGetRedditSentiment:
         with patch.dict("sys.modules", {"praw": praw_mock}), patch.dict(
             "os.environ", {"REDDIT_CLIENT_ID": "cid", "REDDIT_CLIENT_SECRET": "csec"}
         ), patch("asyncio.get_running_loop") as mock_loop:
-            mock_loop.return_value.run_in_executor = AsyncMock(return_value=0.85)
+            mock_loop.return_value.run_in_executor = AsyncMock(
+                return_value=(0.42, "reddit_bullish")
+            )
             val, signal = await mc._get_reddit_sentiment("BTC")
         assert signal == "reddit_bullish"
-        assert val == pytest.approx(0.85, abs=0.001)
+        assert val == pytest.approx(0.42, abs=0.001)
 
     @pytest.mark.asyncio
     async def test_reddit_bearish(self):
@@ -966,7 +968,9 @@ class TestGetRedditSentiment:
         with patch.dict("sys.modules", {"praw": praw_mock}), patch.dict(
             "os.environ", {"REDDIT_CLIENT_ID": "cid", "REDDIT_CLIENT_SECRET": "csec"}
         ), patch("asyncio.get_running_loop") as mock_loop:
-            mock_loop.return_value.run_in_executor = AsyncMock(return_value=0.4)
+            mock_loop.return_value.run_in_executor = AsyncMock(
+                return_value=(-0.3, "reddit_bearish")
+            )
             val, signal = await mc._get_reddit_sentiment("BTC")
         assert signal == "reddit_bearish"
 
@@ -978,7 +982,9 @@ class TestGetRedditSentiment:
             {"REDDIT_CLIENT_ID": "cid", "REDDIT_CLIENT_SECRET": "csec"},
         ):
             with patch("asyncio.get_running_loop") as mock_loop:
-                mock_loop.return_value.run_in_executor = AsyncMock(return_value=0.65)
+                mock_loop.return_value.run_in_executor = AsyncMock(
+                    return_value=(0.05, "neutral")
+                )
                 val, signal = await mc._get_reddit_sentiment("BTC")
         assert signal == "neutral"
 

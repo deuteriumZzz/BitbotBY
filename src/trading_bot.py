@@ -1013,6 +1013,7 @@ class TradingBot:
         balance: float,
         regimes: Dict[str, str],
         market_data: Dict[str, pd.DataFrame],
+        market_context: Optional[Dict[str, Any]] = None,
     ) -> list:
         """Генерирует торговые сигналы через combiner с локальным fallback.
 
@@ -1020,6 +1021,9 @@ class TradingBot:
         :param balance: Текущий баланс в USDT.
         :param regimes: Словарь {символ: режим}.
         :param market_data: Словарь {символ: DataFrame} для fallback-стратегии.
+        :param market_context: {symbol: ctx} из MarketContext — funding/OI/
+            liquidation/ETF/Reddit/etc. Без этого параметра контекстные
+            фильтры в SignalCombiner не применяются к новым сделкам.
         :return: Список рекомендаций.
         """
         recs = await self.combiner.combine(
@@ -1028,6 +1032,7 @@ class TradingBot:
             regime=self._current_regime,
             regimes=regimes,
             market_data=market_data,
+            market_context=market_context,
         )
         recs = self._cycle.optimize_allocation(recs, market_data)
 
@@ -1585,12 +1590,6 @@ class TradingBot:
                             if sym in market_data
                         }
                         regimes = await self._detect_regimes(_mon_mdata)
-                        _mon_recs = await self._generate_signals(
-                            _mon_snaps, balance, regimes, _mon_mdata
-                        )
-                        _signals_map = {
-                            r["symbol"]: r for r in _mon_recs if r.get("symbol")
-                        }
                         _prices = {
                             sym: df["close"].iloc[-1]
                             for sym, df in _mon_mdata.items()
@@ -1605,6 +1604,16 @@ class TradingBot:
                         except Exception as _mc_exc:
                             logger.warning("MarketContext fetch failed: %s", _mc_exc)
                             _market_ctx_map = {}
+                        _mon_recs = await self._generate_signals(
+                            _mon_snaps,
+                            balance,
+                            regimes,
+                            _mon_mdata,
+                            market_context=_market_ctx_map,
+                        )
+                        _signals_map = {
+                            r["symbol"]: r for r in _mon_recs if r.get("symbol")
+                        }
                         self._position_monitor.update_market_state(
                             signals=_signals_map,
                             market_ctx=_market_ctx_map,
@@ -1616,17 +1625,6 @@ class TradingBot:
                 # РЕЖИМ ПОИСКА: есть свободные слоты — полный скан + AI
                 logger.info("Slots available (%d/%d) — full scan mode", _open, _max)
                 regimes = await self._detect_regimes(market_data)
-                # Умный предфильтр: из 100 монет выбираем 30 лучших кандидатов
-                # по быстрым метрикам — до отправки в AI
-                _ai_limit = int(os.getenv("AI_MAX_SYMBOLS", "30"))
-                ai_snapshots = self._prescore_snapshots(snapshots, regimes, _ai_limit)
-                recs = await self._generate_signals(
-                    ai_snapshots, balance, regimes, market_data
-                )
-
-                # БАГ 1: строим signals_map из реальных рекомендаций (после combine),
-                # а не из снэпшотов, где top_signal/market_context не существуют.
-                _signals_map = {r["symbol"]: r for r in recs if r.get("symbol")}
                 _prices = {
                     sym: df["close"].iloc[-1]
                     for sym, df in market_data.items()
@@ -1641,6 +1639,21 @@ class TradingBot:
                 except Exception as _mc_exc:
                     logger.warning("MarketContext fetch failed: %s", _mc_exc)
                     _market_ctx_map = {}
+                # Умный предфильтр: из 100 монет выбираем 30 лучших кандидатов
+                # по быстрым метрикам — до отправки в AI
+                _ai_limit = int(os.getenv("AI_MAX_SYMBOLS", "30"))
+                ai_snapshots = self._prescore_snapshots(snapshots, regimes, _ai_limit)
+                recs = await self._generate_signals(
+                    ai_snapshots,
+                    balance,
+                    regimes,
+                    market_data,
+                    market_context=_market_ctx_map,
+                )
+
+                # БАГ 1: строим signals_map из реальных рекомендаций (после combine),
+                # а не из снэпшотов, где top_signal/market_context не существуют.
+                _signals_map = {r["symbol"]: r for r in recs if r.get("symbol")}
                 self._position_monitor.update_market_state(
                     signals=_signals_map,
                     market_ctx=_market_ctx_map,

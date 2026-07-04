@@ -12,6 +12,8 @@ import logging
 import time
 from typing import Dict, List, Optional, Tuple
 
+from src import crypto_sentiment_analyzer
+
 logger = logging.getLogger(__name__)
 
 _BYBIT_BASE = "https://api.bybit.com"
@@ -792,10 +794,13 @@ class MarketContext:
 
     async def _get_reddit_sentiment(self, base: str) -> Tuple[float, str]:
         """
-        Средний upvote_ratio последних 10 постов в r/CryptoCurrency по тикеру.
-        upvote_ratio < 0.5  → "reddit_bearish"
-        upvote_ratio > 0.75 → "reddit_bullish"
-        иначе               → "neutral"
+        Sentiment последних 10 постов в r/CryptoCurrency по тикеру через
+        CryptoBERT (title + selftext), а не upvote_ratio — тот отражал
+        согласие голосующих с постом, а не его содержание.
+
+        net_score > 0.15  → "reddit_bullish"
+        net_score < -0.15 → "reddit_bearish"
+        иначе             → "neutral"
         """
         now = time.monotonic()
         cached = self._reddit_cache.get(base)
@@ -817,7 +822,7 @@ class MarketContext:
 
             loop = asyncio.get_running_loop()
 
-            def fetch() -> float:
+            def fetch() -> Tuple[float, str]:
                 reddit = praw.Reddit(
                     client_id=client_id,
                     client_secret=client_secret,
@@ -825,21 +830,12 @@ class MarketContext:
                 )
                 subreddit = reddit.subreddit("CryptoCurrency")
                 posts = list(subreddit.search(base, limit=10, time_filter="day"))
-                if not posts:
-                    return 0.5
-                ratios = [p.upvote_ratio for p in posts if hasattr(p, "upvote_ratio")]
-                return sum(ratios) / len(ratios) if ratios else 0.5
+                texts = [
+                    f"{p.title} {getattr(p, 'selftext', '')}".strip() for p in posts
+                ]
+                return crypto_sentiment_analyzer.predict_sentiment(texts)
 
-            avg_ratio = await loop.run_in_executor(None, fetch)
-
-            if avg_ratio < 0.5:
-                signal = "reddit_bearish"
-            elif avg_ratio > 0.75:
-                signal = "reddit_bullish"
-            else:
-                signal = "neutral"
-
-            result_val = (round(avg_ratio, 4), signal)
+            result_val = await loop.run_in_executor(None, fetch)
             self._reddit_cache[base] = (result_val, now)
             return result_val
 
