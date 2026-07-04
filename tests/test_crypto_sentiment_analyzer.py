@@ -47,8 +47,8 @@ class TestLoadPipeline:
 
     def test_load_sets_pipeline_none_on_import_error(self):
         """Если transformers не установлен — _pipeline остаётся None."""
+        _reset_module_state()
         with patch.dict("sys.modules", {"transformers": None}):
-            _reset_module_state()
             import src.crypto_sentiment_analyzer as csa
 
             csa._load_attempted = False
@@ -75,8 +75,8 @@ class TestLoadPipeline:
         """Исключение при загрузке → pipeline=None, нет краша."""
         transformers_mock = MagicMock()
         transformers_mock.pipeline.side_effect = RuntimeError("model fetch failed")
+        _reset_module_state()
         with patch.dict("sys.modules", {"transformers": transformers_mock}):
-            _reset_module_state()
             import src.crypto_sentiment_analyzer as csa
 
             csa._load_attempted = False
