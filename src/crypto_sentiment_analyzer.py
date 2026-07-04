@@ -14,7 +14,7 @@ upvote_ratio, если все согласны, что новость плоха
 from __future__ import annotations
 
 import logging
-from typing import Sequence, Tuple
+from typing import Any, Dict, List, Sequence, Tuple, cast
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +58,9 @@ def predict_sentiment(texts: Sequence[str]) -> Tuple[float, str]:
         return 0.0, "neutral"
 
     try:
-        results = _pipeline(clean_texts)
+        # transformers types __call__ as list[dict], but with top_k=None on a
+        # batch of texts it actually returns list[list[dict]] at runtime.
+        results = cast(List[List[Dict[str, Any]]], _pipeline(clean_texts))
         bullish = 0.0
         bearish = 0.0
         for scores in results:
