@@ -36,6 +36,12 @@ _CHRONOS_DISAGREE_PENALTY = 0.15
 _CHRONOS_ATR_MULT = 0.3
 _CHRONOS_MIN_THRESHOLD = 0.001
 
+# Потолок суммарного штрафа в _apply_market_context_filter — коррелированные
+# сигналы (funding/OI/liquidation/etc.) не должны обнулять confidence целиком
+# только потому что несколько из них загорелись одновременно. Не применяется
+# к Fear&Greed hard-override (это осознанные бизнес-правила, не накопление).
+_MAX_CONTEXT_PENALTY = 0.25
+
 
 class SignalCombiner:
     """
@@ -340,18 +346,23 @@ class SignalCombiner:
             reddit = ctx.get("reddit_signal", "neutral")
             stablecoin = ctx.get("stablecoin_signal", "neutral")
 
+            # Штраф-сторона funding идёт в общий потолок; бонус-сторона (сигнал
+            # согласен с фильтром) — нет, там нет риска стекинга.
+            penalty = 0.0
+
             if funding == "long_overheated":
                 if action == "buy":
-                    conf -= 0.15
+                    penalty += 0.15
                 elif action == "sell":
                     conf = min(0.95, conf + 0.05)
             elif funding == "short_overheated":
                 if action == "sell":
-                    conf -= 0.15
+                    penalty += 0.15
                 elif action == "buy":
                     conf = min(0.95, conf + 0.05)
 
-            # Fear & Greed contrarian modifier
+            # Fear & Greed — осознанные hard-override правила, не часть
+            # накопительного стека, потолок на них не действует.
             if fng_value <= 15:  # extreme fear — contrarian window
                 if action == "buy":
                     if liquidation == "long_liquidation":
@@ -368,51 +379,63 @@ class SignalCombiner:
                     conf = round(conf * 0.85, 3)
 
             if oi == "oi_bearish" and action == "buy":
-                conf -= 0.08
+                penalty += 0.08
 
             if liquidation == "long_liquidation" and action == "buy":
-                conf -= 0.12
+                penalty += 0.12
             elif liquidation == "short_squeeze" and action == "sell":
-                conf -= 0.12
+                penalty += 0.12
 
             if basis == "greed_premium" and action == "buy":
-                conf -= 0.10
+                penalty += 0.10
             elif basis == "backwardation" and action == "sell":
-                conf -= 0.10
+                penalty += 0.10
 
             if google_trends == "retail_fomo" and action == "buy":
-                conf -= 0.08
+                penalty += 0.08
             elif google_trends == "retail_absent" and action == "sell":
-                conf -= 0.08
+                penalty += 0.08
 
             if pcr == "greed_calls" and action == "buy":
-                conf -= 0.10
+                penalty += 0.10
             elif pcr == "fear_puts" and action == "sell":
-                conf -= 0.10
+                penalty += 0.10
 
             if ob == "ask_dominant" and action == "buy":
-                conf -= 0.10
+                penalty += 0.10
             elif ob == "bid_dominant" and action == "sell":
-                conf -= 0.10
+                penalty += 0.10
 
             if iv == "put_skew" and action == "buy":
-                conf -= 0.08
+                penalty += 0.08
             elif iv == "call_skew" and action == "sell":
-                conf -= 0.08
+                penalty += 0.08
 
             if macro == "macro_bearish" and action == "buy":
-                conf -= 0.07
+                penalty += 0.07
 
             if etf == "etf_outflow" and action == "buy":
-                conf -= 0.08
+                penalty += 0.08
             elif etf == "etf_inflow" and action == "sell":
-                conf -= 0.08
+                penalty += 0.08
 
             if reddit == "reddit_bearish" and action == "buy":
-                conf -= 0.05
+                penalty += 0.05
 
             if stablecoin == "stablecoin_outflow" and action == "buy":
-                conf -= 0.06
+                penalty += 0.06
+
+            capped_penalty = min(penalty, _MAX_CONTEXT_PENALTY)
+            if capped_penalty > 0:
+                conf -= capped_penalty
+                if penalty > _MAX_CONTEXT_PENALTY:
+                    self.logger.debug(
+                        "Context penalty capped %s %s: raw=%.3f capped=%.3f",
+                        symbol,
+                        action,
+                        penalty,
+                        capped_penalty,
+                    )
 
             conf = round(conf, 3)
 

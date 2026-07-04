@@ -922,6 +922,40 @@ class TestApplyMarketContextFilter:
         result = self._filter(recs, ctx)
         assert result == []
 
+    # ── потолок штрафа ────────────────────────────────────────────────────────
+
+    def test_penalty_capped_when_multiple_signals_stack(self):
+        """Несколько коррелированных штрафов не обнуляют confidence — потолок 0.25."""
+        recs = [make_rec(action="buy", confidence=0.90)]
+        ctx = {
+            "funding_signal": "long_overheated",  # -0.15
+            "oi_signal": "oi_bearish",  # -0.08
+            "liquidation_pressure": "long_liquidation",  # -0.12
+            "basis_signal": "greed_premium",  # -0.10
+        }
+        # raw penalty = 0.45, capped на 0.25 → 0.90 - 0.25 = 0.65 (не 0.45)
+        result = self._filter(recs, ctx)
+        assert len(result) == 1
+        assert result[0]["confidence"] == pytest.approx(0.65, abs=1e-3)
+
+    def test_penalty_not_capped_when_under_threshold(self):
+        """Штраф ниже потолка применяется полностью, без искажений."""
+        recs = [make_rec(action="buy", confidence=0.90)]
+        ctx = {
+            "funding_signal": "long_overheated",  # -0.15
+            "oi_signal": "oi_bearish",  # -0.08
+        }
+        # raw penalty = 0.23 < 0.25 — потолок не задействован
+        result = self._filter(recs, ctx)
+        assert result[0]["confidence"] == pytest.approx(0.90 - 0.23, abs=1e-3)
+
+    def test_fear_greed_hard_override_not_affected_by_cap(self):
+        """Fear&Greed extreme блокирует сделку напрямую — потолок штрафа не участвует."""
+        recs = [make_rec(action="sell", confidence=0.95)]
+        ctx = {"fear_greed": 5}  # extreme panic → sell заблокирован, conf=0.0
+        result = self._filter(recs, ctx)
+        assert result == []
+
     def test_neutral_context_passes_through(self):
         recs = [make_rec(action="buy", confidence=0.80)]
         result = self._filter(recs, {})
