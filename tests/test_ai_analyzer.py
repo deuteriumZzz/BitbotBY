@@ -598,3 +598,118 @@ class TestRecommendStrategyLocal:
         strategy, conf = self.ai.recommend_strategy_local(snap)
         assert strategy == "ema_crossover"
         assert conf == 0.60
+
+
+# ---------------------------------------------------------------------------
+# _record_usage() / refresh_deepseek_balance()
+# ---------------------------------------------------------------------------
+
+
+class TestRecordUsage:
+    def test_noop_when_no_tokens(self, no_key_analyzer):
+        no_key_analyzer._runtime_config = MagicMock()
+        no_key_analyzer._record_usage("groq", None)
+        no_key_analyzer._runtime_config.record_token_usage.assert_not_called()
+
+    def test_noop_when_zero_tokens(self, no_key_analyzer):
+        no_key_analyzer._runtime_config = MagicMock()
+        no_key_analyzer._record_usage("groq", 0)
+        no_key_analyzer._runtime_config.record_token_usage.assert_not_called()
+
+    def test_noop_when_no_runtime_config(self, no_key_analyzer):
+        no_key_analyzer._runtime_config = None
+        no_key_analyzer._record_usage("groq", 500)  # must not raise
+
+    def test_records_when_tokens_present(self, no_key_analyzer):
+        no_key_analyzer._runtime_config = MagicMock()
+        no_key_analyzer._record_usage("groq", 500)
+        no_key_analyzer._runtime_config.record_token_usage.assert_called_once_with(
+            "groq", 500
+        )
+
+    def test_swallows_exception_from_runtime_config(self, no_key_analyzer):
+        no_key_analyzer._runtime_config = MagicMock()
+        no_key_analyzer._runtime_config.record_token_usage.side_effect = RuntimeError(
+            "boom"
+        )
+        no_key_analyzer._record_usage("groq", 500)  # must not raise
+
+
+class TestRefreshDeepseekBalance:
+    @pytest.mark.asyncio
+    async def test_noop_without_deepseek_client(self, no_key_analyzer):
+        no_key_analyzer._deepseek = None
+        no_key_analyzer._runtime_config = MagicMock()
+        await no_key_analyzer.refresh_deepseek_balance()
+        no_key_analyzer._runtime_config.set_deepseek_balance.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_noop_without_runtime_config(self, no_key_analyzer):
+        no_key_analyzer._deepseek = MagicMock()
+        no_key_analyzer._runtime_config = None
+        await no_key_analyzer.refresh_deepseek_balance()  # must not raise
+
+    @pytest.mark.asyncio
+    async def test_caches_usd_balance_on_success(self, no_key_analyzer):
+        no_key_analyzer._deepseek = MagicMock()
+        no_key_analyzer._runtime_config = MagicMock()
+
+        resp = MagicMock()
+        resp.status = 200
+        resp.json = AsyncMock(
+            return_value={
+                "is_available": True,
+                "balance_infos": [
+                    {
+                        "currency": "USD",
+                        "total_balance": "12.34",
+                        "granted_balance": "10.00",
+                        "topped_up_balance": "2.34",
+                    }
+                ],
+            }
+        )
+        resp.__aenter__ = AsyncMock(return_value=resp)
+        resp.__aexit__ = AsyncMock(return_value=False)
+
+        session = MagicMock()
+        session.__aenter__ = AsyncMock(return_value=session)
+        session.__aexit__ = AsyncMock(return_value=False)
+        session.get = MagicMock(return_value=resp)
+
+        with patch("aiohttp.ClientSession", return_value=session):
+            await no_key_analyzer.refresh_deepseek_balance()
+
+        no_key_analyzer._runtime_config.set_deepseek_balance.assert_called_once_with(
+            12.34
+        )
+
+    @pytest.mark.asyncio
+    async def test_skips_caching_on_non_200(self, no_key_analyzer):
+        no_key_analyzer._deepseek = MagicMock()
+        no_key_analyzer._runtime_config = MagicMock()
+
+        resp = MagicMock()
+        resp.status = 401
+        resp.__aenter__ = AsyncMock(return_value=resp)
+        resp.__aexit__ = AsyncMock(return_value=False)
+
+        session = MagicMock()
+        session.__aenter__ = AsyncMock(return_value=session)
+        session.__aexit__ = AsyncMock(return_value=False)
+        session.get = MagicMock(return_value=resp)
+
+        with patch("aiohttp.ClientSession", return_value=session):
+            await no_key_analyzer.refresh_deepseek_balance()
+
+        no_key_analyzer._runtime_config.set_deepseek_balance.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_swallows_network_exception(self, no_key_analyzer):
+        no_key_analyzer._deepseek = MagicMock()
+        no_key_analyzer._runtime_config = MagicMock()
+
+        with patch("aiohttp.ClientSession", side_effect=ConnectionError("boom")):
+            await no_key_analyzer.refresh_deepseek_balance()  # must not raise
+
+        no_key_analyzer._runtime_config.set_deepseek_balance.assert_not_called()

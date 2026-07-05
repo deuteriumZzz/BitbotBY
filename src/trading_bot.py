@@ -443,10 +443,11 @@ class TradingBot:
         "зомби": PositionMonitor их не видит, SL/TP не проверяются, PnL
         никогда не фиксируется, а зарезервированный капитал не возвращается.
         На каждый символ восстанавливаем самую свежую открытую запись из БД
-        (с запасным SL от процентного отступа, TP не восстанавливаем — как
-        и в живой реконсиляции выше), более старые дубликаты по тому же
-        символу помечаем status='orphaned' — без выдуманного PnL, но и без
-        вечного зависания в 'open'.
+        с запасным SL от процентного отступа и запасным TP на risk:reward
+        1:2 от того же SL-расстояния (оригинальный TP физически не
+        восстановить — он не хранится в БД), более старые дубликаты по тому
+        же символу помечаем status='orphaned' — без выдуманного PnL, но и
+        без вечного зависания в 'open'.
         """
         try:
             open_trades = await self.trade_history.get_open_trades()
@@ -487,13 +488,22 @@ class TradingBot:
                 side = latest["action"]
                 entry = float(latest["entry_price"])
                 sl = entry * (1.0 - sl_pct) if side == "buy" else entry * (1.0 + sl_pct)
+                # Оригинальный TP потерян вместе с Redis — считаем запасной
+                # от того же SL-расстояния с risk:reward 1:2, чтобы позиция
+                # не осталась вовсе без цели на прибыль.
+                sl_distance = abs(entry - sl)
+                tp = (
+                    entry + 2.0 * sl_distance
+                    if side == "buy"
+                    else entry - 2.0 * sl_distance
+                )
 
                 self._monitored[sym] = {
                     "trade_id": latest["id"],
                     "qty": float(latest["quantity"]),
                     "entry": entry,
                     "stop_loss": sl,
-                    "take_profit": 0.0,
+                    "take_profit": tp,
                     "side": side,
                     "atr": 0.0,
                     "peak_price": entry,
@@ -503,12 +513,13 @@ class TradingBot:
                 restored += 1
                 logger.warning(
                     "Paper reconcile: восстановлена потерянная позиция %s %s"
-                    " %.6f @ %.4f sl=%.4f (fallback %.0f%%)",
+                    " %.6f @ %.4f sl=%.4f tp=%.4f (fallback %.0f%%, R:R 1:2)",
                     sym,
                     side,
                     latest["quantity"],
                     entry,
                     sl,
+                    tp,
                     sl_pct * 100,
                 )
 
@@ -850,6 +861,8 @@ class TradingBot:
                                 )
                 except Exception as _exc:
                     logger.debug("FNG fetch failed: %s", _exc)
+
+                await self.ai.refresh_deepseek_balance()
 
                 data = await self._season_detector.fetch_data()
                 if data:
@@ -1326,12 +1339,26 @@ class TradingBot:
         self._runtime_config.ensure_first_start_date()
         self._runtime_config.ensure_default_market_profile()
         start_balance = await self._get_balance_usdt()
+        _ai_names = {
+            "anthropic": "Claude",
+            "openai": "OpenAI",
+            "deepseek": "DeepSeek",
+            "groq": "Groq",
+            "gemini": "Gemini",
+        }
+        _providers_line = (
+            " → ".join(_ai_names.get(p, p) for p in self.ai._provider_order)
+            if self.ai._provider_order
+            else "нет ключей"
+        )
         await self.telegram.notify(
             f"🤖 *BitbotBY запущен* [{mode}]\n"
             f"Стратегия: `{Config.DEFAULT_STRATEGY}`\n"
             f"Баланс: `${start_balance:,.2f}`\n"
-            f"AI: {ai_status} | Символов: {scan_n}\n\n"
-            f"Используй кнопки ниже или набери /help",
+            f"AI: {ai_status} | Символов: {scan_n}\n"
+            f"Провайдеры: `{_providers_line}`\n\n"
+            f"Используй кнопки ниже или набери /help "
+            f"(баланс/лимиты — кнопка 🤖 AI-провайдеры)",
             reply_markup=_kb_main(),
         )
         await self._check_sac_model()

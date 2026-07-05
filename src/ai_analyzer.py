@@ -272,6 +272,18 @@ class AIAnalyzer:
             valid.append(r)
         return valid
 
+    def _record_usage(self, provider: str, total_tokens: "int | None") -> None:
+        """Копит счётчик токенов за сутки для панели статусов в Telegram."""
+        if not total_tokens:
+            return
+        rc = getattr(self, "_runtime_config", None)
+        if rc is None:
+            return
+        try:
+            rc.record_token_usage(provider, total_tokens)
+        except Exception:
+            pass
+
     async def _call_anthropic(self, prompt: str) -> str:
         """Вызов Claude (Anthropic API)."""
         message = await self._anthropic.messages.create(
@@ -280,6 +292,12 @@ class AIAnalyzer:
             system=_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": prompt}],
         )
+        usage = getattr(message, "usage", None)
+        if usage is not None:
+            total = getattr(usage, "input_tokens", 0) + getattr(
+                usage, "output_tokens", 0
+            )
+            self._record_usage("anthropic", total)
         block = message.content[0]
         return block.text if hasattr(block, "text") else ""
 
@@ -293,6 +311,8 @@ class AIAnalyzer:
                 {"role": "user", "content": prompt},
             ],
         )
+        usage = getattr(response, "usage", None)
+        self._record_usage("deepseek", getattr(usage, "total_tokens", None))
         return response.choices[0].message.content or ""
 
     async def _call_openai(self, prompt: str) -> str:
@@ -305,6 +325,8 @@ class AIAnalyzer:
                 {"role": "user", "content": prompt},
             ],
         )
+        usage = getattr(response, "usage", None)
+        self._record_usage("openai", getattr(usage, "total_tokens", None))
         return response.choices[0].message.content or ""
 
     async def _call_groq(self, prompt: str) -> str:
@@ -317,6 +339,8 @@ class AIAnalyzer:
                 {"role": "user", "content": prompt},
             ],
         )
+        usage = getattr(response, "usage", None)
+        self._record_usage("groq", getattr(usage, "total_tokens", None))
         return response.choices[0].message.content or ""
 
     async def _call_gemini(self, prompt: str) -> str:
@@ -329,7 +353,43 @@ class AIAnalyzer:
                 {"role": "user", "content": prompt},
             ],
         )
+        usage = getattr(response, "usage", None)
+        self._record_usage("gemini", getattr(usage, "total_tokens", None))
         return response.choices[0].message.content or ""
+
+    async def refresh_deepseek_balance(self) -> None:
+        """Запрашивает актуальный баланс DeepSeek и кэширует в RuntimeConfig.
+
+        Вызывается периодически (раз в 4ч из _season_check_loop) — баланс
+        pay-per-use меняется медленно, частый опрос не нужен.
+        """
+        if self._deepseek is None:
+            return
+        rc = getattr(self, "_runtime_config", None)
+        if rc is None:
+            return
+        try:
+            import aiohttp
+
+            headers = {"Authorization": f"Bearer {Config.DEEPSEEK_API_KEY}"}
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    "https://api.deepseek.com/user/balance",
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as resp:
+                    if resp.status != 200:
+                        return
+                    data = await resp.json()
+            infos = data.get("balance_infos") or []
+            usd = next(
+                (b for b in infos if b.get("currency") == "USD"),
+                infos[0] if infos else None,
+            )
+            if usd:
+                rc.set_deepseek_balance(float(usd.get("total_balance", 0.0)))
+        except Exception as exc:
+            self.logger.debug("refresh_deepseek_balance failed: %s", exc)
 
     async def analyze(
         self,

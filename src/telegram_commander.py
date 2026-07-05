@@ -72,6 +72,7 @@ def _kb_main(paper: "bool | None" = None) -> "InlineKeyboardMarkup":
                 InlineKeyboardButton("⚙️ Настройки", callback_data="settings"),
                 InlineKeyboardButton("❓ Справка", callback_data="help_menu"),
             ],
+            [InlineKeyboardButton("🤖 AI-провайдеры", callback_data="provider_menu")],
             [InlineKeyboardButton(mode_label, callback_data="switch_trading_mode")],
         ]
     )
@@ -997,13 +998,24 @@ class TelegramCommander:
         if chronos_enabled:
             mode_label += " +Chronos"
 
+        _ai_extra = ""
+        if provider == "deepseek":
+            _bal = self._rc.get_deepseek_balance()
+            if _bal:
+                _ai_extra = f" — баланс ${_bal['balance']:.2f}"
+        elif provider in ("groq", "gemini", "openai", "anthropic"):
+            _used = self._rc.get_token_usage_today(provider)
+            if _used:
+                _ai_extra = f" — сегодня {_used:,} токенов".replace(",", " ")
+
         text = (
             f"{state_icon} *BitbotBY [{paper}]*\n\n"
             f"💰 Баланс: `${balance:,.2f}` ({pnl_pct:+.2f}%)\n"
             f"📊 Профиль: {profile_str}\n"
             f"{season_line}"
             f"{fng_line}"
-            f"🤖 Режим: `{mode_label}` | AI: `{provider}`\n"
+            f"🤖 Режим: `{mode_label}`\n"
+            f"🧠 AI-провайдер: `{provider}`{_ai_extra}\n"
             f"🔢 Символов: `{n}` | Позиций: `{len(positions)}`\n"
             f"⏱ Цикл: `{self._rc.get_trading_interval()}с`"
             f" | Плечо: `{lev_mode}` ({lev_target*100:.1f}% ATR)\n"
@@ -2691,13 +2703,22 @@ class TelegramCommander:
             ]
             lines = []
             for _p, _name, _has_key in _PROVIDERS:
-                if _has_key:
-                    _st = self._rc.get_provider_status(_p)
-                    _icon = _STATUS_ICON.get(_st, "❓")
-                    _sdesc = _STATUS_DESC.get(_st, _st)
-                    lines.append(f"{_icon} *{_name}* — {_sdesc}")
-                else:
+                if not _has_key:
                     lines.append(f"❌ *{_name}* — не настроен")
+                    continue
+                _st = self._rc.get_provider_status(_p)
+                _icon = _STATUS_ICON.get(_st, "❓")
+                _sdesc = _STATUS_DESC.get(_st, _st)
+                _extra = ""
+                if _p == "deepseek":
+                    _bal = self._rc.get_deepseek_balance()
+                    if _bal:
+                        _extra = f" — баланс ${_bal['balance']:.2f}"
+                else:
+                    _used = self._rc.get_token_usage_today(_p)
+                    if _used:
+                        _extra = f" — сегодня {_used:,} токенов".replace(",", " ")
+                lines.append(f"{_icon} *{_name}* — {_sdesc}{_extra}")
             providers_text = "\n".join(lines)
             _last_str = f"Активен сейчас: `{last}`\n\n" if last else ""
             await self._edit(

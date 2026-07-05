@@ -445,6 +445,55 @@ class RuntimeConfig:
         """Возвращает последний известный статус провайдера."""
         return self._get(f"bot:provider_status:{provider}") or "unknown"
 
+    def record_token_usage(self, provider: str, tokens: int) -> None:
+        """Накапливает счётчик токенов за текущие UTC-сутки для провайдера."""
+        import datetime as _dt
+
+        today = _dt.datetime.now(_dt.timezone.utc).date().isoformat()
+        key = f"bot:tokens_used:{provider}:{today}"
+        try:
+            self._r.redis_client.incrby(key, tokens)
+            self._r.redis_client.expire(key, 2 * 24 * 3600)
+        except Exception as e:
+            logger.warning("RuntimeConfig record_token_usage failed: %s", e)
+
+    def get_token_usage_today(self, provider: str) -> int:
+        """Токенов использовано провайдером за текущие UTC-сутки."""
+        import datetime as _dt
+
+        today = _dt.datetime.now(_dt.timezone.utc).date().isoformat()
+        val = self._get(f"bot:tokens_used:{provider}:{today}")
+        try:
+            return int(val) if val else 0
+        except ValueError:
+            return 0
+
+    def set_deepseek_balance(self, balance_usd: float) -> None:
+        """Кэширует баланс DeepSeek в USD (TTL 1 час)."""
+        import json as _json
+        import time as _time
+
+        try:
+            self._r.redis_client.setex(
+                "bot:deepseek_balance",
+                3600,
+                _json.dumps({"balance": balance_usd, "ts": _time.time()}),
+            )
+        except Exception as e:
+            logger.warning("RuntimeConfig set_deepseek_balance failed: %s", e)
+
+    def get_deepseek_balance(self) -> "dict | None":
+        """Возвращает {'balance': float, 'ts': float} или None если нет в кэше."""
+        import json as _json
+
+        raw = self._get("bot:deepseek_balance")
+        if not raw:
+            return None
+        try:
+            return _json.loads(raw)
+        except Exception:
+            return None
+
     # ── Leverage ──────────────────────────────────────────────────────────────
 
     def get_max_drawdown_percent(self) -> float:

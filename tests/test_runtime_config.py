@@ -535,3 +535,60 @@ class TestRuntimeConfigLaunchRateBaseline:
         stored = json.loads(args[1])
         assert len(stored) == 42
         assert stored[-1] == 999.0
+
+
+class TestRuntimeConfigTokenUsage:
+    def test_record_token_usage_increments_by_key(self, rc_bundle):
+        rc, redis_mock, _ = rc_bundle
+        rc.record_token_usage("groq", 500)
+        args = redis_mock.redis_client.incrby.call_args[0]
+        assert args[0].startswith("bot:tokens_used:groq:")
+        assert args[1] == 500
+        redis_mock.redis_client.expire.assert_called_once()
+
+    def test_get_token_usage_today_zero_when_unset(self, rc_bundle):
+        rc, _, _ = rc_bundle
+        assert rc.get_token_usage_today("groq") == 0
+
+    def test_get_token_usage_today_returns_stored_value(self, rc_bundle):
+        rc, redis_mock, _ = rc_bundle
+        redis_mock.redis_client.get.return_value = b"1234"
+        assert rc.get_token_usage_today("deepseek") == 1234
+
+    def test_get_token_usage_today_invalid_value_returns_zero(self, rc_bundle):
+        rc, redis_mock, _ = rc_bundle
+        redis_mock.redis_client.get.return_value = b"not-a-number"
+        assert rc.get_token_usage_today("deepseek") == 0
+
+
+class TestRuntimeConfigDeepseekBalance:
+    def test_get_balance_none_when_unset(self, rc_bundle):
+        rc, _, _ = rc_bundle
+        assert rc.get_deepseek_balance() is None
+
+    def test_set_and_get_balance_roundtrip(self, rc_bundle):
+        import json
+
+        rc, redis_mock, _ = rc_bundle
+        rc.set_deepseek_balance(12.34)
+        args = redis_mock.redis_client.setex.call_args[0]
+        assert args[0] == "bot:deepseek_balance"
+        assert args[1] == 3600
+        stored = json.loads(args[2])
+        assert stored["balance"] == 12.34
+        assert "ts" in stored
+
+    def test_get_balance_returns_parsed_dict(self, rc_bundle):
+        import json
+
+        rc, redis_mock, _ = rc_bundle
+        redis_mock.redis_client.get.return_value = json.dumps(
+            {"balance": 5.5, "ts": 123.0}
+        ).encode()
+        result = rc.get_deepseek_balance()
+        assert result == {"balance": 5.5, "ts": 123.0}
+
+    def test_get_balance_none_on_corrupt_json(self, rc_bundle):
+        rc, redis_mock, _ = rc_bundle
+        redis_mock.redis_client.get.return_value = b"not-json"
+        assert rc.get_deepseek_balance() is None
