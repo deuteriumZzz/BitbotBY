@@ -51,6 +51,7 @@ _KEY_LAST_AI_PROVIDER = "bot:last_ai_provider"
 _KEY_SEASON_MODE = "bot:season_switch_mode"
 _KEY_SEASON_INDEX = "bot:season_index"
 _KEY_FEAR_GREED = "bot:fear_greed"
+_KEY_LAUNCH_RATE_HISTORY = "bot:launch_rate_history"
 _KEY_CONFIDENCE_LIVE = "bot:signal_confidence_live"
 _KEY_CONFIDENCE_PAPER = "bot:signal_confidence_paper"
 
@@ -947,6 +948,43 @@ class RuntimeConfig:
             return _json.loads(raw)
         except Exception:
             return None
+
+    # ── Pump.fun launch-rate baseline (для meme-season) ─────────────────────────
+    # Абсолютный порог "нормального" темпа лаунчей на pump.fun угадать нельзя —
+    # база сама по себе огромна и меняется со временем. Вместо этого копим
+    # историю замеров и сравниваем текущий темп с собственным скользящим
+    # медианным бейзлайном (см. SeasonDetector.classify).
+
+    _LAUNCH_RATE_MAX_SAMPLES = 42  # ~7 дней при проверке раз в 4 часа
+
+    def record_launch_rate_sample(self, rate: float) -> None:
+        """Добавляет замер темпа лаунчей в скользящую историю (капается)."""
+        import json as _json
+
+        raw = self._get(_KEY_LAUNCH_RATE_HISTORY)
+        try:
+            history = _json.loads(raw) if raw else []
+        except Exception:
+            history = []
+        history.append(round(rate, 2))
+        history = history[-self._LAUNCH_RATE_MAX_SAMPLES :]
+        self._set(_KEY_LAUNCH_RATE_HISTORY, _json.dumps(history))
+
+    def get_launch_rate_baseline(self, min_samples: int = 5) -> "float | None":
+        """Медиана накопленной истории. None если данных ещё недостаточно."""
+        import json as _json
+        import statistics as _statistics
+
+        raw = self._get(_KEY_LAUNCH_RATE_HISTORY)
+        if not raw:
+            return None
+        try:
+            history = _json.loads(raw)
+        except Exception:
+            return None
+        if len(history) < min_samples:
+            return None
+        return float(_statistics.median(history))
 
     # ── Startup ───────────────────────────────────────────────────────────────
 

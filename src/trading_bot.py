@@ -33,6 +33,7 @@ from src.order_executor import OrderExecutor
 from src.portfolio_manager import PortfolioManager
 from src.portfolio_optimizer import PortfolioOptimizer
 from src.position_monitor import PositionMonitor
+from src.pumpfun_tracker import PumpfunTracker
 from src.redis_client import RedisClient
 from src.regime_detector import RegimeDetector
 from src.risk_management import RiskManager
@@ -209,6 +210,7 @@ class TradingBot:
         # УЛУЧШЕНИЕ 7: макро-событийный blackout фильтр
         self._macro_calendar = MacroCalendar()
         self._season_detector = SeasonDetector()
+        self._pumpfun_tracker = PumpfunTracker(Config.PUMPPORTAL_API_KEY)
 
     async def initialize(self) -> None:
         """
@@ -301,7 +303,11 @@ class TradingBot:
             return
         self._runtime_config.set_sac_prompted(profile)
 
-        profile_labels = {"bluechip": "🔵 Блючипы", "altcoin": "🟡 Альткоины"}
+        profile_labels = {
+            "bluechip": "🔵 Блючипы",
+            "altcoin": "🟡 Альткоины",
+            "meme": "🚀 Мемкоины",
+        }
         profile_str = profile_labels.get(profile, "")
         profile_note = f" для профиля *{profile_str}*" if profile_str else ""
 
@@ -850,8 +856,29 @@ class TradingBot:
                     index = self._season_detector.compute_index(data)
                     if index:
                         current_profile = self._runtime_config.get_market_profile()
-                        signal = self._season_detector.classify(index)
+
+                        launch_rate = None
+                        launch_baseline = None
+                        if self._pumpfun_tracker.enabled:
+                            launch_rate = self._pumpfun_tracker.launch_rate_per_hour()
+                            launch_baseline = (
+                                self._runtime_config.get_launch_rate_baseline()
+                            )
+
+                        fng = self._runtime_config.get_fear_greed()
+                        fear_greed_val = fng["value"] if fng else None
+
+                        signal = self._season_detector.classify(
+                            index,
+                            fear_greed=fear_greed_val,
+                            launch_rate=launch_rate,
+                            launch_baseline=launch_baseline,
+                        )
                         self._runtime_config.set_season_index(signal, index)
+
+                        if launch_rate is not None:
+                            self._runtime_config.record_launch_rate_sample(launch_rate)
+
                         now = time.time()
 
                         needs_alert = self._season_detector.should_alert(
@@ -863,20 +890,19 @@ class TradingBot:
                             auto_switch = (
                                 self._runtime_config.get_season_switch_mode() == "auto"
                             )
+                            profile_labels = {
+                                "bluechip": "🔵 Блючипы",
+                                "altcoin": "🟡 Альткоины",
+                                "meme": "🚀 Мемкоины",
+                            }
                             if auto_switch:
                                 self._runtime_config.apply_market_profile(signal)
-                                profile_labels = {
-                                    "bluechip": "🔵 Блючипы",
-                                    "altcoin": "🟡 Альткоины",
-                                }
                                 label = profile_labels.get(signal, signal)
                                 suffix = f"\n\n✅ *Профиль переключён на {label}.*"
                                 await self.telegram.notify(msg + suffix)
                             else:
-                                btn_label = (
-                                    "✅ Переключить на Альты"
-                                    if signal == "altcoin"
-                                    else "✅ Переключить на Блючипы"
+                                btn_label = "✅ Переключить на " + profile_labels.get(
+                                    signal, signal
                                 )
                                 kb = InlineKeyboardMarkup(
                                     [
@@ -1286,6 +1312,7 @@ class TradingBot:
         self.is_running = True
         self._monitor_task = asyncio.create_task(self._monitor_positions())
         asyncio.create_task(self._season_check_loop())
+        self._pumpfun_tracker.start()
         cycle = 0
         ai_status = "on" if self.ai.enabled else "off"
         scan_n = self._runtime_config.get_scan_top_n()

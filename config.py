@@ -154,6 +154,7 @@ class Config:
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
     GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
     MAX_DRAWDOWN_PERCENT: float = float(os.getenv("MAX_DRAWDOWN_PERCENT", "0.2"))
+    PUMPPORTAL_API_KEY: str = os.getenv("PUMPPORTAL_API_KEY", "")
 
     # ── Mode ───────────────────────────────────────────────────────────────
     # local  → только правила (9 стратегий, без внешних API)

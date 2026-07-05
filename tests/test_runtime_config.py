@@ -484,3 +484,54 @@ class TestRuntimeConfigLeverage:
     def test_set_leverage_target_risk_invalid(self, rc_bundle):
         rc, _, _ = rc_bundle
         assert rc.set_leverage_target_risk(2.0) is False
+
+
+class TestRuntimeConfigLaunchRateBaseline:
+    def test_baseline_none_when_no_history(self, rc_bundle):
+        rc, _, _ = rc_bundle
+        assert rc.get_launch_rate_baseline() is None
+
+    def test_baseline_none_below_min_samples(self, rc_bundle):
+        import json
+
+        rc, redis_mock, _ = rc_bundle
+        redis_mock.redis_client.get.return_value = json.dumps(
+            [10.0, 20.0, 30.0]
+        ).encode()
+        assert rc.get_launch_rate_baseline(min_samples=5) is None
+
+    def test_baseline_is_median_of_history(self, rc_bundle):
+        import json
+
+        rc, redis_mock, _ = rc_bundle
+        redis_mock.redis_client.get.return_value = json.dumps(
+            [10.0, 20.0, 30.0, 40.0, 50.0]
+        ).encode()
+        assert rc.get_launch_rate_baseline() == pytest.approx(30.0)
+
+    def test_baseline_none_on_corrupt_history(self, rc_bundle):
+        rc, redis_mock, _ = rc_bundle
+        redis_mock.redis_client.get.return_value = b"not-json"
+        assert rc.get_launch_rate_baseline() is None
+
+    def test_record_sample_appends_to_empty_history(self, rc_bundle):
+        import json
+
+        rc, redis_mock, _ = rc_bundle
+        redis_mock.redis_client.get.return_value = None
+        rc.record_launch_rate_sample(42.5)
+        args = redis_mock.redis_client.set.call_args[0]
+        stored = json.loads(args[1])
+        assert stored == [42.5]
+
+    def test_record_sample_caps_history_length(self, rc_bundle):
+        import json
+
+        rc, redis_mock, _ = rc_bundle
+        existing = [float(i) for i in range(50)]
+        redis_mock.redis_client.get.return_value = json.dumps(existing).encode()
+        rc.record_launch_rate_sample(999.0)
+        args = redis_mock.redis_client.set.call_args[0]
+        stored = json.loads(args[1])
+        assert len(stored) == 42
+        assert stored[-1] == 999.0

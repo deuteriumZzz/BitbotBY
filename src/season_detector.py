@@ -35,6 +35,16 @@ _ALT_INDEX_LO = 25  # ниже → BTC Season
 _BTC_DOM_ALT = 45.0  # dominance ниже → поддерживает Alt Season
 _BTC_DOM_BTC = 52.0  # dominance выше → поддерживает BTC Season
 
+# Meme Season — не откалибровано реальными данными, первая рабочая гипотеза
+# (см. project_meme_profile память). Строже обычного альтсезона + жадность
+# на рынке + аномальный темп лаунчей на pump.fun относительно СВОЕГО ЖЕ
+# скользящего бейзлайна (абсолютный порог тут угадать нельзя — "нормальный"
+# темп лаунчей сам по себе огромный и не задокументирован официально).
+_MEME_ALT_INDEX_HI = 85
+_MEME_BTC_DOM_LO = 40.0
+_MEME_FEAR_GREED_HI = 75  # Extreme Greed по alternative.me (76-100)
+_MEME_LAUNCH_RATE_MULTIPLIER = 2.0  # темп лаунчей ≥ 2x медианного бейзлайна
+
 _CONFIRM_STREAK = 2  # проверок подряд для подтверждения
 _COOLDOWN_H = 24  # минимум часов между повторными алертами
 
@@ -46,8 +56,12 @@ class SeasonDetector:
     """
 
     def __init__(self) -> None:
-        self._streak: dict[str, int] = {"altcoin": 0, "bluechip": 0}
-        self._last_alert: dict[str, float] = {"altcoin": 0.0, "bluechip": 0.0}
+        self._streak: dict[str, int] = {"altcoin": 0, "bluechip": 0, "meme": 0}
+        self._last_alert: dict[str, float] = {
+            "altcoin": 0.0,
+            "bluechip": 0.0,
+            "meme": 0.0,
+        }
 
     async def fetch_data(self) -> dict[str, Any] | None:
         """Забирает данные сезона: CoinGecko первый, CoinPaprika как fallback."""
@@ -182,10 +196,34 @@ class SeasonDetector:
             logger.warning("season compute_index error: %s", exc)
             return None
 
-    def classify(self, index: dict[str, Any]) -> str | None:
-        """Возвращает 'altcoin', 'bluechip' или None если сезон неясен."""
+    def classify(
+        self,
+        index: dict[str, Any],
+        fear_greed: int | None = None,
+        launch_rate: float | None = None,
+        launch_baseline: float | None = None,
+    ) -> str | None:
+        """Возвращает 'meme', 'altcoin', 'bluechip' или None если сезон неясен.
+
+        meme проверяется первым — это более узкий и редкий сигнал, чем
+        обычный альтсезон. Требует все 3 доп. сигнала (fear_greed,
+        launch_rate, launch_baseline) — если хоть один недоступен (нет ключа
+        PumpPortal, или ещё не накопился бейзлайн), meme не сработает,
+        classify() ведёт себя как раньше (только altcoin/bluechip).
+        """
         ai = index["altcoin_index"]
         dom = index["btc_dominance"]
+
+        if (
+            fear_greed is not None
+            and launch_rate is not None
+            and launch_baseline is not None
+            and ai >= _MEME_ALT_INDEX_HI
+            and dom < _MEME_BTC_DOM_LO
+            and fear_greed >= _MEME_FEAR_GREED_HI
+            and launch_rate >= launch_baseline * _MEME_LAUNCH_RATE_MULTIPLIER
+        ):
+            return "meme"
 
         if ai >= _ALT_INDEX_HI and dom < _BTC_DOM_ALT:
             return "altcoin"
@@ -207,7 +245,7 @@ class SeasonDetector:
         - streak достиг _CONFIRM_STREAK
         - прошло достаточно времени с последнего алерта этого типа
         """
-        for key in ("altcoin", "bluechip"):
+        for key in ("altcoin", "bluechip", "meme"):
             if key != signal:
                 self._streak[key] = 0
 
@@ -248,7 +286,16 @@ class SeasonDetector:
         bar_filled = int(ai / 10)
         bar = "█" * bar_filled + "░" * (10 - bar_filled)
 
-        if target == "altcoin":
+        if target == "meme":
+            header = "🚀 *Обнаружен MEME SEASON*"
+            hint = (
+                f"Экстремальная жадность на рынке + аномальный темп новых "
+                f"токенов на pump.fun (относительно недавнего среднего).\n"
+                f"{count} из {total} альтов обогнали BTC за 30 дней.\n"
+                f"BTC Dominance: *{dom}%*\n\n"
+                "Рекомендуется переключиться на профиль *Мемкоины*."
+            )
+        elif target == "altcoin":
             header = "🟡 *Обнаружен АЛЬТСЕЗОН*"
             hint = (
                 f"{count} из {total} альтов обогнали BTC за 30 дней.\n"

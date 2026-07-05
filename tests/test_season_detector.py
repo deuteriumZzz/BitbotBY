@@ -99,10 +99,14 @@ def detector():
 
 class TestInit:
     def test_streak_initialised_to_zero(self, detector):
-        assert detector._streak == {"altcoin": 0, "bluechip": 0}
+        assert detector._streak == {"altcoin": 0, "bluechip": 0, "meme": 0}
 
     def test_last_alert_initialised_to_zero(self, detector):
-        assert detector._last_alert == {"altcoin": 0.0, "bluechip": 0.0}
+        assert detector._last_alert == {
+            "altcoin": 0.0,
+            "bluechip": 0.0,
+            "meme": 0.0,
+        }
 
 
 # ===========================================================================
@@ -574,6 +578,61 @@ class TestClassify:
         result = detector.classify(self._index(74.9, 43.0))
         assert result is None
 
+    def test_meme_when_all_conditions_met(self, detector):
+        result = detector.classify(
+            self._index(90.0, 35.0),
+            fear_greed=80,
+            launch_rate=200.0,
+            launch_baseline=50.0,
+        )
+        assert result == "meme"
+
+    def test_meme_takes_priority_over_altcoin(self, detector):
+        # ai/dom satisfy both meme and altcoin thresholds — meme wins
+        result = detector.classify(
+            self._index(90.0, 35.0),
+            fear_greed=80,
+            launch_rate=200.0,
+            launch_baseline=50.0,
+        )
+        assert result == "meme"
+        # Same index without the extra signals falls back to altcoin
+        assert detector.classify(self._index(90.0, 35.0)) == "altcoin"
+
+    def test_meme_not_triggered_without_launch_data(self, detector):
+        # altcoin-level index but no PumpPortal signal available → falls
+        # back to plain altcoin/bluechip classification
+        result = detector.classify(self._index(90.0, 35.0), fear_greed=80)
+        assert result == "altcoin"
+
+    def test_meme_not_triggered_when_launch_rate_below_baseline(self, detector):
+        result = detector.classify(
+            self._index(90.0, 35.0),
+            fear_greed=80,
+            launch_rate=60.0,
+            launch_baseline=50.0,
+        )
+        assert result != "meme"
+
+    def test_meme_not_triggered_when_fear_greed_not_extreme(self, detector):
+        result = detector.classify(
+            self._index(90.0, 35.0),
+            fear_greed=60,
+            launch_rate=200.0,
+            launch_baseline=50.0,
+        )
+        assert result != "meme"
+
+    def test_meme_not_triggered_when_alt_index_below_meme_threshold(self, detector):
+        # ai=80 satisfies plain altcoin (>=75) but not meme (>=85)
+        result = detector.classify(
+            self._index(80.0, 35.0),
+            fear_greed=80,
+            launch_rate=200.0,
+            launch_baseline=50.0,
+        )
+        assert result == "altcoin"
+
 
 # ===========================================================================
 # SeasonDetector.should_alert
@@ -658,6 +717,17 @@ class TestShouldAlert:
         detector.should_alert("bluechip", "altcoin", self._now())
         result = detector.should_alert("bluechip", "altcoin", self._now())
         assert result is True
+
+    def test_meme_signal_returns_true_after_confirm(self, detector):
+        detector.should_alert("meme", "bluechip", self._now())
+        result = detector.should_alert("meme", "bluechip", self._now())
+        assert result is True
+
+    def test_altcoin_signal_resets_meme_streak(self, detector):
+        detector.should_alert("meme", "bluechip", self._now())
+        assert detector._streak["meme"] == 1
+        detector.should_alert("altcoin", "bluechip", self._now())
+        assert detector._streak["meme"] == 0
 
 
 # ===========================================================================
@@ -753,3 +823,8 @@ class TestFormatMessage:
         result = detector.format_message("altcoin", _sample_index())
         assert isinstance(result, str)
         assert len(result) > 0
+
+    def test_meme_target_header_and_hint(self, detector):
+        msg = detector.format_message("meme", _sample_index())
+        assert "MEME SEASON" in msg
+        assert "Мемкоины" in msg
