@@ -677,6 +677,15 @@ class RuntimeConfig:
         """Текущий профиль: 'bluechip' | 'altcoin' | '' (не задан)."""
         return self._get(_KEY_MARKET_PROFILE) or ""
 
+    def ensure_default_market_profile(self, default: str = "bluechip") -> str:
+        """Применяет профиль по умолчанию, если он ещё не задан (первый запуск
+        или после очистки Redis). Возвращает действующий профиль."""
+        current = self.get_market_profile()
+        if current:
+            return current
+        self.apply_market_profile(default)
+        return default
+
     def get_timeframe(self) -> str:
         """Таймфрейм свечей. Fallback: Config.TIMEFRAME."""
         return self._get(_KEY_TIMEFRAME) or Config.TIMEFRAME

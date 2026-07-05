@@ -1297,6 +1297,7 @@ class TradingBot:
         )
         mode = "paper" if Config.PAPER_TRADING else "live"
         self._runtime_config.ensure_first_start_date()
+        self._runtime_config.ensure_default_market_profile()
         start_balance = await self._get_balance_usdt()
         await self.telegram.notify(
             f"🤖 *BitbotBY запущен* [{mode}]\n"
