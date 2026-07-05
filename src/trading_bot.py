@@ -1650,6 +1650,7 @@ class TradingBot:
                     self._save_monitored_state()
                     self._last_cycle_at = time.time()
                     await self._check_silent_death()
+                    cycles_counter.inc()
                     elapsed = loop.time() - t0
                     _interval = self._runtime_config.get_trading_interval()
                     await asyncio.sleep(max(0, _interval - elapsed))
