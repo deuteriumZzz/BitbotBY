@@ -7,8 +7,12 @@ backtest.py — Walk-forward бэктестирование стратегий B
 Переменные окружения:
     BT_MONTHS      месяцев истории (по умолчанию 6)
     BT_SYMBOL      символ (по умолчанию Config.SYMBOL)
-    BT_TIMEFRAME   таймфрейм (по умолчанию Config.TIMEFRAME)
+    BT_TIMEFRAME   таймфрейм (по умолчанию Config.TIMEFRAME, или профиля)
     BT_MIN_CONF    мин. уверенность (по умолчанию Config.MIN_SIGNAL_CONFIDENCE)
+    BT_PROFILE     bluechip|altcoin|meme — подставляет таймфрейм, пул символов
+                   (как в live-сканере) и SL%/TP-множитель профиля вместо
+                   ATR-based SL и RR=2.0. BT_SYMBOLS/BT_SYMBOL всё ещё имеют
+                   приоритет, если заданы явно.
 """
 
 import asyncio
@@ -27,10 +31,11 @@ import pandas as pd
 # Разрешаем импорты из корня проекта
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from config import STABLECOIN_BASES, Config
+from config import JUNK_BASES, JUNK_PREFIXES, MEME_COIN_BASES, STABLECOIN_BASES, Config
 from src.alpha_tester import AlphaTester
 from src.indicators import add_indicators
 from src.market_impact import estimate_from_df as _ac_impact
+from src.runtime_config import _MARKET_PROFILES
 from src.strategies import STRATEGY_REGISTRY, BaseStrategy
 
 # ── Константы ──────────────────────────────────────────────────────────────
@@ -104,6 +109,81 @@ def _save_csv_cache(df: pd.DataFrame, path: str) -> None:
 
 
 # ── Топ-N символов по объёму за 24ч (публичный API, без авторизации) ─────
+
+
+def _passes_base_filters(base: str, is_meme_profile: bool) -> bool:
+    """Общие фильтры базового тикера — зеркалит market_scanner.py:75-92."""
+    if base in STABLECOIN_BASES or base in JUNK_BASES:
+        return False
+    if not is_meme_profile and base in MEME_COIN_BASES:
+        return False
+    if any(base.startswith(p) for p in JUNK_PREFIXES):
+        return False
+    return True
+
+
+async def _fetch_profile_symbols(profile: str, n: int) -> List[str]:
+    """
+    Резолвит пул символов для профиля так же, как live-бот
+    (src/trading_bot.py:1380-1396, src/market_scanner.py:75-117):
+    bluechip — топ-N по объёму; altcoin — топ-N по объёму в диапазоне
+    min/max volume профиля, ИСКЛЮЧАЯ текущий топ-20 по объёму (bluechip
+    определяется динамически, а не статическим списком — BLUECHIP_BASES
+    в runtime_config.py нигде в реальном коде не используется).
+    """
+    cfg = _MARKET_PROFILES[profile]
+    is_meme = profile == "meme"
+    try:
+        import ccxt.async_support as ccxt_async
+
+        exchange = ccxt_async.bybit(
+            {"enableRateLimit": True, "options": {"defaultType": "spot"}}
+        )
+        try:
+            tickers = await exchange.fetch_tickers()
+        finally:
+            await exchange.close()
+
+        usdt: Dict[str, Any] = {}
+        for sym, t in tickers.items():
+            if not sym.endswith("/USDT"):
+                continue
+            base = sym.split("/")[0]
+            if not _passes_base_filters(base, is_meme):
+                continue
+            qv = t.get("quoteVolume") or 0
+            if qv > 0:
+                usdt[sym] = qv
+
+        if profile == "altcoin":
+            top20 = sorted(usdt.items(), key=lambda x: x[1], reverse=True)[:20]
+            exclude_bases = {sym.split("/")[0] for sym, _ in top20}
+            usdt = {
+                sym: qv for sym, qv in usdt.items() if sym.split("/")[0] not in exclude_bases
+            }
+
+        min_vol = cfg.get("min_volume_usdt", 0)
+        max_vol = cfg.get("max_volume_usdt", 0)
+        filtered = {
+            sym: qv
+            for sym, qv in usdt.items()
+            if qv >= min_vol and (max_vol <= 0 or qv <= max_vol)
+        }
+
+        ranked = sorted(filtered.items(), key=lambda x: x[1], reverse=True)
+        symbols = [sym for sym, _ in ranked[:n]]
+        logger.info(
+            "[%s] Top %d symbols (vol %.0f-%.0f): %s...",
+            profile,
+            len(symbols),
+            min_vol,
+            max_vol,
+            ", ".join(symbols[:8]),
+        )
+        return symbols
+    except Exception as e:
+        logger.error("_fetch_profile_symbols(%s) failed: %s", profile, e)
+        return Config.SYMBOLS[:n]
 
 
 async def _fetch_top_symbols(n: int = 20) -> List[str]:
@@ -215,6 +295,52 @@ async def _fetch_batches(
     return result
 
 
+_POOL_MULTIPLIER = 3  # запас кандидатов на случай нехватки данных/делистинга
+
+
+async def _resolve_symbols_with_data(
+    candidates: List[str],
+    target_n: int,
+    timeframe: str,
+    months: int,
+) -> "Dict[str, pd.DataFrame]":
+    """
+    Идёт по ranked-списку кандидатов сверху вниз и грузит данные, пока не
+    наберёт ровно target_n монет с реальной историей — а не просто берёт
+    первые target_n по рейтингу и молча теряет те, что без данных.
+
+    Пример: топ-20 запрошен, но 4 монеты из топ-20 не имеют истории на
+    Bybit (молодой листинг) — тогда идём дальше по рейтингу (21-е, 22-е
+    место и т.д.), пока не наберём 20 монет с реальными данными, либо не
+    исчерпаем пул кандидатов.
+    """
+    resolved: "Dict[str, pd.DataFrame]" = {}
+    skipped: List[str] = []
+    for symbol in candidates:
+        if len(resolved) >= target_n:
+            break
+        df = await load_data(symbol, timeframe, months)
+        if df.empty:
+            skipped.append(symbol)
+            continue
+        resolved[symbol] = df
+
+    if skipped:
+        logger.info(
+            "Пропущено %d монет без данных (%s) — добрано с рейтинга ниже",
+            len(skipped),
+            ", ".join(skipped[:10]) + ("..." if len(skipped) > 10 else ""),
+        )
+    if len(resolved) < target_n:
+        logger.warning(
+            "Набрано только %d/%d монет — пул кандидатов (%d) исчерпан",
+            len(resolved),
+            target_n,
+            len(candidates),
+        )
+    return resolved
+
+
 async def load_data(
     symbol: str,
     timeframe: str,
@@ -234,7 +360,27 @@ async def load_data(
     combined: pd.DataFrame
 
     if cached is not None and not cached.empty:
+        first_ts = int(cached["timestamp"].min())
         last_ts = int(cached["timestamp"].max())
+        frames = [cached]
+
+        # Кэш может быть построен под меньший диапазон months (например,
+        # предыдущий прогон запрашивал 3 месяца, а этот — 12): в таком
+        # случае докачиваем более старую историю, а не только новые свечи.
+        if first_ts > since_ms:
+            logger.info(
+                "Кэш не покрывает запрошенный период — докачиваем историю "
+                f"с {since_ms} по {first_ts}"
+            )
+            backfill_df = await _fetch_batches(
+                symbol,
+                timeframe,
+                since_ms=since_ms,
+                until_ms=first_ts,
+            )
+            if not backfill_df.empty:
+                frames.insert(0, backfill_df)
+
         logger.info("Кэш найден — получаем инкрементальное обновление " f"с {last_ts}")
         new_df = await _fetch_batches(
             symbol,
@@ -243,14 +389,14 @@ async def load_data(
             until_ms=now_ms,
         )
         if not new_df.empty:
-            combined = (
-                pd.concat([cached, new_df], ignore_index=True)
-                .drop_duplicates(subset=["timestamp"])
-                .sort_values("timestamp")
-                .reset_index(drop=True)
-            )
-        else:
-            combined = cached
+            frames.append(new_df)
+
+        combined = (
+            pd.concat(frames, ignore_index=True)
+            .drop_duplicates(subset=["timestamp"])
+            .sort_values("timestamp")
+            .reset_index(drop=True)
+        )
     else:
         logger.info(
             f"Кэш отсутствует — загружаем историю {months}м "
@@ -284,6 +430,11 @@ async def load_data(
         return pd.DataFrame()
 
     _save_csv_cache(combined, cache_path)
+
+    # Обрезаем до запрошенного окна — кэш может содержать более длинную
+    # историю, накопленную прошлыми прогонами с другим значением months.
+    combined = combined[combined["timestamp"] >= since_ms].reset_index(drop=True)
+
     logger.info(f"Всего свечей до расчёта индикаторов: {len(combined)}")
 
     # Вычисляем технические индикаторы
@@ -327,11 +478,26 @@ def run_strategy(
     commission_rate: float,
     stop_loss_pct: float,
     min_confidence: float,
+    maker_commission_rate: Optional[float] = None,
+    tp_multiplier: Optional[float] = None,
+    use_fixed_sl: bool = False,
 ) -> BacktestResult:
     """
     Прогоняет одну стратегию по df в режиме walk-forward.
     Без look-ahead: сигнал генерируется на df.iloc[:i+1].
+
+    Комиссия асимметрична, как в реальном исполнении (order_executor.py,
+    bybit_api.py): вход и SL — market/stop_market (тейкер, commission_rate),
+    TP — limit-ордер (мейкер, обычно дешевле, maker_commission_rate).
+
+    use_fixed_sl=True — SL всегда entry*stop_loss_pct (как в профилях
+    _MARKET_PROFILES), а не динамический ATR-стоп; tp_multiplier переопределяет
+    глобальный _RR (bluechip=2x, altcoin=4x, meme=6x — см. runtime_config.py).
     """
+    maker_rate = (
+        maker_commission_rate if maker_commission_rate is not None else commission_rate
+    )
+    rr = tp_multiplier if tp_multiplier is not None else _RR
     balance = initial_balance
     peak_balance = initial_balance
     max_drawdown = 0.0
@@ -371,7 +537,7 @@ def run_strategy(
                 n_closed = len(closed_trades)
                 if n_closed >= 10:
                     wr = sum(1 for t in closed_trades if t["pnl"] > 0) / n_closed
-                    b = _RR  # reward/risk ratio fixed at 2.0
+                    b = rr  # reward/risk ratio (профильный или дефолтный _RR)
                     kelly_f = max(0.0, min((wr * b - (1 - wr)) / b * 0.5, 0.20))
                     fraction = kelly_f if kelly_f > 0 else risk_per_trade
                 else:
@@ -388,18 +554,20 @@ def run_strategy(
                     float(window["atr"].iloc[-1]) if "atr" in window.columns else 0.0
                 )
 
-                if atr_val > 0:
+                if use_fixed_sl:
+                    sl_dist = entry_price * stop_loss_pct
+                elif atr_val > 0:
                     sl_dist = _ATR_MULT * atr_val
                 else:
                     sl_dist = entry_price * stop_loss_pct
 
                 if action == "buy":
                     stop_loss = entry_price - sl_dist
-                    take_profit = entry_price + _RR * sl_dist
+                    take_profit = entry_price + rr * sl_dist
                     direction = 1
                 else:
                     stop_loss = entry_price + sl_dist
-                    take_profit = entry_price - _RR * sl_dist
+                    take_profit = entry_price - rr * sl_dist
                     direction = -1
 
                 quantity = position_usdt / entry_price
@@ -441,7 +609,9 @@ def run_strategy(
                 else:  # шорт → покупаем по ask
                     exit_price = current_price * (1.0 + exit_impact)
                 qty = open_trade["quantity"]
-                exit_comm = qty * exit_price * commission_rate
+                # TP закрывается лимитным ордером (мейкер), SL — stop_market (тейкер)
+                exit_rate = maker_rate if tp_hit else commission_rate
+                exit_comm = qty * exit_price * exit_rate
                 total_comm = open_trade["entry_comm"] + exit_comm
                 pnl = (exit_price - open_trade["entry_price"]) * qty * d - total_comm
                 balance += qty * exit_price - exit_comm
@@ -554,6 +724,9 @@ def run_strategy_with_holdout(
     stop_loss_pct: float,
     min_confidence: float,
     holdout_ratio: float = 0.2,
+    maker_commission_rate: Optional[float] = None,
+    tp_multiplier: Optional[float] = None,
+    use_fixed_sl: bool = False,
 ) -> BacktestResult:
     """
     Прогоняет стратегию с честным hold-out test set.
@@ -572,6 +745,9 @@ def run_strategy_with_holdout(
             commission_rate,
             stop_loss_pct,
             min_confidence,
+            maker_commission_rate,
+            tp_multiplier,
+            use_fixed_sl,
         )
 
     n = len(df)
@@ -588,6 +764,9 @@ def run_strategy_with_holdout(
         commission_rate,
         stop_loss_pct,
         min_confidence,
+        maker_commission_rate,
+        tp_multiplier,
+        use_fixed_sl,
     )
     test_result = run_strategy(
         name,
@@ -598,6 +777,9 @@ def run_strategy_with_holdout(
         commission_rate,
         stop_loss_pct,
         min_confidence,
+        maker_commission_rate,
+        tp_multiplier,
+        use_fixed_sl,
     )
 
     overfit_ratio = train_result.sharpe_ratio / max(test_result.sharpe_ratio, 0.01)
@@ -782,25 +964,78 @@ async def main() -> None:
     holdout_ratio = float(
         os.getenv("BT_HOLDOUT_RATIO", str(Config.BACKTEST_HOLDOUT_RATIO))
     )
-    timeframe = os.getenv("BT_TIMEFRAME", Config.TIMEFRAME)
     min_conf = float(os.getenv("BT_MIN_CONF", str(Config.MIN_SIGNAL_CONFIDENCE)))
+    # TP закрывается лимит-ордером (мейкер) в живом боте (bybit_api.py:431),
+    # вход и SL — market/stop_market (тейкер, Config.COMMISSION_RATE).
+    # Дефолт 0.0002 — типовая базовая мейкер-комиссия Bybit linear-фьючерсов;
+    # сверьте с реальным тарифом аккаунта при необходимости.
+    maker_commission_rate = float(os.getenv("BT_MAKER_COMMISSION_RATE", "0.0002"))
+
+    # BT_PROFILE=bluechip|altcoin|meme — подставляет таймфрейм, пул символов
+    # и SL%/TP-множитель ровно из _MARKET_PROFILES (runtime_config.py), как
+    # в реальном боте. Без BT_PROFILE — старое поведение (ATR-based SL, RR=2.0).
+    profile = os.getenv("BT_PROFILE", "").strip().lower() or None
+    if profile and profile not in _MARKET_PROFILES:
+        print(f"[backtest] Неизвестный BT_PROFILE={profile!r} — игнорирую")
+        profile = None
+
+    if profile:
+        pcfg = _MARKET_PROFILES[profile]
+        timeframe = os.getenv("BT_TIMEFRAME", pcfg["timeframe"])
+        stop_loss_pct = pcfg["sl_percent"]
+        tp_multiplier: Optional[float] = pcfg["tp_multiplier"]
+        risk_per_trade = pcfg["risk_per_trade"]
+        use_fixed_sl = True
+        default_top_n = pcfg["scan_top_n"]
+    else:
+        timeframe = os.getenv("BT_TIMEFRAME", Config.TIMEFRAME)
+        stop_loss_pct = Config.STOP_LOSS_PERCENT
+        tp_multiplier = None
+        risk_per_trade = Config.RISK_PER_TRADE
+        use_fixed_sl = False
+        default_top_n = Config.SCAN_TOP_N
 
     # Определение символов:
-    #   BT_SYMBOLS=A,B,C  → явный список
+    #   BT_SYMBOLS=A,B,C  → явный список (приоритет над профилем)
     #   BT_SYMBOL=A       → один явный символ
-    #   (ничего)          → автоматически получить топ BT_TOP_N с Bybit по объёму за 24ч
-    top_n = int(os.getenv("BT_TOP_N", str(Config.SCAN_TOP_N)))
+    #   BT_PROFILE=...    → пул профиля (bluechip/altcoin/meme), как в проде
+    #   (ничего)          → автоматически топ BT_TOP_N по объёму за 24ч
+    top_n = int(os.getenv("BT_TOP_N", str(default_top_n)))
     raw_syms = os.getenv("BT_SYMBOLS") or os.getenv("BT_SYMBOL")
+    symbol_data: "Dict[str, pd.DataFrame]"
     if raw_syms:
-        symbols = [s.strip() for s in raw_syms.split(",") if s.strip()]
+        # Явный список — берём как есть, без добора (пользователь указал точно).
+        explicit_symbols = [s.strip() for s in raw_syms.split(",") if s.strip()]
+        symbol_data = await _resolve_symbols_with_data(
+            explicit_symbols, len(explicit_symbols), timeframe, months
+        )
     else:
-        print(f"[backtest] Auto-fetching top {top_n} symbols by 24h volume...")
-        symbols = await _fetch_top_symbols(top_n)
+        pool_n = top_n * _POOL_MULTIPLIER
+        if profile:
+            print(
+                f"[backtest] Резолвинг пула символов профиля {profile!r} "
+                f"(цель {top_n}, пул кандидатов {pool_n})..."
+            )
+            candidates = await _fetch_profile_symbols(profile, pool_n)
+        else:
+            print(
+                f"[backtest] Auto-fetching top {top_n} by 24h volume "
+                f"(пул кандидатов {pool_n})..."
+            )
+            candidates = await _fetch_top_symbols(pool_n)
+        symbol_data = await _resolve_symbols_with_data(
+            candidates, top_n, timeframe, months
+        )
+
+    symbols = list(symbol_data.keys())
+    if not symbols:
+        print("ОШИБКА: не удалось набрать ни одной монеты с данными — прерываем")
+        return
 
     multi = len(symbols) > 1
     print(
-        f"[backtest] {len(symbols)} symbol(s) | {timeframe} | "
-        f"{months}m | min_conf={min_conf}"
+        f"[backtest] profile={profile or '-'} | {len(symbols)} symbol(s) | "
+        f"{timeframe} | {months}m | min_conf={min_conf}"
     )
     print(f"[backtest] symbols: {', '.join(symbols)}")
 
@@ -828,12 +1063,7 @@ async def main() -> None:
         print(f"  {symbol}")
         print(f"{'─' * 50}")
 
-        df = await load_data(symbol, timeframe, months)
-        if df.empty:
-            print(f"  ОШИБКА: нет данных для {symbol} — пропускаем")
-            _done_steps += len(STRATEGY_REGISTRY)
-            continue
-
+        df = symbol_data[symbol]  # уже загружено в _resolve_symbols_with_data
         print(f"[backtest] {len(df)} свечей загружено")
 
         sym_results: List[BacktestResult] = []
@@ -844,11 +1074,14 @@ async def main() -> None:
                 strategy_cls=strat_cls,
                 df=df,
                 initial_balance=Config.INITIAL_BALANCE,
-                risk_per_trade=Config.RISK_PER_TRADE,
+                risk_per_trade=risk_per_trade,
                 commission_rate=Config.COMMISSION_RATE,
-                stop_loss_pct=Config.STOP_LOSS_PERCENT,
+                stop_loss_pct=stop_loss_pct,
                 min_confidence=min_conf,
                 holdout_ratio=holdout_ratio,
+                maker_commission_rate=maker_commission_rate,
+                tp_multiplier=tp_multiplier,
+                use_fixed_sl=use_fixed_sl,
             )
             sym_results.append(result)
             _done_steps += 1

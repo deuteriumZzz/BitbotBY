@@ -51,6 +51,7 @@ class MarketScanner:
         bluechip_bases: frozenset | None = None,
         altcoin_exclude_bases: frozenset | None = None,
         buffer: int = 0,
+        force_non_meme: bool = False,
     ) -> List[str]:
         """
         Возвращает топ-(N+buffer) кандидатов /USDT по объёму за 24ч.
@@ -66,6 +67,11 @@ class MarketScanner:
         :param excluded: Символы, исключённые из сканирования (через /remove).
         :param bluechip_bases: Если задан — вернуть только монеты из этого набора.
         :param altcoin_exclude_bases: Если задан — исключить эти базы (altcoin сезон).
+        :param force_non_meme: Игнорировать текущий активный профиль и считать
+            мем-фильтр как для bluechip/altcoin (исключить MEME_COIN_BASES).
+            Нужно для снапшота "текущий топ по объёму" из meme-профиля —
+            иначе is_meme берётся из активного профиля (meme) и мем-коины
+            случайно остаются в списке на исключение вместо включения.
         :return: До (N+buffer) монет в формате ccxt ('BTC/USDT'), в порядке объёма.
         """
         forced = forced or set()
@@ -83,7 +89,7 @@ class MarketScanner:
                     continue
                 if base in JUNK_BASES:
                     continue
-                is_meme = (
+                is_meme = not force_non_meme and (
                     self._rc is not None and self._rc.get_market_profile() == "meme"
                 )
                 if not is_meme and base in MEME_COIN_BASES:

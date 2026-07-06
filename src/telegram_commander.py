@@ -841,6 +841,7 @@ class TelegramCommander:
             ("resume", self._cmd_resume),
             ("mode", self._cmd_mode),
             ("scan", self._cmd_scan),
+            ("symbols", self._cmd_symbols),
             ("pnl", self._cmd_pnl),
             ("pos", self._cmd_pos),
             ("closeall", self._cmd_closeall),
@@ -1359,6 +1360,28 @@ class TelegramCommander:
             )
         else:
             await self._reply(update, "❌ Диапазон: 1–200", _kb_scan_menu())
+
+    async def _cmd_symbols(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        if not self._authorized(update):
+            return
+        data = self._rc.get_current_symbols()
+        if not data or not data.get("symbols"):
+            await self._reply(
+                update,
+                "Список ещё не сформирован — дождись первого торгового цикла.",
+            )
+            return
+        symbols = data["symbols"]
+        profile = data.get("profile") or "-"
+        updated_at = data.get("updated_at", "")
+        lines = "\n".join(f"  {s}" for s in symbols)
+        await self._reply(
+            update,
+            f"📋 Профиль *{profile}* — `{len(symbols)}` монет "
+            f"(обновлено {updated_at}):\n```\n{lines}\n```",
+        )
 
     async def _cmd_trainn(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE

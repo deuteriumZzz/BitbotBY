@@ -325,10 +325,13 @@ class ScalpingStrategy(BaseStrategy):
 
         high_vol = vol_ratio > 1.5
 
-        if rsi < 32 and close > ema_s and macd > macd_sig:
+        # Пороги 32/68 почти никогда не совпадают с close>ema_s / macd>macd_sig:
+        # пока RSI ещё глубоко перепродан, цена и MACD обычно ещё не развернулись.
+        # 40/60 ловит подтверждённый разворот, а не гипотетическое "ещё дно".
+        if rsi < 40 and close > ema_s and macd > macd_sig:
             conf = 0.75 if high_vol else 0.58
             return {"action": "buy", "confidence": conf, "price": close}
-        if rsi > 68 and close < ema_s and macd < macd_sig:
+        if rsi > 60 and close < ema_s and macd < macd_sig:
             conf = 0.75 if high_vol else 0.58
             return {"action": "sell", "confidence": conf, "price": close}
         return {"action": "hold", "confidence": 0.40}

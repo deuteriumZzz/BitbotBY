@@ -406,6 +406,38 @@ class TestRuntimeConfigPaperTrading:
         redis_mock.redis_client.set.assert_called_once()
 
 
+class TestRuntimeConfigCurrentSymbols:
+    def test_get_current_symbols_none_by_default(self, rc_bundle):
+        rc, _, _ = rc_bundle
+        assert rc.get_current_symbols() is None
+
+    def test_set_then_get_roundtrip(self, rc_bundle):
+        rc, redis_mock, _ = rc_bundle
+        stored = {}
+
+        def fake_set(key, value):
+            stored[key] = value
+
+        def fake_get(key):
+            return stored.get(key)
+
+        redis_mock.redis_client.set.side_effect = fake_set
+        redis_mock.redis_client.get.side_effect = fake_get
+
+        rc.set_current_symbols("bluechip", ["BTC/USDT", "ETH/USDT"])
+        result = rc.get_current_symbols()
+
+        assert result is not None
+        assert result["profile"] == "bluechip"
+        assert result["symbols"] == ["BTC/USDT", "ETH/USDT"]
+        assert "updated_at" in result
+
+    def test_get_current_symbols_ignores_corrupt_json(self, rc_bundle):
+        rc, redis_mock, _ = rc_bundle
+        redis_mock.redis_client.get.return_value = "not valid json {"
+        assert rc.get_current_symbols() is None
+
+
 class TestRuntimeConfigSeasonMode:
     def test_get_season_switch_mode_default(self, rc_bundle):
         rc, _, _ = rc_bundle

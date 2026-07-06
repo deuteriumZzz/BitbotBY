@@ -7,8 +7,10 @@ Runtime-конфигурация поверх Redis.
 
 from __future__ import annotations
 
+import json
 import logging
-from typing import Any, Set
+from datetime import datetime, timezone
+from typing import Any, List, Optional, Set
 
 from config import Config
 
@@ -37,6 +39,7 @@ _KEY_FIRST_START_DATE = "bot:first_start_date"
 _KEY_TUNE_REMINDED = "bot:tune_reminded"
 _KEY_CHRONOS = "bot:chronos_filter"
 _KEY_MARKET_PROFILE = "bot:market_profile"
+_KEY_CURRENT_SYMBOLS = "bot:current_symbols"
 _KEY_TIMEFRAME = "bot:timeframe"
 _KEY_MIN_VOLUME = "bot:min_volume_usdt"
 _KEY_MAX_VOLUME = "bot:max_volume_usdt"
@@ -814,6 +817,27 @@ class RuntimeConfig:
     def get_market_profile_config(self, name: str) -> dict:
         """Возвращает полный конфиг профиля (train_top_n, timeframe и др.)."""
         return dict(_MARKET_PROFILES.get(name, {}))
+
+    # ── Текущий резолвнутый список монет (для /symbols и дашборда) ────────────
+
+    def set_current_symbols(self, profile: str, symbols: List[str]) -> None:
+        """Сохраняет список монет, реально отобранных сканом в этом цикле."""
+        payload = {
+            "profile": profile,
+            "symbols": symbols,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        self._set(_KEY_CURRENT_SYMBOLS, json.dumps(payload, ensure_ascii=False))
+
+    def get_current_symbols(self) -> Optional[dict]:
+        """Возвращает {"profile", "symbols", "updated_at"} или None, если ещё нет данных."""
+        raw = self._get(_KEY_CURRENT_SYMBOLS)
+        if not raw:
+            return None
+        try:
+            return json.loads(raw)
+        except (ValueError, TypeError):
+            return None
 
     # ── Paper / Live switch ───────────────────────────────────────────────────
 

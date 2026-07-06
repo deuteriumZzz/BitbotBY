@@ -23,7 +23,7 @@ from src.correlation_filter import CorrelationFilter
 from src.cycle import CycleRunner
 from src.data_loader import DataLoader
 from src.health_server import cycles_counter
-from src.logger import _SecretFilter, setup_logging
+from src.logger import _SecretFilter
 from src.macro_calendar import MacroCalendar
 from src.market_context import MarketContext
 from src.market_scanner import MarketScanner
@@ -56,7 +56,10 @@ from src.types import PositionRecord
 
 _SECONDS_PER_HOUR: int = 3_600
 
-setup_logging()
+# Логирование настраивается точкой входа (supervisor.py) до импорта этого
+# модуля. Вызов setup_logging() здесь был побочным эффектом импорта: любой
+# файл (включая тесты), импортирующий src.trading_bot, незаметно цеплял
+# RotatingFileHandler на общий logs/trading.log.
 logger = logging.getLogger(__name__)
 
 
@@ -972,7 +975,11 @@ class TradingBot:
             logger.error("Error updating performance stats: %s", e)
 
     async def _scan_and_update_correlations(
-        self, symbols: list, target_n: int = 0
+        self,
+        symbols: list,
+        target_n: int = 0,
+        refill_kwargs: Optional[dict] = None,
+        max_refill_rounds: int = 2,
     ) -> Dict[str, pd.DataFrame]:
         """Сканирует рыночные данные, обновляет корреляционный фильтр
         и сохраняет в Redis.
@@ -981,14 +988,58 @@ class TradingBot:
                         больше target_n — get_top_symbols возвращает N+buffer).
         :param target_n: Сколько символов оставить после загрузки OHLCV.
                          0 = без ограничения.
+        :param refill_kwargs: kwargs для повторного get_top_symbols() (например,
+                        altcoin_exclude_bases), если после scan_all не хватило
+                        target_n монет с валидными данными (часть кандидатов
+                        отвалилась — мало истории, делистинг, ошибка API).
+                        Без этого недобор просто оставался недобором.
+                        None = без добора (старое поведение).
+        :param max_refill_rounds: Предохранитель от бесконечного цикла, если
+                        на бирже физически нет столько подходящих монет.
         :return: Словарь {символ: DataFrame с OHLCV+индикаторами}.
         """
         market_data = await self.scanner.scan_all(
             symbols, self._runtime_config.get_timeframe()
         )
+        tried = set(symbols)
+
+        rounds = 0
+        while (
+            target_n > 0
+            and len(market_data) < target_n
+            and refill_kwargs is not None
+            and rounds < max_refill_rounds
+        ):
+            shortfall = target_n - len(market_data)
+            extra_candidates = await self.scanner.get_top_symbols(
+                n=shortfall,
+                excluded=tried,
+                buffer=shortfall,
+                **refill_kwargs,
+            )
+            new_candidates = [s for s in extra_candidates if s not in tried]
+            if not new_candidates:
+                break  # пул кандидатов на бирже исчерпан
+            tried.update(new_candidates)
+            extra_data = await self.scanner.scan_all(
+                new_candidates, self._runtime_config.get_timeframe()
+            )
+            market_data.update(extra_data)
+            rounds += 1
+
+        if target_n > 0 and len(market_data) < target_n:
+            logger.warning(
+                "Добор не помог: набрано %d/%d монет с валидными данными",
+                len(market_data),
+                target_n,
+            )
+
         # Обрезаем до target_n в исходном порядке объёма (symbols уже отсортированы)
         if target_n > 0 and len(market_data) > target_n:
             ordered = {s: market_data[s] for s in symbols if s in market_data}
+            for s, df in market_data.items():
+                if s not in ordered:
+                    ordered[s] = df
             market_data = dict(list(ordered.items())[:target_n])
         for sym, df in market_data.items():
             self.corr_filter.update_from_df(sym, df)
@@ -1376,23 +1427,65 @@ class TradingBot:
             try:
                 _profile = self._runtime_config.get_market_profile()
                 _scan_n = self._runtime_config.get_scan_top_n()
+                _refill_kwargs: dict = {}
                 if _profile == "bluechip":
                     symbols = await self.scanner.get_top_symbols(
                         n=_scan_n,
                     )
                 elif _profile == "altcoin":
-                    # Динамически определяем текущий топ bluechip по объёму
+                    # Динамически определяем текущий топ bluechip по объёму.
+                    # n=_scan_n (не хардкод 20!) — иначе при scan_top_n>20
+                    # монеты #21.._scan_n остаются доступны и bluechip, и
+                    # altcoin одновременно (реальное пересечение пулов).
                     # buffer=0: этот список нужен только для исключения, не для загрузки
-                    _bc_syms = await self.scanner.get_top_symbols(n=20, buffer=0)
+                    # force_non_meme=True: мем-коины всё равно исключены отдельным
+                    # фильтром (is_meme=False вне meme-профиля), но фиксируем явно —
+                    # этот снапшот должен вести себя одинаково независимо от того,
+                    # из какого профиля его вызвали.
+                    _bc_syms = await self.scanner.get_top_symbols(
+                        n=_scan_n, buffer=0, force_non_meme=True
+                    )
                     _bc_bases = frozenset(s.split("/")[0] for s in _bc_syms)
+                    _refill_kwargs = {"altcoin_exclude_bases": _bc_bases}
                     symbols = await self.scanner.get_top_symbols(
                         n=_scan_n,
                         altcoin_exclude_bases=_bc_bases,
                     )
+                elif _profile == "meme":
+                    # Meme должен исключать и текущий bluechip, и текущий altcoin —
+                    # иначе одна и та же крупная волатильная монета (не мем-коин,
+                    # например AVAX) могла попасть одновременно в altcoin и meme.
+                    # Сами мем-коины (DOGE/SHIB/...) тут не теряются: они и так
+                    # исключены из _bc_syms/_ac_syms через force_non_meme=True
+                    # (is_meme=False для этих двух снапшотов), поэтому не попадут
+                    # в exclude-набор ниже.
+                    _bc_syms = await self.scanner.get_top_symbols(
+                        n=_scan_n, buffer=0, force_non_meme=True
+                    )
+                    _bc_bases = frozenset(s.split("/")[0] for s in _bc_syms)
+                    _ac_syms = await self.scanner.get_top_symbols(
+                        n=_scan_n,
+                        buffer=0,
+                        altcoin_exclude_bases=_bc_bases,
+                        force_non_meme=True,
+                    )
+                    _ac_bases = frozenset(s.split("/")[0] for s in _ac_syms)
+                    _exclude_bases = _bc_bases | _ac_bases
+                    _refill_kwargs = {"altcoin_exclude_bases": _exclude_bases}
+                    symbols = await self.scanner.get_top_symbols(
+                        n=_scan_n,
+                        altcoin_exclude_bases=_exclude_bases,
+                    )
                 else:
                     symbols = await self.scanner.get_top_symbols(n=_scan_n)
+                # refill_kwargs: если после scan_all не хватило _scan_n монет с
+                # валидными данными (молодой листинг, делистинг, сбой API) —
+                # добираем следующими по рейтингу, а не смиряемся с недобором.
                 market_data = await self._scan_and_update_correlations(
-                    symbols, target_n=_scan_n
+                    symbols, target_n=_scan_n, refill_kwargs=_refill_kwargs
+                )
+                self._runtime_config.set_current_symbols(
+                    _profile, list(market_data.keys())
                 )
                 await self._sync_sentiment_poller(_profile, list(market_data.keys()))
                 await self._inject_sentiment(market_data)
