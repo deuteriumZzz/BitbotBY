@@ -830,7 +830,7 @@ class RuntimeConfig:
         self._set(_KEY_CURRENT_SYMBOLS, json.dumps(payload, ensure_ascii=False))
 
     def get_current_symbols(self) -> Optional[dict]:
-        """Возвращает {"profile", "symbols", "updated_at"} или None, если ещё нет данных."""
+        """Возвращает {"profile", "symbols", "updated_at"} или None, если данных нет."""
         raw = self._get(_KEY_CURRENT_SYMBOLS)
         if not raw:
             return None

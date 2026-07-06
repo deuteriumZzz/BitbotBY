@@ -131,7 +131,7 @@ async def _fetch_profile_symbols(profile: str, n: int) -> List[str]:
     определяется динамически, а не статическим списком — BLUECHIP_BASES
     в runtime_config.py нигде в реальном коде не используется).
     """
-    cfg = _MARKET_PROFILES[profile]
+    cfg: Dict[str, Any] = _MARKET_PROFILES[profile]
     is_meme = profile == "meme"
     try:
         import ccxt.async_support as ccxt_async
@@ -159,11 +159,13 @@ async def _fetch_profile_symbols(profile: str, n: int) -> List[str]:
             top20 = sorted(usdt.items(), key=lambda x: x[1], reverse=True)[:20]
             exclude_bases = {sym.split("/")[0] for sym, _ in top20}
             usdt = {
-                sym: qv for sym, qv in usdt.items() if sym.split("/")[0] not in exclude_bases
+                sym: qv
+                for sym, qv in usdt.items()
+                if sym.split("/")[0] not in exclude_bases
             }
 
-        min_vol = cfg.get("min_volume_usdt", 0)
-        max_vol = cfg.get("max_volume_usdt", 0)
+        min_vol = float(cfg.get("min_volume_usdt", 0))  # type: ignore[arg-type]
+        max_vol = float(cfg.get("max_volume_usdt", 0))  # type: ignore[arg-type]
         filtered = {
             sym: qv
             for sym, qv in usdt.items()
@@ -980,13 +982,15 @@ async def main() -> None:
         profile = None
 
     if profile:
-        pcfg = _MARKET_PROFILES[profile]
-        timeframe = os.getenv("BT_TIMEFRAME", pcfg["timeframe"])
-        stop_loss_pct = pcfg["sl_percent"]
-        tp_multiplier: Optional[float] = pcfg["tp_multiplier"]
-        risk_per_trade = pcfg["risk_per_trade"]
+        # _MARKET_PROFILES — гетерогенный dict (str/int/float вперемешку),
+        # поэтому mypy видит значения как object — приводим явно.
+        pcfg: Dict[str, Any] = _MARKET_PROFILES[profile]
+        timeframe = os.getenv("BT_TIMEFRAME", str(pcfg["timeframe"]))
+        stop_loss_pct = float(pcfg["sl_percent"])
+        tp_multiplier: Optional[float] = float(pcfg["tp_multiplier"])
+        risk_per_trade = float(pcfg["risk_per_trade"])
         use_fixed_sl = True
-        default_top_n = pcfg["scan_top_n"]
+        default_top_n = int(pcfg["scan_top_n"])
     else:
         timeframe = os.getenv("BT_TIMEFRAME", Config.TIMEFRAME)
         stop_loss_pct = Config.STOP_LOSS_PERCENT
