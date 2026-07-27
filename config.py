@@ -186,10 +186,18 @@ class Config:
 
     # ── Twitter/X Sentiment ────────────────────────────────────────────────
     # Bearer Token из Twitter Developer Portal (Basic план $100/мес)
-    # Без токена — TwitterAnalyzer молча возвращает 0.0
+    # Без токена — TwitterAnalyzer молча возвращает 0.0, если не задан ещё и
+    # TWSCRAPE_ACCOUNTS ниже.
     TWITTER_BEARER_TOKEN: str = os.getenv("TWITTER_BEARER_TOKEN", "")
     # Максимум твитов на запрос (экономим лимит Basic: 10K/мес)
     TWITTER_MAX_RESULTS: int = int(os.getenv("TWITTER_MAX_RESULTS", "10"))
+    # Fallback без официального API: twscrape (github.com/vladkens/twscrape)
+    # ротирует несколько X-аккаунтов вместо платного Bearer Token.
+    # Используется ТОЛЬКО если TWITTER_BEARER_TOKEN не задан.
+    # Формат: "user:pass:email:email_pass,user2:pass2:email2:email_pass2"
+    TWSCRAPE_ACCOUNTS: str = os.getenv("TWSCRAPE_ACCOUNTS", "")
+    # Путь к SQLite-базе twscrape с сессионными куки залогиненных аккаунтов
+    TWSCRAPE_DB_PATH: str = os.getenv("TWSCRAPE_DB_PATH", "data/twscrape_accounts.db")
 
     # ── Telegram Sentiment (Telethon MTProto) ──────────────────────────────
     # Получить на my.telegram.org → API development tools
