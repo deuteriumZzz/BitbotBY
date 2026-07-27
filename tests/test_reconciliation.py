@@ -157,10 +157,15 @@ class TestReconcilePositions:
         bot = make_bot()
         bot._monitored["SOL/USDT"] = {"qty": 10.0, "entry": 150.0, "side": "buy"}
         bot.api.fetch_positions = AsyncMock(side_effect=Exception("network error"))
+        bot.telegram.notify = AsyncMock()
 
         await bot._reconcile_positions()
 
         assert "SOL/USDT" in bot._monitored
+        # Оператор должен узнать, что сверка провалилась — позиции могли
+        # потеряться и остаться без мониторинга SL/TP.
+        bot.telegram.notify.assert_awaited_once()
+        assert "БЕЗ" in bot.telegram.notify.await_args.args[0]
 
     @pytest.mark.asyncio
     async def test_stale_and_recovered_in_same_call(self):

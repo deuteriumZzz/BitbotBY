@@ -269,8 +269,10 @@ class TradingBot:
             self.strategy = TradingStrategy(Config.DEFAULT_STRATEGY)
             await self.strategy.initialize()
             await self._restore_state()
-            await self._reconcile_positions()
+            # Telegram запускается до reconcile — если сверка с биржей
+            # провалится, алерт ниже должен быть кому доставлять.
             await self.telegram.start()
+            await self._reconcile_positions()
             self._commander.register()
             await self._fit_regime_detector()
             self._load_corr_filter()
@@ -344,7 +346,16 @@ class TradingBot:
         try:
             exchange_positions = await self.api.fetch_positions()
         except Exception as exc:
-            logger.warning("Reconciliation skipped: %s", exc)
+            logger.critical(
+                "Reconciliation skipped — any position open on the exchange but "
+                "missing from Redis state will NOT be monitored: %s",
+                exc,
+            )
+            await self.telegram.notify(
+                "🚨 Сверка позиций с биржей при старте провалилась — если "
+                "какая-то позиция потерялась после краша, она сейчас БЕЗ "
+                "мониторинга SL/TP. Проверь вручную!"
+            )
             return
 
         # ccxt symbol может быть 'BTC/USDT:USDT' — нормализуем к 'BTC/USDT'
