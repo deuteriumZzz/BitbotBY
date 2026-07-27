@@ -538,6 +538,8 @@ def _kb_provider_menu(current: str) -> "InlineKeyboardMarkup":
     providers = [
         ("🆓 Groq", "groq"),
         ("🆓 Gemini", "gemini"),
+        ("🆓 OpenRouter", "openrouter"),
+        ("🆓 NVIDIA", "nvidia"),
         ("Claude", "anthropic"),
         ("DeepSeek", "deepseek"),
         ("OpenAI", "openai"),
@@ -2667,26 +2669,37 @@ class TelegramCommander:
             last = self._rc.get_last_ai_provider()
 
             # Динамический порядок auto — зависит от настроенных ключей
-            _AUTO_ORDER = ["anthropic", "openai", "deepseek", "groq", "gemini"]
+            _AUTO_ORDER = [
+                "anthropic",
+                "openai",
+                "deepseek",
+                "groq",
+                "gemini",
+                "openrouter",
+                "nvidia",
+            ]
             _AUTO_NAMES = {
                 "anthropic": "Claude",
                 "openai": "OpenAI",
                 "deepseek": "DeepSeek",
                 "groq": "Groq",
                 "gemini": "Gemini",
+                "openrouter": "OpenRouter",
+                "nvidia": "NVIDIA",
+            }
+            _AUTO_ENV_KEYS = {
+                "anthropic": "ANTHROPIC_API_KEY",
+                "openai": "OPENAI_API_KEY",
+                "deepseek": "DEEPSEEK_API_KEY",
+                "groq": "GROQ_API_KEY",
+                "gemini": "GEMINI_API_KEY",
+                "openrouter": "OPENROUTER_API_KEY",
+                "nvidia": "NVIDIA_API_KEY",
             }
             _configured_auto = [
                 _AUTO_NAMES[p]
                 for p in _AUTO_ORDER
-                if _os.getenv(
-                    {
-                        "anthropic": "ANTHROPIC_API_KEY",
-                        "openai": "OPENAI_API_KEY",
-                        "deepseek": "DEEPSEEK_API_KEY",
-                        "groq": "GROQ_API_KEY",
-                        "gemini": "GEMINI_API_KEY",
-                    }[p]
-                )
+                if _os.getenv(_AUTO_ENV_KEYS[p])
             ]
             _auto_desc = (
                 " → ".join(_configured_auto) if _configured_auto else "нет ключей"
@@ -2697,7 +2710,9 @@ class TelegramCommander:
                 "anthropic": "Claude — лучшее качество",
                 "deepseek": "Самый дешёвый платный",
                 "openai": "ChatGPT GPT-4o-mini",
-                "gemini": "Gemini 2.0 Flash — бесплатный",
+                "gemini": "Gemini Flash — бесплатный",
+                "openrouter": "OpenRouter — бесплатные ':free' модели",
+                "nvidia": "NVIDIA NIM — бесплатный",
             }.get(current, current)
 
             _utc = datetime.now(timezone.utc)
@@ -2721,6 +2736,8 @@ class TelegramCommander:
                 ("deepseek", "DeepSeek", bool(_os.getenv("DEEPSEEK_API_KEY"))),
                 ("groq", "Groq", bool(_os.getenv("GROQ_API_KEY"))),
                 ("gemini", "Gemini", bool(_os.getenv("GEMINI_API_KEY"))),
+                ("openrouter", "OpenRouter", bool(_os.getenv("OPENROUTER_API_KEY"))),
+                ("nvidia", "NVIDIA", bool(_os.getenv("NVIDIA_API_KEY"))),
                 ("anthropic", "Claude", bool(_os.getenv("ANTHROPIC_API_KEY"))),
                 ("openai", "OpenAI", bool(_os.getenv("OPENAI_API_KEY"))),
             ]
@@ -2756,13 +2773,23 @@ class TelegramCommander:
 
         elif data.startswith("provider:"):
             val = data.split(":", 1)[1]
-            self._rc.set_ai_provider(val)
+            ok = self._rc.set_ai_provider(val)
+            if not ok:
+                await self._edit(
+                    query,
+                    f"❌ Неизвестный провайдер: *{val}*",
+                    _kb_provider_menu(self._rc.get_ai_provider()),
+                )
+                return
             desc = {
-                "auto": "Claude → OpenAI → DeepSeek → Groq",
+                "auto": "Claude → OpenAI → DeepSeek → Groq → Gemini → OpenRouter → NVIDIA",
                 "groq": "Llama 3.3 70B — бесплатный, быстрый",
                 "anthropic": "Claude — лучшее качество",
                 "deepseek": "Самый дешёвый платный",
                 "openai": "ChatGPT GPT-4o-mini",
+                "gemini": "Gemini Flash — бесплатный",
+                "openrouter": "OpenRouter — бесплатные ':free' модели",
+                "nvidia": "NVIDIA NIM — бесплатный",
             }.get(val, val)
             await self._edit(
                 query,

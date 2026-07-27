@@ -58,7 +58,18 @@ _KEY_LAUNCH_RATE_HISTORY = "bot:launch_rate_history"
 _KEY_CONFIDENCE_LIVE = "bot:signal_confidence_live"
 _KEY_CONFIDENCE_PAPER = "bot:signal_confidence_paper"
 
-_AI_PROVIDERS = frozenset({"auto", "anthropic", "openai", "deepseek", "groq"})
+_AI_PROVIDERS = frozenset(
+    {
+        "auto",
+        "anthropic",
+        "openai",
+        "deepseek",
+        "groq",
+        "gemini",
+        "openrouter",
+        "nvidia",
+    }
+)
 _LEVERAGE_MODES = frozenset({"fixed", "volatility", "full"})
 
 _RISK_PRESETS = {

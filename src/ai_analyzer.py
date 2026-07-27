@@ -24,11 +24,15 @@ def _resolve_provider() -> str:
     """
     Определяет активного AI-провайдера согласно Config.AI_PROVIDER.
 
-    auto      → Anthropic → OpenAI → DeepSeek → Groq → none
+    auto      → Anthropic → OpenAI → DeepSeek → Groq → Gemini → OpenRouter
+                → NVIDIA → none
     anthropic → Claude
     deepseek  → DeepSeek
     openai    → ChatGPT
     groq      → Groq
+    gemini    → Google Gemini
+    openrouter→ OpenRouter (бесплатные ":free" модели)
+    nvidia    → NVIDIA NIM
     """
     p = Config.AI_PROVIDER
     if p == "anthropic":
@@ -39,7 +43,16 @@ def _resolve_provider() -> str:
         return "openai" if Config.OPENAI_API_KEY else "none"
     if p == "groq":
         return "groq" if getattr(Config, "GROQ_API_KEY", "") else "none"
-    # auto: prefer paid flagship, then cheaper options
+    if p == "gemini":
+        return "gemini" if getattr(Config, "GEMINI_API_KEY", "") else "none"
+    if p == "openrouter":
+        return "openrouter" if getattr(Config, "OPENROUTER_API_KEY", "") else "none"
+    if p == "nvidia":
+        return "nvidia" if getattr(Config, "NVIDIA_API_KEY", "") else "none"
+    # auto: prefer paid flagship, then cheaper/free options, free-tier-only
+    # providers (OpenRouter/NVIDIA) last — см. память project_senior_quant_
+    # roadmap: не тратить их скромные дневные лимиты, пока доступны более
+    # щедрые провайдеры выше по списку.
     if Config.ANTHROPIC_API_KEY:
         return "anthropic"
     if Config.OPENAI_API_KEY:
@@ -48,6 +61,12 @@ def _resolve_provider() -> str:
         return "deepseek"
     if getattr(Config, "GROQ_API_KEY", ""):
         return "groq"
+    if getattr(Config, "GEMINI_API_KEY", ""):
+        return "gemini"
+    if getattr(Config, "OPENROUTER_API_KEY", ""):
+        return "openrouter"
+    if getattr(Config, "NVIDIA_API_KEY", ""):
+        return "nvidia"
     return "none"
 
 
@@ -76,7 +95,6 @@ class AIAnalyzer:
         self._provider = _resolve_provider()
         self._runtime_config = runtime_config
         self._telegram = telegram
-        self.enabled = self._provider != "none"
         self.strategies = get_all_strategies()
         self.logger = logging.getLogger(__name__)
         # Кулдаун уведомлений: не спамим одним и тем же сообщением
@@ -91,6 +109,8 @@ class AIAnalyzer:
         self._openai = None
         self._groq = None
         self._gemini = None
+        self._openrouter = None
+        self._nvidia = None
 
         if Config.ANTHROPIC_API_KEY:
             import anthropic
@@ -139,16 +159,57 @@ class AIAnalyzer:
                 max_retries=0,  # без авто-ретраев — 429 сразу идёт в fallback
                 timeout=30.0,
             )
-            self._gemini_model = getattr(Config, "GEMINI_MODEL", "gemini-1.5-flash")
+            self._gemini_model = getattr(Config, "GEMINI_MODEL", "gemini-3.6-flash")
 
-        # Ordered list of available providers (primary first)
-        _all = ["anthropic", "openai", "deepseek", "groq", "gemini"]
+        if getattr(Config, "OPENROUTER_API_KEY", ""):
+            from openai import AsyncOpenAI
+
+            self._openrouter = AsyncOpenAI(
+                api_key=Config.OPENROUTER_API_KEY,
+                base_url="https://openrouter.ai/api/v1",
+                max_retries=0,
+                timeout=30.0,
+            )
+            self._openrouter_model = getattr(
+                Config, "OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free"
+            )
+
+        if getattr(Config, "NVIDIA_API_KEY", ""):
+            from openai import AsyncOpenAI
+
+            self._nvidia = AsyncOpenAI(
+                api_key=Config.NVIDIA_API_KEY,
+                base_url="https://integrate.api.nvidia.com/v1",
+                max_retries=0,
+                timeout=30.0,
+            )
+            self._nvidia_model = getattr(
+                Config, "NVIDIA_MODEL", "meta/llama-3.3-70b-instruct"
+            )
+
+        # Ordered list of available providers (primary first). Бесплатные
+        # provider-only-fallback (openrouter/nvidia) — последними: не тратим
+        # их скромные дневные лимиты, пока доступны более щедрые выше.
+        _all = [
+            "anthropic",
+            "openai",
+            "deepseek",
+            "groq",
+            "gemini",
+            "openrouter",
+            "nvidia",
+        ]
         available = [p for p in _all if getattr(self, f"_{p}") is not None]
         # Put the configured primary provider first
         if self._provider in available:
             available.remove(self._provider)
             available.insert(0, self._provider)
         self._provider_order: List[str] = available
+        # bool(_provider_order) — а не self._provider != "none" — потому что
+        # _resolve_provider()'s auto-цепочка исторически не включала все
+        # провайдеры (например, был баг: если задан ТОЛЬКО GEMINI_API_KEY,
+        # _provider возвращал "none" и enabled=False, хотя клиент был жив).
+        self.enabled = bool(self._provider_order)
 
         if self._provider_order:
             self.logger.info(
@@ -366,6 +427,34 @@ class AIAnalyzer:
         self._record_usage("gemini", getattr(usage, "total_tokens", None))
         return response.choices[0].message.content or ""
 
+    async def _call_openrouter(self, prompt: str) -> str:
+        """Вызов OpenRouter (бесплатные ':free' модели, OpenAI-совместимый API)."""
+        response = await self._openrouter.chat.completions.create(
+            model=self._openrouter_model,
+            max_tokens=4096,
+            messages=[
+                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+        )
+        usage = getattr(response, "usage", None)
+        self._record_usage("openrouter", getattr(usage, "total_tokens", None))
+        return response.choices[0].message.content or ""
+
+    async def _call_nvidia(self, prompt: str) -> str:
+        """Вызов NVIDIA NIM (build.nvidia.com, OpenAI-совместимый API)."""
+        response = await self._nvidia.chat.completions.create(
+            model=self._nvidia_model,
+            max_tokens=4096,
+            messages=[
+                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+        )
+        usage = getattr(response, "usage", None)
+        self._record_usage("nvidia", getattr(usage, "total_tokens", None))
+        return response.choices[0].message.content or ""
+
     async def refresh_deepseek_balance(self) -> None:
         """Запрашивает актуальный баланс DeepSeek и кэширует в RuntimeConfig.
 
@@ -457,6 +546,10 @@ class AIAnalyzer:
                     raw = await self._call_groq(prompt)
                 elif provider == "gemini":
                     raw = await self._call_gemini(prompt)
+                elif provider == "openrouter":
+                    raw = await self._call_openrouter(prompt)
+                elif provider == "nvidia":
+                    raw = await self._call_nvidia(prompt)
                 else:
                     raw = await self._call_openai(prompt)
 
@@ -573,6 +666,16 @@ class AIAnalyzer:
             ),
             "gemini": (
                 f"⚠️ *Gemini*: лимит запросов исчерпан (429).\n"
+                f"Переключаюсь на следующего провайдера.\n"
+                f"Сброс {reset_str}."
+            ),
+            "openrouter": (
+                f"⚠️ *OpenRouter*: дневной лимит бесплатных запросов исчерпан (429).\n"
+                f"Переключаюсь на следующего провайдера.\n"
+                f"Сброс {reset_str}."
+            ),
+            "nvidia": (
+                f"⚠️ *NVIDIA NIM*: лимит запросов/кредитов исчерпан.\n"
                 f"Переключаюсь на следующего провайдера.\n"
                 f"Сброс {reset_str}."
             ),

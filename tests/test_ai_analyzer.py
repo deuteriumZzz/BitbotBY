@@ -20,6 +20,8 @@ def _make_config(**kwargs):
     cfg.GROQ_API_KEY = kwargs.get("GROQ_API_KEY", "")
     cfg.OPENAI_API_KEY = kwargs.get("OPENAI_API_KEY", "")
     cfg.GEMINI_API_KEY = kwargs.get("GEMINI_API_KEY", "")
+    cfg.OPENROUTER_API_KEY = kwargs.get("OPENROUTER_API_KEY", "")
+    cfg.NVIDIA_API_KEY = kwargs.get("NVIDIA_API_KEY", "")
     cfg.MIN_SIGNAL_CONFIDENCE = kwargs.get("MIN_SIGNAL_CONFIDENCE", 0.65)
     cfg.MIN_SIGNAL_CONFIDENCE_PAPER = kwargs.get("MIN_SIGNAL_CONFIDENCE_PAPER", 0.60)
     cfg.PAPER_TRADING = kwargs.get("PAPER_TRADING", False)
@@ -27,7 +29,11 @@ def _make_config(**kwargs):
     cfg.DEEPSEEK_MODEL = kwargs.get("DEEPSEEK_MODEL", "deepseek-chat")
     cfg.GROQ_MODEL = kwargs.get("GROQ_MODEL", "llama-3.3-70b-versatile")
     cfg.OPENAI_MODEL = kwargs.get("OPENAI_MODEL", "gpt-4o-mini")
-    cfg.GEMINI_MODEL = kwargs.get("GEMINI_MODEL", "gemini-1.5-flash")
+    cfg.GEMINI_MODEL = kwargs.get("GEMINI_MODEL", "gemini-3.6-flash")
+    cfg.OPENROUTER_MODEL = kwargs.get(
+        "OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free"
+    )
+    cfg.NVIDIA_MODEL = kwargs.get("NVIDIA_MODEL", "meta/llama-3.3-70b-instruct")
     return cfg
 
 
@@ -160,6 +166,65 @@ class TestResolveProvider:
         )
         assert result == "none"
 
+    def test_resolve_gemini_with_key(self):
+        result = self._call(AI_PROVIDER="gemini", GEMINI_API_KEY="g_key")
+        assert result == "gemini"
+
+    def test_resolve_openrouter_with_key(self):
+        result = self._call(AI_PROVIDER="openrouter", OPENROUTER_API_KEY="or_key")
+        assert result == "openrouter"
+
+    def test_resolve_openrouter_no_key(self):
+        result = self._call(AI_PROVIDER="openrouter", OPENROUTER_API_KEY="")
+        assert result == "none"
+
+    def test_resolve_nvidia_with_key(self):
+        result = self._call(AI_PROVIDER="nvidia", NVIDIA_API_KEY="nv_key")
+        assert result == "nvidia"
+
+    def test_resolve_nvidia_no_key(self):
+        result = self._call(AI_PROVIDER="nvidia", NVIDIA_API_KEY="")
+        assert result == "none"
+
+    def test_resolve_auto_falls_to_gemini_before_free_tier_only(self):
+        # Без платных и без Groq — берём Gemini раньше OpenRouter/NVIDIA
+        result = self._call(
+            AI_PROVIDER="auto",
+            ANTHROPIC_API_KEY="",
+            OPENAI_API_KEY="",
+            DEEPSEEK_API_KEY="",
+            GROQ_API_KEY="",
+            GEMINI_API_KEY="g_key",
+            OPENROUTER_API_KEY="or_key",
+        )
+        assert result == "gemini"
+
+    def test_resolve_auto_falls_to_openrouter(self):
+        result = self._call(
+            AI_PROVIDER="auto",
+            ANTHROPIC_API_KEY="",
+            OPENAI_API_KEY="",
+            DEEPSEEK_API_KEY="",
+            GROQ_API_KEY="",
+            GEMINI_API_KEY="",
+            OPENROUTER_API_KEY="or_key",
+            NVIDIA_API_KEY="nv_key",
+        )
+        assert result == "openrouter"
+
+    def test_resolve_auto_falls_to_nvidia_last(self):
+        result = self._call(
+            AI_PROVIDER="auto",
+            ANTHROPIC_API_KEY="",
+            OPENAI_API_KEY="",
+            DEEPSEEK_API_KEY="",
+            GROQ_API_KEY="",
+            GEMINI_API_KEY="",
+            OPENROUTER_API_KEY="",
+            NVIDIA_API_KEY="nv_key",
+        )
+        assert result == "nvidia"
+
 
 # ---------------------------------------------------------------------------
 # AIAnalyzer.__init__()  — инициализация
@@ -215,6 +280,50 @@ class TestAIAnalyzerInit:
         )
         assert ai._provider_order[0] == "deepseek"
         assert len(ai._provider_order) == 4
+
+    def test_init_openrouter_key_only(self):
+        ai = self._make(AI_PROVIDER="openrouter", OPENROUTER_API_KEY="or_key")
+        assert ai.enabled is True
+        assert ai._provider_order == ["openrouter"]
+
+    def test_init_nvidia_key_only(self):
+        ai = self._make(AI_PROVIDER="nvidia", NVIDIA_API_KEY="nv_key")
+        assert ai.enabled is True
+        assert ai._provider_order == ["nvidia"]
+
+    def test_init_only_gemini_key_enables_analyzer(self):
+        # Регрессия: раньше _resolve_provider()'s auto-ветка не проверяла
+        # Gemini вообще, и self.enabled оставался False, хотя клиент был жив.
+        ai = self._make(AI_PROVIDER="auto", GEMINI_API_KEY="g_key")
+        assert ai.enabled is True
+        assert ai._provider_order == ["gemini"]
+
+    def test_init_only_openrouter_key_enables_analyzer(self):
+        ai = self._make(AI_PROVIDER="auto", OPENROUTER_API_KEY="or_key")
+        assert ai.enabled is True
+        assert ai._provider_order == ["openrouter"]
+
+    def test_init_only_nvidia_key_enables_analyzer(self):
+        ai = self._make(AI_PROVIDER="auto", NVIDIA_API_KEY="nv_key")
+        assert ai.enabled is True
+        assert ai._provider_order == ["nvidia"]
+
+    def test_init_openrouter_and_nvidia_ordered_after_paid_and_free(self):
+        ai = self._make(
+            AI_PROVIDER="auto",
+            ANTHROPIC_API_KEY="a_key",
+            GROQ_API_KEY="groq_key",
+            GEMINI_API_KEY="g_key",
+            OPENROUTER_API_KEY="or_key",
+            NVIDIA_API_KEY="nv_key",
+        )
+        assert ai._provider_order == [
+            "anthropic",
+            "groq",
+            "gemini",
+            "openrouter",
+            "nvidia",
+        ]
 
 
 # ---------------------------------------------------------------------------
@@ -481,6 +590,75 @@ class TestAnalyze:
             ai._runtime_config = rc
             await ai.analyze([{"symbol": "BTC/USDT"}], 10000)
         rc.set_last_ai_provider.assert_called_once_with("groq")
+
+    @pytest.mark.asyncio
+    async def test_analyze_calls_openrouter_and_returns_recs(self):
+        cfg = _make_config(MIN_SIGNAL_CONFIDENCE=0.65)
+        with patch("src.ai_analyzer.Config", cfg):
+            ai = self._make_ai(provider_order=["openrouter"])
+            valid_response = json.dumps(
+                [
+                    {
+                        "symbol": "BTC/USDT",
+                        "action": "buy",
+                        "strategy": "ema_crossover",
+                        "confidence": 0.9,
+                    }
+                ]
+            )
+            ai._call_openrouter = AsyncMock(return_value=valid_response)
+            ai._build_prompt = MagicMock(return_value="prompt")
+            result = await ai.analyze([{"symbol": "BTC/USDT"}], 10000)
+        assert len(result) == 1
+        assert result[0]["action"] == "buy"
+
+    @pytest.mark.asyncio
+    async def test_analyze_calls_nvidia_and_returns_recs(self):
+        cfg = _make_config(MIN_SIGNAL_CONFIDENCE=0.65)
+        with patch("src.ai_analyzer.Config", cfg):
+            ai = self._make_ai(provider_order=["nvidia"])
+            valid_response = json.dumps(
+                [
+                    {
+                        "symbol": "ETH/USDT",
+                        "action": "sell",
+                        "strategy": "rsi_momentum",
+                        "confidence": 0.85,
+                    }
+                ]
+            )
+            ai._call_nvidia = AsyncMock(return_value=valid_response)
+            ai._build_prompt = MagicMock(return_value="prompt")
+            result = await ai.analyze([{"symbol": "ETH/USDT"}], 10000)
+        assert len(result) == 1
+        assert result[0]["action"] == "sell"
+
+    @pytest.mark.asyncio
+    async def test_analyze_falls_back_from_gemini_to_openrouter_to_nvidia(self):
+        cfg = _make_config(MIN_SIGNAL_CONFIDENCE=0.65)
+        with patch("src.ai_analyzer.Config", cfg):
+            ai = self._make_ai(provider_order=["gemini", "openrouter", "nvidia"])
+            rate_limited = Exception("Too Many Requests")
+            rate_limited.status_code = 429
+            ai._call_gemini = AsyncMock(side_effect=rate_limited)
+            ai._call_openrouter = AsyncMock(side_effect=rate_limited)
+            valid_response = json.dumps(
+                [
+                    {
+                        "symbol": "BTC/USDT",
+                        "action": "buy",
+                        "strategy": "ema_crossover",
+                        "confidence": 0.9,
+                    }
+                ]
+            )
+            ai._call_nvidia = AsyncMock(return_value=valid_response)
+            ai._build_prompt = MagicMock(return_value="prompt")
+            result = await ai.analyze([{"symbol": "BTC/USDT"}], 10000)
+        assert len(result) == 1
+        ai._call_gemini.assert_awaited_once()
+        ai._call_openrouter.assert_awaited_once()
+        ai._call_nvidia.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_analyze_no_runtime_config_does_not_raise(self):

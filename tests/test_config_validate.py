@@ -53,7 +53,35 @@ class TestConfigValidate:
 
     def test_invalid_ai_provider_rejected(self):
         with pytest.raises(ValueError, match="AI_PROVIDER"):
-            _paper(MODE="ai", AI_PROVIDER="gemini", ANTHROPIC_API_KEY="key").validate()
+            _paper(
+                MODE="ai", AI_PROVIDER="mistral", ANTHROPIC_API_KEY="key"
+            ).validate()
+
+    def test_gemini_provider_is_valid(self):
+        _paper(MODE="ai", AI_PROVIDER="gemini", GEMINI_API_KEY="g-key").validate()
+
+    def test_openrouter_provider_is_valid(self):
+        _paper(
+            MODE="ai", AI_PROVIDER="openrouter", OPENROUTER_API_KEY="or-key"
+        ).validate()
+
+    def test_nvidia_provider_is_valid(self):
+        _paper(MODE="ai", AI_PROVIDER="nvidia", NVIDIA_API_KEY="nv-key").validate()
+
+    def test_openrouter_provider_without_key_rejected(self):
+        with pytest.raises(ValueError, match="ключ не задан"):
+            _paper(
+                MODE="ai",
+                AI_PROVIDER="openrouter",
+                OPENROUTER_API_KEY="",
+            ).validate()
+
+    def test_ai_mode_with_only_openrouter_key_passes(self):
+        _paper(
+            MODE="ai",
+            AI_PROVIDER="auto",
+            OPENROUTER_API_KEY="or-key",
+        ).validate()
 
     def test_missing_bybit_keys_in_live_mode(self):
         with pytest.raises(ValueError, match="BYBIT_API_KEY"):
