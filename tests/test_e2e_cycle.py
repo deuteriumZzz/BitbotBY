@@ -60,6 +60,7 @@ def _make_cfg(paper: bool = True, auto: bool = True, max_pos: int = 3):
     cfg.BYBIT_API_KEY = cfg.BYBIT_API_SECRET = ""
     cfg.ANTHROPIC_API_KEY = cfg.DEEPSEEK_API_KEY = cfg.OPENAI_API_KEY = ""
     cfg.TELEGRAM_BOT_TOKEN = ""
+    cfg.MAX_PORTFOLIO_EXPOSURE = 0.0
     return cfg
 
 
@@ -87,6 +88,7 @@ def make_bot(balance: float = 1000.0):
             cfg.BYBIT_API_KEY = cfg.BYBIT_API_SECRET = ""
             cfg.ANTHROPIC_API_KEY = cfg.DEEPSEEK_API_KEY = cfg.OPENAI_API_KEY = ""
             cfg.TELEGRAM_BOT_TOKEN = ""
+            cfg.MAX_PORTFOLIO_EXPOSURE = 0.0
             from src.trading_bot import TradingBot
 
             bot = TradingBot()

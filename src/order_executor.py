@@ -370,6 +370,43 @@ class OrderExecutor:
             if scale < 1.0:
                 quantity *= scale
 
+            # Portfolio-wide exposure cap: совокупная notional-экспозиция всех
+            # открытых позиций (включая эту) не должна превышать
+            # MAX_PORTFOLIO_EXPOSURE x balance. Half-Kelly cap (20%) и
+            # MAX_CORRELATION действуют на сделку/пару, а не на портфель
+            # целиком — при MAX_POSITIONS одновременных позициях и leverage
+            # это может дать многократный excess-exposure без этого чека.
+            if Config.MAX_PORTFOLIO_EXPOSURE > 0:
+                current_notional = sum(
+                    float(p.get("qty") or 0) * float(p.get("entry") or 0)
+                    for s, p in monitored.items()
+                    if s != sym and p is not None
+                )
+                proposed_notional = quantity * entry
+                headroom = Config.MAX_PORTFOLIO_EXPOSURE * balance - current_notional
+                if headroom <= 0:
+                    logger.warning(
+                        "Portfolio exposure cap reached (%.2fx balance, current="
+                        "%.2f) — skipping %s",
+                        Config.MAX_PORTFOLIO_EXPOSURE,
+                        current_notional,
+                        sym,
+                    )
+                    return
+                if proposed_notional > headroom:
+                    scaled_qty = headroom / entry
+                    logger.info(
+                        "Scaling %s down %.6f -> %.6f to respect "
+                        "MAX_PORTFOLIO_EXPOSURE=%.2fx (current=%.2f headroom=%.2f)",
+                        sym,
+                        quantity,
+                        scaled_qty,
+                        Config.MAX_PORTFOLIO_EXPOSURE,
+                        current_notional,
+                        headroom,
+                    )
+                    quantity = scaled_qty
+
             # Almgren-Chriss market impact: shift effective entry price for large
             # orders relative to ADV.
             df = market_data.get(sym)

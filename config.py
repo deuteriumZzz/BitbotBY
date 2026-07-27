@@ -117,6 +117,11 @@ class Config:
     TRADING_INTERVAL: int = int(os.getenv("TRADING_INTERVAL", "30"))
     MAX_POSITION_SIZE: float = float(os.getenv("MAX_POSITION_SIZE", "0.1"))
     STOP_LOSS_PERCENT: float = float(os.getenv("STOP_LOSS_PERCENT", "0.05"))
+    # Жёсткий кап на совокупную notional-экспозицию ВСЕХ открытых позиций
+    # (с учётом плеча) как множитель баланса. 0 или меньше — отключено.
+    # По умолчанию 1.5x — заметно туже, чем текущий незащищённый худший случай
+    # (MAX_POSITIONS x Half-Kelly 20% x LEVERAGE_MAX может доходить до ~3x).
+    MAX_PORTFOLIO_EXPOSURE: float = float(os.getenv("MAX_PORTFOLIO_EXPOSURE", "1.5"))
 
     # ── Strategy ───────────────────────────────────────────────────────────
     DEFAULT_STRATEGY: str = os.getenv("ACTIVE_STRATEGY", "ema_crossover")
@@ -376,6 +381,31 @@ class Config:
             raise ValueError("RISK_PER_TRADE must be between 0 and 1")
         if self.MAX_POSITION_SIZE <= 0 or self.MAX_POSITION_SIZE > 1:
             raise ValueError("MAX_POSITION_SIZE must be between 0 and 1")
+        if self.MAX_PORTFOLIO_EXPOSURE < 0:
+            raise ValueError(
+                "MAX_PORTFOLIO_EXPOSURE must be >= 0 (0 disables the cap)"
+            )
+        if not (1 <= self.LEVERAGE_MAX <= 20):
+            raise ValueError(
+                f"LEVERAGE_MAX={self.LEVERAGE_MAX} must be between 1 and 20 — "
+                "higher values risk liquidation on small adverse moves."
+            )
+        if not (0 < self.DAILY_LOSS_LIMIT <= 0.5):
+            raise ValueError(
+                f"DAILY_LOSS_LIMIT={self.DAILY_LOSS_LIMIT} must be a fraction "
+                "in (0, 0.5] — e.g. 0.05 for 5%/day, not 5.0."
+            )
+        if not (0 < self.MAX_DRAWDOWN_PERCENT <= 0.5):
+            raise ValueError(
+                f"MAX_DRAWDOWN_PERCENT={self.MAX_DRAWDOWN_PERCENT} must be a "
+                "fraction in (0, 0.5] — e.g. 0.2 for 20%, not 20.0."
+            )
+        if self.DAILY_LOSS_LIMIT > self.MAX_DRAWDOWN_PERCENT:
+            raise ValueError(
+                f"DAILY_LOSS_LIMIT={self.DAILY_LOSS_LIMIT} must not exceed "
+                f"MAX_DRAWDOWN_PERCENT={self.MAX_DRAWDOWN_PERCENT} — the daily "
+                "breaker should trip before the overall drawdown halt."
+            )
         if self.COMMISSION_RATE < 0:
             raise ValueError("COMMISSION_RATE must be non-negative")
         if self.TRADING_INTERVAL <= 0:

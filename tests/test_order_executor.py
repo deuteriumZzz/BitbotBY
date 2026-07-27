@@ -39,6 +39,7 @@ def _make_cfg(paper: bool = True, max_pos: int = 5, max_corr: float = 0.0) -> Ma
     cfg.COMMISSION_RATE = 0.001
     cfg.AUTO_EXECUTE = True
     cfg.TELEGRAM_CONFIRM_TIMEOUT = 0
+    cfg.MAX_PORTFOLIO_EXPOSURE = 0.0
     return cfg
 
 

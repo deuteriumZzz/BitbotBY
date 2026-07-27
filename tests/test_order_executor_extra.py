@@ -68,6 +68,7 @@ def _make_cfg(
     cfg.DRAWDOWN_SCALE_ENABLED = True
     cfg.DRAWDOWN_SCALE_THRESHOLD = 0.10
     cfg.DRAWDOWN_SCALE_FACTOR = 0.5
+    cfg.MAX_PORTFOLIO_EXPOSURE = 0.0
     return cfg
 
 

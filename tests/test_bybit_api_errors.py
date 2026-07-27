@@ -239,6 +239,95 @@ class TestCreateOrderErrors:
 
 
 # ---------------------------------------------------------------------------
+# create_order idempotency (clientOrderId)
+# ---------------------------------------------------------------------------
+
+
+class TestCreateOrderIdempotency:
+    @pytest.mark.asyncio
+    async def test_passes_stable_client_order_id_across_retries(self):
+        api = _make_api()
+        order = {"id": "abc", "filled": 0.1, "status": "closed"}
+        api.exchange.create_order.side_effect = [
+            ccxt.NetworkError("net"),
+            ccxt.NetworkError("net"),
+            order,
+        ]
+        api.exchange.fetch_open_orders.return_value = []
+        api.exchange.fetch_closed_orders.return_value = []
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            result = await api.create_order("BTC/USDT", "market", "buy", 0.1)
+        assert result == order
+        assert api.exchange.create_order.call_count == 3
+        coids = {
+            call.kwargs["params"]["clientOrderId"]
+            for call in api.exchange.create_order.await_args_list
+        }
+        assert len(coids) == 1
+
+    @pytest.mark.asyncio
+    async def test_network_error_finds_existing_order_before_retry(self):
+        api = _make_api()
+        api.exchange.create_order.side_effect = ccxt.NetworkError("net")
+        with patch(
+            "src.bybit_api._new_client_order_id", return_value="bb-fixed"
+        ):
+            api.exchange.fetch_open_orders.return_value = [
+                {"id": "existing-1", "clientOrderId": "bb-fixed", "status": "open"}
+            ]
+            api.exchange.fetch_closed_orders.return_value = []
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                result = await api.create_order("BTC/USDT", "market", "buy", 0.1)
+        assert result is not None
+        assert result["id"] == "existing-1"
+        assert api.exchange.create_order.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_duplicate_client_order_id_error_recovers_existing_order(self):
+        api = _make_api()
+        api.exchange.create_order.side_effect = ccxt.BadRequest(
+            "Duplicate clientOrderId."
+        )
+        api.exchange.fetch_open_orders.return_value = []
+        api.exchange.fetch_closed_orders.return_value = [
+            {"id": "existing-2", "clientOrderId": "bb-whatever", "status": "closed"}
+        ]
+        with patch(
+            "src.bybit_api._new_client_order_id", return_value="bb-whatever"
+        ):
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                result = await api.create_order("BTC/USDT", "market", "buy", 0.1)
+        assert result is not None
+        assert result["id"] == "existing-2"
+
+    @pytest.mark.asyncio
+    async def test_duplicate_error_not_found_anywhere_stops_retrying(self):
+        api = _make_api()
+        api.exchange.create_order.side_effect = ccxt.BadRequest(
+            "Duplicate clientOrderId."
+        )
+        api.exchange.fetch_open_orders.return_value = []
+        api.exchange.fetch_closed_orders.return_value = []
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            result = await api.create_order("BTC/USDT", "market", "buy", 0.1)
+        assert result is None
+        assert api.exchange.create_order.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_lookup_failure_falls_back_to_existing_retry_behavior(self):
+        api = _make_api()
+        api.exchange.create_order.side_effect = ccxt.NetworkError("net")
+        # fetch_open_orders/fetch_closed_orders left unconfigured (plain
+        # AsyncMock) — iterating the awaited result raises TypeError, which
+        # _find_order_by_client_id must swallow (fail-open) so the pre-existing
+        # retry behavior (3 attempts, then None) is unaffected.
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            result = await api.create_order("BTC/USDT", "market", "buy", 0.1)
+        assert result is None
+        assert api.exchange.create_order.call_count == 3
+
+
+# ---------------------------------------------------------------------------
 # get_balance error paths
 # ---------------------------------------------------------------------------
 

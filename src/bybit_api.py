@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 from datetime import datetime
 from typing import Optional
 
@@ -36,6 +37,15 @@ def _is_retryable(exc: BaseException) -> bool:
             ccxt.ExchangeNotAvailable,
         ),
     )
+
+
+def _new_client_order_id() -> str:
+    """Генерирует clientOrderId (Bybit orderLinkId) для одной логической попытки
+    размещения ордера. Используется ОДИН И ТОТ ЖЕ id на все повторы одного и
+    того же ордера — иначе ccxt сам сгенерирует новый uuid на каждый вызов, и
+    серверная дедупликация Bybit по orderLinkId не сможет поймать повторную
+    отправку потерянного ответа."""
+    return f"bb-{uuid.uuid4().hex}"
 
 
 @retry(
@@ -198,6 +208,44 @@ class BybitAPI:
             )
             raise
 
+    async def _find_order_by_client_id(
+        self, symbol: str, client_order_id: str
+    ) -> Optional[dict]:
+        """Ищет ордер по clientOrderId среди открытых и закрытых.
+
+        Используется перед повтором после сетевой ошибки/дублирования — чтобы
+        не отправить второй ордер поверх уже исполненного первого. Аккаунт на
+        UTA (Unified Trading Account) — fetch_order/fetch_orders там не
+        работают без биржевого id, поэтому ищем через fetch_open_orders/
+        fetch_closed_orders с фильтром по orderLinkId.
+
+        :param symbol: Символ торговой пары.
+        :param client_order_id: clientOrderId, переданный при создании ордера.
+        :return: Словарь ордера если найден, иначе None (в т.ч. при ошибке
+            самого поиска — fail-open, чтобы не блокировать основной retry).
+        """
+        try:
+            for o in await self.exchange.fetch_open_orders(
+                symbol, params={"orderLinkId": client_order_id}
+            ):
+                if o.get("clientOrderId") == client_order_id:
+                    return o
+            for o in await self.exchange.fetch_closed_orders(
+                symbol, params={"orderLinkId": client_order_id}
+            ):
+                if o.get("clientOrderId") == client_order_id:
+                    return o
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            self.logger.warning(
+                "Поиск ордера по clientOrderId %s (%s) не удался: %s",
+                client_order_id,
+                symbol,
+                e,
+            )
+        return None
+
     async def create_order(
         self,
         symbol: str,
@@ -210,7 +258,11 @@ class BybitAPI:
         """
         Создаёт ордер с Redis-блокировкой для предотвращения конфликтов.
 
-        Повторяет попытку до 3 раз с экспоненциальной задержкой.
+        Повторяет попытку до 3 раз с экспоненциальной задержкой. Все попытки
+        одного вызова используют один и тот же clientOrderId — если ответ на
+        успешно исполненный ордер потеряется (таймаут/сетевой сбой), перед
+        повтором ищем уже созданный ордер по этому id вместо слепой повторной
+        отправки, которая задвоила бы позицию.
 
         :param symbol: Символ торговой пары.
         :param order_type: Тип ордера ("limit" или "market").
@@ -223,12 +275,18 @@ class BybitAPI:
         if not self.redis.acquire_lock(lock_name):
             self.logger.warning("Не удалось захватить блокировку для %s", symbol)
             return None
+        client_order_id = _new_client_order_id()
         try:
             last_error: Optional[Exception] = None
             for attempt in range(3):
                 try:
                     order = await self.exchange.create_order(
-                        symbol, order_type, side, amount, price
+                        symbol,
+                        order_type,
+                        side,
+                        amount,
+                        price,
+                        params={"clientOrderId": client_order_id},
                     )
                     order_data = {
                         "id": order["id"],
@@ -256,8 +314,78 @@ class BybitAPI:
                         "Недостаточно средств для ордера %s: %s", symbol, e
                     )
                     return None
+                except (ccxt.BadRequest, ccxt.InvalidOrder) as e:
+                    last_error = e
+                    if "duplicate" in str(e).lower():
+                        self.logger.warning(
+                            "Bybit сообщил о дубликате clientOrderId %s для %s — "
+                            "ищу уже созданный ордер вместо повтора: %s",
+                            client_order_id,
+                            symbol,
+                            e,
+                        )
+                        existing = await self._find_order_by_client_id(
+                            symbol, client_order_id
+                        )
+                        if existing is not None:
+                            self.redis.save_trading_state(
+                                symbol,
+                                {
+                                    "id": existing.get("id"),
+                                    "symbol": symbol,
+                                    "type": order_type,
+                                    "side": side,
+                                    "amount": amount,
+                                    "filled": existing.get("filled", 0),
+                                    "price": price,
+                                    "timestamp": datetime.now().isoformat(),
+                                    "status": existing.get("status", "open"),
+                                },
+                            )
+                            self.logger.info(
+                                "Найден существующий ордер по clientOrderId: %s",
+                                existing,
+                            )
+                            return existing
+                        self.logger.error(
+                            "Дубликат clientOrderId %s, но ордер не найден ни в "
+                            "открытых, ни в закрытых — не повторяю с тем же id",
+                            client_order_id,
+                        )
+                        break
+                    self.logger.warning(
+                        "Попытка %d/3 создания ордера не удалась (BadRequest/"
+                        "InvalidOrder): %s",
+                        attempt + 1,
+                        e,
+                    )
+                    await asyncio.sleep(2**attempt)
                 except (ccxt.NetworkError, ccxt.RequestTimeout) as e:
                     last_error = e
+                    existing = await self._find_order_by_client_id(
+                        symbol, client_order_id
+                    )
+                    if existing is not None:
+                        self.redis.save_trading_state(
+                            symbol,
+                            {
+                                "id": existing.get("id"),
+                                "symbol": symbol,
+                                "type": order_type,
+                                "side": side,
+                                "amount": amount,
+                                "filled": existing.get("filled", 0),
+                                "price": price,
+                                "timestamp": datetime.now().isoformat(),
+                                "status": existing.get("status", "open"),
+                            },
+                        )
+                        self.logger.info(
+                            "Ордер после сетевой ошибки найден по clientOrderId, "
+                            "повтор не требуется: %s",
+                            existing,
+                        )
+                        return existing
                     wait = 2**attempt
                     self.logger.warning(
                         "Попытка %d/3 создания ордера не удалась: %s. Повтор через %dс",

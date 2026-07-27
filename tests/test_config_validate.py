@@ -126,3 +126,44 @@ class TestConfigValidate:
 
     def test_local_mode_no_keys_needed(self):
         _paper(MODE="local").validate()
+
+    # ── MAX_PORTFOLIO_EXPOSURE (Gap 2) ──────────────────────────────────────
+
+    def test_negative_max_portfolio_exposure_rejected(self):
+        with pytest.raises(ValueError, match="MAX_PORTFOLIO_EXPOSURE"):
+            _paper(MAX_PORTFOLIO_EXPOSURE=-1.0).validate()
+
+    def test_zero_max_portfolio_exposure_disables_cap_and_passes(self):
+        _paper(MAX_PORTFOLIO_EXPOSURE=0.0).validate()
+
+    def test_default_max_portfolio_exposure_passes(self):
+        _paper().validate()
+
+    # ── LEVERAGE_MAX / DAILY_LOSS_LIMIT / MAX_DRAWDOWN_PERCENT (Gap D) ──────
+
+    def test_leverage_max_too_high_rejected(self):
+        with pytest.raises(ValueError, match="LEVERAGE_MAX"):
+            _paper(LEVERAGE_MAX=100).validate()
+
+    def test_leverage_max_zero_rejected(self):
+        with pytest.raises(ValueError, match="LEVERAGE_MAX"):
+            _paper(LEVERAGE_MAX=0).validate()
+
+    def test_leverage_max_default_passes(self):
+        _paper().validate()  # LEVERAGE_MAX default=5 must still pass
+
+    def test_daily_loss_limit_as_percent_typo_rejected(self):
+        with pytest.raises(ValueError, match="DAILY_LOSS_LIMIT"):
+            _paper(DAILY_LOSS_LIMIT=5.0).validate()
+
+    def test_daily_loss_limit_zero_rejected(self):
+        with pytest.raises(ValueError, match="DAILY_LOSS_LIMIT"):
+            _paper(DAILY_LOSS_LIMIT=0.0).validate()
+
+    def test_max_drawdown_percent_as_percent_typo_rejected(self):
+        with pytest.raises(ValueError, match="MAX_DRAWDOWN_PERCENT"):
+            _paper(MAX_DRAWDOWN_PERCENT=20.0).validate()
+
+    def test_daily_loss_limit_exceeding_max_drawdown_rejected(self):
+        with pytest.raises(ValueError, match="MAX_DRAWDOWN_PERCENT"):
+            _paper(DAILY_LOSS_LIMIT=0.4, MAX_DRAWDOWN_PERCENT=0.2).validate()
