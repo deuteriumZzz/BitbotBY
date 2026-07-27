@@ -330,6 +330,16 @@ def _kb_backtest_menu() -> "InlineKeyboardMarkup":
                     "▶ Запустить (~5-10 мин)", callback_data="backtest_now"
                 )
             ],
+            [
+                InlineKeyboardButton(
+                    "📈 Значимость альфы", callback_data="alpha_report_now"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "📐 Live vs Backtest", callback_data="live_divergence_now"
+                )
+            ],
             [InlineKeyboardButton("« Настройки", callback_data="settings")],
         ]
     )
@@ -823,6 +833,8 @@ class TelegramCommander:
         self._on_close_all = on_close_all
         self._sac_training = False
         self._backtesting = False
+        self._alpha_report_running = False
+        self._live_divergence_running = False
         self._background_tasks: set = set()
 
     def register(self) -> None:
@@ -1784,6 +1796,76 @@ class TelegramCommander:
         finally:
             self._backtesting = False
             self._rc.clear_backtest_progress()
+
+    @staticmethod
+    def _truncate_report(text: str, limit: int = 3500) -> str:
+        """Обрезает начало отчёта, если он не влезает в лимит сообщения
+        Telegram (~4096 символов) — итог/сводка обычно внизу отчёта."""
+        text = text.strip()
+        if len(text) <= limit:
+            return text
+        return "...\n" + text[-limit:]
+
+    async def _run_report_script(self, script: str) -> "tuple[bool, str]":
+        """Запускает read-only отчётный скрипт (без прогресс-стриминга,
+        в отличие от backtest.py) и возвращает (успех, вывод/ошибка)."""
+        import asyncio as _asyncio
+        import os
+
+        env = {**os.environ, "PYTHONPATH": "/app"}
+        proc = await _asyncio.create_subprocess_exec(
+            "python",
+            script,
+            env=env,
+            stdout=_asyncio.subprocess.PIPE,
+            stderr=_asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await proc.communicate()
+        if proc.returncode != 0:
+            return False, stderr.decode(errors="replace")[-300:]
+        return True, stdout.decode(errors="replace")
+
+    async def _run_alpha_report(self) -> None:
+        """Запускает paper_alpha_report.py — значимость альфы на реальных
+        закрытых paper-сделках (bootstrap Sharpe + Wilcoxon + Bonferroni)."""
+        try:
+            ok, out = await self._run_report_script("paper_alpha_report.py")
+            if not ok:
+                await self._notifier.notify(
+                    f"❌ *Отчёт значимости альфы упал*\n```{out}```"
+                )
+                return
+            await self._notifier.notify(
+                "📈 *Значимость альфы (paper-сделки)*\n```"
+                f"{self._truncate_report(out)}```"
+            )
+        except Exception as e:
+            await self._notifier.notify(
+                f"❌ Отчёт значимости альфы: непредвиденная ошибка\n`{e}`"
+            )
+        finally:
+            self._alpha_report_running = False
+
+    async def _run_live_divergence(self) -> None:
+        """Запускает backtest_live_divergence.py — расхождение реальной цены
+        исполнения с моделью market impact на исторических данных."""
+        try:
+            ok, out = await self._run_report_script("backtest_live_divergence.py")
+            if not ok:
+                await self._notifier.notify(
+                    f"❌ *Отчёт Live vs Backtest упал*\n```{out}```"
+                )
+                return
+            await self._notifier.notify(
+                "📐 *Live vs Backtest (расхождение исполнения)*\n```"
+                f"{self._truncate_report(out)}```"
+            )
+        except Exception as e:
+            await self._notifier.notify(
+                f"❌ Отчёт Live vs Backtest: непредвиденная ошибка\n`{e}`"
+            )
+        finally:
+            self._live_divergence_running = False
 
     async def _run_sac_training(self) -> None:
         """Запускает train_sac.py как subprocess, не блокируя event loop."""
@@ -2821,12 +2903,14 @@ class TelegramCommander:
         elif data == "backtest_menu":
             await self._edit(
                 query,
-                "📊 *Бэктест стратегий*\n\n"
-                "Проверяет все стратегии на 3-6 месяцах исторических данных.\n\n"
-                "📌 *Когда запускать:*\n"
-                "• Перед переходом на реальные деньги\n"
-                "• После тюнинга SAC — убедиться что стало лучше\n\n"
-                "⏱ Займёт ~5-10 мин. Бот продолжает торговать.",
+                "📊 *Бэктест и отчёты*\n\n"
+                "▶ *Бэктест* — проверяет стратегии на 3-6 мес. исторических данных.\n"
+                "📌 Когда: перед реальными деньгами, после тюнинга SAC. ~5-10 мин.\n\n"
+                "📈 *Значимость альфы* — bootstrap Sharpe + Wilcoxon на реально\n"
+                "закрытых paper-сделках (не симуляция). Секунды.\n\n"
+                "📐 *Live vs Backtest* — совпадает ли реальная цена исполнения\n"
+                "с тем, что предсказывала модель импакта. Секунды.\n\n"
+                "Бот продолжает торговать во всех трёх случаях.",
                 _kb_backtest_menu(),
             )
 
@@ -2844,6 +2928,42 @@ class TelegramCommander:
             import asyncio as _asyncio
 
             task = _asyncio.ensure_future(self._run_backtest())
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
+
+        elif data == "alpha_report_now":
+            if self._alpha_report_running:
+                await query.answer("⏳ Отчёт уже выполняется...", show_alert=True)
+                return
+            self._alpha_report_running = True
+            await self._edit(
+                query,
+                "⏳ *Отчёт значимости альфы запущен*\n\n"
+                "Bootstrap Sharpe + Wilcoxon на реальных paper-сделках.\n"
+                "Пришлю результат через несколько секунд.",
+                _kb_after_action(),
+            )
+            import asyncio as _asyncio
+
+            task = _asyncio.ensure_future(self._run_alpha_report())
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
+
+        elif data == "live_divergence_now":
+            if self._live_divergence_running:
+                await query.answer("⏳ Отчёт уже выполняется...", show_alert=True)
+                return
+            self._live_divergence_running = True
+            await self._edit(
+                query,
+                "⏳ *Отчёт Live vs Backtest запущен*\n\n"
+                "Сравниваю реальные сделки с моделью market impact.\n"
+                "Пришлю результат через несколько секунд.",
+                _kb_after_action(),
+            )
+            import asyncio as _asyncio
+
+            task = _asyncio.ensure_future(self._run_live_divergence())
             self._background_tasks.add(task)
             task.add_done_callback(self._background_tasks.discard)
 
