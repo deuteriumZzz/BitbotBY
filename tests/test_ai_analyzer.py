@@ -246,6 +246,19 @@ class TestBuildStrategyList:
         assert "risk=" in result
         assert "market=" in result
 
+    def test_build_strategy_list_excludes_disabled(self, no_key_analyzer):
+        no_key_analyzer.strategies = [
+            _make_strategy("ema_crossover"),
+            _make_strategy("rsi_momentum"),
+        ]
+        no_key_analyzer._runtime_config = MagicMock()
+        no_key_analyzer._runtime_config.get_disabled_strategies.return_value = {
+            "rsi_momentum"
+        }
+        result = no_key_analyzer._build_strategy_list()
+        assert "ema_crossover" in result
+        assert "rsi_momentum" not in result
+
 
 # ---------------------------------------------------------------------------
 # AIAnalyzer._build_prompt()  — построение промпта
@@ -598,6 +611,26 @@ class TestRecommendStrategyLocal:
         strategy, conf = self.ai.recommend_strategy_local(snap)
         assert strategy == "ema_crossover"
         assert conf == 0.60
+
+    def test_local_disabled_strategy_returns_hold(self):
+        # Без disabled-фильтра rsi=25 всегда выбрал бы rsi_momentum (см.
+        # test_local_rsi_oversold) — отключённая через Telegram стратегия
+        # не должна тихо продолжать торговать.
+        self.ai._runtime_config = MagicMock()
+        self.ai._runtime_config.get_disabled_strategies.return_value = {
+            "rsi_momentum"
+        }
+        snap = self._snap(rsi=25)
+        strategy, conf = self.ai.recommend_strategy_local(snap)
+        assert strategy == "hold"
+        assert conf == 0.0
+
+    def test_local_no_runtime_config_behaves_as_before(self):
+        # _runtime_config=None (дефолт) — поведение как до фикса.
+        snap = self._snap(rsi=25)
+        strategy, conf = self.ai.recommend_strategy_local(snap)
+        assert strategy == "rsi_momentum"
+        assert conf == 0.78
 
 
 # ---------------------------------------------------------------------------

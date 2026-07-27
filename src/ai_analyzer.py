@@ -165,10 +165,19 @@ class AIAnalyzer:
         """
         Формирует текстовый список доступных стратегий для промпта.
 
+        Исключает стратегии, отключённые через Telegram
+        (RuntimeConfig.get_disabled_strategies()) — без этого AI продолжал
+        предлагать "отключенные" стратегии, потому что список строился
+        один раз при инициализации и никогда не сверялся с Redis.
+
         :return: Многострочная строка с описанием каждой стратегии.
         """
+        _rc = getattr(self, "_runtime_config", None)
+        disabled = _rc.get_disabled_strategies() if _rc is not None else set()
         lines = []
         for s in self.strategies:
+            if s["name"] in disabled:
+                continue
             desc = s["description"][:60]
             lines.append(
                 f"  {s['name']}: {desc}... "
@@ -615,9 +624,25 @@ class AIAnalyzer:
         """
         Локальный выбор стратегии без AI (fallback).
 
+        Если выбранная по индикаторам стратегия отключена через Telegram
+        (RuntimeConfig.get_disabled_strategies()) — возвращает ("hold", 0.0)
+        вместо того, чтобы всё равно торговать по ней: local fallback раньше
+        не проверял этот список вообще.
+
         :param snapshot: Снэпшот из MarketScanner.build_snapshot().
         :return: (strategy_name, confidence)
         """
+        strat, conf = self._recommend_strategy_local_raw(snapshot)
+        _rc = getattr(self, "_runtime_config", None)
+        disabled = _rc.get_disabled_strategies() if _rc is not None else set()
+        if strat in disabled:
+            return "hold", 0.0
+        return strat, conf
+
+    def _recommend_strategy_local_raw(
+        self, snapshot: Dict[str, Any]
+    ) -> Tuple[str, float]:
+        """Считает выбор стратегии по индикаторам, без учёта disabled-списка."""
         ind = snapshot.get("indicators", {})
         rsi = ind.get("rsi", 50)
         bb_width = ind.get("bb_width", 0.04)
