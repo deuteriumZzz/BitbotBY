@@ -1,4 +1,4 @@
-.PHONY: train train-long train-docker tune tune-bluechip tune-altcoin retrain backtest backtest-eth paper paper-ai live test lint fmt up down logs htpasswd
+.PHONY: train train-long train-docker tune tune-bluechip tune-altcoin retrain backtest backtest-eth alpha-report live-divergence ai-isolation paper paper-ai live test lint fmt up down logs htpasswd
 
 # ── Training ───────────────────────────────────────────────────────────────────
 train:
@@ -51,6 +51,18 @@ backtest:
 
 backtest-eth:
 	PYTHONPATH=. BT_SYMBOL=ETH/USDT python3 backtest.py
+
+alpha-report:
+	@echo ">>> Checking statistical significance of real paper/live trades..."
+	PYTHONPATH=. python3 paper_alpha_report.py
+
+live-divergence:
+	@echo ">>> Comparing live execution price vs backtest impact model..."
+	PYTHONPATH=. python3 backtest_live_divergence.py
+
+ai-isolation:
+	@echo ">>> Isolating AI(LLM) signal contribution (uses real AI provider calls)..."
+	PYTHONPATH=. python3 ai_signal_isolation_backtest.py
 
 # ── Paper trading (no real orders) ────────────────────────────────────────────
 paper:
