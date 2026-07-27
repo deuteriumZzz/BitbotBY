@@ -13,6 +13,11 @@ backtest.py — Walk-forward бэктестирование стратегий B
                    (как в live-сканере) и SL%/TP-множитель профиля вместо
                    ATR-based SL и RR=2.0. BT_SYMBOLS/BT_SYMBOL всё ещё имеют
                    приоритет, если заданы явно.
+    BT_ROLLING_WINDOWS  >=2 → anchored walk-forward по N последовательным
+                   фолдам вместо одного статичного 80/20-сплита (BT_HOLDOUT_RATIO
+                   игнорируется в этом режиме). Показывает разброс overfit_ratio
+                   по нескольким окнам, а не одно число — см.
+                   run_strategy_rolling_walk_forward(). По умолчанию 0 (выкл).
 """
 
 import asyncio
@@ -24,7 +29,7 @@ import sys
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
@@ -468,6 +473,24 @@ def _sharpe(returns: List[float]) -> float:
     return mean_r / std_r
 
 
+def _compute_overfit_ratio(
+    train_sharpe: float, test_sharpe: float
+) -> Optional[float]:
+    """
+    train/test Sharpe как мера переобучения. None = неприменимо.
+
+    Раньше `train_sharpe / max(test_sharpe, 0.01)` считалось без учёта
+    знака train_sharpe: при train_sharpe<=0 (нет edge в принципе — нечему
+    переобучаться) формула всё равно давала число вида train_sharpe*100,
+    маскируя реальную причину ("стратегия просто плохая") под ложным
+    "сильно переобучена". Возвращаем None в этом случае — вызывающий код
+    обязан явно показать "нет edge", а не подсунуть обманчивое число.
+    """
+    if train_sharpe <= 0:
+        return None
+    return train_sharpe / max(test_sharpe, 0.01)
+
+
 # ── Основной движок walk-forward ──────────────────────────────────────────
 
 
@@ -784,7 +807,9 @@ def run_strategy_with_holdout(
         use_fixed_sl,
     )
 
-    overfit_ratio = train_result.sharpe_ratio / max(test_result.sharpe_ratio, 0.01)
+    overfit_ratio = _compute_overfit_ratio(
+        train_result.sharpe_ratio, test_result.sharpe_ratio
+    )
     print(
         f"\n  IN-SAMPLE  (train {100-int(holdout_ratio*100)}%): "
         f"Sharpe={train_result.sharpe_ratio:.2f}  "
@@ -797,12 +822,164 @@ def run_strategy_with_holdout(
         f"WinRate={test_result.win_rate:.1%}  "
         f"Return={test_result.total_return_pct:.1%}"
     )
-    print(f"  Overfit ratio: {overfit_ratio:.1f}x", end="")
-    if overfit_ratio > 2.0:
-        print("  ⚠ OVERFITTED", end="")
-    print()
+    if overfit_ratio is None:
+        print("  Overfit ratio: n/a — no in-sample edge (train Sharpe <= 0)")
+    else:
+        print(f"  Overfit ratio: {overfit_ratio:.1f}x", end="")
+        if overfit_ratio > 2.0:
+            print("  ⚠ OVERFITTED", end="")
+        print()
 
     return test_result
+
+
+def run_strategy_rolling_walk_forward(
+    name: str,
+    strategy_cls: type,
+    df: pd.DataFrame,
+    initial_balance: float,
+    risk_per_trade: float,
+    commission_rate: float,
+    stop_loss_pct: float,
+    min_confidence: float,
+    n_windows: int = 5,
+    maker_commission_rate: Optional[float] = None,
+    tp_multiplier: Optional[float] = None,
+    use_fixed_sl: bool = False,
+) -> Tuple[BacktestResult, List[Optional[float]]]:
+    """
+    Anchored (expanding-window) walk-forward по n_windows последовательным фолдам.
+
+    Один статичный 80/20-сплит (run_strategy_with_holdout) даёт единственное
+    число overfit_ratio, которое может оказаться случайно удачным/неудачным
+    периодом. Здесь история делится на n_windows+1 последовательных фолдов;
+    для i-го тестового фолда train = все данные до него (expanding, без
+    заглядывания вперёд), test = сам фолд. OOS-результаты всех фолдов
+    объединяются в один BacktestResult через aggregate_results, плюс
+    возвращается список overfit_ratio по каждому окну (None = train Sharpe
+    <= 0 в этом окне, см. _compute_overfit_ratio) — чтобы увидеть разброс,
+    а не одну точку.
+
+    :return: (объединённый OOS BacktestResult, [overfit_ratio по фолдам]).
+             Если данных недостаточно — fallback на run_strategy_with_holdout
+             с holdout_ratio=0.2, пустой список overfit_ratio.
+    """
+    n = len(df)
+    if n_windows < 2 or n < _WARMUP * (n_windows + 1):
+        single = run_strategy_with_holdout(
+            name,
+            strategy_cls,
+            df,
+            initial_balance,
+            risk_per_trade,
+            commission_rate,
+            stop_loss_pct,
+            min_confidence,
+            holdout_ratio=0.2,
+            maker_commission_rate=maker_commission_rate,
+            tp_multiplier=tp_multiplier,
+            use_fixed_sl=use_fixed_sl,
+        )
+        return single, []
+
+    fold_size = n // (n_windows + 1)
+    overfit_ratios: List[Optional[float]] = []
+    test_results: List[BacktestResult] = []
+
+    for i in range(1, n_windows + 1):
+        train_end = fold_size * i
+        test_end = fold_size * (i + 1) if i < n_windows else n
+        train_df = df.iloc[:train_end].copy()
+        test_df = df.iloc[train_end:test_end].copy()
+        if len(test_df) < _WARMUP or len(train_df) < _WARMUP:
+            continue
+
+        train_result = run_strategy(
+            name,
+            strategy_cls(),
+            train_df,
+            initial_balance,
+            risk_per_trade,
+            commission_rate,
+            stop_loss_pct,
+            min_confidence,
+            maker_commission_rate,
+            tp_multiplier,
+            use_fixed_sl,
+        )
+        test_result = run_strategy(
+            name,
+            strategy_cls(),
+            test_df,
+            initial_balance,
+            risk_per_trade,
+            commission_rate,
+            stop_loss_pct,
+            min_confidence,
+            maker_commission_rate,
+            tp_multiplier,
+            use_fixed_sl,
+        )
+        ratio = _compute_overfit_ratio(
+            train_result.sharpe_ratio, test_result.sharpe_ratio
+        )
+        overfit_ratios.append(ratio)
+        test_results.append(test_result)
+        ratio_str = "n/a" if ratio is None else f"{ratio:.1f}x"
+        print(
+            f"\n  Window {i}/{n_windows}: train_n={len(train_df)} test_n={len(test_df)} "
+            f"train_Sharpe={train_result.sharpe_ratio:.2f} "
+            f"test_Sharpe={test_result.sharpe_ratio:.2f} "
+            f"overfit={ratio_str}",
+            end="",
+        )
+
+    if not test_results:
+        single = run_strategy_with_holdout(
+            name,
+            strategy_cls,
+            df,
+            initial_balance,
+            risk_per_trade,
+            commission_rate,
+            stop_loss_pct,
+            min_confidence,
+            holdout_ratio=0.2,
+            maker_commission_rate=maker_commission_rate,
+            tp_multiplier=tp_multiplier,
+            use_fixed_sl=use_fixed_sl,
+        )
+        return single, []
+
+    combined = aggregate_results({name: test_results})[0]
+
+    valid_ratios = [r for r in overfit_ratios if r is not None]
+    no_edge_count = len(overfit_ratios) - len(valid_ratios)
+    if not valid_ratios:
+        print(
+            f"\n  Rolling overfit ratio: n/a — no in-sample edge in any of "
+            f"{len(overfit_ratios)} window(s)"
+        )
+    else:
+        mean_of = statistics.mean(valid_ratios)
+        print(f"\n  Rolling overfit ratio: mean={mean_of:.1f}x", end="")
+        if len(valid_ratios) > 1:
+            stdev_of = statistics.stdev(valid_ratios)
+            print(
+                f" stdev={stdev_of:.1f}x min={min(valid_ratios):.1f}x"
+                f" max={max(valid_ratios):.1f}x",
+                end="",
+            )
+        if no_edge_count:
+            print(
+                f" ({no_edge_count}/{len(overfit_ratios)} окон без in-sample edge)",
+                end="",
+            )
+        if mean_of > 2.0:
+            print("  ⚠ OVERFITTED", end="")
+        print()
+
+    return combined, overfit_ratios
 
 
 # ── Агрегация по нескольким символам ─────────────────────────────────────
@@ -962,10 +1139,14 @@ def save_json(
 
 async def main() -> None:
     # ── Чтение переопределений из окружения ───────────────────────
-    months = int(os.getenv("BT_MONTHS", "6"))
+    months = int(os.getenv("BT_MONTHS", "12"))
     holdout_ratio = float(
         os.getenv("BT_HOLDOUT_RATIO", str(Config.BACKTEST_HOLDOUT_RATIO))
     )
+    # BT_ROLLING_WINDOWS>=2 → anchored walk-forward по N фолдам вместо
+    # единственного 80/20-сплита (см. run_strategy_rolling_walk_forward).
+    # По умолчанию 0 — старое поведение (run_strategy_with_holdout).
+    rolling_windows = int(os.getenv("BT_ROLLING_WINDOWS", "0"))
     min_conf = float(os.getenv("BT_MIN_CONF", str(Config.MIN_SIGNAL_CONFIDENCE)))
     # TP закрывается лимит-ордером (мейкер) в живом боте (bybit_api.py:431),
     # вход и SL — market/stop_market (тейкер, Config.COMMISSION_RATE).
@@ -1073,20 +1254,36 @@ async def main() -> None:
         sym_results: List[BacktestResult] = []
         for strat_name, strat_cls in STRATEGY_REGISTRY.items():
             print(f"\n[{strat_name}] ", end="", flush=True)
-            result = run_strategy_with_holdout(
-                name=strat_name,
-                strategy_cls=strat_cls,
-                df=df,
-                initial_balance=Config.INITIAL_BALANCE,
-                risk_per_trade=risk_per_trade,
-                commission_rate=Config.COMMISSION_RATE,
-                stop_loss_pct=stop_loss_pct,
-                min_confidence=min_conf,
-                holdout_ratio=holdout_ratio,
-                maker_commission_rate=maker_commission_rate,
-                tp_multiplier=tp_multiplier,
-                use_fixed_sl=use_fixed_sl,
-            )
+            if rolling_windows >= 2:
+                result, _ = run_strategy_rolling_walk_forward(
+                    name=strat_name,
+                    strategy_cls=strat_cls,
+                    df=df,
+                    initial_balance=Config.INITIAL_BALANCE,
+                    risk_per_trade=risk_per_trade,
+                    commission_rate=Config.COMMISSION_RATE,
+                    stop_loss_pct=stop_loss_pct,
+                    min_confidence=min_conf,
+                    n_windows=rolling_windows,
+                    maker_commission_rate=maker_commission_rate,
+                    tp_multiplier=tp_multiplier,
+                    use_fixed_sl=use_fixed_sl,
+                )
+            else:
+                result = run_strategy_with_holdout(
+                    name=strat_name,
+                    strategy_cls=strat_cls,
+                    df=df,
+                    initial_balance=Config.INITIAL_BALANCE,
+                    risk_per_trade=risk_per_trade,
+                    commission_rate=Config.COMMISSION_RATE,
+                    stop_loss_pct=stop_loss_pct,
+                    min_confidence=min_conf,
+                    holdout_ratio=holdout_ratio,
+                    maker_commission_rate=maker_commission_rate,
+                    tp_multiplier=tp_multiplier,
+                    use_fixed_sl=use_fixed_sl,
+                )
             sym_results.append(result)
             _done_steps += 1
             _pct = round(_done_steps / _total_steps * 100, 1) if _total_steps else 100.0
