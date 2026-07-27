@@ -1367,17 +1367,38 @@ async def main() -> None:
     if multi:
         print("(на основе агрегированных доходностей сделок по всем символам)")
     print(sep)
+    # Bonferroni-поправка на множественное тестирование: если проверяется
+    # N стратегий на одних и тех же данных, часть из них пройдёт p<0.05
+    # просто по теории вероятностей (data dredging), даже без реального
+    # edge. Скорректированный порог = 0.05/N — жёстче, чем raw-порог у
+    # каждого отдельного AlphaTester.test() (тот остаётся как есть — он
+    # корректен для одиночного использования вне пакетного прогона).
+    n_tests = len(final_results)
+    bonferroni_alpha = 0.05 / n_tests if n_tests > 0 else 0.05
     sig_count = 0
+    sig_count_corrected = 0
     for r in final_results:
         alpha = tester.test(r.trade_returns, name=r.strategy)
         print(alpha.summary())
         if alpha.is_significant:
             sig_count += 1
+        if alpha.sharpe_pvalue < bonferroni_alpha:
+            sig_count_corrected += 1
     print(sep)
     print(
-        f"{sig_count}/{len(final_results)} стратегий показывают статистически "
-        f"значимую альфу при p<{0.05:.0%}"
+        f"{sig_count}/{n_tests} стратегий показывают статистически "
+        f"значимую альфу при p<5% (БЕЗ поправки на множественное тестирование)"
     )
+    print(
+        f"{sig_count_corrected}/{n_tests} проходят после Bonferroni-поправки "
+        f"(p<{bonferroni_alpha:.4f}, скорректировано на {n_tests} тестов)"
+    )
+    if sig_count_corrected < sig_count:
+        print(
+            f"  ⚠ {sig_count - sig_count_corrected} стратегия(й) значимы только "
+            f"без поправки — вероятно, ложные срабатывания от перебора {n_tests} "
+            f"вариантов на одних данных, а не реальный edge"
+        )
     print(sep)
 
 
