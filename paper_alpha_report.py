@@ -49,6 +49,44 @@ def load_closed_returns(db_path: str) -> List[Tuple[str, float]]:
     return [(strategy, float(pnl_pct)) for strategy, pnl_pct in rows]
 
 
+def load_closed_returns_by_profile(db_path: str) -> List[Tuple[str, float]]:
+    """Читает (profile, pnl_pct) закрытых сделок, читая profile из context_flags.
+
+    SignalCombiner тегирует активный рыночный профиль (bluechip/altcoin/meme)
+    в context_flags["profile"] на момент входа (см. src/signal_combiner.py).
+    Это даёт реализованный PnL/Sharpe за периоды активного профиля вместо
+    голого счётчика срабатываний "Season check: ... signal=meme"
+    (п.6 роадмапа). Сделки без тега (до появления этой инструментации, или
+    если профиль не был определён) попадают в бакет "unknown" — не
+    отбрасываются, чтобы было видно, сколько истории ещё не размечено.
+
+    :param db_path: Путь к trades_paper.db или trades_live.db.
+    :return: Список (profile, pnl_pct); пусто, если файла нет или сделок нет.
+    """
+    if not os.path.exists(db_path):
+        return []
+    conn = sqlite3.connect(db_path)
+    try:
+        rows = conn.execute(
+            "SELECT context_flags, pnl_pct FROM trades "
+            "WHERE status='closed' AND pnl_pct IS NOT NULL"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    result: List[Tuple[str, float]] = []
+    for context_flags, pnl_pct in rows:
+        profile = "unknown"
+        if context_flags:
+            try:
+                flags = json.loads(context_flags)
+                profile = flags.get("profile") or "unknown"
+            except (json.JSONDecodeError, AttributeError):
+                pass
+        result.append((profile, float(pnl_pct)))
+    return result
+
+
 def group_returns_by_strategy(
     rows: List[Tuple[str, float]],
 ) -> Dict[str, List[float]]:
@@ -63,39 +101,44 @@ def group_returns_by_strategy(
     return grouped
 
 
-def build_report(returns_by_strategy: Dict[str, List[float]]) -> str:
-    """Строит текстовый отчёт значимости альфы по каждой стратегии + сводно.
+def group_returns_by_profile(rows: List[Tuple[str, float]]) -> Dict[str, List[float]]:
+    """Группирует доходности сделок по рыночному профилю на момент входа.
 
-    Зеркалит логику Bonferroni-секции backtest.py:main() — тот же
-    порог 0.05/N, где N = число проверяемых стратегий, чтобы не выдать
-    ложноположительный результат от простого перебора нескольких стратегий
-    на одной и той же короткой истории сделок.
+    :param rows: Список (profile, pnl_pct), например из load_closed_returns_by_profile.
+    :return: {profile: [pnl_pct, ...]}, сохраняя порядок первого появления.
+    """
+    grouped: Dict[str, List[float]] = {}
+    for profile, pnl_pct in rows:
+        grouped.setdefault(profile, []).append(pnl_pct)
+    return grouped
 
-    :param returns_by_strategy: {strategy: [pnl_pct, ...]}.
-    :return: Многострочный отчёт для печати в консоль.
+
+def _significance_section(
+    returns_by_group: Dict[str, List[float]], group_noun: str
+) -> List[str]:
+    """Секция значимости: per-group AlphaTester.test() + Bonferroni-поправка.
+
+    Общая логика для группировки по стратегии (build_report) и по рыночному
+    профилю (build_profile_report) — идентична, отличается только
+    существительным в строке счёта. Зеркалит Bonferroni-секцию
+    backtest.py:main() — порог 0.05/N, где N = число групп, чтобы не выдать
+    ложноположительный результат от простого перебора нескольких групп на
+    одной и той же короткой истории сделок.
+
+    :param returns_by_group: {group_name: [pnl_pct, ...]}, непусто.
+    :param group_noun: Существительное для строк счёта ("стратегий"/"профилей").
+    :return: Строки отчёта (без заголовка и без портфельной секции).
     """
     tester = AlphaTester()
     sep = "=" * 68
-    lines = [
-        sep,
-        "ЗНАЧИМОСТЬ АЛЬФЫ НА РЕАЛЬНЫХ PAPER/LIVE СДЕЛКАХ",
-        "(bootstrap Sharpe + Wilcoxon, та же методология что в backtest.py)",
-        sep,
-    ]
+    lines: List[str] = []
 
-    n_tests = len(returns_by_strategy)
-    if n_tests == 0:
-        lines.append("Нет закрытых сделок — отчёт невозможен.")
-        lines.append(sep)
-        return "\n".join(lines)
-
+    n_tests = len(returns_by_group)
     bonferroni_alpha = 0.05 / n_tests
     sig_count = 0
     sig_count_corrected = 0
-    all_returns: List[float] = []
-    for strategy, returns in returns_by_strategy.items():
-        all_returns.extend(returns)
-        result = tester.test(returns, name=strategy)
+    for name, returns in returns_by_group.items():
+        result = tester.test(returns, name=name)
         lines.append(result.summary())
         if result.is_significant:
             sig_count += 1
@@ -104,7 +147,7 @@ def build_report(returns_by_strategy: Dict[str, List[float]]) -> str:
 
     lines.append(sep)
     lines.append(
-        f"{sig_count}/{n_tests} стратегий значимы при p<5% "
+        f"{sig_count}/{n_tests} {group_noun} значимы при p<5% "
         "(БЕЗ поправки на множественное тестирование)"
     )
     lines.append(
@@ -113,14 +156,66 @@ def build_report(returns_by_strategy: Dict[str, List[float]]) -> str:
     )
     if sig_count_corrected < sig_count:
         lines.append(
-            f"  ⚠ {sig_count - sig_count_corrected} стратегия(й) значимы только "
+            f"  ⚠ {sig_count - sig_count_corrected} {group_noun} значимы только "
             f"без поправки — вероятно, ложные срабатывания от перебора {n_tests} "
             "вариантов на одной и той же короткой истории, а не реальный edge"
         )
     lines.append(sep)
+    return lines
 
+
+def build_report(returns_by_strategy: Dict[str, List[float]]) -> str:
+    """Строит текстовый отчёт значимости альфы по каждой стратегии + сводно.
+
+    :param returns_by_strategy: {strategy: [pnl_pct, ...]}.
+    :return: Многострочный отчёт для печати в консоль.
+    """
+    sep = "=" * 68
+    lines = [
+        sep,
+        "ЗНАЧИМОСТЬ АЛЬФЫ НА РЕАЛЬНЫХ PAPER/LIVE СДЕЛКАХ",
+        "(bootstrap Sharpe + Wilcoxon, та же методология что в backtest.py)",
+        sep,
+    ]
+    if not returns_by_strategy:
+        lines.append("Нет закрытых сделок — отчёт невозможен.")
+        lines.append(sep)
+        return "\n".join(lines)
+
+    lines.extend(_significance_section(returns_by_strategy, group_noun="стратегий"))
+    all_returns = [r for rs in returns_by_strategy.values() for r in rs]
     lines.append("ПОРТФЕЛЬ ЦЕЛИКОМ (все стратегии вместе, без Bonferroni — один тест):")
-    lines.append(tester.test(all_returns, name="ALL STRATEGIES").summary())
+    lines.append(AlphaTester().test(all_returns, name="ALL STRATEGIES").summary())
+    lines.append(sep)
+    return "\n".join(lines)
+
+
+def build_profile_report(returns_by_profile: Dict[str, List[float]]) -> str:
+    """Строит отчёт значимости альфы по рыночному профилю на момент входа.
+
+    П.6 роадмапа: реализованный PnL/Sharpe (с доверительным интервалом) за
+    периоды активного профиля bluechip/altcoin/meme — вместо голого счётчика
+    срабатываний "Season check: index=... signal=meme" в trading_bot.py.
+
+    :param returns_by_profile: {profile: [pnl_pct, ...]}.
+    :return: Многострочный отчёт для печати в консоль.
+    """
+    sep = "=" * 68
+    lines = [
+        sep,
+        "ЗНАЧИМОСТЬ АЛЬФЫ ПО РЫНОЧНОМУ ПРОФИЛЮ (bluechip/altcoin/meme)",
+        "(та же методология, группировка по context_flags['profile'])",
+        sep,
+    ]
+    if not returns_by_profile:
+        lines.append("Нет закрытых сделок — отчёт невозможен.")
+        lines.append(sep)
+        return "\n".join(lines)
+
+    lines.extend(_significance_section(returns_by_profile, group_noun="профилей"))
+    all_returns = [r for rs in returns_by_profile.values() for r in rs]
+    lines.append("ПОРТФЕЛЬ ЦЕЛИКОМ (все профили вместе, без Bonferroni — один тест):")
+    lines.append(AlphaTester().test(all_returns, name="ALL PROFILES").summary())
     lines.append(sep)
     return "\n".join(lines)
 
@@ -144,6 +239,10 @@ def main() -> None:
     print(f"[paper_alpha_report] {len(rows)} закрытых сделок, "
           f"{len(grouped)} стратегия(й), источник: {args.db}\n")
     print(build_report(grouped))
+
+    grouped_by_profile = group_returns_by_profile(load_closed_returns_by_profile(args.db))
+    print()
+    print(build_profile_report(grouped_by_profile))
 
 
 if __name__ == "__main__":
