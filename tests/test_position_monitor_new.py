@@ -578,6 +578,63 @@ class TestCheckPartialTp:
         monitor._api.place_exchange_sl_tp.assert_awaited_once()
 
     @pytest.mark.asyncio
+    async def test_live_trading_create_order_fails_and_restore_fails_alerts(self):
+        """create_order AND the SL/TP restore both fail → Telegram critical alert."""
+        cfg = _make_cfg(paper=False, partial_tp_trigger=0.6, partial_tp_fraction=0.5)
+        monitor = _make_monitor(cfg=cfg)
+        monitor._api.create_order = AsyncMock(side_effect=Exception("order failed"))
+        monitor._api.place_exchange_sl_tp = AsyncMock(
+            side_effect=Exception("restore failed")
+        )
+        pos = _open_pos(
+            side="buy",
+            entry=50000,
+            tp=55000,
+            sl=48000,
+            qty=0.1,
+            exchange_sl_id="sl_123",
+            exchange_tp_id="tp_456",
+        )
+        lock = asyncio.Lock()
+        monitored = {"BTC/USDT": dict(pos)}
+        with patch("src.position_monitor.Config", cfg):
+            await monitor._check_partial_tp("BTC/USDT", pos, 53500.0, monitored, lock)
+        monitor._telegram.notify.assert_awaited_once()
+        msg = monitor._telegram.notify.await_args.args[0]
+        assert "БЕЗ защиты" in msg
+
+    @pytest.mark.asyncio
+    async def test_live_trading_reprice_remaining_volume_fails_alerts(self):
+        """Partial close succeeds but re-placing SL/TP for the remainder fails."""
+        cfg = _make_cfg(paper=False, partial_tp_trigger=0.6, partial_tp_fraction=0.5)
+        monitor = _make_monitor(cfg=cfg)
+        monitor._api.place_exchange_sl_tp = AsyncMock(
+            side_effect=Exception("re-place failed")
+        )
+        pos = _open_pos(
+            side="buy",
+            entry=50000,
+            tp=55000,
+            sl=48000,
+            qty=0.1,
+            exchange_sl_id="sl_123",
+            exchange_tp_id="tp_456",
+        )
+        lock = asyncio.Lock()
+        monitored = {"BTC/USDT": dict(pos)}
+        with patch("src.position_monitor.Config", cfg):
+            result = await monitor._check_partial_tp(
+                "BTC/USDT", pos, 53500.0, monitored, lock
+            )
+        # Partial close still happened despite the re-place failure
+        assert result["partial_tp_triggered"] is True
+        # Only the critical unprotected alert — the reassuring "SL → breakeven"
+        # success message must not also fire, that would contradict it.
+        monitor._telegram.notify.assert_awaited_once()
+        msg = monitor._telegram.notify.await_args.args[0]
+        assert "БЕЗ защиты" in msg
+
+    @pytest.mark.asyncio
     async def test_no_tp_no_partial_tp(self):
         """If tp=0, partial TP should not trigger."""
         cfg = _make_cfg(paper=True, partial_tp_trigger=0.6, partial_tp_fraction=0.5)
@@ -608,6 +665,81 @@ class TestCheckPartialTp:
             )
         # With PARTIAL_TP_ENABLED=None → bool(None)=False → disabled → returns pos
         assert result is pos
+
+
+# ===========================================================================
+# close_losers_tighten_winners (hard drawdown protection)
+# ===========================================================================
+
+
+class TestCloseLosersTightenWinners:
+
+    @pytest.mark.asyncio
+    async def test_live_winner_tighten_success_sends_breakeven_message(self):
+        cfg = _make_cfg(paper=False)
+        monitor = _make_monitor(cfg=cfg)
+        pos = _open_pos(
+            side="buy",
+            entry=50000,
+            sl=48000,
+            tp=55000,
+            qty=0.1,
+            exchange_sl_id="sl_1",
+            exchange_tp_id="tp_1",
+        )
+        lock = asyncio.Lock()
+        monitored = {"BTC/USDT": dict(pos)}
+        with patch("src.position_monitor.Config", cfg):
+            await monitor.close_losers_tighten_winners(
+                monitored, lock, {"BTC/USDT": 51000.0}
+            )
+        assert monitored["BTC/USDT"]["stop_loss"] == pytest.approx(50000.0)
+        monitor._telegram.notify.assert_awaited_once()
+        msg = monitor._telegram.notify.await_args.args[0]
+        assert "breakeven" in msg
+        assert "БЕЗ защиты" not in msg
+
+    @pytest.mark.asyncio
+    async def test_live_winner_tighten_failure_alerts_unprotected(self):
+        cfg = _make_cfg(paper=False)
+        monitor = _make_monitor(cfg=cfg)
+        monitor._api.place_exchange_sl_tp = AsyncMock(
+            side_effect=Exception("exchange down")
+        )
+        pos = _open_pos(
+            side="buy",
+            entry=50000,
+            sl=48000,
+            tp=55000,
+            qty=0.1,
+            exchange_sl_id="sl_1",
+            exchange_tp_id="tp_1",
+        )
+        lock = asyncio.Lock()
+        monitored = {"BTC/USDT": dict(pos)}
+        with patch("src.position_monitor.Config", cfg):
+            await monitor.close_losers_tighten_winners(
+                monitored, lock, {"BTC/USDT": 51000.0}
+            )
+        monitor._telegram.notify.assert_awaited_once()
+        msg = monitor._telegram.notify.await_args.args[0]
+        assert "БЕЗ защиты" in msg
+
+    @pytest.mark.asyncio
+    async def test_losing_position_closed_at_market(self):
+        cfg = _make_cfg(paper=False)
+        monitor = _make_monitor(cfg=cfg)
+        pos = _open_pos(side="buy", entry=50000, sl=48000, tp=55000, qty=0.1)
+        lock = asyncio.Lock()
+        monitored = {"BTC/USDT": dict(pos)}
+        with patch("src.position_monitor.Config", cfg):
+            await monitor.close_losers_tighten_winners(
+                monitored, lock, {"BTC/USDT": 49000.0}
+            )
+        monitor._api.create_order.assert_awaited_once_with(
+            "BTC/USDT", "market", "sell", 0.1, lock_suffix="close"
+        )
+        assert "BTC/USDT" not in monitored
 
 
 # ===========================================================================

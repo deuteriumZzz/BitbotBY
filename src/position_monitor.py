@@ -400,6 +400,7 @@ class PositionMonitor:
                     side,
                     entry,
                 )
+                unprotected = False
                 if not Config.PAPER_TRADING:
                     for oid in filter(
                         None, [pos.get("exchange_sl_id"), pos.get("exchange_tp_id")]
@@ -418,15 +419,28 @@ class PositionMonitor:
                                 monitored[sym]["exchange_sl_id"] = new_sl_id
                                 monitored[sym]["exchange_tp_id"] = new_tp_id
                     except Exception as exc:
-                        logger.warning("Tighten SL for %s failed: %s", sym, exc)
+                        logger.critical(
+                            "Tighten SL for %s failed — old SL/TP already cancelled, "
+                            "position has NO exchange-side protection: %s",
+                            sym,
+                            exc,
+                        )
+                        unprotected = True
                 else:
                     async with lock:
                         if sym in monitored and monitored[sym] is not None:
                             monitored[sym]["stop_loss"] = entry
-                await self._telegram.notify(
-                    f"🔒 *{sym}* [{side}]: SL перенесён на breakeven"
-                    f" ${entry:.4f} (hard drawdown protection)"
-                )
+                if unprotected:
+                    await self._telegram.notify(
+                        f"🚨 *{sym}* [{side}]: не удалось выставить SL/TP на "
+                        f"breakeven — позиция БЕЗ защиты на бирже! "
+                        f"Требуется ручное вмешательство."
+                    )
+                else:
+                    await self._telegram.notify(
+                        f"🔒 *{sym}* [{side}]: SL перенесён на breakeven"
+                        f" ${entry:.4f} (hard drawdown protection)"
+                    )
 
     # ── Circuit-breaker persistence ───────────────────────────────────────────
 
@@ -500,6 +514,7 @@ class PositionMonitor:
         close_side = "sell" if side == "buy" else "buy"
         new_sl_id: str | None = None
         new_tp_id: str | None = None
+        remaining_unprotected = False
         if not Config.PAPER_TRADING:
             # Отменяем биржевые SL/TP перед частичным закрытием —
             # иначе биржа попытается закрыть полный объём при достижении TP.
@@ -535,6 +550,11 @@ class PositionMonitor:
                         logger.critical(
                             "Partial TP: restore SL/TP for %s failed: %s", sym, re_exc
                         )
+                        await self._telegram.notify(
+                            f"🚨 *{sym}*: не удалось восстановить SL/TP после "
+                            f"неудачного partial TP — позиция БЕЗ защиты на бирже! "
+                            f"Требуется ручное вмешательство."
+                        )
                 return pos
             # Выставляем новые SL (breakeven) и TP для оставшегося объёма
             tp_price = float(pos.get("take_profit") or 0)
@@ -544,8 +564,17 @@ class PositionMonitor:
                         sym, close_side, new_qty, entry, tp_price
                     )
                 except Exception as exc:
-                    logger.warning(
-                        "Partial TP: re-place SL/TP for %s failed: %s", sym, exc
+                    logger.critical(
+                        "Partial TP: re-place SL/TP for %s failed — remaining "
+                        "position has NO exchange-side protection: %s",
+                        sym,
+                        exc,
+                    )
+                    remaining_unprotected = True
+                    await self._telegram.notify(
+                        f"🚨 *{sym}*: partial TP закрыт, но новый SL/TP на "
+                        f"оставшийся объём не выставлен — позиция БЕЗ защиты "
+                        f"на бирже! Требуется ручное вмешательство."
                     )
 
         async with lock:
@@ -565,10 +594,13 @@ class PositionMonitor:
             partial_qty,
             entry,
         )
-        await self._telegram.notify(
-            f"Partial TP *{sym}*: closed {fraction:.0%},"
-            f" SL → breakeven ${entry:.4f}"
-        )
+        # При remaining_unprotected критический алерт уже отправлен выше —
+        # не дублируем его успокаивающим сообщением про "SL → breakeven".
+        if not remaining_unprotected:
+            await self._telegram.notify(
+                f"Partial TP *{sym}*: closed {fraction:.0%},"
+                f" SL → breakeven ${entry:.4f}"
+            )
         return {  # type: ignore[return-value]
             **pos,
             "qty": new_qty,

@@ -22,6 +22,7 @@ from src.constants import REDIS_TTL_MARKET_DATA, SILENT_DEATH_ALERT_COOLDOWN
 from src.correlation_filter import CorrelationFilter
 from src.cycle import CycleRunner
 from src.data_loader import DataLoader
+from src.funding_arb_detector import FundingArbDetector
 from src.health_server import cycles_counter
 from src.logger import _SecretFilter
 from src.macro_calendar import MacroCalendar
@@ -210,6 +211,7 @@ class TradingBot:
             get_current_regime=lambda: self._current_regime,
         )
         self._market_context = MarketContext()
+        self._funding_arb_detector = FundingArbDetector()
         # УЛУЧШЕНИЕ 7: макро-событийный blackout фильтр
         self._macro_calendar = MacroCalendar()
         self._season_detector = SeasonDetector()
@@ -1097,6 +1099,20 @@ class TradingBot:
         )
         return regimes
 
+    async def _check_funding_arb(self, market_ctx_map: Dict[str, Any]) -> None:
+        """Алертит в Telegram funding arb-возможности (delta-neutral, не сделка).
+
+        Не влияет на торговые решения — только уведомление, funding_rate
+        уже вычислен для market_context, здесь просто переиспользуется.
+        """
+        for sym, ctx in market_ctx_map.items():
+            funding_rate = ctx.get("funding_rate")
+            if funding_rate is None:
+                continue
+            await self._funding_arb_detector.check_and_alert(
+                sym, funding_rate, self.telegram
+            )
+
     async def _generate_signals(
         self,
         snapshots: list,
@@ -1752,6 +1768,7 @@ class TradingBot:
                         except Exception as _mc_exc:
                             logger.warning("MarketContext fetch failed: %s", _mc_exc)
                             _market_ctx_map = {}
+                        await self._check_funding_arb(_market_ctx_map)
                         _mon_recs = await self._generate_signals(
                             _mon_snaps,
                             balance,
@@ -1793,6 +1810,7 @@ class TradingBot:
                 except Exception as _mc_exc:
                     logger.warning("MarketContext fetch failed: %s", _mc_exc)
                     _market_ctx_map = {}
+                await self._check_funding_arb(_market_ctx_map)
                 # Умный предфильтр: из 100 монет выбираем 30 лучших кандидатов
                 # по быстрым метрикам — до отправки в AI
                 _ai_limit = int(os.getenv("AI_MAX_SYMBOLS", "30"))
