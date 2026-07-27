@@ -467,6 +467,15 @@ class SignalCombiner:
             if chronos_signal not in (None, "off", "neutral"):
                 fired["chronos"] = chronos_signal
 
+            # Тег действующего рыночного профиля на момент входа — нужен для
+            # п.6 роадмапа: сопоставить реализованный PnL/Sharpe с периодами
+            # bluechip/altcoin/meme, а не полагаться на голый счётчик
+            # срабатываний season-сигнала (см. paper_alpha_report.py).
+            if self._rc is not None:
+                profile = self._rc.get_market_profile()
+                if profile:
+                    fired["profile"] = profile
+
             if conf < min_conf:
                 self.logger.info(
                     "Context filter dropped %s %s: conf %.3f→%.3f < %.2f "

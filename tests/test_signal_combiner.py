@@ -734,13 +734,13 @@ class TestHybrid:
 
 
 class TestApplyMarketContextFilter:
-    def _filter(self, recs, ctx, min_conf=0.65):
+    def _filter(self, recs, ctx, min_conf=0.65, rc=None):
         mock_ai = MagicMock()
         cfg = _make_config(MIN_SIGNAL_CONFIDENCE=min_conf)
         with patch("src.signal_combiner.SACSignal"), patch(
             "src.signal_combiner.Config", cfg
         ):
-            c = SignalCombiner(ai=mock_ai)
+            c = SignalCombiner(ai=mock_ai, rc=rc)
         with patch("src.signal_combiner.Config", cfg):
             return c._apply_market_context_filter(recs, ctx)
 
@@ -991,6 +991,44 @@ class TestApplyMarketContextFilter:
         recs = [make_rec(action="sell", confidence=0.93)]
         result = self._filter(recs, {"funding_signal": "long_overheated"})
         assert result[0]["confidence"] <= 0.95
+
+    # ── profile tag (п.6 роадмапа) ───────────────────────────────────────────
+
+    def test_profile_tagged_in_context_flags_when_rc_present(self):
+        import json
+
+        rc = MagicMock()
+        rc.get_market_profile.return_value = "meme"
+        recs = [make_rec(action="buy", confidence=0.80)]
+        result = self._filter(recs, {}, rc=rc)
+        flags = json.loads(result[0]["context_flags"])
+        assert flags["profile"] == "meme"
+
+    def test_no_profile_tag_without_rc(self):
+        import json
+
+        recs = [make_rec(action="buy", confidence=0.80)]
+        result = self._filter(recs, {}, rc=None)
+        flags = json.loads(result[0]["context_flags"]) if result[0]["context_flags"] else {}
+        assert "profile" not in flags
+
+    def test_no_profile_tag_when_rc_returns_empty(self):
+        rc = MagicMock()
+        rc.get_market_profile.return_value = ""
+        recs = [make_rec(action="buy", confidence=0.80)]
+        result = self._filter(recs, {}, rc=rc)
+        assert result[0]["context_flags"] == ""
+
+    def test_profile_tag_combined_with_other_fired_flags(self):
+        import json
+
+        rc = MagicMock()
+        rc.get_market_profile.return_value = "altcoin"
+        recs = [make_rec(action="buy", confidence=0.80)]
+        result = self._filter(recs, {"funding_signal": "long_overheated"}, rc=rc)
+        flags = json.loads(result[0]["context_flags"])
+        assert flags["profile"] == "altcoin"
+        assert flags["funding"] == "long_overheated"
 
 
 # ---------------------------------------------------------------------------
