@@ -340,7 +340,26 @@ def _kb_backtest_menu() -> "InlineKeyboardMarkup":
                     "📐 Live vs Backtest", callback_data="live_divergence_now"
                 )
             ],
+            [
+                InlineKeyboardButton(
+                    "🤖 AI-изоляция (тратит AI-лимиты)",
+                    callback_data="ai_isolation_menu",
+                )
+            ],
             [InlineKeyboardButton("« Настройки", callback_data="settings")],
+        ]
+    )
+
+
+def _kb_ai_isolation_confirm() -> "InlineKeyboardMarkup":
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "✅ Запустить (~150 AI-вызовов)", callback_data="ai_isolation_now"
+                ),
+                InlineKeyboardButton("⏭ Отмена", callback_data="ai_isolation_skip"),
+            ]
         ]
     )
 
@@ -835,6 +854,7 @@ class TelegramCommander:
         self._backtesting = False
         self._alpha_report_running = False
         self._live_divergence_running = False
+        self._ai_isolation_running = False
         self._background_tasks: set = set()
 
     def register(self) -> None:
@@ -1866,6 +1886,29 @@ class TelegramCommander:
             )
         finally:
             self._live_divergence_running = False
+
+    async def _run_ai_isolation_backtest(self) -> None:
+        """Запускает ai_signal_isolation_backtest.py — изолирует вклад AI(LLM)
+        от голых TA-индикаторов. В отличие от остальных отчётов в этом меню,
+        делает реальные (хоть и ограниченные, см. AIB_SAMPLES) вызовы AI-провайдера
+        — расходует его лимиты/квоту."""
+        try:
+            ok, out = await self._run_report_script("ai_signal_isolation_backtest.py")
+            if not ok:
+                await self._notifier.notify(
+                    f"❌ *AI-изоляция упала*\n```{out}```"
+                )
+                return
+            await self._notifier.notify(
+                "🤖 *AI-изоляция (вклад AI-слоя отдельно от индикаторов)*\n```"
+                f"{self._truncate_report(out)}```"
+            )
+        except Exception as e:
+            await self._notifier.notify(
+                f"❌ AI-изоляция: непредвиденная ошибка\n`{e}`"
+            )
+        finally:
+            self._ai_isolation_running = False
 
     async def _run_sac_training(self) -> None:
         """Запускает train_sac.py как subprocess, не блокируя event loop."""
@@ -2910,7 +2953,9 @@ class TelegramCommander:
                 "закрытых paper-сделках (не симуляция). Секунды.\n\n"
                 "📐 *Live vs Backtest* — совпадает ли реальная цена исполнения\n"
                 "с тем, что предсказывала модель импакта. Секунды.\n\n"
-                "Бот продолжает торговать во всех трёх случаях.",
+                "🤖 *AI-изоляция* — даёт ли AI-слой эдж отдельно от индикаторов.\n"
+                "⚠️ Тратит реальные лимиты AI-провайдера. Несколько минут.\n\n"
+                "Бот продолжает торговать во всех случаях.",
                 _kb_backtest_menu(),
             )
 
@@ -2966,6 +3011,46 @@ class TelegramCommander:
             task = _asyncio.ensure_future(self._run_live_divergence())
             self._background_tasks.add(task)
             task.add_done_callback(self._background_tasks.discard)
+
+        elif data == "ai_isolation_menu":
+            await self._edit(
+                query,
+                "🤖 *AI-изоляция (вклад AI-слоя отдельно от индикаторов)*\n\n"
+                "Прогоняет отдельный бэктест, который вызывает настоящего\n"
+                "AI-провайдера (~150 вызовов по умолчанию), чтобы понять,\n"
+                "даёт ли AI-слой эдж, которого нет у голых индикаторов.\n\n"
+                "⚠️ *В отличие от остальных отчётов в этом меню — тратит\n"
+                "реальные лимиты/квоту твоего AI-провайдера.*\n\n"
+                "⏱ Обычно несколько минут, зависит от провайдера.\n"
+                "Бот продолжает торговать.",
+                _kb_ai_isolation_confirm(),
+            )
+
+        elif data == "ai_isolation_now":
+            if self._ai_isolation_running:
+                await query.answer("⏳ Уже выполняется...", show_alert=True)
+                return
+            self._ai_isolation_running = True
+            await self._edit(
+                query,
+                "⏳ *AI-изоляция запущена*\n\n"
+                "Расходует лимиты AI-провайдера. Бот продолжает торговать.\n"
+                "Пришлю результат когда готово.",
+                _kb_after_action(),
+            )
+            import asyncio as _asyncio
+
+            task = _asyncio.ensure_future(self._run_ai_isolation_backtest())
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
+
+        elif data == "ai_isolation_skip":
+            await self._edit(
+                query,
+                "⏭ *AI-изоляция отменена*\n\n"
+                "Вернуться можно в 📊 Бэктест и отчёты.",
+                _kb_backtest_menu(),
+            )
 
         # ── Таймаут подтверждения ─────────────────────────────────────────────
         elif data == "timeout_menu":
