@@ -757,14 +757,16 @@ class MarketContext:
                             continue
             except ImportError:
                 pattern = r"<tr[^>]*>.*?</tr>"
-                rows = re.findall(pattern, html, re.DOTALL | re.IGNORECASE)
-                for row in reversed(rows):
-                    cells = re.findall(
-                        r"<t[dh][^>]*>(.*?)</t[dh]>", row, re.DOTALL | re.IGNORECASE
+                row_htmls = re.findall(pattern, html, re.DOTALL | re.IGNORECASE)
+                for row_html in reversed(row_htmls):
+                    cell_htmls = re.findall(
+                        r"<t[dh][^>]*>(.*?)</t[dh]>",
+                        row_html,
+                        re.DOTALL | re.IGNORECASE,
                     )
-                    if not cells:
+                    if not cell_htmls:
                         continue
-                    raw = re.sub(r"<[^>]+>", "", cells[-1]).strip()
+                    raw = re.sub(r"<[^>]+>", "", cell_htmls[-1]).strip()
                     raw = raw.replace(",", "").replace("(", "-").replace(")", "")
                     try:
                         total = float(raw)
