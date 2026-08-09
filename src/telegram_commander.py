@@ -603,6 +603,21 @@ _STRAT_SHORT = {
     "breakout": "Break🔴",
     "mean_reversion": "Mean↩",
     "trend_following": "Trend🟢",
+    "volume_spike": "VolSpk🔴",
+    "volume_spike_bluechip": "VolBC",
+    "volume_spike_altcoin": "VolAlt🔴",
+    "volume_spike_meme": "VolMeme🔴",
+    "momentum_burst": "MomB🔴",
+    "pump_exit": "PumpX🔴",
+    "sentiment": "Sent🔴",
+    # ICT tier-1
+    "support_resistance": "S/R",
+    "fibonacci_retracement": "Fib",
+    "cvd_divergence": "CVD🔴",
+    "fair_value_gap": "FVG",
+    "inverse_fair_value_gap": "IFVG🔴",
+    "liquidity_sweep": "Sweep🔴",
+    "amd": "AMD🔴",
 }
 
 
