@@ -813,6 +813,11 @@ class RuntimeConfig:
                 self.enable_strategy(strat_name)
             else:
                 self.disable_strategy(strat_name)
+        # Базовый volume_spike (порог из Config, не из профиля) дублирует
+        # выбранный выше профильный вариант при любом активном профиле —
+        # держим его выключенным, чтобы в турнире recommend_strategy_local
+        # конкурировал ровно один volume_spike-вариант, а не два.
+        self.disable_strategy("volume_spike")
         for strat_name in _MEME_ONLY:
             if name == "meme":
                 self.enable_strategy(strat_name)

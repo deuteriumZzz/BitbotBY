@@ -602,14 +602,18 @@ class VolumeSpikeStrategy(BaseStrategy):
         if ratio < threshold:
             return {"action": "hold", "confidence": 0.40}
 
-        # Уверенность растёт пропорционально силе спайка (cap 0.90)
-        spike_bonus = min((ratio - threshold) * 0.05, 0.15)
+        # Уверенность считается от АБСОЛЮТНОГО ratio, а не от (ratio -
+        # threshold): иначе вариант с более низким порогом систематически
+        # получал бы равную или бОльшую confidence при любом одинаковом
+        # ratio и всегда побеждал бы в турнире recommend_strategy_local —
+        # смысл более строгих профильных порогов (altcoin/meme) обнулялся
+        # бы. Теперь одинаковый по силе реальный спайк даёт одинаковую
+        # confidence независимо от того, какой профильный вариант его поймал.
+        conf = round(min(0.65 + (ratio - 1.0) * 0.05, 0.90), 2)
 
         if close > ema_s and rsi < 70:
-            conf = round(min(0.75 + spike_bonus, 0.90), 2)
             return {"action": "buy", "confidence": conf, "price": close}
         if close < ema_s and rsi > 30:
-            conf = round(min(0.75 + spike_bonus, 0.90), 2)
             return {"action": "sell", "confidence": conf, "price": close}
         return {"action": "hold", "confidence": 0.45}
 
