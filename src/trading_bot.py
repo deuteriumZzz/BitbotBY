@@ -42,7 +42,7 @@ from src.runtime_config import RuntimeConfig
 from src.season_detector import SeasonDetector
 from src.sentiment_poller import SentimentPoller
 from src.signal_combiner import SignalCombiner
-from src.strategies import TradingStrategy, create_strategy
+from src.strategies import TradingStrategy
 from src.telegram_commander import (
     TelegramCommander,
     _kb_main,
@@ -1166,23 +1166,20 @@ class TradingBot:
             for snap in snapshots:
                 sym = snap["symbol"]
                 sym_regime = regimes.get(sym, self._current_regime)
-                strat, conf = self.combiner.ai.recommend_strategy_local(snap)
-                # В боковом рынке не используем трендовые стратегии
-                if sym_regime == "ranging" and strat in _TRENDING_STRATEGIES:
-                    logger.debug("Skip %s strat=%s in ranging regime", sym, strat)
+                df = market_data.get(sym)
+                if df is None or df.empty:
                     continue
+                # В боковом рынке трендовые стратегии исключаются из кандидатов
+                # заранее, чтобы фолбэк мог выбрать другую подходящую стратегию
+                # вместо того чтобы пропускать символ целиком.
+                exclude = _TRENDING_STRATEGIES if sym_regime == "ranging" else None
+                strat, conf, sig = self.combiner.ai.recommend_strategy_local(
+                    df, exclude=exclude
+                )
                 _min_conf = self._runtime_config.get_signal_confidence(
                     Config.PAPER_TRADING
                 )
                 if conf >= _min_conf:
-                    df = market_data.get(sym)
-                    sig = {}
-                    if df is not None and not df.empty:
-                        try:
-                            _local_strat = create_strategy(strat)
-                            sig = _local_strat.generate_signal(df)
-                        except (ValueError, KeyError):
-                            pass
                     action = sig.get("action", "hold")
                     _price = float(snap.get("price") or 0.0)
                     _sl_pct = self._runtime_config.get_sl_percent()

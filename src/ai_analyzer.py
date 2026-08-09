@@ -4,8 +4,10 @@ import json
 import logging
 from typing import Any, Dict, List, Tuple
 
+import pandas as pd
+
 from config import Config
-from src.strategies import get_all_strategies
+from src.strategies import STRATEGY_REGISTRY, create_strategy, get_all_strategies
 
 logger = logging.getLogger(__name__)
 
@@ -723,60 +725,43 @@ class AIAnalyzer:
         except Exception:
             pass
 
-    def recommend_strategy_local(self, snapshot: Dict[str, Any]) -> Tuple[str, float]:
+    def recommend_strategy_local(
+        self, data: pd.DataFrame, exclude: set | None = None
+    ) -> Tuple[str, float, Dict[str, Any]]:
         """
-        Локальный выбор стратегии без AI (fallback).
+        Локальный выбор стратегии без AI (fallback) — реальный перебор реестра.
 
-        Если выбранная по индикаторам стратегия отключена через Telegram
-        (RuntimeConfig.get_disabled_strategies()) — возвращает ("hold", 0.0)
-        вместо того, чтобы всё равно торговать по ней: local fallback раньше
-        не проверял этот список вообще.
+        Запускает generate_signal() каждой невыключенной стратегии из
+        STRATEGY_REGISTRY на настоящих OHLCV-данных и берёт buy/sell-сигнал
+        с максимальной confidence. Раньше выбор шёл по захардкоженной
+        индикаторной эвристике на 7 фиксированных имён — 8 из 16
+        зарегистрированных стратегий (macd_crossover, scalping, мем-профиль,
+        profile-варианты volume_spike) были физически недостижимы в этом
+        фолбэке, сколько бы их ни включали через Telegram-чекбоксы. Каждая
+        стратегия сама защищена от нехватки данных (см. BaseStrategy._last
+        default), поэтому лишний try/except здесь не нужен.
 
-        :param snapshot: Снэпшот из MarketScanner.build_snapshot().
-        :return: (strategy_name, confidence)
+        :param data: DataFrame с OHLCV + индикаторами для одного символа.
+        :param exclude: Дополнительные имена для исключения (например,
+            трендовые стратегии в боковом режиме) — поверх Telegram-списка
+            отключённых.
+        :return: (strategy_name, confidence, signal_dict); ("hold", 0.0, {})
+            если ни одна включённая стратегия не дала buy/sell.
         """
-        strat, conf = self._recommend_strategy_local_raw(snapshot)
         _rc = getattr(self, "_runtime_config", None)
         disabled = _rc.get_disabled_strategies() if _rc is not None else set()
-        if strat in disabled:
-            return "hold", 0.0
-        return strat, conf
+        disabled = disabled | (exclude or set())
 
-    def _recommend_strategy_local_raw(
-        self, snapshot: Dict[str, Any]
-    ) -> Tuple[str, float]:
-        """Считает выбор стратегии по индикаторам, без учёта disabled-списка."""
-        ind = snapshot.get("indicators", {})
-        rsi = ind.get("rsi", 50)
-        bb_width = ind.get("bb_width", 0.04)
-        vol_ratio = snapshot.get("volume_ratio", 1.0)
-        trend = ind.get("trend", "sideways")
-        macd_dir = ind.get("macd", "bearish")
-        bb_pos = ind.get("bb_position", "middle")
-
-        if bb_width > 0.08 and vol_ratio > 2.0:
-            return "breakout", 0.72
-
-        if bb_pos == "near_lower" and rsi < 35:
-            return "bollinger_bands", 0.75
-        if bb_pos == "near_upper" and rsi > 65:
-            return "bollinger_bands", 0.75
-
-        if trend == "uptrend" and macd_dir == "bullish":
-            return "swing_trading" if rsi < 60 else "trend_following", 0.70
-
-        if trend == "downtrend" and macd_dir == "bearish":
-            return "swing_trading" if rsi > 40 else "trend_following", 0.70
-
-        if rsi < 30:
-            return "rsi_momentum", 0.78
-        if rsi > 70:
-            return "rsi_momentum", 0.78
-
-        if vol_ratio > 3.0:
-            return "volume_spike", 0.68
-
-        if trend == "sideways" and 38 <= rsi <= 62:
-            return "mean_reversion", 0.65
-
-        return "ema_crossover", 0.60
+        best_name = "hold"
+        best_conf = 0.0
+        best_sig: Dict[str, Any] = {}
+        for name in STRATEGY_REGISTRY:
+            if name in disabled:
+                continue
+            sig = create_strategy(name).generate_signal(data)
+            if sig.get("action") not in ("buy", "sell"):
+                continue
+            conf = sig.get("confidence", 0.0)
+            if conf > best_conf:
+                best_name, best_conf, best_sig = name, conf, sig
+        return best_name, best_conf, best_sig

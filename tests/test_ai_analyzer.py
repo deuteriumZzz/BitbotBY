@@ -4,7 +4,10 @@ import json
 import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pandas as pd
 import pytest
+
+from src.strategies import STRATEGY_REGISTRY
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -701,112 +704,103 @@ class TestRecommendStrategyLocal:
     def analyzer(self, no_key_analyzer):
         self.ai = no_key_analyzer
 
-    def _snap(self, **kwargs):
-        """Строит минимальный снапшот с заданными переопределениями индикаторов."""
-        indicators = {
-            "rsi": kwargs.pop("rsi", 50),
-            "bb_width": kwargs.pop("bb_width", 0.04),
-            "trend": kwargs.pop("trend", "sideways"),
-            "macd": kwargs.pop("macd", "neutral"),
-            "bb_position": kwargs.pop("bb_position", "middle"),
-        }
-        return {
-            "indicators": indicators,
-            "volume_ratio": kwargs.pop("volume_ratio", 1.0),
-            **kwargs,
-        }
+    @staticmethod
+    def _fake_registry(signals: dict) -> dict:
+        """Строит {name: class} реестр с захардкоженным generate_signal()."""
+        registry = {}
+        for name, sig in signals.items():
+            registry[name] = type(
+                "Fake",
+                (),
+                {"generate_signal": lambda self, data, _sig=sig: dict(_sig)},
+            )
+        return registry
 
-    def test_local_breakout(self):
-        snap = self._snap(bb_width=0.09, volume_ratio=2.5)
-        strategy, conf = self.ai.recommend_strategy_local(snap)
-        assert strategy == "breakout"
-        assert conf == 0.72
+    def _patch_registry(self, registry: dict):
+        return (
+            patch("src.ai_analyzer.STRATEGY_REGISTRY", registry),
+            patch(
+                "src.ai_analyzer.create_strategy",
+                side_effect=lambda name: registry[name](),
+            ),
+        )
 
-    def test_local_bb_near_lower(self):
-        snap = self._snap(bb_position="near_lower", rsi=30)
-        strategy, conf = self.ai.recommend_strategy_local(snap)
-        assert strategy == "bollinger_bands"
-        assert conf == 0.75
+    def test_picks_highest_confidence_actionable_signal(self):
+        # "c" holds highest confidence overall, but action=hold — must be
+        # ignored in favour of the strongest actual buy/sell.
+        registry = self._fake_registry(
+            {
+                "a": {"action": "buy", "confidence": 0.60},
+                "b": {"action": "sell", "confidence": 0.85},
+                "c": {"action": "hold", "confidence": 0.99},
+            }
+        )
+        p1, p2 = self._patch_registry(registry)
+        with p1, p2:
+            strat, conf, sig = self.ai.recommend_strategy_local(pd.DataFrame())
+        assert strat == "b"
+        assert conf == 0.85
+        assert sig["action"] == "sell"
 
-    def test_local_bb_near_upper(self):
-        snap = self._snap(bb_position="near_upper", rsi=70)
-        strategy, conf = self.ai.recommend_strategy_local(snap)
-        assert strategy == "bollinger_bands"
-        assert conf == 0.75
+    def test_all_hold_returns_hold(self):
+        registry = self._fake_registry({"a": {"action": "hold", "confidence": 0.99}})
+        p1, p2 = self._patch_registry(registry)
+        with p1, p2:
+            strat, conf, sig = self.ai.recommend_strategy_local(pd.DataFrame())
+        assert (strat, conf, sig) == ("hold", 0.0, {})
 
-    def test_local_uptrend_bullish_low_rsi(self):
-        snap = self._snap(trend="uptrend", macd="bullish", rsi=55)
-        strategy, conf = self.ai.recommend_strategy_local(snap)
-        assert strategy == "swing_trading"
-        assert conf == 0.70
-
-    def test_local_uptrend_bullish_high_rsi(self):
-        snap = self._snap(trend="uptrend", macd="bullish", rsi=65)
-        strategy, conf = self.ai.recommend_strategy_local(snap)
-        assert strategy == "trend_following"
-        assert conf == 0.70
-
-    def test_local_downtrend_bearish_high_rsi(self):
-        snap = self._snap(trend="downtrend", macd="bearish", rsi=45)
-        strategy, conf = self.ai.recommend_strategy_local(snap)
-        assert strategy == "swing_trading"
-        assert conf == 0.70
-
-    def test_local_downtrend_bearish_low_rsi(self):
-        snap = self._snap(trend="downtrend", macd="bearish", rsi=35)
-        strategy, conf = self.ai.recommend_strategy_local(snap)
-        assert strategy == "trend_following"
-        assert conf == 0.70
-
-    def test_local_rsi_oversold(self):
-        snap = self._snap(rsi=25)
-        strategy, conf = self.ai.recommend_strategy_local(snap)
-        assert strategy == "rsi_momentum"
-        assert conf == 0.78
-
-    def test_local_rsi_overbought(self):
-        snap = self._snap(rsi=75)
-        strategy, conf = self.ai.recommend_strategy_local(snap)
-        assert strategy == "rsi_momentum"
-        assert conf == 0.78
-
-    def test_local_default(self):
-        # sideways + rsi=50 → mean_reversion (боковик с нейтральным RSI)
-        snap = self._snap()
-        strategy, conf = self.ai.recommend_strategy_local(snap)
-        assert strategy == "mean_reversion"
-        assert conf == 0.65
-
-    def test_local_missing_indicators(self):
-        # Empty snapshot → defaults: trend=sideways, rsi=50 → mean_reversion
-        strategy, conf = self.ai.recommend_strategy_local({})
-        assert strategy == "mean_reversion"
-        assert conf == 0.65
-
-    def test_local_ema_crossover_pure_sideways(self):
-        # sideways + RSI вне диапазона 38-62 → ema_crossover
-        snap = self._snap(trend="sideways", rsi=35)
-        strategy, conf = self.ai.recommend_strategy_local(snap)
-        assert strategy == "ema_crossover"
-        assert conf == 0.60
-
-    def test_local_disabled_strategy_returns_hold(self):
-        # Без disabled-фильтра rsi=25 всегда выбрал бы rsi_momentum (см.
-        # test_local_rsi_oversold) — отключённая через Telegram стратегия
-        # не должна тихо продолжать торговать.
+    def test_disabled_strategy_via_telegram_is_skipped(self):
+        registry = self._fake_registry(
+            {
+                "a": {"action": "buy", "confidence": 0.90},
+                "b": {"action": "buy", "confidence": 0.50},
+            }
+        )
         self.ai._runtime_config = MagicMock()
-        self.ai._runtime_config.get_disabled_strategies.return_value = {"rsi_momentum"}
-        snap = self._snap(rsi=25)
-        strategy, conf = self.ai.recommend_strategy_local(snap)
-        assert strategy == "hold"
-        assert conf == 0.0
+        self.ai._runtime_config.get_disabled_strategies.return_value = {"a"}
+        p1, p2 = self._patch_registry(registry)
+        with p1, p2:
+            strat, conf, _ = self.ai.recommend_strategy_local(pd.DataFrame())
+        assert strat == "b"
+        assert conf == 0.50
 
-    def test_local_no_runtime_config_behaves_as_before(self):
-        # _runtime_config=None (дефолт) — поведение как до фикса.
-        snap = self._snap(rsi=25)
-        strategy, conf = self.ai.recommend_strategy_local(snap)
-        assert strategy == "rsi_momentum"
-        assert conf == 0.78
+    def test_exclude_param_removes_candidate(self):
+        registry = self._fake_registry(
+            {
+                "a": {"action": "buy", "confidence": 0.90},
+                "b": {"action": "buy", "confidence": 0.50},
+            }
+        )
+        p1, p2 = self._patch_registry(registry)
+        with p1, p2:
+            strat, conf, _ = self.ai.recommend_strategy_local(
+                pd.DataFrame(), exclude={"a"}
+            )
+        assert strat == "b"
+        assert conf == 0.50
+
+    def test_no_runtime_config_still_works(self):
+        # _runtime_config=None (дефолт) — не должно падать при отсутствии RC.
+        registry = self._fake_registry({"a": {"action": "buy", "confidence": 0.70}})
+        p1, p2 = self._patch_registry(registry)
+        with p1, p2:
+            strat, conf, _ = self.ai.recommend_strategy_local(pd.DataFrame())
+        assert strat == "a"
+        assert conf == 0.70
+
+    def test_real_registry_returns_structurally_valid_result(self):
+        # Интеграционный смоук-тест на настоящем STRATEGY_REGISTRY — все 16+
+        # стратегии (включая ранее недостижимые macd_crossover/scalping/
+        # мем-профиль) должны быть реально вызываемы без исключений.
+        from src.indicators import calculate_technical_indicators
+        from tests.conftest import make_ohlcv
+
+        df = calculate_technical_indicators(make_ohlcv(n=100, trend=0.002))
+        strat, conf, sig = self.ai.recommend_strategy_local(df)
+        assert strat == "hold" or strat in STRATEGY_REGISTRY
+        assert 0.0 <= conf <= 1.0
+        if strat != "hold":
+            assert sig["action"] in ("buy", "sell")
 
 
 # ---------------------------------------------------------------------------

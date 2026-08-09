@@ -8,7 +8,7 @@ Trend Following), реестр STRATEGY_REGISTRY и класс TradingStrategy-�
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Type
+from typing import Any, Dict, List, Optional, Tuple, Type
 
 import pandas as pd
 
@@ -851,6 +851,556 @@ class SentimentStrategy(BaseStrategy):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 15. SUPPORT / RESISTANCE (ICT tier-1)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class SupportResistanceStrategy(BaseStrategy):
+    """
+    Отскок от кластеризованных уровней поддержки/сопротивления.
+
+    В отличие от `breakout` (пробой 20-свечного хай/лоу), строит реальные
+    уровни через кластеризацию локальных свинг-хай/лоу за последние 60
+    свечей — уровень тем сильнее, чем больше раз цена его касалась. Сигнал
+    даётся на отскоке (не пробое) от сильного уровня с подтверждением RSI.
+    """
+
+    name = "support_resistance"
+    description = (
+        "Отскок от уровня поддержки/сопротивления, построенного кластеризацией "
+        "свинг-хай/лоу за 60 свечей. Сила уровня = число касаний."
+    )
+    recommended_timeframes = ["1h", "4h"]
+    risk_level = "medium"
+    market_type = "ranging"
+
+    _LOOKBACK = 60
+    _SWING_WINDOW = 3
+    _CLUSTER_TOL = 0.005
+    _TOUCH_TOL = 0.003
+
+    def _swing_levels(
+        self, window: pd.DataFrame, col: str, is_high: bool
+    ) -> List[float]:
+        w = self._SWING_WINDOW
+        n = len(window)
+        levels = []
+        for i in range(w, n - w):
+            local = window[col].iloc[i - w : i + w + 1]
+            val = window[col].iloc[i]
+            if is_high and val == local.max():
+                levels.append(float(val))
+            elif not is_high and val == local.min():
+                levels.append(float(val))
+        return levels
+
+    @staticmethod
+    def _cluster(levels: List[float], price: float, tol_pct: float) -> List[Any]:
+        """Группирует близкие уровни, возвращает [(средний_уровень, касания), ...]."""
+        if not levels:
+            return []
+        levels = sorted(levels)
+        tol = price * tol_pct
+        clusters: List[List[float]] = [[levels[0]]]
+        for lv in levels[1:]:
+            if lv - clusters[-1][-1] <= tol:
+                clusters[-1].append(lv)
+            else:
+                clusters.append([lv])
+        return [(sum(c) / len(c), len(c)) for c in clusters]
+
+    def generate_signal(self, data: pd.DataFrame) -> Dict[str, Any]:
+        if len(data) < self._LOOKBACK:
+            return {"action": "hold", "confidence": 0.50}
+
+        window = data.iloc[-self._LOOKBACK :]
+        close = self._last(data, "close")
+        rsi = self._last(data, "rsi", 50)
+
+        highs = self._cluster(
+            self._swing_levels(window, "high", True), close, self._CLUSTER_TOL
+        )
+        lows = self._cluster(
+            self._swing_levels(window, "low", False), close, self._CLUSTER_TOL
+        )
+        supports = [(lv, touches) for lv, touches in lows if lv < close]
+        resistances = [(lv, touches) for lv, touches in highs if lv > close]
+        touch_tol = close * self._TOUCH_TOL
+
+        if supports:
+            level, touches = max(supports, key=lambda x: x[1])
+            if close - level <= touch_tol and rsi < 45:
+                conf = round(min(0.55 + touches * 0.08, 0.88), 2)
+                return {"action": "buy", "confidence": conf, "price": close}
+
+        if resistances:
+            level, touches = max(resistances, key=lambda x: x[1])
+            if level - close <= touch_tol and rsi > 55:
+                conf = round(min(0.55 + touches * 0.08, 0.88), 2)
+                return {"action": "sell", "confidence": conf, "price": close}
+
+        return {"action": "hold", "confidence": 0.40}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 16. FIBONACCI RETRACEMENT (ICT tier-1)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class FibonacciRetracementStrategy(BaseStrategy):
+    """
+    Вход на откате к уровням Фибоначчи от последнего значимого свинга.
+
+    Определяет свинг-хай/лоу за последние 50 свечей, направление ноги — по
+    хронологии (какой экстремум сформировался раньше), затем ищет вход в
+    "золотой зоне" отката 50-61.8% с подтверждением разворота по RSI и
+    направлению последней свечи.
+    """
+
+    name = "fibonacci_retracement"
+    description = (
+        "Вход на откате в зону 50-61.8% Фибоначчи от последнего значимого "
+        "свинга, с подтверждением разворота по RSI. Требует тренда."
+    )
+    recommended_timeframes = ["1h", "4h", "1d"]
+    risk_level = "medium"
+    market_type = "trending"
+
+    _LOOKBACK = 50
+
+    def generate_signal(self, data: pd.DataFrame) -> Dict[str, Any]:
+        if len(data) < self._LOOKBACK:
+            return {"action": "hold", "confidence": 0.50}
+
+        window = data.iloc[-self._LOOKBACK :]
+        close = self._last(data, "close")
+        prev_close = self._prev(data, "close", close)
+        rsi = self._last(data, "rsi", 50)
+
+        high_pos = int(window["high"].values.argmax())
+        low_pos = int(window["low"].values.argmin())
+        swing_high = float(window["high"].iloc[high_pos])
+        swing_low = float(window["low"].iloc[low_pos])
+        diff = swing_high - swing_low
+        if diff <= 0:
+            return {"action": "hold", "confidence": 0.50}
+
+        uptrend_leg = low_pos < high_pos
+
+        if uptrend_leg:
+            level_50 = swing_high - diff * 0.5
+            level_618 = swing_high - diff * 0.618
+        else:
+            level_50 = swing_low + diff * 0.5
+            level_618 = swing_low + diff * 0.618
+        zone_lo, zone_hi = sorted((level_50, level_618))
+
+        if not (zone_lo <= close <= zone_hi):
+            return {"action": "hold", "confidence": 0.40}
+
+        if uptrend_leg and rsi < 55 and close >= prev_close:
+            depth = (swing_high - close) / diff
+            conf = round(0.60 + (depth - 0.5) / 0.118 * 0.22, 2)
+            return {"action": "buy", "confidence": conf, "price": close}
+
+        if not uptrend_leg and rsi > 45 and close <= prev_close:
+            depth = (close - swing_low) / diff
+            conf = round(0.60 + (depth - 0.5) / 0.118 * 0.22, 2)
+            return {"action": "sell", "confidence": conf, "price": close}
+
+        return {"action": "hold", "confidence": 0.45}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 17. CVD DIVERGENCE (ICT tier-1, приближённый — не тик-данные)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class CVDDivergenceStrategy(BaseStrategy):
+    """
+    Дивергенция кумулятивной дельты объёма (приближённый CVD).
+
+    Настоящий order-flow CVD требует тик-данных с классификацией
+    покупок/продаж на уровне сделок — в OHLCV-свечах их нет. Здесь дельта
+    свечи приближается направлением тела (+volume если close>open, -volume
+    если close<open) — грубее честного footprint-CVD, поэтому явно
+    помечено как приближение, а не тик-точный расчёт. Ищет классическую
+    дивергенцию: цена обновляет экстремум, а приближённый CVD — нет
+    (накопление/распределение против текущего движения цены).
+    """
+
+    name = "cvd_divergence"
+    description = (
+        "Дивергенция цены и приближённой кумулятивной дельты объёма "
+        "(по направлению тела свечи, не тик-данные). Разворотный сигнал."
+    )
+    recommended_timeframes = ["15m", "1h"]
+    risk_level = "high"
+    market_type = "any"
+
+    _LOOKBACK = 30
+
+    def generate_signal(self, data: pd.DataFrame) -> Dict[str, Any]:
+        if len(data) < self._LOOKBACK:
+            return {"action": "hold", "confidence": 0.50}
+
+        window = data.iloc[-self._LOOKBACK :]
+        close = self._last(data, "close")
+        rsi = self._last(data, "rsi", 50)
+
+        direction = (window["close"] - window["open"]).apply(
+            lambda x: 1.0 if x > 0 else (-1.0 if x < 0 else 0.0)
+        )
+        cvd = (direction * window["volume"]).cumsum()
+
+        half = self._LOOKBACK // 2
+        price_first, price_second = (
+            window["close"].iloc[:half],
+            window["close"].iloc[half:],
+        )
+        cvd_first, cvd_second = cvd.iloc[:half], cvd.iloc[half:]
+        avg_vol = float(window["volume"].mean()) * half + 1e-9
+
+        price_new_low = price_second.min() < price_first.min()
+        cvd_higher_low = cvd_second.min() > cvd_first.min()
+        price_new_high = price_second.max() > price_first.max()
+        cvd_lower_high = cvd_second.max() < cvd_first.max()
+
+        if price_new_low and cvd_higher_low and rsi < 50:
+            spread = abs(float(cvd_second.min() - cvd_first.min()))
+            conf = round(min(0.60 + min(spread / avg_vol, 1.0) * 0.2, 0.82), 2)
+            return {"action": "buy", "confidence": conf, "price": close}
+
+        if price_new_high and cvd_lower_high and rsi > 50:
+            spread = abs(float(cvd_first.max() - cvd_second.max()))
+            conf = round(min(0.60 + min(spread / avg_vol, 1.0) * 0.2, 0.82), 2)
+            return {"action": "sell", "confidence": conf, "price": close}
+
+        return {"action": "hold", "confidence": 0.40}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 18. FAIR VALUE GAP (ICT tier-1)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class FairValueGapStrategy(BaseStrategy):
+    """
+    Вход на возврате цены в незаполненный Fair Value Gap (ICT).
+
+    FVG — трёхсвечный ценовой дисбаланс: агрессивное движение (средняя
+    свеча) оставляет "дыру" без торговли между хаем свечи 1 и лоу свечи 3
+    (бычий FVG) либо между лоу свечи 1 и хаем свечи 3 (медвежий FVG).
+    Такие зоны статистически стремятся быть "закрытыми" — цена
+    возвращается в них хотя бы частично. Стратегия ищет самый свежий
+    ещё не пробитый насквозь гэп за lookback свечей и торгует отскок при
+    возврате цены в его границы, в направлении породившего гэп импульса
+    (не против него).
+    """
+
+    name = "fair_value_gap"
+    description = (
+        "Вход на возврате цены в последний незаполненный Fair Value Gap "
+        "(ICT) — по направлению породившего гэп импульса."
+    )
+    recommended_timeframes = ["15m", "1h", "4h"]
+    risk_level = "medium"
+    market_type = "trending"
+
+    _LOOKBACK = 40
+
+    def _find_last_fvg(
+        self, window: pd.DataFrame
+    ) -> Optional[Tuple[str, float, float, int]]:
+        """Ищет самый свежий непробитый насквозь FVG в окне.
+
+        :return: (направление_импульса, low_зоны, high_зоны, возраст_в_свечах) или None.
+        """
+        n = len(window)
+        for i in range(n - 3, -1, -1):
+            c1 = window.iloc[i]
+            c3 = window.iloc[i + 2]
+            if c1["high"] < c3["low"]:
+                zone_lo, zone_hi, direction = c1["high"], c3["low"], "bullish"
+            elif c1["low"] > c3["high"]:
+                zone_lo, zone_hi, direction = c3["high"], c1["low"], "bearish"
+            else:
+                continue
+
+            filled = False
+            for j in range(i + 3, n):
+                c = window.iloc[j]
+                if direction == "bullish" and c["low"] <= zone_lo:
+                    filled = True
+                    break
+                if direction == "bearish" and c["high"] >= zone_hi:
+                    filled = True
+                    break
+            if filled:
+                continue
+
+            age = n - 1 - (i + 2)
+            return direction, float(zone_lo), float(zone_hi), age
+        return None
+
+    def generate_signal(self, data: pd.DataFrame) -> Dict[str, Any]:
+        if len(data) < self._LOOKBACK:
+            return {"action": "hold", "confidence": 0.50}
+
+        window = data.iloc[-self._LOOKBACK :]
+        close = self._last(data, "close")
+        rsi = self._last(data, "rsi", 50)
+
+        fvg = self._find_last_fvg(window)
+        if fvg is None:
+            return {"action": "hold", "confidence": 0.40}
+        direction, zone_lo, zone_hi, age = fvg
+
+        if not (zone_lo <= close <= zone_hi):
+            return {"action": "hold", "confidence": 0.40}
+
+        freshness = max(0.0, 1.0 - age / self._LOOKBACK)
+
+        if direction == "bullish" and rsi < 60:
+            conf = round(min(0.58 + freshness * 0.22, 0.85), 2)
+            return {"action": "buy", "confidence": conf, "price": close}
+
+        if direction == "bearish" and rsi > 40:
+            conf = round(min(0.58 + freshness * 0.22, 0.85), 2)
+            return {"action": "sell", "confidence": conf, "price": close}
+
+        return {"action": "hold", "confidence": 0.45}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 19. INVERSE FAIR VALUE GAP (ICT tier-1)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class InverseFairValueGapStrategy(BaseStrategy):
+    """
+    Вход на ретесте инвертированного Fair Value Gap (IFVG, ICT).
+
+    Когда FVG пробивается насквозь (цена закрывается по другую сторону
+    гэпа), он теряет исходную полярность: пробитый вниз бычий FVG
+    становится сопротивлением, пробитый вверх медвежий — поддержкой.
+    Стратегия ищет самый свежий насквозь пробитый гэп за lookback свечей
+    и торгует отскок при ретесте его границ с уже развёрнутой стороны —
+    по направлению пробоя, а не исходного гэпа. Более рискованная и
+    контр-трендовая по духу, чем FairValueGapStrategy выше, поэтому
+    отдельная стратегия, а не режим той же.
+    """
+
+    name = "inverse_fair_value_gap"
+    description = (
+        "Вход на ретесте насквозь пробитого (инвертированного) Fair "
+        "Value Gap (ICT) — по направлению пробоя, полярность зоны развёрнута."
+    )
+    recommended_timeframes = ["15m", "1h", "4h"]
+    risk_level = "high"
+    market_type = "volatile"
+
+    _LOOKBACK = 40
+
+    def _find_last_inverted_fvg(
+        self, window: pd.DataFrame
+    ) -> Optional[Tuple[str, float, float, int]]:
+        """Ищет самый свежий насквозь пробитый (инвертированный) FVG.
+
+        :return: (новое_направление_после_инверсии, low_зоны, high_зоны,
+            возраст_пробоя_в_свечах) или None.
+        """
+        n = len(window)
+        for i in range(n - 3, -1, -1):
+            c1 = window.iloc[i]
+            c3 = window.iloc[i + 2]
+            if c1["high"] < c3["low"]:
+                zone_lo, zone_hi, origin = c1["high"], c3["low"], "bullish"
+            elif c1["low"] > c3["high"]:
+                zone_lo, zone_hi, origin = c3["high"], c1["low"], "bearish"
+            else:
+                continue
+
+            breach_idx = None
+            for j in range(i + 3, n):
+                c = window.iloc[j]
+                if origin == "bullish" and c["close"] < zone_lo:
+                    breach_idx = j
+                    break
+                if origin == "bearish" and c["close"] > zone_hi:
+                    breach_idx = j
+                    break
+            if breach_idx is None:
+                continue
+
+            age = n - 1 - breach_idx
+            new_direction = "bearish" if origin == "bullish" else "bullish"
+            return new_direction, float(zone_lo), float(zone_hi), age
+        return None
+
+    def generate_signal(self, data: pd.DataFrame) -> Dict[str, Any]:
+        if len(data) < self._LOOKBACK:
+            return {"action": "hold", "confidence": 0.50}
+
+        window = data.iloc[-self._LOOKBACK :]
+        close = self._last(data, "close")
+        rsi = self._last(data, "rsi", 50)
+
+        ifvg = self._find_last_inverted_fvg(window)
+        if ifvg is None:
+            return {"action": "hold", "confidence": 0.40}
+        direction, zone_lo, zone_hi, age = ifvg
+
+        if not (zone_lo <= close <= zone_hi):
+            return {"action": "hold", "confidence": 0.40}
+
+        freshness = max(0.0, 1.0 - age / self._LOOKBACK)
+
+        if direction == "bearish" and rsi > 45:
+            conf = round(min(0.55 + freshness * 0.20, 0.80), 2)
+            return {"action": "sell", "confidence": conf, "price": close}
+
+        if direction == "bullish" and rsi < 55:
+            conf = round(min(0.55 + freshness * 0.20, 0.80), 2)
+            return {"action": "buy", "confidence": conf, "price": close}
+
+        return {"action": "hold", "confidence": 0.45}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 20. LIQUIDITY SWEEP (ICT tier-1)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class LiquiditySweepStrategy(BaseStrategy):
+    """
+    Разворот на снятии ликвидности за предыдущим свинг-хай/лоу (ICT stop hunt).
+
+    За предыдущим свинг-экстремумом скапливаются стоп-лоссы (ликвидность).
+    "Снятие ликвидности" — цена коротким фитилём пробивает этот уровень,
+    исполняя чужие стопы, но закрывается обратно внутри диапазона —
+    типичный признак ложного пробоя перед разворотом, а не начала нового
+    тренда. В отличие от `breakout` (торгует ПРОДОЛЖЕНИЕ пробоя), эта
+    стратегия торгует его ОТКАЗ: сигнал только когда текущая свеча
+    пробила уровень фитилём, но закрылась обратно за него.
+    """
+
+    name = "liquidity_sweep"
+    description = (
+        "Разворот на ложном пробое (снятии ликвидности) предыдущего "
+        "свинг-хай/лоу — фитиль пробивает уровень, закрытие возвращается "
+        "внутрь диапазона."
+    )
+    recommended_timeframes = ["15m", "1h", "4h"]
+    risk_level = "high"
+    market_type = "ranging"
+
+    _LOOKBACK = 30
+
+    def generate_signal(self, data: pd.DataFrame) -> Dict[str, Any]:
+        if len(data) < self._LOOKBACK + 1:
+            return {"action": "hold", "confidence": 0.50}
+
+        prior = data.iloc[-(self._LOOKBACK + 1) : -1]
+        cur = data.iloc[-1]
+        rsi = self._last(data, "rsi", 50)
+
+        swing_high = float(prior["high"].max())
+        swing_low = float(prior["low"].min())
+        cur_high, cur_low, cur_close = (
+            float(cur["high"]),
+            float(cur["low"]),
+            float(cur["close"]),
+        )
+
+        if cur_high > swing_high and cur_close < swing_high and rsi > 50:
+            depth = (cur_high - swing_high) / swing_high
+            conf = round(min(0.60 + min(depth / 0.01, 1.0) * 0.20, 0.85), 2)
+            return {"action": "sell", "confidence": conf, "price": cur_close}
+
+        if cur_low < swing_low and cur_close > swing_low and rsi < 50:
+            depth = (swing_low - cur_low) / swing_low
+            conf = round(min(0.60 + min(depth / 0.01, 1.0) * 0.20, 0.85), 2)
+            return {"action": "buy", "confidence": conf, "price": cur_close}
+
+        return {"action": "hold", "confidence": 0.40}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 21. AMD — ACCUMULATION / MANIPULATION / DISTRIBUTION (ICT tier-1)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class AMDStrategy(BaseStrategy):
+    """
+    Accumulation-Manipulation-Distribution (ICT "Power of Three").
+
+    Классическая модель ICT для дневного/сессионного диапазона: узкий
+    флэт-диапазон накопления (Accumulation) → ложный вынос цены за его
+    границу в одну сторону, снимающий ликвидность (Manipulation / "Judas
+    swing") → настоящее направленное движение в противоположную сторону
+    (Distribution). В OHLCV-приближении: диапазон накопления ищется по
+    тесноте свечей за accum-окно (до недавних _MANIP_WINDOW свечей),
+    манипуляция — по выносу хая/лоу за его границы в этом недавнем окне,
+    дистрибуция — по закрытию цены за ПРОТИВОПОЛОЖНОЙ границей диапазона
+    там же. Требование закрытия за противоположной границей (не просто
+    в середину) — сознательно строгий фильтр: сигнал только на полностью
+    состоявшейся дистрибуции, а не на первом отскоке.
+    """
+
+    name = "amd"
+    description = (
+        "ICT Power of Three: узкий диапазон накопления → ложный вынос за "
+        "его границу (манипуляция) → закрытие за противоположной границей "
+        "(дистрибуция) — вход по направлению дистрибуции."
+    )
+    recommended_timeframes = ["1h", "4h", "1d"]
+    risk_level = "high"
+    market_type = "ranging"
+
+    _ACCUM_LOOKBACK = 20
+    _MANIP_WINDOW = 6
+    _MAX_RANGE_PCT = 0.05
+
+    def generate_signal(self, data: pd.DataFrame) -> Dict[str, Any]:
+        total_needed = self._ACCUM_LOOKBACK + self._MANIP_WINDOW
+        if len(data) < total_needed:
+            return {"action": "hold", "confidence": 0.50}
+
+        accum = data.iloc[-total_needed : -self._MANIP_WINDOW]
+        recent = data.iloc[-self._MANIP_WINDOW :]
+        cur_close = self._last(data, "close")
+        rsi = self._last(data, "rsi", 50)
+
+        range_high = float(accum["high"].max())
+        range_low = float(accum["low"].min())
+        mid = (range_high + range_low) / 2
+        if mid <= 0:
+            return {"action": "hold", "confidence": 0.40}
+        width_pct = (range_high - range_low) / mid
+        if width_pct > self._MAX_RANGE_PCT:
+            return {"action": "hold", "confidence": 0.40}
+
+        manip_up = float(recent["high"].max()) > range_high
+        manip_down = float(recent["low"].min()) < range_low
+        span = max(range_high - range_low, 1e-9)
+
+        # Манипуляция вверх (Judas swing вверх) → настоящая дистрибуция вниз
+        if manip_up and cur_close < range_low and rsi < 50:
+            depth = (range_low - cur_close) / span
+            conf = round(min(0.62 + min(depth, 1.0) * 0.20, 0.88), 2)
+            return {"action": "sell", "confidence": conf, "price": cur_close}
+
+        # Манипуляция вниз (Judas swing вниз) → настоящая дистрибуция вверх
+        if manip_down and cur_close > range_high and rsi > 50:
+            depth = (cur_close - range_high) / span
+            conf = round(min(0.62 + min(depth, 1.0) * 0.20, 0.88), 2)
+            return {"action": "buy", "confidence": conf, "price": cur_close}
+
+        return {"action": "hold", "confidence": 0.45}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # REGISTRY
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -873,6 +1423,14 @@ STRATEGY_REGISTRY: Dict[str, Type[BaseStrategy]] = {
     "momentum_burst": MomentumBurstStrategy,
     "pump_exit": PumpExitStrategy,
     "sentiment": SentimentStrategy,
+    # ICT tier-1
+    "support_resistance": SupportResistanceStrategy,
+    "fibonacci_retracement": FibonacciRetracementStrategy,
+    "cvd_divergence": CVDDivergenceStrategy,
+    "fair_value_gap": FairValueGapStrategy,
+    "inverse_fair_value_gap": InverseFairValueGapStrategy,
+    "liquidity_sweep": LiquiditySweepStrategy,
+    "amd": AMDStrategy,
 }
 
 
