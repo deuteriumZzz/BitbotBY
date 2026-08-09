@@ -1009,7 +1009,9 @@ class TestApplyMarketContextFilter:
 
         recs = [make_rec(action="buy", confidence=0.80)]
         result = self._filter(recs, {}, rc=None)
-        flags = json.loads(result[0]["context_flags"]) if result[0]["context_flags"] else {}
+        flags = (
+            json.loads(result[0]["context_flags"]) if result[0]["context_flags"] else {}
+        )
         assert "profile" not in flags
 
     def test_no_profile_tag_when_rc_returns_empty(self):

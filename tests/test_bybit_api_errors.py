@@ -269,9 +269,7 @@ class TestCreateOrderIdempotency:
     async def test_network_error_finds_existing_order_before_retry(self):
         api = _make_api()
         api.exchange.create_order.side_effect = ccxt.NetworkError("net")
-        with patch(
-            "src.bybit_api._new_client_order_id", return_value="bb-fixed"
-        ):
+        with patch("src.bybit_api._new_client_order_id", return_value="bb-fixed"):
             api.exchange.fetch_open_orders.return_value = [
                 {"id": "existing-1", "clientOrderId": "bb-fixed", "status": "open"}
             ]
@@ -292,9 +290,7 @@ class TestCreateOrderIdempotency:
         api.exchange.fetch_closed_orders.return_value = [
             {"id": "existing-2", "clientOrderId": "bb-whatever", "status": "closed"}
         ]
-        with patch(
-            "src.bybit_api._new_client_order_id", return_value="bb-whatever"
-        ):
+        with patch("src.bybit_api._new_client_order_id", return_value="bb-whatever"):
             with patch("asyncio.sleep", new_callable=AsyncMock):
                 result = await api.create_order("BTC/USDT", "market", "buy", 0.1)
         assert result is not None

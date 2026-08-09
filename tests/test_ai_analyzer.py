@@ -795,9 +795,7 @@ class TestRecommendStrategyLocal:
         # test_local_rsi_oversold) — отключённая через Telegram стратегия
         # не должна тихо продолжать торговать.
         self.ai._runtime_config = MagicMock()
-        self.ai._runtime_config.get_disabled_strategies.return_value = {
-            "rsi_momentum"
-        }
+        self.ai._runtime_config.get_disabled_strategies.return_value = {"rsi_momentum"}
         snap = self._snap(rsi=25)
         strategy, conf = self.ai.recommend_strategy_local(snap)
         assert strategy == "hold"

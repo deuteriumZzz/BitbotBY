@@ -50,14 +50,24 @@ def test_load_cache_reads_and_sorts(tmp_path, monkeypatch):
     assert len(df) == 5
 
 
-def test_find_reference_uses_utc_offset_and_picks_closest_timeframe(tmp_path, monkeypatch):
+def test_find_reference_uses_utc_offset_and_picks_closest_timeframe(
+    tmp_path, monkeypatch
+):
     monkeypatch.chdir(tmp_path)
     # Свеча закрылась в UTC; entry_time пишется как datetime.now() (локальное).
     utc_now = datetime.utcnow()
     local_now = datetime.now()
     candle_utc = utc_now - timedelta(minutes=20)
     start_ms = int((candle_utc - timedelta(minutes=45)).timestamp() * 1000)
-    _write_cache(tmp_path, "BTC/USDT", "15m", start_ms=start_ms, step_ms=900_000, n=4, price=100.0)
+    _write_cache(
+        tmp_path,
+        "BTC/USDT",
+        "15m",
+        start_ms=start_ms,
+        step_ms=900_000,
+        n=4,
+        price=100.0,
+    )
 
     entry_time_iso = local_now.isoformat()
     ref = find_reference("BTC/USDT", entry_time_iso)
@@ -78,7 +88,15 @@ def test_compute_divergence_matches_reference_price(tmp_path, monkeypatch):
     utc_now = datetime.utcnow()
     candle_utc = utc_now - timedelta(minutes=10)
     start_ms = int((candle_utc - timedelta(minutes=45 * 15)).timestamp() * 1000)
-    _write_cache(tmp_path, "BTC/USDT", "15m", start_ms=start_ms, step_ms=900_000, n=60, price=100.0)
+    _write_cache(
+        tmp_path,
+        "BTC/USDT",
+        "15m",
+        start_ms=start_ms,
+        step_ms=900_000,
+        n=60,
+        price=100.0,
+    )
 
     trade = {
         "symbol": "BTC/USDT",
@@ -142,9 +160,37 @@ def trades_db(tmp_path):
         """
     )
     rows = [
-        ("BTC/USDT", "ema_crossover", "buy", 100, 101, 1, 0.6, 1.0, 0.01, 0.1, "2026-01-01T00:00:00", "2026-01-01T01:00:00", "closed"),
+        (
+            "BTC/USDT",
+            "ema_crossover",
+            "buy",
+            100,
+            101,
+            1,
+            0.6,
+            1.0,
+            0.01,
+            0.1,
+            "2026-01-01T00:00:00",
+            "2026-01-01T01:00:00",
+            "closed",
+        ),
         # open trade — must be excluded (no entry_price check needed, but status filters it)
-        ("BTC/USDT", "ema_crossover", "buy", 100, None, 1, 0.6, None, None, 0.1, "2026-01-01T02:00:00", None, "open"),
+        (
+            "BTC/USDT",
+            "ema_crossover",
+            "buy",
+            100,
+            None,
+            1,
+            0.6,
+            None,
+            None,
+            0.1,
+            "2026-01-01T02:00:00",
+            None,
+            "open",
+        ),
     ]
     conn.executemany(
         "INSERT INTO trades (symbol, strategy, action, entry_price, exit_price, "

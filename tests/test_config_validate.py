@@ -53,9 +53,7 @@ class TestConfigValidate:
 
     def test_invalid_ai_provider_rejected(self):
         with pytest.raises(ValueError, match="AI_PROVIDER"):
-            _paper(
-                MODE="ai", AI_PROVIDER="mistral", ANTHROPIC_API_KEY="key"
-            ).validate()
+            _paper(MODE="ai", AI_PROVIDER="mistral", ANTHROPIC_API_KEY="key").validate()
 
     def test_gemini_provider_is_valid(self):
         _paper(MODE="ai", AI_PROVIDER="gemini", GEMINI_API_KEY="g-key").validate()

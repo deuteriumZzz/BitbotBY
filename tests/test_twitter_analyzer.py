@@ -6,7 +6,6 @@ import pytest
 
 from src.twitter_analyzer import TwitterAnalyzer, _parse_twscrape_accounts
 
-
 # ---------------------------------------------------------------------------
 # _parse_twscrape_accounts()
 # ---------------------------------------------------------------------------

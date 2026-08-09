@@ -12,21 +12,26 @@ from ai_signal_isolation_backtest import (
     _ATR_MULT,
     _RR,
     _WARMUP,
-    _Portfolio,
-    _SymbolState,
     _advance_symbol,
     _build_checkpoints,
     _entry_sl_tp,
     _force_close_tail,
+    _Portfolio,
     _print_report,
     _run_ai_round,
     _save_json,
+    _SymbolState,
     run_isolation_backtest,
 )
 from src.market_scanner import MarketScanner
 
 
-def _make_df(n: int, start_ts: int = 1_700_000_000_000, step_ms: int = 900_000, price: float = 100.0):
+def _make_df(
+    n: int,
+    start_ts: int = 1_700_000_000_000,
+    step_ms: int = 900_000,
+    price: float = 100.0,
+):
     """Плоская серия цен (без волатильности) + постоянный atr — синтетика без
     необходимости гонять add_indicators()."""
     rows = []
@@ -45,7 +50,13 @@ def _make_df(n: int, start_ts: int = 1_700_000_000_000, step_ms: int = 900_000, 
     return pd.DataFrame(rows)
 
 
-def _trend_df(n: int, start_ts: int = 1_700_000_000_000, step_ms: int = 900_000, start_price: float = 100.0, pct_per_bar: float = 0.0):
+def _trend_df(
+    n: int,
+    start_ts: int = 1_700_000_000_000,
+    step_ms: int = 900_000,
+    start_price: float = 100.0,
+    pct_per_bar: float = 0.0,
+):
     """Серия с управляемым трендом — для детерминированных SL/TP срабатываний."""
     rows = []
     price = start_price
@@ -209,8 +220,12 @@ class TestForceCloseTail:
 class TestBuildCheckpoints:
     def test_respects_warmup_and_no_lookahead(self):
         states = {
-            "BTC/USDT": _SymbolState(symbol="BTC/USDT", df=_make_df(150), next_idx=_WARMUP),
-            "ETH/USDT": _SymbolState(symbol="ETH/USDT", df=_make_df(120), next_idx=_WARMUP),
+            "BTC/USDT": _SymbolState(
+                symbol="BTC/USDT", df=_make_df(150), next_idx=_WARMUP
+            ),
+            "ETH/USDT": _SymbolState(
+                symbol="ETH/USDT", df=_make_df(120), next_idx=_WARMUP
+            ),
         }
         checkpoints = _build_checkpoints(states, n_samples=5)
 
@@ -224,7 +239,9 @@ class TestBuildCheckpoints:
 
     def test_too_short_history_returns_empty(self):
         states = {
-            "BTC/USDT": _SymbolState(symbol="BTC/USDT", df=_make_df(_WARMUP), next_idx=_WARMUP),
+            "BTC/USDT": _SymbolState(
+                symbol="BTC/USDT", df=_make_df(_WARMUP), next_idx=_WARMUP
+            ),
         }
         assert _build_checkpoints(states, n_samples=5) == []
 
@@ -233,8 +250,12 @@ class TestBuildCheckpoints:
         # длинного) символа для ETH индекса может не хватить, но общий
         # список чекпоинтов не должен ломаться.
         states = {
-            "BTC/USDT": _SymbolState(symbol="BTC/USDT", df=_make_df(200), next_idx=_WARMUP),
-            "ETH/USDT": _SymbolState(symbol="ETH/USDT", df=_make_df(60), next_idx=_WARMUP),
+            "BTC/USDT": _SymbolState(
+                symbol="BTC/USDT", df=_make_df(200), next_idx=_WARMUP
+            ),
+            "ETH/USDT": _SymbolState(
+                symbol="ETH/USDT", df=_make_df(60), next_idx=_WARMUP
+            ),
         }
         checkpoints = _build_checkpoints(states, n_samples=10)
         assert len(checkpoints) > 0
@@ -320,13 +341,17 @@ class TestRunAiRound:
 
     async def test_hold_action_does_not_open_trade(self):
         states = {
-            "BTC/USDT": _SymbolState(symbol="BTC/USDT", df=_make_df(60), next_idx=_WARMUP),
+            "BTC/USDT": _SymbolState(
+                symbol="BTC/USDT", df=_make_df(60), next_idx=_WARMUP
+            ),
         }
         ai = _FakeAI([{"symbol": "BTC/USDT", "action": "hold", "confidence": 0.9}])
         scanner = MarketScanner(api=None, data_loader=None)
         portfolio = _Portfolio(balance=10_000.0)
 
-        await _run_ai_round(ai, scanner, states, {"BTC/USDT": 55}, portfolio, 0.001, 0.02, "15m")
+        await _run_ai_round(
+            ai, scanner, states, {"BTC/USDT": 55}, portfolio, 0.001, 0.02, "15m"
+        )
 
         assert states["BTC/USDT"].open_trade is None
         assert portfolio.balance == 10_000.0
@@ -345,7 +370,8 @@ class TestRunIsolationBacktest:
 
         monkeypatch.setattr("ai_signal_isolation_backtest.load_data", fake_load_data)
         monkeypatch.setattr(
-            "ai_signal_isolation_backtest.AIAnalyzer", lambda: _FakeAI([], enabled=False)
+            "ai_signal_isolation_backtest.AIAnalyzer",
+            lambda: _FakeAI([], enabled=False),
         )
 
         result = await run_isolation_backtest(["BTC/USDT"], "15m", 6, n_samples=3)
@@ -401,7 +427,18 @@ class TestRunIsolationBacktest:
 class TestReporting:
     def _portfolio_with_trades(self):
         portfolio = _Portfolio(balance=10_100.0)
-        portfolio.trade_returns = [0.05, -0.02, 0.03, -0.01, 0.02, 0.04, -0.03, 0.01, 0.02, 0.01]
+        portfolio.trade_returns = [
+            0.05,
+            -0.02,
+            0.03,
+            -0.01,
+            0.02,
+            0.04,
+            -0.03,
+            0.01,
+            0.02,
+            0.01,
+        ]
         portfolio.closed_trades = [
             {
                 "symbol": "BTC/USDT",

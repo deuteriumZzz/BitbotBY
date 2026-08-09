@@ -382,9 +382,7 @@ class Config:
         if self.MAX_POSITION_SIZE <= 0 or self.MAX_POSITION_SIZE > 1:
             raise ValueError("MAX_POSITION_SIZE must be between 0 and 1")
         if self.MAX_PORTFOLIO_EXPOSURE < 0:
-            raise ValueError(
-                "MAX_PORTFOLIO_EXPOSURE must be >= 0 (0 disables the cap)"
-            )
+            raise ValueError("MAX_PORTFOLIO_EXPOSURE must be >= 0 (0 disables the cap)")
         if not (1 <= self.LEVERAGE_MAX <= 20):
             raise ValueError(
                 f"LEVERAGE_MAX={self.LEVERAGE_MAX} must be between 1 and 20 — "

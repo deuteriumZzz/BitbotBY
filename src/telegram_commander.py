@@ -1895,18 +1895,14 @@ class TelegramCommander:
         try:
             ok, out = await self._run_report_script("ai_signal_isolation_backtest.py")
             if not ok:
-                await self._notifier.notify(
-                    f"❌ *AI-изоляция упала*\n```{out}```"
-                )
+                await self._notifier.notify(f"❌ *AI-изоляция упала*\n```{out}```")
                 return
             await self._notifier.notify(
                 "🤖 *AI-изоляция (вклад AI-слоя отдельно от индикаторов)*\n```"
                 f"{self._truncate_report(out)}```"
             )
         except Exception as e:
-            await self._notifier.notify(
-                f"❌ AI-изоляция: непредвиденная ошибка\n`{e}`"
-            )
+            await self._notifier.notify(f"❌ AI-изоляция: непредвиденная ошибка\n`{e}`")
         finally:
             self._ai_isolation_running = False
 
@@ -2822,9 +2818,7 @@ class TelegramCommander:
                 "nvidia": "NVIDIA_API_KEY",
             }
             _configured_auto = [
-                _AUTO_NAMES[p]
-                for p in _AUTO_ORDER
-                if _os.getenv(_AUTO_ENV_KEYS[p])
+                _AUTO_NAMES[p] for p in _AUTO_ORDER if _os.getenv(_AUTO_ENV_KEYS[p])
             ]
             _auto_desc = (
                 " → ".join(_configured_auto) if _configured_auto else "нет ключей"
@@ -2907,7 +2901,10 @@ class TelegramCommander:
                 )
                 return
             desc = {
-                "auto": "Claude → OpenAI → DeepSeek → Groq → Gemini → OpenRouter → NVIDIA",
+                "auto": (
+                    "Claude → OpenAI → DeepSeek → Groq → Gemini → "
+                    "OpenRouter → NVIDIA"
+                ),
                 "groq": "Llama 3.3 70B — бесплатный, быстрый",
                 "anthropic": "Claude — лучшее качество",
                 "deepseek": "Самый дешёвый платный",
@@ -3047,8 +3044,7 @@ class TelegramCommander:
         elif data == "ai_isolation_skip":
             await self._edit(
                 query,
-                "⏭ *AI-изоляция отменена*\n\n"
-                "Вернуться можно в 📊 Бэктест и отчёты.",
+                "⏭ *AI-изоляция отменена*\n\n" "Вернуться можно в 📊 Бэктест и отчёты.",
                 _kb_backtest_menu(),
             )
 
