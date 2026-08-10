@@ -77,7 +77,12 @@ class MarketScanner:
         forced = forced or set()
         excluded = excluded or set()
         try:
-            params = {"category": "linear"} if Config.MARKET_TYPE == "linear" else {}
+            _market_type = (
+                self._rc.get_market_type()
+                if self._rc is not None
+                else Config.MARKET_TYPE
+            )
+            params = {"category": "linear"} if _market_type == "linear" else {}
             tickers = await self.api.exchange.fetch_tickers(params=params)
             usdt: dict = {}
             for sym, t in tickers.items():

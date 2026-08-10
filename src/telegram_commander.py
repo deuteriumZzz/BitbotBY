@@ -144,6 +144,11 @@ def _kb_settings(
         [InlineKeyboardButton("🎯 Профиль рынка", callback_data="market_profile_menu")],
         [
             InlineKeyboardButton(
+                "💱 Рынок: Spot/Futures", callback_data="market_type_menu"
+            )
+        ],
+        [
+            InlineKeyboardButton(
                 (
                     "🔔 Сезон: Алерт  →  авто"
                     if season_mode == "alert"
@@ -561,6 +566,24 @@ def _kb_lev_menu(mode: str, target: float, drawdown: float) -> "InlineKeyboardMa
         [InlineKeyboardButton("« Риск-профиль", callback_data="risk_menu")],
     ]
     return InlineKeyboardMarkup(rows)
+
+
+def _kb_market_type_menu(current: str) -> "InlineKeyboardMarkup":
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    ("✅ " if current == "spot" else "") + "💵 Spot",
+                    callback_data="market_type:spot",
+                ),
+                InlineKeyboardButton(
+                    ("✅ " if current == "linear" else "") + "📐 Futures",
+                    callback_data="market_type:linear",
+                ),
+            ],
+            [InlineKeyboardButton("« Настройки", callback_data="settings")],
+        ]
+    )
 
 
 def _kb_provider_menu(current: str) -> "InlineKeyboardMarkup":
@@ -2795,6 +2818,51 @@ class TelegramCommander:
 
         elif data == "noop":
             await query.answer()
+
+        # ── Тип рынка (spot / futures) ──────────────────────────────────────
+        elif data == "market_type_menu":
+            current = self._rc.get_market_type()
+            label = "💵 Spot" if current == "spot" else "📐 Futures"
+            positions = self._get_state().get("positions", [])
+            _warn = (
+                f"\n\n⚠️ Открыто позиций: {len(positions)} — переключение "
+                f"заблокировано, пока они не закроются."
+                if positions
+                else ""
+            )
+            await self._edit(
+                query,
+                f"💱 *Тип рынка*\n\nТекущий: *{label}*\n\n"
+                f"Spot — только лонги, без плеча и ликвидации.\n"
+                f"Futures — лонг/шорт, плечо, funding rate.{_warn}",
+                _kb_market_type_menu(current),
+            )
+
+        elif data.startswith("market_type:"):
+            val = data.split(":", 1)[1]
+            positions = self._get_state().get("positions", [])
+            if positions:
+                await self._edit(
+                    query,
+                    f"❌ Нельзя сменить тип рынка при {len(positions)} "
+                    f"открытых позициях — закрой их сначала.",
+                    _kb_market_type_menu(self._rc.get_market_type()),
+                )
+                return
+            ok = self._rc.set_market_type(val)
+            if not ok:
+                await self._edit(
+                    query,
+                    f"❌ Неизвестный тип рынка: *{val}*",
+                    _kb_market_type_menu(self._rc.get_market_type()),
+                )
+                return
+            label = "💵 Spot" if val == "spot" else "📐 Futures"
+            await self._edit(
+                query,
+                f"✅ Тип рынка: *{label}*\n\n_Применится к следующему циклу._",
+                _kb_market_type_menu(val),
+            )
 
         # ── AI-провайдер ─────────────────────────────────────────────────────
         elif data == "provider_menu":

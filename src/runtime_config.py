@@ -29,6 +29,7 @@ _KEY_RISK_PER_TRADE = "bot:risk_per_trade"
 _KEY_DRAWDOWN_SCALE = "bot:drawdown_scale_enabled"
 _KEY_TRAIN_TOP_N = "bot:train_top_n"
 _KEY_AI_PROVIDER = "bot:ai_provider"
+_KEY_MARKET_TYPE = "bot:market_type"
 _KEY_LEVERAGE_MODE = "bot:leverage_mode"
 _KEY_LEVERAGE_TARGET_RISK = "bot:leverage_target_risk"
 _KEY_MAX_DRAWDOWN = "bot:max_drawdown_percent"
@@ -71,6 +72,7 @@ _AI_PROVIDERS = frozenset(
     }
 )
 _LEVERAGE_MODES = frozenset({"fixed", "volatility", "full"})
+_MARKET_TYPES = frozenset({"spot", "linear"})
 
 _RISK_PRESETS = {
     "conservative": {
@@ -442,6 +444,22 @@ class RuntimeConfig:
             return False
         self._set(_KEY_AI_PROVIDER, provider)
         logger.info("Runtime: ai_provider → %s", provider)
+        return True
+
+    # ── Market Type (spot / futures) ─────────────────────────────────────────
+
+    def get_market_type(self) -> str:
+        """Текущий тип рынка: spot | linear (perpetual futures)."""
+        val = self._get(_KEY_MARKET_TYPE)
+        if val and val in _MARKET_TYPES:
+            return val
+        return getattr(Config, "MARKET_TYPE", "linear")
+
+    def set_market_type(self, market_type: str) -> bool:
+        if market_type not in _MARKET_TYPES:
+            return False
+        self._set(_KEY_MARKET_TYPE, market_type)
+        logger.info("Runtime: market_type → %s", market_type)
         return True
 
     def get_last_ai_provider(self) -> str:
@@ -1091,6 +1109,7 @@ class RuntimeConfig:
         _KEY_DRAWDOWN_SCALE,
         _KEY_TRAIN_TOP_N,
         _KEY_AI_PROVIDER,
+        _KEY_MARKET_TYPE,
         _KEY_LEVERAGE_MODE,
         _KEY_LEVERAGE_TARGET_RISK,
         _KEY_MAX_DRAWDOWN,

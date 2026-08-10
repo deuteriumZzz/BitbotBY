@@ -199,6 +199,17 @@ class OrderExecutor:
         if action not in ("buy", "sell"):
             return
 
+        _rc = getattr(self, "_runtime_config", None)
+        _market_type = _rc.get_market_type() if _rc is not None else Config.MARKET_TYPE
+        if _market_type == "spot" and action == "sell":
+            # execute() открывает только НОВЫЕ позиции (закрытие — отдельно через
+            # position_monitor.py), поэтому sell здесь всегда означает попытку
+            # входа, а не закрытия уже купленного лонга. На споте без маржи
+            # шорта не существует — игнорируем сигнал вместо ошибочного входа.
+            logger.debug("Spot mode: sell-as-entry ignored for %s (no shorting)", sym)
+            return
+        self._api.sync_market_type()
+
         # УЛУЧШЕНИЕ 4: фильтр по времени суток (UTC)
         _rc = getattr(self, "_runtime_config", None)
         _trading_hours = (

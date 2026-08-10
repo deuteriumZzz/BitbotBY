@@ -995,8 +995,14 @@ class TestPaperTradingSell:
         assert paper_balance[0] < initial_bal
 
     @pytest.mark.asyncio
-    async def test_paper_sell_spot_adds_balance(self):
-        """Paper SPOT sell: balance += qty*entry - commission (line 461)."""
+    async def test_paper_sell_spot_ignored_as_entry(self):
+        """Paper SPOT sell-as-entry: сигнал игнорируется, баланс не меняется.
+
+        execute() открывает только НОВЫЕ позиции (закрытие уже купленного
+        лонга — отдельно через position_monitor.py), а на споте без маржи
+        шорта не существует — sell здесь не может значить ничего, кроме
+        ошибочной попытки входа.
+        """
         executor, monitored, paper_balance = _make_executor()
         initial_bal = paper_balance[0]
         cfg = _make_cfg(paper=True, market_type="spot")
@@ -1006,8 +1012,8 @@ class TestPaperTradingSell:
                     "src.trade_history.get_backtest_stats", return_value=_BT_STATS
                 ):
                     await executor.execute(_TOP_SELL, {}, 10_000.0)
-        # SPOT sell: receives money → balance increases
-        assert paper_balance[0] > initial_bal
+        assert paper_balance[0] == initial_bal
+        assert not monitored
 
 
 # ── round_quantity returns 0 ──────────────────────────────────────────────────

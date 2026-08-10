@@ -11,7 +11,7 @@ import asyncio
 import logging
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 import ccxt.async_support as ccxt
 import pandas as pd
@@ -84,11 +84,27 @@ class BybitAPI:
     управление балансом и кэширование данных через Redis.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, runtime_config: "Any | None" = None) -> None:
         self.exchange: Optional[ccxt.Exchange] = None
         self.redis = RedisClient()
         self.logger = logging.getLogger(__name__)
         self._leverage_cache: dict[str, int] = {}  # {symbol: last_set_leverage}
+        self._runtime_config = runtime_config
+
+    def _current_market_type(self) -> str:
+        """Тип рынка: из RuntimeConfig (переключаемо на лету) либо статичный Config."""
+        rc = getattr(self, "_runtime_config", None)
+        if rc is not None:
+            return rc.get_market_type()
+        return Config.MARKET_TYPE
+
+    def sync_market_type(self) -> None:
+        """Синхронизирует defaultType уже подключённого ccxt-клиента с текущим
+        рантайм-режимом — вызывать перед ордер-специфичными вызовами биржи,
+        чтобы переключение spot/futures через Telegram подхватывалось без
+        пересоздания соединения."""
+        if self.exchange is not None:
+            self.exchange.options["defaultType"] = self._current_market_type()
 
     async def initialize(
         self, api_key: str, api_secret: str, testnet: bool = False
@@ -113,7 +129,7 @@ class BybitAPI:
                         "apiKey": api_key,
                         "secret": api_secret,
                         "enableRateLimit": True,
-                        "options": {"defaultType": Config.MARKET_TYPE},
+                        "options": {"defaultType": self._current_market_type()},
                         "urls": {
                             "api": {
                                 "public": "https://api-testnet.bybit.com",
@@ -128,7 +144,7 @@ class BybitAPI:
                         "apiKey": api_key,
                         "secret": api_secret,
                         "enableRateLimit": True,
-                        "options": {"defaultType": Config.MARKET_TYPE},
+                        "options": {"defaultType": self._current_market_type()},
                     }
                 )
             await self.exchange.load_markets()
@@ -535,7 +551,9 @@ class BybitAPI:
 
         # На фьючерсном рынке ордера закрытия должны иметь reduceOnly=True,
         # чтобы не открыть новую позицию если основная уже закрыта.
-        extra: dict = {"reduceOnly": True} if Config.MARKET_TYPE != "spot" else {}
+        extra: dict = (
+            {"reduceOnly": True} if self._current_market_type() != "spot" else {}
+        )
 
         if sl_price and sl_price > 0:
             try:
@@ -637,7 +655,7 @@ class BybitAPI:
         :param leverage: Плечо (1 = без плеча).
         :return: True всегда (исключение не роняет бота).
         """
-        if Config.MARKET_TYPE == "spot":
+        if self._current_market_type() == "spot":
             return True
         if Config.PAPER_TRADING:
             return True

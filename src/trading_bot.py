@@ -86,7 +86,7 @@ class TradingBot:
         if override is not None:
             Config.PAPER_TRADING = override
             os.environ["PAPER_TRADING"] = "true" if override else "false"
-        self.api = BybitAPI()
+        self.api = BybitAPI(runtime_config=self._runtime_config)
         self.data_loader = DataLoader()
         self.portfolio_manager = PortfolioManager(
             Config.INITIAL_BALANCE, redis_client=self.redis
