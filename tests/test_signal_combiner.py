@@ -999,10 +999,12 @@ class TestApplyMarketContextFilter:
 
         rc = MagicMock()
         rc.get_market_profile.return_value = "meme"
+        rc.get_market_type.return_value = "linear"
         recs = [make_rec(action="buy", confidence=0.80)]
         result = self._filter(recs, {}, rc=rc)
         flags = json.loads(result[0]["context_flags"])
         assert flags["profile"] == "meme"
+        assert flags["market_type"] == "linear"
 
     def test_no_profile_tag_without_rc(self):
         import json
@@ -1015,21 +1017,30 @@ class TestApplyMarketContextFilter:
         assert "profile" not in flags
 
     def test_no_profile_tag_when_rc_returns_empty(self):
+        import json
+
         rc = MagicMock()
         rc.get_market_profile.return_value = ""
+        rc.get_market_type.return_value = "linear"
         recs = [make_rec(action="buy", confidence=0.80)]
         result = self._filter(recs, {}, rc=rc)
-        assert result[0]["context_flags"] == ""
+        # profile не тегируется, но market_type тегируется всегда при rc —
+        # context_flags больше не пустой в этом случае.
+        flags = json.loads(result[0]["context_flags"])
+        assert "profile" not in flags
+        assert flags["market_type"] == "linear"
 
     def test_profile_tag_combined_with_other_fired_flags(self):
         import json
 
         rc = MagicMock()
         rc.get_market_profile.return_value = "altcoin"
+        rc.get_market_type.return_value = "spot"
         recs = [make_rec(action="buy", confidence=0.80)]
         result = self._filter(recs, {"funding_signal": "long_overheated"}, rc=rc)
         flags = json.loads(result[0]["context_flags"])
         assert flags["profile"] == "altcoin"
+        assert flags["market_type"] == "spot"
         assert flags["funding"] == "long_overheated"
 
 

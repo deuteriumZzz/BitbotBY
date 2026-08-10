@@ -475,6 +475,12 @@ class SignalCombiner:
                 profile = self._rc.get_market_profile()
                 if profile:
                     fired["profile"] = profile
+                # Тег типа рынка (spot/futures) на момент входа — механика
+                # сделки принципиально разная (плечо, шорт, funding, риск
+                # ликвидации только на futures), смешивать их в одну
+                # win_rate/EV-выборку так же некорректно, как смешивать
+                # разные рыночные профили (см. п.6 роадмапа выше).
+                fired["market_type"] = self._rc.get_market_type()
 
             if conf < min_conf:
                 self.logger.info(

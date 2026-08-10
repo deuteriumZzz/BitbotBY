@@ -899,6 +899,7 @@ class PositionMonitor:
                 if _profile == "altcoin"
                 else "data/experiences.jsonl"
             )
+            _market_type = os.environ.get("MARKET_TYPE", Config.MARKET_TYPE)
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(
                 None,
@@ -908,6 +909,7 @@ class PositionMonitor:
                     entry_price=_entry,
                     exit_price=_price,
                     path=_exp_path,
+                    market_type=_market_type,
                 ),
             )
 

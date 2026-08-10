@@ -459,6 +459,12 @@ class RuntimeConfig:
         if market_type not in _MARKET_TYPES:
             return False
         self._set(_KEY_MARKET_TYPE, market_type)
+        # Зеркалит паттерн apply_market_profile()'s SAC_PROFILE — env var
+        # даёт коду без ссылки на RuntimeConfig (напр. position_monitor.py
+        # при записи experiences.jsonl) увидеть актуальный тип рынка.
+        import os as _os
+
+        _os.environ["MARKET_TYPE"] = market_type
         logger.info("Runtime: market_type → %s", market_type)
         return True
 

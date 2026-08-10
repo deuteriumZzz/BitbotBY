@@ -1555,7 +1555,7 @@ Walk-forward с holdout 20% — показывает IN-SAMPLE и OUT-SAMPLE Sha
 make alpha-report                          # data/trades_paper.db по умолчанию
 python3 paper_alpha_report.py --db data/trades_live.db
 ```
-Bootstrap Sharpe CI + Wilcoxon + Bonferroni-поправка на реально закрытых сделках, отдельно по стратегии и по активному рыночному профилю (bluechip/altcoin/meme). Нужно минимум 30-50 закрытых сделок на группу, иначе вердикт будет `INSUFFICIENT DATA` — это не ошибка, а честный сигнал "рано делать выводы".
+Bootstrap Sharpe CI + Wilcoxon + Bonferroni-поправка на реально закрытых сделках, отдельно по стратегии, по активному рыночному профилю (bluechip/altcoin/meme) и по типу рынка (spot/futures) на момент входа — механика сделки (плечо, шорт, funding, ликвидация) настолько разная между spot и futures, что смешивать их в одну выборку так же некорректно, как смешивать разные профили. Все три тега пишутся в `context_flags` сделки при входе (`signal_combiner.py`), тип рынка также попадает в `experiences.jsonl` для раздельной статистики при переобучении SAC. Нужно минимум 30-50 закрытых сделок на группу, иначе вердикт будет `INSUFFICIENT DATA` — это не ошибка, а честный сигнал "рано делать выводы".
 
 **3 — расхождение live/backtest:**
 ```bash

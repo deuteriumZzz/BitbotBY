@@ -44,6 +44,7 @@ def save(
     entry_price: float,
     exit_price: float,
     path: str = _DEFAULT_PATH,
+    market_type: str = "",
 ) -> None:
     """
     Добавляет закрытую сделку в файл опыта.
@@ -53,6 +54,9 @@ def save(
     :param entry_price: Цена входа.
     :param exit_price: Цена выхода.
     :param path: Путь к файлу JSONL.
+    :param market_type: "spot" | "linear" на момент входа, если известен —
+        механика сделки разная (плечо/шорт только на linear), нужно для
+        раздельной статистики при переобучении SAC на смешанной истории.
     """
     if not snap:
         return
@@ -77,6 +81,8 @@ def save(
         "price": snap.get("price", entry_price),
         "source": source,
     }
+    if market_type:
+        record["market_type"] = market_type
 
     try:
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)

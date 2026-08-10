@@ -26,7 +26,11 @@ from src.alpha_tester import AlphaTester
 
 
 def _default_db_path() -> str:
-    name = "trades_paper.db" if os.getenv("PAPER_TRADING", "").lower() == "true" else "trades_live.db"
+    name = (
+        "trades_paper.db"
+        if os.getenv("PAPER_TRADING", "").lower() == "true"
+        else "trades_live.db"
+    )
     return os.path.join("data", name)
 
 
@@ -87,6 +91,43 @@ def load_closed_returns_by_profile(db_path: str) -> List[Tuple[str, float]]:
     return result
 
 
+def load_closed_returns_by_market_type(db_path: str) -> List[Tuple[str, float]]:
+    """Читает (market_type, pnl_pct) закрытых сделок из context_flags.
+
+    SignalCombiner тегирует активный тип рынка (spot/linear) в
+    context_flags["market_type"] на момент входа (см. src/signal_combiner.py)
+    — та же логика, что и load_closed_returns_by_profile, но для spot/futures:
+    механика сделки (плечо, шорт, funding, ликвидация) настолько разная, что
+    смешивать их в одну win_rate/EV-выборку так же некорректно, как смешивать
+    рыночные профили. Сделки без тега — в "unknown".
+
+    :param db_path: Путь к trades_paper.db или trades_live.db.
+    :return: Список (market_type, pnl_pct); пусто, если файла/сделок нет.
+    """
+    if not os.path.exists(db_path):
+        return []
+    conn = sqlite3.connect(db_path)
+    try:
+        rows = conn.execute(
+            "SELECT context_flags, pnl_pct FROM trades "
+            "WHERE status='closed' AND pnl_pct IS NOT NULL"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    result: List[Tuple[str, float]] = []
+    for context_flags, pnl_pct in rows:
+        market_type = "unknown"
+        if context_flags:
+            try:
+                flags = json.loads(context_flags)
+                market_type = flags.get("market_type") or "unknown"
+            except (json.JSONDecodeError, AttributeError):
+                pass
+        result.append((market_type, float(pnl_pct)))
+    return result
+
+
 def group_returns_by_strategy(
     rows: List[Tuple[str, float]],
 ) -> Dict[str, List[float]]:
@@ -110,6 +151,20 @@ def group_returns_by_profile(rows: List[Tuple[str, float]]) -> Dict[str, List[fl
     grouped: Dict[str, List[float]] = {}
     for profile, pnl_pct in rows:
         grouped.setdefault(profile, []).append(pnl_pct)
+    return grouped
+
+
+def group_returns_by_market_type(
+    rows: List[Tuple[str, float]],
+) -> Dict[str, List[float]]:
+    """Группирует доходности сделок по типу рынка (spot/linear) на момент входа.
+
+    :param rows: Список (market_type, pnl_pct), напр. из load_closed_returns_by_market_type.
+    :return: {market_type: [pnl_pct, ...]}, сохраняя порядок первого появления.
+    """
+    grouped: Dict[str, List[float]] = {}
+    for market_type, pnl_pct in rows:
+        grouped.setdefault(market_type, []).append(pnl_pct)
     return grouped
 
 
@@ -220,6 +275,39 @@ def build_profile_report(returns_by_profile: Dict[str, List[float]]) -> str:
     return "\n".join(lines)
 
 
+def build_market_type_report(returns_by_market_type: Dict[str, List[float]]) -> str:
+    """Строит отчёт значимости альфы по типу рынка (spot/futures) на момент входа.
+
+    Та же методология, что build_profile_report — реализованный PnL/Sharpe
+    (с доверительным интервалом) отдельно за периоды spot и linear, вместо
+    одной смешанной выборки, где плечо/шорт/funding одного режима искажают
+    статистику другого.
+
+    :param returns_by_market_type: {market_type: [pnl_pct, ...]}.
+    :return: Многострочный отчёт для печати в консоль.
+    """
+    sep = "=" * 68
+    lines = [
+        sep,
+        "ЗНАЧИМОСТЬ АЛЬФЫ ПО ТИПУ РЫНКА (spot/futures)",
+        "(та же методология, группировка по context_flags['market_type'])",
+        sep,
+    ]
+    if not returns_by_market_type:
+        lines.append("Нет закрытых сделок — отчёт невозможен.")
+        lines.append(sep)
+        return "\n".join(lines)
+
+    lines.extend(
+        _significance_section(returns_by_market_type, group_noun="типов рынка")
+    )
+    all_returns = [r for rs in returns_by_market_type.values() for r in rs]
+    lines.append("ПОРТФЕЛЬ ЦЕЛИКОМ (spot+futures вместе, без Bonferroni — один тест):")
+    lines.append(AlphaTester().test(all_returns, name="ALL MARKET TYPES").summary())
+    lines.append(sep)
+    return "\n".join(lines)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -236,13 +324,23 @@ def main() -> None:
         return
 
     grouped = group_returns_by_strategy(rows)
-    print(f"[paper_alpha_report] {len(rows)} закрытых сделок, "
-          f"{len(grouped)} стратегия(й), источник: {args.db}\n")
+    print(
+        f"[paper_alpha_report] {len(rows)} закрытых сделок, "
+        f"{len(grouped)} стратегия(й), источник: {args.db}\n"
+    )
     print(build_report(grouped))
 
-    grouped_by_profile = group_returns_by_profile(load_closed_returns_by_profile(args.db))
+    grouped_by_profile = group_returns_by_profile(
+        load_closed_returns_by_profile(args.db)
+    )
     print()
     print(build_profile_report(grouped_by_profile))
+
+    grouped_by_market_type = group_returns_by_market_type(
+        load_closed_returns_by_market_type(args.db)
+    )
+    print()
+    print(build_market_type_report(grouped_by_market_type))
 
 
 if __name__ == "__main__":
