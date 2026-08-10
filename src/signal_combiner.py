@@ -113,6 +113,8 @@ class SignalCombiner:
             self.logger.warning("Unknown MODE='%s', fallback to 'ai'", mode)
             recs = await self.ai.analyze(snapshots, balance)
 
+        recs = self._drop_invalid_for_market(recs)
+
         if market_context and recs:
             recs = self._apply_market_context_filter(recs, market_context)
         if sentiment and recs:
@@ -128,6 +130,26 @@ class SignalCombiner:
                 return self._merge_with_context(recs, context_recs)
 
         return recs
+
+    def _drop_invalid_for_market(
+        self, recs: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """Отсекает sell-рекомендации как вход на spot — шорта без маржи нет.
+
+        SAC — обученная политика, ей нельзя "объяснить" ограничение
+        промптом (в отличие от AI, см. AIAnalyzer._build_prompt). Единая
+        точка отсева для всех режимов (ai/dqn/hybrid) сразу после выбора
+        MODE — до контекстных фильтров, чтобы не гонять дальше по пайплайну
+        рекомендацию, которую order_executor.execute() всё равно отбросит
+        последним рубежом. AI тоже проходит через этот же фильтр —
+        подстраховка на случай, если модель проигнорировала инструкцию
+        промпта.
+        """
+        rc = self._rc
+        market_type = rc.get_market_type() if rc is not None else Config.MARKET_TYPE
+        if market_type != "spot":
+            return recs
+        return [r for r in recs if r.get("action") != "sell"]
 
     @staticmethod
     def _sl_tp(price: float, atr: float, action: str) -> Tuple[float, float]:

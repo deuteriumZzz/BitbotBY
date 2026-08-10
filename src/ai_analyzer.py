@@ -274,6 +274,15 @@ class AIAnalyzer:
         ]
         data_block = json.dumps(slim, ensure_ascii=False)
         _rc = getattr(self, "_runtime_config", None)
+        _market_type = _rc.get_market_type() if _rc is not None else Config.MARKET_TYPE
+        _market_rule = (
+            "MARKET TYPE: SPOT — no margin, no shorting. 'sell' is valid ONLY as "
+            "an exit for an existing long, never as a new entry — do not "
+            "recommend 'sell' for a symbol you're not already long on.\n"
+            if _market_type == "spot"
+            else "MARKET TYPE: FUTURES (linear perpetual) — both 'buy' (long) "
+            "and 'sell' (short) are valid new entries.\n"
+        )
         min_conf = (
             _rc.get_signal_confidence(Config.PAPER_TRADING)
             if _rc is not None
@@ -287,6 +296,7 @@ class AIAnalyzer:
             f"Analyze the following crypto market data and provide "
             f"trading recommendations.\n\n"
             f"USER BALANCE: ${balance:.2f} USDT\n\n"
+            f"{_market_rule}\n"
             f"AVAILABLE STRATEGIES:\n{strategy_block}\n\n"
             f"MARKET DATA (real-time snapshots):\n{data_block}\n\n"
             f"RULES:\n"
