@@ -288,13 +288,13 @@ class OrderExecutor:
 
             bt = get_backtest_stats(strategy)
             live_wr = await self._trade_history.get_win_rate(
-                strategy, lookback=TRADE_HISTORY_LOOKBACK
+                strategy, lookback=TRADE_HISTORY_LOOKBACK, market_type=_market_type
             )
             live_n = await self._trade_history.get_trade_count(
-                strategy, lookback=TRADE_HISTORY_LOOKBACK
+                strategy, lookback=TRADE_HISTORY_LOOKBACK, market_type=_market_type
             )
             live_ev = await self._trade_history.get_expected_value(
-                strategy, lookback=TRADE_HISTORY_LOOKBACK
+                strategy, lookback=TRADE_HISTORY_LOOKBACK, market_type=_market_type
             )
 
             _rc = getattr(self, "_runtime_config", None)

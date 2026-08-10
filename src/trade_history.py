@@ -294,68 +294,37 @@ class TradeHistory:
 
     # ── Read ──────────────────────────────────────────────
 
-    async def get_win_rate(
+    async def _fetch_recent_closed(
         self,
-        strategy: Optional[str] = None,
-        lookback: int = 50,
-    ) -> float:
-        """
-        Возвращает долю прибыльных закрытых сделок [0.0–1.0].
+        strategy: Optional[str],
+        market_type: str,
+        lookback: int,
+    ) -> list:
+        """Возвращает [(pnl, pnl_pct), ...] последних закрытых сделок.
 
-        По умолчанию 0.5 при отсутствии данных.
+        При заданном market_type фильтрует по context_flags["market_type"]
+        (тег пишет signal_combiner.py при входе) — сделки другого типа
+        рынка (spot/linear) не должны влиять на live win_rate/EV текущего
+        режима, механика сделки принципиально разная (плечо/шорт/funding
+        только на linear). Записи без тега (до появления инструментации)
+        не отбрасываются. Тег живёт в TEXT-колонке, а не в отдельном
+        столбце — фильтруем в Python, поэтому при активном фильтре берём
+        запас сверх lookback, чтобы после фильтрации осталось достаточно.
 
-        :param strategy: Фильтр по названию стратегии (None = все стратегии).
-        :param lookback: Количество последних сделок для расчёта.
-        :return: Win rate от 0.0 до 1.0.
-
+        :param strategy: Фильтр по названию стратегии (None = все).
+        :param market_type: "spot"|"linear"; "" = без фильтра (как раньше).
+        :param lookback: Сколько последних (уже отфильтрованных) сделок вернуть.
+        :return: [(pnl, pnl_pct), ...] от новых к старым, максимум lookback.
         """
         where = (
             "WHERE status='closed' AND strategy=?"
             if strategy
             else "WHERE status='closed'"
         )
-        params = (strategy, lookback) if strategy else (lookback,)
+        fetch_limit = max(lookback * 5, 200) if market_type else lookback
+        params = (strategy, fetch_limit) if strategy else (fetch_limit,)
         sql = f"""
-            SELECT
-              COUNT(*) AS total,
-              SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END)
-                  AS wins
-            FROM (
-              SELECT pnl, strategy FROM trades
-              {where}
-              ORDER BY id DESC LIMIT ?
-            )
-            """
-        async with self._lock:
-
-            def _read():
-                return self._conn.execute(sql, params).fetchone()
-
-            row = await self._run_db(_read)
-        if not row or not row[0]:
-            return 0.5  # default assumption: 50%
-        return row[1] / row[0]
-
-    async def get_expected_value(
-        self,
-        strategy: Optional[str] = None,
-        lookback: int = 50,
-    ) -> float:
-        """
-        Возвращает EV как долю: win_rate × avg_win_pct − loss_rate × |avg_loss_pct|.
-
-        :param strategy: Фильтр по названию стратегии (None = все стратегии).
-        :param lookback: Количество последних сделок для расчёта.
-        :return: Expected value (может быть отрицательным).
-        """
-        where = (
-            "WHERE status='closed' AND strategy=?"
-            if strategy
-            else "WHERE status='closed'"
-        )
-        params = (strategy, lookback) if strategy else (lookback,)
-        sql = f"""
-            SELECT pnl_pct FROM trades
+            SELECT pnl, pnl_pct, context_flags FROM trades
             {where}
             ORDER BY id DESC LIMIT ?
             """
@@ -365,11 +334,69 @@ class TradeHistory:
                 return self._conn.execute(sql, params).fetchall()
 
             rows = await self._run_db(_read)
+
+        if not market_type:
+            return [(r[0], r[1]) for r in rows]
+
+        result = []
+        for pnl, pnl_pct, context_flags in rows:
+            row_mtype = ""
+            if context_flags:
+                try:
+                    row_mtype = json.loads(context_flags).get("market_type", "")
+                except (json.JSONDecodeError, AttributeError):
+                    pass
+            if not row_mtype or row_mtype == market_type:
+                result.append((pnl, pnl_pct))
+                if len(result) >= lookback:
+                    break
+        return result
+
+    async def get_win_rate(
+        self,
+        strategy: Optional[str] = None,
+        lookback: int = 50,
+        market_type: str = "",
+    ) -> float:
+        """
+        Возвращает долю прибыльных закрытых сделок [0.0–1.0].
+
+        По умолчанию 0.5 при отсутствии данных.
+
+        :param strategy: Фильтр по названию стратегии (None = все стратегии).
+        :param lookback: Количество последних сделок для расчёта.
+        :param market_type: "spot"|"linear" — фильтр по типу рынка на момент
+            входа; "" = без фильтра (обратная совместимость).
+        :return: Win rate от 0.0 до 1.0.
+        """
+        rows = await self._fetch_recent_closed(strategy, market_type, lookback)
+        if not rows:
+            return 0.5  # default assumption: 50%
+        wins = sum(1 for pnl, _ in rows if pnl is not None and pnl > 0)
+        return wins / len(rows)
+
+    async def get_expected_value(
+        self,
+        strategy: Optional[str] = None,
+        lookback: int = 50,
+        market_type: str = "",
+    ) -> float:
+        """
+        Возвращает EV как долю: win_rate × avg_win_pct − loss_rate × |avg_loss_pct|.
+
+        :param strategy: Фильтр по названию стратегии (None = все стратегии).
+        :param lookback: Количество последних сделок для расчёта.
+        :param market_type: "spot"|"linear" — фильтр по типу рынка на момент
+            входа; "" = без фильтра (обратная совместимость).
+        :return: Expected value (может быть отрицательным).
+        """
+        rows = await self._fetch_recent_closed(strategy, market_type, lookback)
         if not rows:
             return 0.0
-        wins = [r[0] for r in rows if r[0] is not None and r[0] > 0]
-        losses = [r[0] for r in rows if r[0] is not None and r[0] <= 0]
-        n = len(rows)
+        pnl_pcts = [pnl_pct for _, pnl_pct in rows]
+        wins = [p for p in pnl_pcts if p is not None and p > 0]
+        losses = [p for p in pnl_pcts if p is not None and p <= 0]
+        n = len(pnl_pcts)
         if n == 0:
             return 0.0
         wr = len(wins) / n
@@ -381,32 +408,19 @@ class TradeHistory:
         self,
         strategy: Optional[str] = None,
         lookback: int = 50,
+        market_type: str = "",
     ) -> int:
         """
         Возвращает количество закрытых сделок в окне lookback.
 
         :param strategy: Фильтр по названию стратегии.
         :param lookback: Максимальное количество учитываемых сделок.
+        :param market_type: "spot"|"linear" — фильтр по типу рынка на момент
+            входа; "" = без фильтра (обратная совместимость).
         :return: Количество закрытых сделок.
         """
-        where = (
-            "WHERE status='closed' AND strategy=?"
-            if strategy
-            else "WHERE status='closed'"
-        )
-        params = (strategy, lookback) if strategy else (lookback,)
-        sql = (
-            f"SELECT COUNT(*) FROM "
-            f"(SELECT id FROM trades {where} "
-            f"ORDER BY id DESC LIMIT ?)"
-        )
-        async with self._lock:
-
-            def _read():
-                return self._conn.execute(sql, params).fetchone()
-
-            row = await self._run_db(_read)
-        return row[0] if row else 0
+        rows = await self._fetch_recent_closed(strategy, market_type, lookback)
+        return len(rows)
 
     async def get_summary(self) -> Dict:
         """
