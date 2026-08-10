@@ -229,6 +229,7 @@ def _finetune_on_experiences(model: Any, norm_stats: Dict[str, Any]) -> None:
     добавляет в replay buffer модели и запускает gradient steps.
     Пропускается если файл пуст или содержит < 50 записей.
     """
+    from src.experience_buffer import filter_by_market_type as _filter_mtype
     from src.experience_buffer import load_ai_only as _load_exp
 
     _profile = os.getenv("SAC_PROFILE", "")
@@ -238,6 +239,17 @@ def _finetune_on_experiences(model: Any, norm_stats: Dict[str, Any]) -> None:
         else "data/experiences.jsonl"
     )
     records = _load_exp(path=exp_path)
+    _market_type = os.getenv("MARKET_TYPE", "linear")
+    _before = len(records)
+    records = _filter_mtype(records, _market_type)
+    if _before != len(records):
+        logger.info(
+            "Experiences: %d → %d после фильтра market_type=%s (исключены сделки "
+            "с другим типом рынка)",
+            _before,
+            len(records),
+            _market_type,
+        )
     if len(records) < 50:
         logger.info(
             "AI experiences: %d записей — пропускаем fine-tune (нужно ≥ 50)",

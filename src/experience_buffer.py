@@ -124,6 +124,23 @@ def load(path: str = _DEFAULT_PATH) -> list:
     return records
 
 
+def filter_by_market_type(records: list, market_type: str) -> list:
+    """Оставляет только опыты текущего типа рынка перед обучением SAC.
+
+    Механика сделки принципиально разная между spot и linear (плечо, шорт,
+    funding, риск ликвидации есть только на linear) — обучать модель на
+    смеси означает учить её действиям, часть из которых на текущем рынке
+    физически невозможна. Записи без поля market_type (до появления этого
+    тега) пропускаются как есть — не отбрасываются, чтобы не терять
+    накопленную историю целиком при включении фичи.
+
+    :param records: Список опытов, например из load_ai_only().
+    :param market_type: Текущий тип рынка ("spot" | "linear").
+    :return: Отфильтрованный список — market_type отсутствует ИЛИ совпадает.
+    """
+    return [r for r in records if r.get("market_type", market_type) == market_type]
+
+
 def load_ai_only(path: str = _DEFAULT_PATH) -> list:
     """Возвращает только experiences с source="ai" для обучения SAC.
 
