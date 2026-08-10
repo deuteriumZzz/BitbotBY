@@ -281,6 +281,7 @@ class OnlineLearner:
                 "HOME": os.environ.get("HOME", ""),
                 "SAC_MODEL_PATH": tmp_path,
                 "SAC_PROFILE": _profile,
+                "MARKET_TYPE": os.environ.get("MARKET_TYPE", Config.MARKET_TYPE),
                 "TRAIN_TOP_N": str(self._get_train_top_n()),
                 "TRAIN_MIN_CANDLES": os.environ.get("TRAIN_MIN_CANDLES", "2880"),
                 "TOTAL_TIMESTEPS": os.environ.get("TOTAL_TIMESTEPS", "50000"),

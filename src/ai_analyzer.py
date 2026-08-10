@@ -768,7 +768,19 @@ class AIAnalyzer:
         for name in STRATEGY_REGISTRY:
             if name in disabled:
                 continue
-            sig = create_strategy(name).generate_signal(data)
+            try:
+                sig = create_strategy(name).generate_signal(data)
+            except Exception:
+                # Одна упавшая стратегия не должна ронять весь турнир —
+                # раньше эта изоляция была в trading_bot.py (try/except
+                # вокруг create_strategy().generate_signal()), но при
+                # переходе на turnir здесь её не перенесли: без неё
+                # исключение долетает до generate_signals() и обрывает
+                # сигналы для ВСЕХ символов цикла, а не только для этого.
+                logger.exception(
+                    "recommend_strategy_local: %s упала на данных, пропуск", name
+                )
+                continue
             if sig.get("action") not in ("buy", "sell"):
                 continue
             conf = sig.get("confidence", 0.0)

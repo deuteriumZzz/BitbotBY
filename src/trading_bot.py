@@ -1413,6 +1413,13 @@ class TradingBot:
         mode = "paper" if Config.PAPER_TRADING else "live"
         self._runtime_config.ensure_first_start_date()
         self._runtime_config.ensure_default_market_profile()
+        # Синхронизируем os.environ["MARKET_TYPE"] из Redis при старте —
+        # RuntimeConfig.set_market_type() зеркалит его в env только пока
+        # процесс жив; после рестарта переменная окружения откатывается к
+        # .env-дефолту, пока пользователь заново не дёрнет тумблер в
+        # Telegram, а position_monitor.py (без ссылки на RuntimeConfig)
+        # читает именно os.environ при тегировании experiences.jsonl.
+        os.environ["MARKET_TYPE"] = self._runtime_config.get_market_type()
         start_balance = await self._get_balance_usdt()
         _ai_names = {
             "anthropic": "Claude",
@@ -1447,6 +1454,13 @@ class TradingBot:
             if self._runtime_config.is_paused():
                 await asyncio.sleep(Config.TRADING_INTERVAL)
                 continue
+
+            # Синхронизируем defaultType ccxt-клиента с рантайм-режимом каждый
+            # цикл, а не только внутри execute() — иначе если бот в spot-режиме
+            # только генерирует sell (отсекается до execute() в signal_combiner),
+            # sync_market_type() может не вызваться вообще, и fetch_positions()/
+            # прочие вызовы биржи в этом цикле уйдут со старым defaultType.
+            self.api.sync_market_type()
 
             try:
                 _profile = self._runtime_config.get_market_profile()

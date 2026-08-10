@@ -504,7 +504,7 @@ class OrderExecutor:
                     # Открытие LONG: тратим деньги
                     self._set_paper_balance(bal - quantity * entry - commission)
                 else:
-                    if Config.MARKET_TYPE == "spot":
+                    if _market_type == "spot":
                         # SPOT продажа: получаем деньги (закрытие лонга)
                         self._set_paper_balance(bal + quantity * entry - commission)
                     else:
@@ -512,7 +512,7 @@ class OrderExecutor:
                         margin = quantity * entry / dynamic_lev
                         self._set_paper_balance(bal - margin - commission)
             else:
-                if Config.MARKET_TYPE != "spot":
+                if _market_type != "spot":
                     try:
                         await self._api.set_leverage(sym, dynamic_lev)
                     except Exception as _lev_err:
