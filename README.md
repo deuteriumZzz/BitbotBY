@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/bitbot_banner.svg" alt="BitbotBY — AI-гибридный торговый бот для Bybit Futures" width="100%">
+
 # 🤖 BitbotBY
 
 ### AI-гибридный торговый бот для Bybit Futures
