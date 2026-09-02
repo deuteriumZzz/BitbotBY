@@ -1,295 +1,306 @@
-# BitbotBY — AI-торговый бот для Bybit
+<div align="center">
 
-Гибридный крипто-трейдинг бот на Python: **Claude / DeepSeek / OpenAI / Groq / Gemini** + SAC нейросеть + **Amazon Chronos** (time-series forecasting) + рыночные сигналы реального времени + кванты (CVaR, Almgren-Chriss, Kelly) + 16 стратегий.  
-Три рыночных профиля: **Bluechip** (топ-20), **Altcoin** (топ-100), **Meme** (топ-200 с памп-стратегиями + Twitter/Telegram сентимент).  
-Торгует на perpetual фьючерсах (long + short), открывает до N позиций одновременно (1–20, настраивается в Telegram), присылает сигналы в Telegram.
+# 🤖 BitbotBY
+
+### AI-гибридный торговый бот для Bybit Futures
+
+Claude / DeepSeek / OpenAI / Groq / Gemini · SAC (RL) · Amazon Chronos · 10+ рыночных сигналов в реальном времени
+
+[![Python 3.11](https://img.shields.io/badge/python-3.11-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/dashboard-FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Docker](https://img.shields.io/badge/deploy-Docker%20Compose-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
+[![Tests](https://img.shields.io/badge/tests-1242%20passing-brightgreen)](#-тесты)
+[![Coverage](https://img.shields.io/badge/coverage-69%25-yellow)](#-тесты)
+[![Bybit](https://img.shields.io/badge/exchange-Bybit%20Futures-F7A600)](https://www.bybit.com/)
+[![License](https://img.shields.io/badge/license-Proprietary-lightgrey)](#-отказ-от-ответственности)
+
+</div>
+
+---
+
+BitbotBY сканирует рынок Bybit, сводит сигналы AI-модели, SAC-нейросети и 16 классических стратегий с
+рыночным контекстом (funding, ликвидации, Fear & Greed, ордербук, деривативы, сентимент соцсетей) и
+торгует perpetual-фьючерсами long/short — с квант-риск-менеджментом (Kelly, CVaR, Almgren-Chriss) и
+полным управлением через Telegram.
+
+Три рыночных профиля под разную волатильность: **Bluechip** (топ-20), **Altcoin** (топ-100),
+**Meme** (топ-200, памп-стратегии + Twitter/Telegram сентимент).
+
+> ⚠️ Торговля с реальными деньгами. Всегда начинайте с `PAPER_TRADING=true` и пройдите
+> [чек-лист перед реальной торговлей](#-перед-реальной-торговлей).
 
 ---
 
 ## Содержание
 
-1. [Как это работает](#как-это-работает)
-2. [Возможности](#возможности)
-3. [Быстрый старт](#быстрый-старт)
-4. [Настройка .env — подробно](#настройка-env--подробно)
-5. [Пошаговая инструкция запуска](#пошаговая-инструкция-запуска)
-6. [Режимы работы](#режимы-работы)
-7. [Управление через Telegram](#управление-через-telegram)
-8. [Онлайн-обучение модели](#онлайн-обучение-модели)
-9. [Мониторинг](#мониторинг)
-10. [Обучение SAC-модели](#обучение-sac-модели)
-11. [Бэктест](#бэктест)
-12. [Makefile команды](#makefile-команды)
-13. [Архитектура](#архитектура)
-14. [Тесты](#тесты)
-15. [Частые вопросы](#частые-вопросы)
-16. [Перед реальной торговлей](#перед-реальной-торговлей)
+- [Как это работает](#-как-это-работает)
+- [Архитектура](#-архитектура)
+- [Возможности](#-возможности)
+- [Быстрый старт](#-быстрый-старт)
+- [Конфигурация](#-конфигурация)
+- [Справочник .env — все переменные](#-справочник-env--все-переменные)
+- [Управление через Telegram](#-управление-через-telegram)
+- [Мониторинг](#-мониторинг)
+- [Обучение SAC-модели](#-обучение-sac-модели)
+- [Бэктест и валидация альфы](#-бэктест-и-валидация-альфы)
+- [Makefile команды](#-makefile-команды)
+- [Тесты](#-тесты)
+- [FAQ](#-faq)
+- [Перед реальной торговлей](#-перед-реальной-торговлей)
 
 ---
 
-## Как это работает
+## 🔄 Как это работает
 
-Интервал цикла зависит от профиля — bluechip раз в 15 мин, altcoin раз в 5 мин.  
-Цикл адаптируется к состоянию позиций: **полный скан** когда есть свободные слоты, **режим мониторинга** когда все позиции заняты.
+Цикл адаптируется к состоянию портфеля: **полный скан** рынка, когда есть свободные слоты,
+и лёгкий **режим мониторинга**, когда все позиции заняты (экономия AI-токенов в 5–33×).
 
+```mermaid
+flowchart LR
+    subgraph FULL["🔍 Полный скан — есть свободные слоты"]
+        direction TB
+        A1["Скан Bybit\nbluechip 20 / altcoin 100 / meme 200"] --> A2["Prescore-фильтр\nтоп-30 по RSI/объёму/ATR/тренду"]
+        A2 --> A3["OHLCV + индикаторы\n+ рыночный контекст (13 сигналов)"]
+        A3 --> A4["SeasonDetector\nBTC-доминация → сезон рынка"]
+        A4 --> A5["Сигналы: 16 стратегий\n+ AI + SAC [+ Chronos]"]
+        A5 --> A6["Composite score\nconfidence × TP × объём × режим"]
+        A6 --> A7["Открытие позиции\ndynamic leverage + SL/TP на бирже"]
+    end
+    subgraph MON["👁 Режим мониторинга — все слоты заняты"]
+        direction TB
+        B1["Скан только открытых\nпозиций + BTC/ETH барометр"] --> B2["AI только по ним\nэкономия токенов"]
+        B2 --> B3["Динамические выходы:\nразворот тренда, funding squeeze, F&G"]
+    end
+    A7 -.slot freed.-> FULL
+    MON -->|каждые 5с| C["Position Monitor\ntrailing · partial TP · SL/TP"]
+    A7 --> C
+    C -->|закрытие| D["OnlineLearner\nдообучение SAC"]
+
+    style FULL fill:#0d3b2e,stroke:#2ecc71,color:#fff
+    style MON fill:#2b2340,stroke:#9b6bff,color:#fff
+    style C fill:#3a2c14,stroke:#f39c12,color:#fff
+    style D fill:#1c2c4c,stroke:#4a90e2,color:#fff
 ```
-── ПОЛНЫЙ СКАН (есть свободные слоты) ──────────────────────────────────────
-1.  Сканирует монеты на Bybit: bluechip → топ-20, altcoin → топ-100, meme → топ-200
-2.  Prescore-фильтр отбирает 30 самых активных (RSI, объём, ATR, тренд) → AI
-3.  Загружает OHLCV, рассчитывает индикаторы
-4.  Получает рыночный контекст (funding, OI, F&G, orderbook, ETF, Reddit ...) —
-    влияет и на выбор новых сделок, и на выход из открытых позиций
-5.  SeasonDetector: BTC доминация + Altcoin Index → текущий сезон рынка
-6.  Определяет режим per-символ (trending_up / ranging / trending_down)
-7.  Генерирует сигналы (16 стратегий + AI + SAC, профильные активируются автоматически)
-8.  Выбирает лучшие по composite score (confidence × потенциал × объём × режим)
-9.  Открывает позиции с динамическим плечом, ставит SL/TP на бирже
 
-── РЕЖИМ МОНИТОРИНГА (все позиции заняты) ───────────────────────────────────
-1.  Сканирует только открытые N монет + BTC/ETH как барометры рынка
-2.  AI анализирует только эти монеты → экономия токенов в 5-33x
-3.  PositionMonitor получает актуальные сигналы для динамических выходов:
-    разворот тренда, смена режима, funding squeeze, F&G экстремум
-4.  Как только слот освобождается → автоматически переход в полный скан
+<details>
+<summary><b>Полная цепочка принятия решения — 14 шагов с формулами</b> (развернуть)</summary>
 
-── ВСЕГДА (независимо от режима) ────────────────────────────────────────────
-10. Мониторинг позиций каждые 5 сек: trailing stop + частичный TP + SL/TP на бирже
-11. После закрытия — автоматически дообучает SAC-модель (если включено)
-```
-
----
-
-### Полная цепочка принятия решения — от скана до открытой позиции
-
-Ниже — детальный путь одного цикла в режиме полного скана, шаг за шагом, с точными формулами/порогами из кода. Раздел общий для всех трёх профилей — где логика отличается по профилю, это указано явно; где отличаются только параметры (таймфрейм, риск/сделку, SL/TP) — см. таблицу **🌐 Профиль рынка** в разделе [Управление через Telegram](#управление-через-telegram) ниже, здесь не дублируется.
-
-**1. Сбор снэпшотов** ([cycle.py](src/cycle.py) `collect_snapshots`)
-Для каждого символа параллельно: OHLCV → индикаторы (RSI/MACD/BB/ATR/тренд) + `NewsAnalyzer.get_sentiment()` (VADER-fallback или AI-скоринг заголовков NewsAPI/RSS) → всё собирается в один снэпшот-словарь на монету.
-
-**2. Prescore — отбор кандидатов для AI** (`_prescore_snapshots`, только если монет больше `AI_MAX_SYMBOLS`, по умолчанию 30)
-`score = vol_score×0.35 + rsi_score×0.30 + atr_score×0.20 + regime_bonus×0.15`, где `regime_bonus=0.3` если режим трендовый. Берутся топ-30 — экономия токенов AI без потери лучших кандидатов.
-
-**3. Рыночный контекст** (`MarketContext.get_context_for_symbols`, параллельно с шагом 2)
-13 сигналов на символ: funding rate, OI+ликвидации, Fear&Greed, futures basis, orderbook imbalance, Google Trends, Deribit PCR+IV skew, Glassnode macro, BTC ETF flows, **Reddit-сентимент через CryptoBERT**, stablecoin supply. Кэш 5 мин – 4 часа на сигнал.
-*(Meme-профиль дополнительно)*: `SentimentPoller` — Twitter/X + Telegram памп-каналы → колонка `social_sentiment` в DataFrame, отдельный вход для SAC и стратегии `sentiment`.
-
-**4. Генерация сигналов** (`SignalCombiner.combine()`) — зависит от `MODE`, не от профиля рынка:
-- `local` — пустой список, дальше работает только локальный fallback (шаг 7)
-- `ai` — только `AIAnalyzer.analyze()` (news_sentiment и заголовки — часть промпта, с инструкцией "score > 0.3 boosts buy")
-- `dqn` — только SAC
-- `hybrid` (рекомендуется для всех профилей) — SAC и AI должны согласиться по направлению; вес смешивания зависит от режима рынка (trending_up 50/50, trending_down 30/70, ranging/unknown 40/60); при AI-молчании берётся SAC-сигнал, если его confidence ≥0.80
-- `hybrid + Chronos` — поверх согласия SAC+AI применяется мягкий модификатор confidence (+0.05 согласен / −0.15 не согласен, порог направления = `0.3 × ATR/price`)
-
-**5. Контекстный фильтр confidence** (`_apply_market_context_filter`) — только если `MODE=hybrid`/`ai`/`dqn` дали хоть один сигнал. Каждый из 13 сигналов из шага 3 двигает confidence уже существующего SAC/AI-сигнала на ±0.05…0.15 (например funding `long_overheated` + buy → −0.15; Fear&Greed ≤15 + каскад ликвидаций ещё идёт → confidence обнуляется полностью — не покупаем в падающий нож). Сработавшие сигналы логируются в `context_flags` для последующего анализа корреляции с исходом сделки.
-
-**6. Прямые контекстные сигналы** (`_generate_context_signals` + `_merge_with_context`) — независимо от AI/SAC, из **экстремальных** значений контекста генерируются отдельные сигналы: funding overheated (contrarian), liquidation cascade / short squeeze (momentum), orderbook imbalance >0.4, PCR extremes, Fear&Greed ≤10/≥92, basis premium >2%, BTC ETF flow ±. Если по тому же символу+направлению уже есть сигнал от AI/SAC — confidence усиливается на +0.05 (не дублируется); если сигнала не было — добавляется как отдельная рекомендация со strategy=`context_signal`.
-
-**7. Локальный fallback** — если после шагов 4-6 сигналов нет, для каждого символа считается стратегия по включённым индикаторам (`create_strategy`), TP автоматически расширяется в тренде (≥25%) и сужается в боковике (≤10%).
-
-**8. Приоритизация** — фильтр по балансу, затем сортировка по `composite_score = confidence × (1+tp_bonus) × (1+volume_bonus) × regime_mult` (макс бонусы: TP-потенциал +50%, объём +30%, совпадение с трендом +15%/−10% в боковике).
-
-**9. Portfolio allocation** (`optimize_allocation`, CVaR/Markowitz) — если ≥2 buy-сигналов одновременно, каждому назначается `alloc_fraction` вместо фиксированного `RISK_PER_TRADE`, с капом ×3.
-
-**10. Execution guards** (`_execute_top_rec` → `OrderExecutor.execute()`, по порядку, любой fail = skip):
-1. Macro blackout (±30 мин от FOMC/CPI/NFP, если включено)
-2. Свободные слоты (`MAX_POSITIONS`) и symbol cooldown после последнего закрытия
-3. Торговые часы (если заданы)
-4. Max positions + дубликат по символу (под локом — резервирует слот сразу)
-5. **Correlation guard** — `CorrelationFilter.is_allowed`, блокирует если корреляция с открытой позицией ≥ `MAX_CORRELATION`
-6. Подтверждение — paper/`AUTO_EXECUTE=true` исполняют сразу, иначе диалог в Telegram с live win-rate/EV и бэктест-статистикой по стратегии, таймаут `TELEGRAM_CONFIRM_TIMEOUT`
-7. **Liquidity filter** — spread% и 24ч объём против `MAX_SPREAD_PCT`/`MIN_VOLUME_USDT`
-8. Валидация SL/TP (инвертированный уровень = skip)
-9. **Sizing**: Half-Kelly (если ≥10 живых сделок по стратегии, капается `alloc_fraction×balance/entry`) или консервативный фиксированный процент (пока сделок мало)
-10. Масштабирование при просадке от пика баланса
-11. **Almgren-Chriss** — поправка entry на маркет-импакт от размера ордера относительно объёма; SL/TP перепроверяются повторно после поправки
-12. Динамическое плечо (fixed/volatility/full — ATR-based)
-13. Размещение ордера (paper — симуляция баланса; live — биржевой ордер + SL/TP на бирже)
-14. `TradeHistory.record_open()` — сохраняет сделку **и** `context_flags` (какие из 13 сигналов шага 3 были не-нейтральны на входе)
-
-**11. После открытия** — `PositionMonitor` каждые 5 сек проверяет SL/TP/trailing/частичный TP, плюс те же 13 сигналов контекста (уже для управления открытой позицией): разворот сигнала с confidence ≥0.80 → force_close, funding squeeze/ликвидационный каскад против позиции → tighten_sl или force_close. При закрытии — `record_close()` с PnL, который позже сопоставляется с `context_flags` для анализа "какие фильтры реально коррелируют с выигрышем".
-
-**Что отличается по профилям именно в логике решения** (не просто в параметрах):
-- **Meme** — единственный профиль с реальным Twitter/Telegram сентиментом как входом (шаг 3) и профильными стратегиями `momentum_burst`/`pump_exit`/`sentiment`, которых нет у bluechip/altcoin
-- **BTC ETF flows** (шаг 3 и 6) применяются только к символу BTC/USDT, независимо от профиля
-- Всё остальное (contrarian-логика funding/PCR/FNG, Kelly-сайзинг, correlation guard, Almgren-Chriss) работает идентично во всех трёх профилях — разница только в цифрах (таймфрейм/риск/SL-TP из таблицы профилей), не в самой логике принятия решения
-
----
-
-## Возможности
-
-### Рыночный Edge — сигналы реального времени
-
-Бот собирает 10+ внешних источников и генерирует из них **прямые BUY/SELL сигналы**:
-
-| Источник | Логика | Пример сигнала |
+| # | Шаг | Что делает |
 |---|---|---|
-| **Funding Rate** (Bybit) | >0.1% = лонги перегреты → SHORT contrarian | SELL ETH conf=0.82 |
-| **Open Interest + цена** | OI упал + цена падает → ликвидация лонгов | SELL BTC conf=0.72 |
-| **Fear & Greed** (alternative.me) | ≤15 + нет каскада → BUY conf×1.15 (контрарный); ≤15 + каскад → блок (падающий нож); ≤15 + SELL → блок; ≥85 + BUY → conf×0.85 | BUY SOL conf×1.15 |
-| **Orderbook Imbalance** (Bybit) | ask_volume / bid_volume > 1.4 → SELL | SELL XRP conf=0.71 |
-| **Basis (futures-spot)** | >2% премия = жадность → SELL | SELL BTC conf=0.69 |
-| **Deribit PCR + IV Skew** | PCR <0.5 = all-in calls → SELL | SELL ETH conf=0.65 |
-| **ETF Flows** (farside.co.uk) | Outflow <-$100M → SELL; Inflow >$150M → BUY | BUY BTC conf=0.65 |
-| **Google Trends** | >75 = retail FOMO пик → SELL | SELL BTC conf=0.67 |
-| **Reddit** (r/CryptoCurrency, CryptoBERT) | NLP-классификация текста постов (title+selftext) Bullish/Bearish/Neutral — не upvote_ratio | опционально |
-| **News sentiment** (NewsAPI/RSS + Claude/DeepSeek/VADER) | Корректирует confidence сигналов по новостному фону монеты | все профили |
-| **Twitter/X** | VADER по монетам профиля Meme (Basic API, ~10K твитов/мес) | только Meme |
-| **Telegram памп-каналы** | Мониторинг публичных каналов через Telethon MTProto, Telegram весит 2× в combined score | только Meme |
-| **Stablecoin Supply** (CoinGecko) | USDT market cap упал → риск оттока | фильтр |
+| 1 | **Снэпшоты** ([cycle.py](src/cycle.py)) | OHLCV → индикаторы (RSI/MACD/BB/ATR/тренд) + новостной сентимент на монету |
+| 2 | **Prescore** | `score = vol×0.35 + rsi×0.30 + atr×0.20 + regime_bonus×0.15` → топ-30 в AI |
+| 3 | **Рыночный контекст** ([market_context.py](src/market_context.py)) | 13 сигналов: funding, OI+ликвидации, F&G, basis, orderbook, Deribit PCR/IV, Google Trends, Glassnode, ETF flows, Reddit (CryptoBERT), stablecoin supply |
+| 4 | **SignalCombiner** ([signal_combiner.py](src/signal_combiner.py)) | `local` / `ai` / `dqn` / **`hybrid`** (SAC+AI согласие, вес зависит от режима: trending 50/50, ranging 40/60) / **`hybrid+Chronos`** (±0.05…0.15 модификатор) |
+| 5 | **Контекстный фильтр** | Каждый из 13 сигналов двигает confidence на ±0.05…0.15 (напр. F&G ≤15 + каскад ликвидаций → confidence = 0) |
+| 6 | **Прямые контекстные сигналы** | Экстремумы (funding overheated, squeeze, imbalance >0.4, F&G ≤10/≥92) генерируют отдельные сигналы |
+| 7 | **Локальный fallback** | Если сигналов нет — индикаторная стратегия, TP шире в тренде, уже в боковике |
+| 8 | **Приоритизация** | `composite_score = confidence × (1+tp_bonus) × (1+volume_bonus) × regime_mult` |
+| 9 | **Portfolio allocation** | CVaR/Markowitz ([portfolio_optimizer.py](src/portfolio_optimizer.py)) при ≥2 сигналах, cap ×3 |
+| 10 | **Execution guards** ([order_executor.py](src/order_executor.py)) | macro blackout → слоты/cooldown → торговые часы → дубликат символа → **correlation guard** → подтверждение в Telegram → **liquidity filter** → валидация SL/TP → **Kelly sizing** → drawdown scaling → **Almgren-Chriss** → dynamic leverage → ордер |
+| 11 | **После открытия** | PositionMonitor каждые 5с: те же 13 сигналов контекста управляют выходом (force_close / tighten_sl) |
 
-Все источники кэшированы (5 мин — 4 часа), работают независимо и gracefully degradируют при недоступности.
+**Что реально отличается по профилям** (не только параметры): Meme — единственный профиль с
+Twitter/Telegram сентиментом как входом и стратегиями `momentum_burst`/`pump_exit`/`sentiment`.
+BTC ETF flows применяются только к BTC/USDT. Остальная логика (contrarian funding/PCR/FNG, Kelly,
+correlation guard, Almgren-Chriss) идентична во всех профилях — различаются только цифры.
 
-### Торговые стратегии
+</details>
 
-**10 базовых стратегий** (работают во всех профилях):
-EMA crossover, RSI, MACD, Bollinger Bands, Scalping, Swing, Breakout, Mean Reversion, Trend Following, Volume Spike
+---
 
-**6 профильных стратегий** (автоматически активируются при смене профиля):
+## 🏗 Архитектура
 
-| Стратегия | Профиль | Логика |
+```mermaid
+flowchart TB
+    SUP["supervisor.py\nrestart on crash · SIGTERM"] --> BOT["TradingBot\nsrc/trading_bot.py"]
+
+    subgraph DATA["Данные и сигналы"]
+        SCAN["MarketScanner"]
+        DL["DataLoader\nccxt async · CSV cache 24ч"]
+        REGIME["RegimeDetector\nGaussianHMM"]
+        CTX["MarketContext\n10+ источников, TTL 5–240мин"]
+        NEWS["NewsAnalyzer\nNewsAPI + RSS + VADER"]
+        TW["TwitterAnalyzer\nMeme профиль"]
+        TG["TelegramSentiment\nTelethon MTProto"]
+        POLL["SentimentPoller\nasyncio → Redis"]
+    end
+
+    subgraph BRAIN["Принятие решений"]
+        COMBINER["SignalCombiner\nSAC + AI [+Chronos]"]
+        CHRONOS["ChronosAnalyzer\namazon/chronos-t5-small"]
+        CRYPTOBERT["CryptoSentimentAnalyzer\nElKulako/cryptobert"]
+        PORT["PortfolioOptimizer\nCVaR / Markowitz"]
+        CORR["CorrelationFilter"]
+        MACRO["MacroCalendar\nFOMC/CPI/NFP blackout"]
+        ARB["FundingArbDetector"]
+    end
+
+    subgraph EXEC["Исполнение"]
+        OE["OrderExecutor\nKelly → CVaR → Almgren-Chriss"]
+        PM["PositionMonitor\nSL/TP · trailing · partial TP"]
+        API["BybitAPI\nccxt async, linear+spot"]
+        LEARN["OnlineLearner\nSAC auto-retrain"]
+    end
+
+    subgraph OUT["Наблюдаемость"]
+        NOTIFY["TelegramNotifier"]
+        HIST["TradeHistory\nSQLite"]
+        HEALTH["HealthServer\n/health /metrics"]
+    end
+
+    BOT --> SCAN & DL & REGIME & CTX
+    CTX --> NEWS & TW & TG & POLL
+    BOT --> COMBINER
+    COMBINER --> CHRONOS & CRYPTOBERT
+    BOT --> PORT & CORR & MACRO & ARB
+    BOT --> OE --> API
+    OE --> PM --> LEARN
+    BOT --> NOTIFY & HIST & HEALTH
+
+    style SUP fill:#1c1c1c,stroke:#888,color:#fff
+    style BOT fill:#0d3b2e,stroke:#2ecc71,color:#fff
+    style DATA fill:#16213e,stroke:#4a90e2,color:#fff
+    style BRAIN fill:#2b2340,stroke:#9b6bff,color:#fff
+    style EXEC fill:#3a2c14,stroke:#f39c12,color:#fff
+    style OUT fill:#3a1414,stroke:#e74c3c,color:#fff
+```
+
+**RL / бэктест:**
+
+```
+reinforcement_learning/
+  ├── rl_env.py      — TradingEnv (Gymnasium), OBS_DIM=21, exec по open[i+1]
+  ├── train_sac.py   — SAC: 80/20 split, Optuna, walk-forward, online finetune
+  └── tune_sac.py     — Optuna hyperparameter search
+
+backtest.py    — walk-forward с holdout 20%, overfit ratio
+dashboard.py   — FastAPI :8080 (баланс, позиции, история)
+```
+
+---
+
+## ✨ Возможности
+
+### 📡 Рыночный Edge — сигналы реального времени
+
+| Источник | Логика | Профиль |
 |---|---|---|
-| `volume_spike_bluechip` | 🔵 Bluechip | Аномальный объём ×2.0 (огромная база объёма) |
-| `volume_spike_altcoin` | 🟡 Altcoin | Аномальный объём ×3.0 (выше шум) |
-| `volume_spike_meme` | 🚀 Meme | Аномальный объём ×5.0 (фейк-памп частый) |
-| `momentum_burst` | 🚀 Meme | +4%+ за 3 свечи + объём ×2 + RSI<80 → buy |
-| `pump_exit` | 🚀 Meme | Объём упал <40% пика + движение ≥5% + RSI>60 → sell |
-| `sentiment` | 🚀 Meme | Twitter+Telegram score ≥0.4 → buy; ≤-0.4 → sell |
+| **Funding Rate** (Bybit) | >0.1% = лонги перегреты → SHORT contrarian | все |
+| **Open Interest + цена** | OI↓ + цена↓ → ликвидация лонгов | все |
+| **Fear & Greed** | ≤15 контрарный BUY (если нет каскада), ≥85 гасит BUY | все |
+| **Orderbook Imbalance** | ask/bid > 1.4 → SELL | все |
+| **Basis (futures-spot)** | >2% премия = жадность → SELL | все |
+| **Deribit PCR + IV Skew** | PCR <0.5 = all-in calls → SELL | все |
+| **ETF Flows** (farside.co.uk) | Outflow < −$100M → SELL, Inflow > $150M → BUY | только BTC |
+| **Google Trends** | >75 = retail FOMO пик → SELL | все |
+| **Reddit / CryptoBERT** | NLP-классификация постов r/CryptoCurrency | все |
+| **News sentiment** | NewsAPI/RSS + Claude/DeepSeek/VADER | все |
+| **Twitter/X** | VADER, Basic API ~10K твитов/мес | только Meme |
+| **Telegram памп-каналы** | Telethon MTProto, вес 2× в score | только Meme |
+| **Stablecoin Supply** | USDT market cap ↓ → риск оттока | фильтр |
 
-- **Автовыбор стратегии** по состоянию рынка (local fallback — когда AI недоступен):
-  - Volatile (BB широкие + объём ×2) → Breakout
-  - Цена у BB + RSI экстремум → Bollinger Bands
-  - Uptrend/Downtrend + MACD → Swing / Trend Following
-  - RSI < 30 или > 70 → RSI Momentum
-  - Объём ×3+ → Volume Spike
-  - Боковик + RSI 38–62 → Mean Reversion
-  - Иное → EMA Crossover (confidence 0.60 — не торгует в live)
-- **AI-анализ** — Claude / DeepSeek / OpenAI / Groq анализирует OHLCV + контекст, выбирает стратегию, генерирует сигнал
-- **SAC нейросеть** (Stable-Baselines3) — RL-агент, observation space 22 признака
+Все источники кэшированы (5 мин — 4 часа) и gracefully degradируют при недоступности.
 
-### Кванты
+### 🧠 Стратегии и модели
 
-- **CVaR / Markowitz** — оптимальная аллокация капитала на каждую монету
-- **Almgren-Chriss (2001)** — оценка рыночного импакта, корректирует размер позиции
-- **Half-Kelly** — ×0.5 от формулы Келли, кэп 20%
-- **Динамическое плечо** — бот сам рассчитывает плечо для каждой сделки:
+- **10 базовых стратегий**: EMA crossover, RSI, MACD, Bollinger Bands, Scalping, Swing, Breakout, Mean Reversion, Trend Following, Volume Spike
+- **6 профильных стратегий**: активируются автоматически при смене профиля (`momentum_burst`, `pump_exit`, `sentiment` — Meme; и др.)
+- **AI-анализ**: Claude / DeepSeek / OpenAI / Groq / Gemini с fallback-цепочкой
+- **SAC (Soft Actor-Critic)** — RL-модель, обучается на истории, дообучается онлайн после каждой сделки
+- **Amazon Chronos** — предобученная time-series модель, мягкий модификатор confidence в hybrid-режиме
 
-```
-Base от confidence:  ≥0.85 → max;  ≥0.75 → 75%;  ≥0.65 → 50%
-Штрафы-множители:
-  ATR > 5% цены        → × 0.50  (очень волатильно)
-  ATR > 3% цены        → × 0.70
-  Fear&Greed ≤15/≥85   → × 0.70  (экстремальный sentiment)
-  Ликвидационный каскад → × 0.50
-  Боковой рынок        → × 0.80
-  Funding против сделки → × 0.70
-Итог: clip(1, LEVERAGE)  ← LEVERAGE — максимум из .env
-```
+### 📐 Квант-инструменты
 
-### Управление позициями
-
-- **До N позиций одновременно** — количество задаётся динамически через Telegram (⚖️ Риск-профиль → ➖/➕), диапазон 1–20; в paper режиме кнопка 🚀 Paper макс выставляет 15 для ускорения обучения SAC
-- **Spot / Futures — переключается на лету через Telegram** (💱 Рынок в Настройках, `RuntimeConfig.set_market_type`), без рестарта бота. Futures (linear) — perpetual, LONG+SHORT, плечо, funding rate. Spot — только LONG (шорт без маржи невозможен): `sell`-сигнал как вход в spot-режиме автоматически игнорируется. Переключение заблокировано, пока есть открытые позиции. Один и тот же API-ключ работает для обоих режимов — на Bybit V5 права Spot Trading и Derivatives/Contract Trading включаются на одном ключе одновременно, отдельный ключ под каждый рынок не нужен.
-- **Лимитные ордера** — вход 0.05% лучше рынка, таймаут 30с → автофоллбек на рыночный
-- **SL/TP на бирже** — ставятся `stop_market` + `limit` ордера сразу при открытии
-- **Trailing stop** — SL подтягивается за ценой на основе ATR
-- **Partial TP** — при 60% пути к TP закрывает 50% позиции, SL → breakeven
-- **Динамические выходы** — позиция закрывается досрочно при смене условий:
-
-| Условие | Логика |
+| Инструмент | Где применяется |
 |---|---|
-| Сигнал развернулся (conf ≥ 0.72) | Открыт LONG + пришёл SELL → выход |
-| Смена режима | SHORT + рынок перешёл в `trending_up` → выход |
-| Funding squeeze | SHORT + `short_overheated` → выход до сквиза |
-| Extreme F&G | LONG + F&G ≥ 92 → фиксируем прибыль на эйфории |
-| Liquidation cascade | LONG + `long_liquidation` → выход до каскада |
-| Short squeeze | SHORT + `short_squeeze` → выход |
+| **Kelly Criterion** (half-Kelly) | Sizing позиции по live win-rate/EV стратегии |
+| **CVaR / Markowitz** | Portfolio allocation при нескольких одновременных сигналах |
+| **Almgren-Chriss** | Поправка entry-цены на market impact от размера ордера |
+| **GaussianHMM** | Определение режима рынка (trending/ranging) per-symbol |
+| **Correlation guard** | Блокирует новую позицию, коррелирующую с открытой |
 
-### Риск-менеджмент
+### 🛡 Риск-менеджмент
 
-Три уровня защиты — каждый следующий срабатывает когда предыдущий не справился:
-
-**Уровень 1 — SL/TP на бирже** (каждая позиция отдельно)
-- `stop_market` + `limit` ордера ставятся при открытии, трейлинг-стоп подтягивается за ценой
-
-**Уровень 2 — Дневной лимит потерь**
-- Считается по **equity** (кэш + нереализованный P&L открытых позиций) — открытие позиций само по себе не считается убытком
-- При срабатывании: новые входы блокируются, открытые позиции продолжают работать по своим SL/TP
-- **Автовосстановление**: каждые 60 секунд проверяется equity — как только восстановилась выше порога, торговля возобновляется досрочно без ожидания полуночи
-- Если до 00:00 UTC equity не восстановилась — возобновление на следующий день
-- В paper режиме: предупреждение в Telegram, торговля не останавливается
-
-**Уровень 3 — Аварийные стоп-краны** (black swan)
-- **Hard drawdown halt** — просадка equity от пика ≥ 20% подтверждённая N циклов подряд (защита от flash crash). Количество циклов меняется через Telegram: ⚖️ Риск-профиль → 🛡 Flash-защита ±
-  - Убыточные позиции: закрываются по рынку (они причина просадки)
-  - Прибыльные позиции: SL переносится на breakeven — не могут уйти в минус, возьмут профит при росте рынка
-  - Новые входы заблокированы на `DRAWDOWN_HALT_HOURS` часов
-- **ATR spike circuit breaker** — ATR в 3× выше среднего за 20 свечей → все позиции закрыть, новые не открывать 1 час
-- В paper режиме — только уведомление в Telegram, торговля продолжается
-
-**Остальные защиты:**
-- **Circuit breaker** — после N убыточных сделок подряд: в live режиме останавливает бота, в paper режиме только уведомляет
-- **Drawdown scaling** — при просадке ≥10% от пика размер позиций снижается до 50%
-- **Partial TP** — частичная фиксация прибыли + перенос SL на breakeven
-- **Фильтр ликвидности** — проверяет спред (<0.3%) и объём (>$1M) перед входом
-- **Symbol cooldown** — после закрытия позиции по символу X бот не открывает его снова N часов (по умолчанию 3ч); защита от повторного входа в падающий токен
-- **Macro blackout** — пауза за 30 мин до/после FOMC, CPI, NFP, GDP, PCE
-- **Корреляционный фильтр** — блокирует одновременные похожие позиции (напр. BTC + ETH лонг)
-- **Стейблкоин-фильтр** — USDC, BUSD, DAI и ещё 17 стейблкоинов не попадают в сканирование
-- **JUNK-фильтр** — автоматически исключает плечовые ETF (SOXL, SOXS, TQQQ, NVDL…), товарные трекеры (XAU, XAG…) и монеты с префиксами 1000/10000 (1000PEPE и подобные)
+Macro blackout (FOMC/CPI/NFP) · Correlation filter · Liquidity filter (spread/объём) ·
+Circuit breaker и дневной лимит убытков · **Hard drawdown halt** (закрытие убыточных, SL в breakeven
+на прибыльных, блокировка входов) · **ATR spike protection** (закрытие всех позиций, пауза 1ч) ·
+Dynamic leverage (fixed/volatility/full, ATR-based) · Trailing stop + partial TP.
 
 ---
 
-## Быстрый старт
+## 🚀 Быстрый старт
 
 ### Требования
 
-- **Python 3.11+** или [Docker Desktop](https://docs.docker.com/get-docker/)
-- **Bybit аккаунт** с API-ключами (Unified Trading Account)
-- **Один из AI-провайдеров**: DeepSeek (дешевле всего), Claude или ChatGPT
-- **Telegram Bot** (создать через [@BotFather](https://t.me/BotFather))
+Python 3.11 · Docker + Docker Compose (рекомендуется) · API-ключи Bybit · один AI-провайдер · Telegram-бот
 
-### Минимальный .env для старта
-
-```env
-BYBIT_API_KEY=ваш_ключ
-BYBIT_API_SECRET=ваш_секрет
-MARKET_TYPE=linear
-LEVERAGE=3
-DEEPSEEK_API_KEY=sk-...
-TELEGRAM_BOT_TOKEN=1234567890:ABC...
-TELEGRAM_CHAT_ID=ваш_chat_id
-PAPER_TRADING=true
-AUTO_EXECUTE=false
-MODE=ai
-```
-
-### Запуск
+### Запуск через Docker (рекомендуется)
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/deuteriumZzz/BitbotBY.git
 cd BitbotBY
-cp .env.example .env
-# заполнить .env (см. раздел ниже)
-
-make setup   # генерирует пароль дашборда, собирает и запускает всё одной командой
-make logs    # смотреть что происходит
+cp .env.example .env        # заполнить ключи — см. раздел «Конфигурация»
+make setup                  # первый запуск: сборка, htpasswd, docker compose up
 ```
 
-| Сервис | URL |
-|--------|-----|
-| Веб-дашборд | http://localhost:8080 (логин/пароль из `.env`: `DASHBOARD_USER` / `DASHBOARD_PASSWORD`) |
-| Grafana | http://localhost:3000 (admin / `GRAFANA_PASSWORD`) |
-| Prometheus | http://localhost:9090 |
-| Alertmanager | http://localhost:9093 |
+### Локальный запуск
 
-> **SAC модель:** trainer контейнер не запускается с `make setup` — модель дообучается автоматически через `OnlineLearner` каждые 50 сделок.  
-> Для первоначального обучения с нуля: кнопка в Telegram при первом запуске, или `make train-docker`
+```bash
+python -m venv venv && source venv/bin/activate   # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+cp .env.example .env
+python supervisor.py
+```
+
+### Минимальный `.env` для paper trading
+
+```env
+BYBIT_API_KEY=...
+BYBIT_API_SECRET=...
+BYBIT_TESTNET=false
+MARKET_TYPE=linear
+
+AI_PROVIDER=deepseek         # или claude / openai / groq / gemini
+DEEPSEEK_API_KEY=...
+
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_CHAT_ID=...          # числовой ID из @userinfobot, не username
+
+PAPER_TRADING=true
+AUTO_EXECUTE=false
+MODE=hybrid
+```
 
 ---
 
-## Настройка .env — подробно
+## ⚙️ Конфигурация
 
-### Bybit API
+Полный список переменных с описанием — в [`.env.example`](.env.example) (комментарии на русском ко
+всем секциям: Bybit API, AI-провайдер, режим торговли, Telegram, торговые параметры, управление
+позициями, риск-менеджмент, macro blackout, онлайн-обучение SAC, внешние сигналы, мониторинг).
+
+| Категория | Ключевые переменные |
+|---|---|
+| Биржа | `BYBIT_API_KEY/SECRET`, `MARKET_TYPE`, `BYBIT_TESTNET` |
+| AI | `AI_PROVIDER`, `<PROVIDER>_API_KEY`, `AI_DAILY_BUDGET`, `AI_MAX_SYMBOLS` |
+| Режим | `MODE` (`local`/`ai`/`dqn`/`hybrid`), `PAPER_TRADING`, `AUTO_EXECUTE` |
+| Профиль | `MARKET_PROFILE` (`bluechip`/`altcoin`/`meme`) |
+| Позиции | `MAX_POSITIONS` (1–20), `RISK_PER_TRADE`, `LEVERAGE`, `LEVERAGE_MODE` |
+| Риск | `DAILY_LOSS_LIMIT`, `DRAWDOWN_HALT_HOURS`, `MAX_CORRELATION`, `MAX_SPREAD_PCT` |
+| Telegram | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `TELEGRAM_CONFIRM_TIMEOUT` |
+| Инфра | `REDIS_HOST/PASSWORD`, `DASHBOARD_USER/PASSWORD` |
+
+Большинство параметров (режим, стратегии, риск-профиль, часы торговли, число позиций) меняются
+**прямо из Telegram-меню без перезапуска** — хранятся в Redis с AOF-персистентностью.
+
+---
+
+## 📋 Справочник .env — все переменные
+
+Построчное описание каждой переменной. Разворачивай нужную категорию.
+
+<details>
+<summary><b>🔑 Bybit API</b></summary>
 
 ```env
 BYBIT_API_KEY=           # Получить: bybit.com → Account → API Management
@@ -316,9 +327,10 @@ LEVERAGE=3               # МАКСИМАЛЬНОЕ плечо. Бот расс�
 > когда-либо переключаться на spot через Telegram — включите также `Spot — Trade` сразу, оба
 > права спокойно живут на одном ключе. Право на вывод средств — **НЕ включать**.
 
----
+</details>
 
-### AI провайдер
+<details>
+<summary><b>🧠 AI-провайдер</b></summary>
 
 ```env
 AI_PROVIDER=auto         # auto      → пробует Claude → OpenAI → DeepSeek → Groq → Gemini → локальные стратегии
@@ -357,7 +369,8 @@ AI_DAILY_BUDGET=500      # Лимит AI-вызовов в сутки (UTC). С�
                          # Bluechip: 96 запросов/день. Altcoin: 288 запросов/день.
 ```
 
-> **Совет для старта (бесплатно):** добавь Groq + Gemini — хватает на весь день для обоих профилей. Для лучшего качества дополнительно пополни DeepSeek на $5 (~9–26 дней торговли).
+> **Совет для старта (бесплатно):** добавь Groq + Gemini — хватает на весь день для обоих профилей.
+> Для лучшего качества дополнительно пополни DeepSeek на $5 (~9–26 дней торговли).
 
 **Цепочка надёжности — бот не останавливается никогда:**
 
@@ -373,23 +386,21 @@ Groq + Gemini — бесплатные, хватает на весь день
 Локальные стратегии — 10 базовых + до 4 профильных стратегий без AI, всегда работают
 ```
 
-Настроены только те провайдеры у которых есть ключ в `.env`. Реальный порядок и статус каждого — в Telegram: ⚙️ Настройки → 🤖 AI-провайдер.
-
-**Сравнение провайдеров:**
+Настроены только те провайдеры, у которых есть ключ в `.env`. Реальный порядок и статус каждого —
+в Telegram: ⚙️ Настройки → 🤖 AI-провайдер.
 
 | Провайдер | Стоимость | Качество | Лимит |
-|-----------|-----------|----------|-------|
+|---|---|---|---|
 | DeepSeek | ~$5 на 9–26 дней | Хорошее | по балансу |
 | Groq (Llama 3.3 70B) | бесплатно | Хорошее | 100k токенов/день |
 | Gemini 2.0 Flash | бесплатно | Хорошее | 1500 запросов/день |
 | Claude Sonnet | ~$0.01/запрос | Отличное | по балансу |
 | OpenAI GPT-4o-mini | ~$0.003/запрос | Хорошее | по балансу |
 
-При `AI_PROVIDER=auto` порядок зависит от настроенных ключей: **Claude → OpenAI → DeepSeek → Groq → Gemini**. Реальный порядок и статус каждого провайдера виден в Telegram: ⚙️ Настройки → 🤖 AI-провайдер.
+</details>
 
----
-
-### Режим торговли
+<details>
+<summary><b>🔀 Режим торговли</b></summary>
 
 ```env
 MODE=ai                  # ai     → AI анализирует каждую монету и генерирует сигнал
@@ -421,9 +432,10 @@ MAX_POSITIONS=3          # Начальное значение (1–20). Мен�
                          # В paper режиме рекомендуется 10–15 для быстрого обучения SAC.
 ```
 
----
+</details>
 
-### Telegram
+<details>
+<summary><b>💬 Telegram</b></summary>
 
 ```env
 TELEGRAM_BOT_TOKEN=      # Шаг 1: написать @BotFather → /newbot → скопировать токен
@@ -441,9 +453,10 @@ SILENT_DEATH_HOURS=6.0   # Алерт в Telegram если нет ни одно�
                          # Помогает вовремя заметить зависание бота. 0 = выключен.
 ```
 
----
+</details>
 
-### Торговые параметры
+<details>
+<summary><b>📈 Торговые параметры</b></summary>
 
 ```env
 TIMEFRAME=15m            # Таймфрейм свечей для стратегий.
@@ -467,9 +480,10 @@ TRADING_INTERVAL=60      # Fallback-интервал цикла в секунд�
                          # bluechip → 900с (15 мин), altcoin → 300с (5 мин).
 ```
 
----
+</details>
 
-### Управление позициями
+<details>
+<summary><b>🎯 Управление позициями</b></summary>
 
 ```env
 # ── Частичная фиксация прибыли ──────────────────────────────────────────
@@ -508,9 +522,10 @@ TRADING_HOURS=           # Пусто = торговать круглосуто�
                          # Не рекомендуется: крипта активна 24/7, ночные движения реальные.
 ```
 
----
+</details>
 
-### Риск-менеджмент
+<details>
+<summary><b>🛡 Риск-менеджмент</b></summary>
 
 ```env
 DAILY_LOSS_LIMIT=0.05    # Дневной лимит убытка: 0.05 = 5% баланса.
@@ -548,9 +563,10 @@ MAX_CORRELATION_PAPER=0.85  # Порог корреляции для paper ре�
 CORRELATION_WINDOW=50    # Окно расчёта корреляции в барах (50 × 15m = 12.5 часов).
 ```
 
----
+</details>
 
-### Macro blackout
+<details>
+<summary><b>📅 Macro blackout</b></summary>
 
 ```env
 FINNHUB_API_KEY=         # Ключ Finnhub (бесплатный тир): finnhub.io → Dashboard → API Key
@@ -561,9 +577,10 @@ MACRO_BLACKOUT_ENABLED=true  # Блокировать новые позиции 
                              # Эти события вызывают резкие движения — лучше переждать.
 ```
 
----
+</details>
 
-### Онлайн-обучение SAC
+<details>
+<summary><b>🎓 Онлайн-обучение SAC</b></summary>
 
 ```env
 ONLINE_LEARNING_MODE=periodic  # disabled → выключено (SAC не обучается автоматически)
@@ -593,9 +610,10 @@ SAC_MODEL_PATH=models/sac_model.zip  # Путь к файлу SAC-модели.
                                      #   altcoin  → models/sac_model_altcoin.zip
 ```
 
----
+</details>
 
-### Внешние сигналы (опционально)
+<details>
+<summary><b>🌐 Внешние сигналы (опционально)</b></summary>
 
 Все ключи опциональны. Без них бот работает, просто без этих источников сигналов.
 
@@ -637,9 +655,10 @@ NEWS_API_KEY=
 NEWS_UPDATE_INTERVAL=900   # Обновлять новости каждые 15 минут
 ```
 
----
+</details>
 
-### Мониторинг и инфраструктура
+<details>
+<summary><b>🖥 Мониторинг и инфраструктура</b></summary>
 
 ```env
 HEALTH_PORT=8080         # Порт HTTP health-сервера:
@@ -657,1073 +676,182 @@ REDIS_PORT=6379
 REDIS_PASSWORD=          # Рекомендуется задать в production.
 ```
 
----
-
-## Пошаговая инструкция запуска
-
-### Шаг 1 — Получить ключи
-
-**Bybit API:**
-1. bybit.com → правый угол → API Management → Create New Key
-2. Включить только: `Contract — Orders` + `Contract — Positions`
-3. Скопировать API Key и Secret (показываются один раз!)
-
-**Telegram Bot:**
-1. Написать [@BotFather](https://t.me/BotFather) → `/newbot` → придумать имя → скопировать токен
-2. Написать [@userinfobot](https://t.me/userinfobot) → скопировать числовой "Your ID"
-3. Написать своему боту любое сообщение (чтобы открыть чат)
-
-**DeepSeek (самый дешёвый AI):**
-1. platform.deepseek.com → API Keys → Create new secret key
-
-### Шаг 2 — Настроить .env
-
-```bash
-cp .env.example .env
-# Открыть .env и заполнить обязательные поля
-```
-
-Минимум для старта:
-```env
-BYBIT_API_KEY=xxxxx
-BYBIT_API_SECRET=xxxxx
-DEEPSEEK_API_KEY=sk-xxxxx
-TELEGRAM_BOT_TOKEN=1234567890:ABCxxx
-TELEGRAM_CHAT_ID=123456789    # ваш числовой ID из @userinfobot
-PAPER_TRADING=true
-AUTO_EXECUTE=false
-MODE=ai
-MARKET_TYPE=linear
-LEVERAGE=3
-```
-
-### Шаг 3 — Запустить в paper trading
-
-```bash
-make setup   # одна команда: htpasswd + down + build + up
-make logs    # смотреть что происходит
-```
-
-**Что должно произойти:**
-- В Telegram (~30с): "🤖 BitbotBY запущен"
-- В Telegram (~1 мин): уведомление об отсутствии SAC модели с кнопкой **Обучить сейчас**
-- В логах: `Top 20 by volume: BTC/USDT, ETH/USDT, SOL/USDT ...`
-- В Telegram: сигналы с кнопками Trade/Skip и таймером авто-исполнения
-- Дашборд: http://localhost:8080 (логин/пароль из `.env`)
-
-### Шаг 4 — Наблюдать за сигналами (1–2 недели)
-
-Пока `AUTO_EXECUTE=false` — бот спрашивает разрешение на каждую сделку. Это нормально.  
-Нажимайте Skip и наблюдайте направление сигналов, сравнивайте с реальным рынком.
-
-```bash
-make logs     # логи в реальном времени
-```
-
-### Шаг 5 — Включить автоторговлю (paper)
-
-Когда убедились что сигналы адекватные:
-
-```env
-AUTO_EXECUTE=true
-```
-
-```bash
-make down && make up
-```
-
-Бот торгует сам в бумажном режиме. Смотрите статистику в дашборде.
-
-### Шаг 6 — Переход на реальные деньги
-
-После 2–4 недель успешного paper trading и win rate >50%:
-
-```env
-PAPER_TRADING=false
-RISK_PER_TRADE=0.01    # начать с 1%
-MAX_POSITIONS=2        # начать с 2 позиций
-LEVERAGE=2             # начать с 2x
-DAILY_LOSS_LIMIT=0.03  # жёсткий лимит на первое время
-```
-
-```bash
-make live
-```
+</details>
 
 ---
 
-## Режимы работы
+## 📱 Управление через Telegram
 
-| Режим | Описание | Требования | Когда использовать |
-|-------|----------|------------|-------------------|
-| `local` | Автовыбор из базовых стратегий по индикаторам, без AI | Только Bybit API | Страховка когда AI недоступен; для live не рекомендуется |
-| `ai` | AI генерирует сигналы | Bybit + AI-ключ (Groq/DeepSeek/Claude/OpenAI) | **Рекомендуется для старта** |
-| `dqn` (SAC) | Только SAC нейросеть | Bybit + обученная модель | После `make train` |
-| `hybrid` | SAC + AI согласуются | Bybit + AI + модель | Консервативный |
-| `hybrid + Chronos` | SAC + AI, Chronos — доп. модификатор confidence | Bybit + AI + модель | **Максимальная точность (paper и live)** |
+При запуске бот присылает клавиатуру с быстрым доступом к:
 
-В режиме `hybrid` веса адаптируются по режиму рынка:
+- 🌐 **Профиль рынка** — переключение Bluechip / Altcoin / Meme
+- ⚙️ **Режим** — Local / AI / DQN / Hybrid (+ Chronos)
+- ⚖️ **Риск-профиль** — пороги confidence, флэш-защита (ATR spike / drawdown halt)
+- 🎯 **Позиции** — количество слотов, risk per trade, leverage
+- 🧠 **Обучение SAC** — запуск дообучения, прогресс, метрики
+- 📊 **Статистика** — win rate, EV, история сделок
 
-| Режим рынка | Вес SAC | Вес AI |
-|-------------|---------|--------|
-| `trending_up` | 50% | 50% |
-| `ranging` | 40% | 60% |
-| `trending_down` | 30% | 70% |
-
-### Hybrid + Chronos (усиленный контроль)
-
-При переключении в `hybrid` Telegram спрашивает:
-
-```
-🔀 Режим переключён: Hybrid
-
-Включить усиленный контроль?
-SAC + LLM + Chronos — тройное подтверждение.
-Chronos мягко корректирует confidence
-(не отменяет сделку жёстко) и работает
-в paper и live одинаково.
-
-[✅ Включить (рекомендуется)]  [⚡ Стандартный режим]
-```
-
-**Три независимых источника:**
-
-| Модель | Смотрит на | Обучение |
-|--------|-----------|---------|
-| **SAC** | Опыт сделок бота (числа + паттерны) | `make train` / онлайн |
-| **LLM** | Новости, сентимент, контекст рынка | Не нужно (готовая) |
-| **Chronos** | Только ценовые паттерны (OHLCV) | Не нужно (готовая, Amazon) |
-
-Chronos — **мягкий модификатор confidence**, а не отдельное условие входа: SAC+AI должны согласиться первыми (как и без Chronos), и уже на их совместный confidence Chronos накидывает бонус или штраф:
-
-- Согласен с направлением SAC+AI → `confidence + 0.05`
-- Не согласен → `confidence − 0.15`
-- Neutral (прогноз внутри порога) → без изменений
-
-Порог "согласен/не согласен" считается от ATR символа (`0.3 × ATR/price`, не ниже 0.1%), а не как фиксированный процент для всех монет — так волатильный альт и спокойный BTC не сравниваются по одной линейке. Если после модификатора итоговый confidence падает ниже `MIN_SIGNAL_CONFIDENCE` — сделка не открывается, как и с любым другим фильтром; но Chronos сам по себе никогда не отменяет сделку жёстким veto.
-
-Работает одинаково **и в paper, и в live** — можно накопить статистику согласия/несогласия Chronos с фактическим исходом сделок ещё до реальных денег.
-
-Включить/выключить в любой момент: ⚙️ Настройки → кнопка **🛡 Chronos**.  
-Chronos (~400MB) скачивается автоматически с HuggingFace при первом использовании и кешируется локально.
+Подтверждение каждой сделки (если `AUTO_EXECUTE=false`) приходит с live win-rate/EV стратегии и
+бэктест-статистикой, таймаут — `TELEGRAM_CONFIRM_TIMEOUT`.
 
 ---
 
-## Управление через Telegram
+## 📊 Мониторинг
 
-Большинство настроек можно менять **без перезапуска бота** прямо из Telegram. Настройки сохраняются в Redis и переживают рестарты — `.env` служит только стартовой точкой.
-
-### При запуске
-
-Бот отправляет сообщение с полным состоянием всех параметров и inline-кнопками для управления:
-
-```
-🤖 BitbotBY запущен [live]
-
-Режим: ai | Символов: 20
-Баланс: $10 432.50
-
-⚙️ Параметры:
-  Авто-сделки: ✅
-  Макс позиций: 3
-  Риск/сделку: 2.0%
-  Защита просадки: ✅
-  Часы торговли: 24/7 UTC
-  Стратегий вкл: 10/10 (+ профильные авто)
-```
-
-### Команды
-
-| Команда | Описание |
-|---------|----------|
-| `/status` | Текущий баланс, позиции, режим, PnL |
-| `/pause` / `/resume` | Остановить / возобновить торговлю |
-| `/mode ai\|local\|dqn\|hybrid` | Сменить режим работы |
-| `/strategies` | Включить/выключить стратегии кнопками |
-| `/alerts` | Управление уведомлениями (вкл/выкл + cooldown) |
-| `/risk` | Применить риск-пресет |
-| `/hours 9-17` | Установить торговые часы (UTC). `/hours 0` = 24/7 |
-| `/pnl` | PnL и win rate за сегодня / всё время |
-| `/pos` | Список открытых позиций |
-| `/closeall` | Закрыть все открытые позиции (с подтверждением) |
-| `/add BTC/USDT` | Принудительно добавить символ в сканирование |
-| `/remove BTC/USDT` | Исключить символ из сканирования |
-| `/scan 30` | Изменить количество сканируемых монет |
-| `/trainn 15` | Сколько монет брать для обучения SAC (1–100, по умолчанию 20) |
-
-### Обучение SAC из Telegram
-
-При первом запуске без модели бот отправляет автоматическое сообщение:
-
-```
-⚠️ SAC модель не найдена
-
-[ ✅ Обучить сейчас (~60 мин) ] [ ⏭ Пропустить ]
-```
-
-Через 60 дней работы бот напоминает о тюнинге (если файл гиперпараметров для текущего профиля ещё не создан):
-
-```
-📅 Прошло 60+ дней с запуска бота
-Рекомендуем запустить тюнинг SAC...
-
-[ 🔬 Запустить тюнинг ] [ ⏭ Пропустить ]
-```
-
-Кнопка **🔬 Тюнинг SAC (~2ч) + обучение** доступна в ⚙️ Настройки в любой момент:
-- Запускает `tune_sac.py` (Optuna, ~2 ч) — находит лучшие параметры нейросети
-- Автоматически запускает `train_sac.py` (~1 ч) с найденными параметрами
-- Бот продолжает торговать во время обучения
-- Уведомления: 🔬 запущен → ✅ тюнинг готов → ✅ модель обновлена
-
-> **Профильная изоляция данных.** Каждый рыночный профиль хранит свои данные отдельно:
->
-> | Профиль | Модель | Гиперпараметры (Optuna) | Реальные сделки (fine-tune) |
-> |---------|--------|------------------------|-----------------------------|
-> | Bluechip / Default | `models/sac_model.zip` | `models/best_hyperparams.json` | `data/experiences.jsonl` |
-> | Altcoin | `models/sac_model_altcoin.zip` | `models/best_hyperparams_altcoin.json` | `data/experiences_altcoin.jsonl` |
-> | Meme | `models/sac_model_meme.zip` | `models/best_hyperparams_meme.json` | `data/experiences_meme.jsonl` |
->
-> При смене профиля через Telegram бот автоматически переключает пути — опыт сделок мемкоинов никогда не влияет на модели bluechip/altcoin и наоборот.
-
----
-
-### Жизненный цикл SAC модели
-
-> Бот сам напоминает когда нужно действовать — ничего держать в голове не нужно.
-
-#### Что бот делает автоматически
-
-| Событие | Что происходит |
-|---------|----------------|
-| Старт без модели | Уведомление ⚠️ с кнопкой "Обучить сейчас" |
-| Каждые 50 сделок | Дообучение SAC в фоне (OnlineLearner) — бот не останавливается |
-| Через 60 дней | Уведомление 📅 с кнопкой "Запустить тюнинг" |
-| После тюнинга | Автоматически запускает полное обучение с новыми параметрами |
-
-#### Рекомендуемый план (что делать вручную)
-
-| Когда | Действие | Как |
-|-------|----------|-----|
-| День 1 | Запустить первичное обучение SAC | Кнопка в уведомлении или `make train` (~60 мин) |
-| Недели 1–8 | Ничего — бот дообучается сам на каждых 50 сделках | Автоматически |
-| День 60+ | Тюнинг гиперпараметров (Optuna) + полное переобучение | Кнопка 🔬 в ⚙️ Настройках (~3 ч) |
-| После тюнинга | Бэктест — проверить улучшился ли результат | `make backtest` или кнопка 📊 Бэктест |
-| Раз в месяц | Полное переобучение на свежих данных | `make train-docker` или кнопка в Настройках |
-
-#### Уведомления которые придут в Telegram
-
-```
-⚠️ SAC модель не найдена
-→ [✅ Обучить сейчас (~60 мин)] [⏭ Пропустить]
-
-📅 Прошло 60+ дней с запуска бота
-Рекомендуем запустить тюнинг SAC — подбор оптимальных параметров.
-→ [🔬 Запустить тюнинг] [⏭ Пропустить]
-
-🧠 Обучение SAC запущено... (~60 мин, бот продолжает торговать)
-✅ Тюнинг завершён → запускаем обучение с найденными параметрами
-```
-
-После завершения любого обучения (🧠 или 🔬) бот присылает результат на тестовой выборке:
-
-```
-✅ SAC модель обучена!
-
-📊 Тестовая выборка (holdout 20%):
-  SAC: +14.2%  |  Buy&Hold: +8.1%  ✅
-
-✅ Модель превзошла Buy&Hold на тестовой выборке.
-Запустить бэктест чтобы проверить результат?
-
-→ [📊 Запустить бэктест] [📊 Статус] [⚙️ Настройки]
-```
-
-Если новая модель **значительно хуже** рынка (разрыв > 10%) — появляется кнопка отката:
-
-```
-⚠️ Модель показала результат хуже рынка.
-
-📊 Тестовая выборка (holdout 20%):
-  SAC: -3.1%  |  Buy&Hold: +8.1%  ⚠️
-
-→ [🔄 Откатить модель] [📊 Запустить бэктест] [⚙️ Настройки]
-```
-
-> **OnlineLearner** (дообучение каждые 50 сделок) присылает уведомление в Telegram с результатом: принята новая модель или отклонена с причиной.
-
-#### Бэктест после обучения
-
-После обучения бот предлагает запустить бэктест прямо в уведомлении. Можно также запустить вручную:
-
-```bash
-make backtest               # топ-20 монет, 15m, последние 3 месяца
-BT_MONTHS=6 make backtest  # 6 месяцев истории
-```
-
-Или через Telegram: ⚙️ Настройки → **📊 Бэктест стратегий**.
-
-#### Откат модели
-
-Перед каждым обучением автоматически создаётся бэкап: `models/sac_model_YYYYMMDD_HHMMSS.zip`.
-
-Если модель деградировала — откатить одной кнопкой 🔄 в уведомлении, или вручную:
-
-```bash
-cp models/sac_model_20260620_143000.zip models/sac_model.zip
-```
-
-### Кнопочное меню
-
-Кнопка **Настройки** открывает меню с разделами:
-
-**🔔 Уведомления** — управление каждым типом алертов без перезапуска:
-
-| Алерт | Работает в | Поведение |
-|-------|-----------|-----------|
-| ⚡ ATR Spike | paper + live | Редактирует одно сообщение вместо спама |
-| 📉 Drawdown | только paper | В live бот действует сам, шлёт одно сообщение |
-| 🔒 Daily limit | только paper | Аналогично drawdown |
-| 🔇 BotStalled | paper + live | **Закрепляется** вверху чата, открепляется при восстановлении |
-
-Для каждого типа: кнопка ✅/❌ (вкл/выкл) и кнопка ⏱ N мин (настройка cooldown — как часто повторять). Cooldown вводится в чат числом от 1 до 1440 минут.
-
-> `BotStalled` покрывает два сценария: зависание торгового цикла и отсутствие сделок дольше `SILENT_DEATH_HOURS`. Алерт **закрепляется** вверху чата автоматически и **открепляется** как только бот возобновляет нормальную работу.
-
----
-
-**📐 Стратегии** — 10 базовых стратегий переключаются кнопкой ВКЛ/ВЫКЛ. Профильные стратегии (volume_spike_bluechip/altcoin/meme, momentum_burst, pump_exit, sentiment) активируются автоматически при смене профиля — их не нужно переключать вручную. Минимум одна стратегия всегда остаётся включённой.
-
-```
-Стратегии (8/9 включено):
-[✅ EMA Crossover]  [✅ RSI]       [❌ MACD]
-[✅ Bollinger]      [✅ Scalping]  [✅ Swing]
-[✅ Breakout]       [✅ Mean Rev]  [✅ Trend]
-[Сбросить всё]      [← Назад]
-```
-
-**💱 Рынок: Spot/Futures** — переключает `MARKET_TYPE` на лету без рестарта. Заблокировано, пока есть открытые позиции (чтобы не оставить открытый шорт "висеть" при переходе на spot). В spot-режиме `sell` как вход в новую позицию игнорируется автоматически.
-
-**🌐 Профиль рынка** — адаптирует весь стек настроек под текущий сезон одним нажатием:
-
-| | 🔵 Блючипы | 🟡 Альткоины | 🚀 Мемкоины |
-|---|-----------|-------------|-------------|
-| **Когда** | BTC-доминация высокая | Сезон альткоинов | Памп-активность, мемы в тренде |
-| **Монеты** | Топ-20 (мемы и стейблы исключены) | Топ-100, объём $500K–$2B | Топ-200, объём $50K–$500M, мемы включены |
-| **Таймфрейм** | 15m | 5m | 3m |
-| **Интервал цикла** | 15 мин | 5 мин | 90 сек |
-| **Риск/сделку** | 2% | 1% | 0.5% |
-| **SL / TP базовый** | SL 5%, TP 10% (2×SL) | SL 4%, TP 16% (4×SL) | SL 12%, TP 72% (6×SL) |
-| **Режим AI** | hybrid (SAC + LLM) | hybrid (SAC + LLM) | hybrid (SAC + LLM) |
-| **SAC модель** | `models/sac_model.zip` | `models/sac_model_altcoin.zip` | `models/sac_model_meme.zip` |
-| **Профильные стратегии** | volume_spike_bluechip | volume_spike_altcoin | volume_spike_meme, momentum_burst, pump_exit, sentiment |
-| **Соц-сентимент** (стратегия `sentiment`) | — | — | Twitter/X + Telegram памп-каналы |
-
-**Новостной сентимент** (NewsAPI/RSS + AI/VADER) применяется **одинаково ко всем профилям** — это фильтр confidence в `SignalCombiner` ([cycle.py:70](src/cycle.py#L70)), не привязан к профилю рынка, поэтому убран из таблицы различий выше (там были одинаковые значения во всех трёх колонках — не различие, а константа).
-
-Значок **🧠** рядом с кнопкой означает что SAC-модель для этого профиля уже обучена. **⚠️** — модели нет, бот будет работать только на AI-сигналах.
-
-Применяется через Telegram **⚙️ Настройки → 🌐 Профиль рынка** без перезапуска. Текущий профиль отображается в шапке настроек и помечается ✅ в меню выбора.
-
-> **Совет:** смотри BTC.D (доминация BTC) на TradingView. Если растёт → 🔵 Блючипы. Если падает и альткоины опережают BTC → 🟡 Альткоины.
-
----
-
-**⚖️ Риск-профиль** — три готовых пресета и настройка flash-защиты:
-
-| Пресет | Макс позиций | Риск/сделку | Защита просадки |
-|--------|-------------|-------------|-----------------|
-| 🛡 Консервативный | 2 | 1% | ✅ |
-| ⚖️ Умеренный | 3 | 2% | ✅ |
-| ⚡ Агрессивный | 5 | 4% | ❌ |
-
-**🛡 Flash-защита** — кнопки ➖/➕ меняют количество циклов подтверждения для hard drawdown halt (1–10). Меньше циклов = быстрее реакция. Больше = устойчивее к flash crash. Сохраняется в Redis без перезапуска.
-
-**🎯 Порог сигнала** — кнопки ▼/▲ меняют минимальную уверенность сигнала отдельно для Live и Paper режимов (диапазон 0.40–0.95, шаг 0.05). Настройки независимы: в paper можно снизить для накопления сделок при обучении SAC, не трогая live. Сохраняется в Redis, при рестарте бота возвращается к значениям из `.env`.
-
----
-
-### Paper vs Live — различия в параметрах
-
-Paper режим намеренно мягче: цель — накопить как можно больше разнообразных сделок для обучения SAC-модели. Live режим строже — защита реальных денег.
-
-| Параметр | Paper | Live | Где задаётся |
-|---|---|---|---|
-| Порог сигнала | 0.60 | 0.75 | `.env` / Telegram ⚖️ Риск |
-| Корреляционный фильтр | 0.85 | 0.70 | `.env` |
-| Hard drawdown halt | только уведомление | блокирует на N часов | автоматически |
-| Daily loss limit | только уведомление | останавливает торговлю | автоматически |
-| MAX_POSITIONS (кнопка) | до 15 (🚀 Paper макс) | ограничен пресетом | Telegram ⚖️ Риск |
-| База данных | `trades_paper.db` | `trades_live.db` | автоматически |
-| Chronos фильтр | работает в hybrid (мягкий модификатор) | работает в hybrid (мягкий модификатор) | автоматически |
-
-**📊 Управление плечом** — три режима, переключаются командой `/lev`:
-
-| Режим | Команда | Как работает |
-|-------|---------|-------------|
-| `fixed` | `/lev fixed` | Всегда использует `LEVERAGE` из `.env` (например 3x). Просто и предсказуемо |
-| `volatility` | `/lev volatility` ✅ | ATR-таргетинг: высокая волатильность → меньше плечо, тихий рынок → больше. Риск на ATR-движение всегда одинаковый |
-| `full` | `/lev full` | То же что volatility + понижает плечо в даунтренде (×0.5) и при просадке баланса (до ×0.3) |
-
-**По умолчанию:** `volatility` — рекомендуется для старта.
-
-**Как работает расчёт (volatility / full):**
-```
-pleco = target_risk / (ATR / price)
-
-Пример: BTC, цена = 50 000, ATR = 500 (ATR% = 1%)
-  target_risk = 1%  →  плечо = 1% / 1% = 1x
-  target_risk = 2%  →  плечо = 2% / 1% = 2x
-
-SOL, цена = 150, ATR = 6 (ATR% = 4%)
-  target_risk = 1%  →  плечо = 1% / 4% = 0.25x → 1x (минимум)
-```
-
-**Дополнительные множители в режиме `full`:**
-
-| Условие | Множитель | Результат |
-|---------|-----------|-----------|
-| Рынок в аптренде | ×1.0 | Плечо без изменений |
-| Рынок боком | ×0.7 | Плечо снижается на 30% |
-| Рынок в даунтренде | ×0.5 | Плечо снижается вдвое |
-| Просадка достигла порога | ×0.3 (min) | Плечо снижается до 30% |
-
-**Порог просадки** (`/lev drawdown 0.15` = 15%):
-- При просадке баланса от пика 0% → 15% плечо плавно снижается от 100% до 30%
-- При просадке ≥ 15% плечо зафиксировано на 30% от расчётного
-- Рекомендация: `0.15` для старта, `0.20` для опытных
-
-**Управление из Telegram:**
-```
-/lev               — статус всех параметров
-/lev volatility    — переключить режим
-/lev target 0.01   — целевой риск на ATR (0.5%–10%)
-/lev drawdown 0.15 — порог просадки для режима full (5%–50%)
-```
-
-Все изменения применяются к следующим ордерам без перезапуска.
-
-**🤖 AI-провайдер** — переключается командой `/provider` без перезапуска:
-
-| Провайдер | Команда | Характеристика |
-|-----------|---------|---------------|
-| `auto` | `/provider auto` | Авто: Claude → OpenAI → DeepSeek → Groq → Gemini → локальные стратегии |
-| `groq` | `/provider groq` ⭐ | Llama 3.3 70B, **бесплатный**, 100k токенов/день |
-| `gemini` | `/provider gemini` ⭐ | Gemini Flash, **бесплатный**, 1500 запросов/день |
-| `anthropic` | `/provider anthropic` | Claude — лучшее качество анализа |
-| `deepseek` | `/provider deepseek` | Самый дешёвый платный (~$0.002/запрос) |
-| `openai` | `/provider openai` | ChatGPT GPT-4o-mini |
-
-> Переключение меняет **первичного** провайдера. Цепочка fallback остаётся активной — если первичный вернёт ошибку, бот автоматически попробует следующий с ключом.
-
-**🕐 Часы торговли** — готовые пресеты или ввод вручную командой `/hours`:
-
-```
-[🌍 24/7 (круглосуточно)]
-[🇺🇸 13-21 (NYSE)]   [🇪🇺 7-15 (Европа)]
-[🌏 1-10 (Азия)]     [📝 Ввести вручную]
-```
-
-**🛡 Chronos (усиленный контроль)** — показывается только в режиме `hybrid`. Включает Chronos как третий, мягкий модификатор confidence (SAC+LLM должны согласиться первыми, Chronos лишь усиливает или ослабляет их совместную уверенность). Работает одинаково в paper и live.
-
-**🔄 Перезапуск бота** — кнопка появляется в Telegram после переключения режима Paper ↔ Live. Отправляет SIGTERM процессу → Docker автоматически поднимает бот заново (`restart: unless-stopped`). После рестарта бот сверяется с реальными позициями на бирже.
-
-**📄/💰 Переключение Paper ↔ Live** — кнопка всегда видна в главном меню и в Настройках. Два сценария:
-
-- **Без PIN** (`TRADING_MODE_PIN=` пусто): нажать кнопку → подтвердить inline-кнопкой → режим переключён
-- **С PIN** (`TRADING_MODE_PIN=секрет`): нажать кнопку → ввести кодовое слово текстом в чат (2 минуты) → переключён
-
-В обоих случаях изменение сохраняется в Redis и восстанавливается после перезапуска. Уведомление 🚨 **ВАЖНО! РЕЖИМ ТОРГОВЛИ ИЗМЕНЁН** отправляется при каждом переключении.
-
-**🗑 Закрыть все позиции** — кнопка в меню `/pos`. Показывает диалог подтверждения с количеством открытых позиций, затем закрывает все сразу и сохраняет состояние в Redis. Работает и как команда `/closeall`. Полезно при зависших (zombie) позициях после перезапуска.
-
-**🔄 Сброс настроек** — возвращает все динамические параметры к значениям из `.env`.
-
-### Сохранение настроек
-
-- Все изменения через Telegram сохраняются в Redis и переживают перезапуск бота
-- `.env` — только начальные значения при первом запуске (или после сброса)
-- Если Redis недоступен — бот работает на значениях из `.env` как fallback
-
----
-
-## Онлайн-обучение модели
-
-Бот автоматически учится на своих сделках. Каждая закрытая позиция сохраняется в профильный файл (`data/experiences.jsonl` для bluechip/default или `data/experiences_altcoin.jsonl` для altcoin) и `data/trades_paper.db` / `data/trades_live.db` — опыт каждого сезона не смешивается.
-
-### Режимы обучения
-
-| Режим | Частота обновления | Риск | Рекомендация |
-|-------|---------------------|------|--------------|
-| `disabled` | никогда | нет | Нет модели / ручной `make train` |
-| `online` | после каждой сделки | ⚠ высокий | Только эксперименты |
-| `periodic` | каждые N сделок в фоне | низкий | ✅ Продакшн |
-| `hybrid` | periodic + мгновенные веса стратегий | средний | После 500+ сделок |
-
-**Режим `periodic`** (рекомендуется для начала):
-- После каждых 50 закрытых сделок → фоновый поток запускает полный ретрейн
-- Торговля не останавливается во время переобучения
-- После обучения автоматическая проверка: SAC должен быть не хуже Buy&Hold − 10%
-  - ✅ Прошёл → новая модель подменяет старую без остановки бота, уведомление в Telegram
-  - ❌ Не прошёл → старая модель остаётся, опыт сохранён, повтор через 50 сделок, уведомление в Telegram
-- Старая модель сохраняется как `.bak` на случай отката
-
-**Режим `hybrid`** добавляет динамические веса стратегий:
-- Если `ema_crossover` дал 3 стопа подряд → его confidence понижается немедленно (×0.5)
-- Если `macd` дал 3 прибыльных → его confidence повышается (×1.5)
-- Веса хранятся в Redis → видны всем процессам в Docker
-
-**Путь перехода:**
-```
-Старт → ONLINE_LEARNING_MODE=disabled  (нет модели)
-  ↓ накопить 100+ сделок (2–4 недели paper trading)
-  ↓ make train-docker  (первоначальное обучение SAC, ~60 мин)
-ONLINE_LEARNING_MODE=periodic           ← запустить здесь (авто-дообучение каждые 50 сделок)
-  ↓ накопить 500+ сделок
-ONLINE_LEARNING_MODE=hybrid             ← перейти когда есть статистика
-  ↓ раз в месяц: make train-docker      (полное переобучение на свежих данных)
-```
-
-### Прогресс обучения SAC
-
-Во время тюнинга или обучения можно проверить статус в реальном времени через Telegram:
-
-**⚙️ Настройки → 📈 Прогресс обучения**
-
-Во время тюнинга:
-```
-🔬 Тюнинг SAC
-[████░░░░░░] 40.0%
-Попытка: 12 / 30
-Лучший PnL: $10 847
-Осталось: ~45 мин
-```
-
-Во время обучения:
-```
-🧠 Обучение SAC
-[████████░░] 80.0%
-Шаги: 400,000 / 500,000
-Осталось: ~12 мин
-```
-
-Кнопка **🔄 Обновить** подтягивает актуальные данные. Когда ничего не запущено — кнопка сообщает об этом.
-
-Кнопка **Обучить SAC / Тюнинг** в меню Настроек показывает состояние в реальном времени: пока идёт процесс — отображает **⏳ Идёт тюнинг SAC...** или **⏳ Идёт обучение SAC...** и ведёт прямо в прогресс. Бот продолжает торговать во время обучения.
-
----
-
-## 🌡 Детектор рыночного сезона
-
-Бот автоматически отслеживает смену сезона (BTC Season ↔ Altcoin Season ↔ Meme Season) через **CoinGecko API** (бесплатно, без ключей) и уведомляет о необходимости сменить профиль рынка.
-
-**Работает в обоих режимах — paper и live.**
-
-### Как работает
-
-Каждые 4 часа бот запрашивает у CoinGecko:
-- **BTC Dominance** — доля биткоина в общей капитализации
-- **Altcoin Index** — % монет из топ-100 которые обогнали BTC за 30 дней
-- **Fear & Greed Index** — alternative.me, бесплатно
-- **Темп новых токенов на pump.fun** — через PumpPortal WebSocket (см. ниже), только если задан `PUMPPORTAL_API_KEY`
-
-| Сезон | Условие |
-|-------|---------|
-| 🚀 **Meme Season** | Altcoin Index ≥ 85 И BTC Dominance < 40% И Fear&Greed ≥ 75 (Extreme Greed) И темп лаунчей на pump.fun ≥ 2× собственного недельного бейзлайна |
-| 🟡 **Altcoin Season** | Индекс ≥ 75% И BTC Dominance < 45% |
-| 🔵 **BTC Season** | Индекс ≤ 25% ИЛИ BTC Dominance > 52% |
-
-Meme Season проверяется первым (более строгий и редкий сигнал) и требует ВСЕ 4 условия одновременно — если хотя бы одно недоступно (нет ключа PumpPortal, или бейзлайн ещё не накопился — см. ниже), детектор просто не рассматривает meme и работает как раньше (только Altcoin/BTC Season).
-
-**Гистерезис:** сигнал должен подтвердиться 2 проверки подряд (~8ч) прежде чем придёт уведомление. Повторный алерт — не раньше 24 часов.
-
-### Темп лаунчей на pump.fun (для Meme Season)
-
-Порог темпа лаунчей — не абсолютное число (его невозможно угадать надёжно, "нормальный" темп на pump.fun сам по себе огромный и не задокументирован официально), а сравнение с собственным скользящим бейзлайном:
-
-- Бот слушает бесплатный WebSocket **PumpPortal** (`subscribeNewToken`) в фоне и считает события/час.
-- Раз в 4 часа (вместе с проверкой сезона) текущий темп сохраняется в историю — до 42 замеров (~7 дней).
-- Бейзлайн = медиана этой истории. Пока накоплено меньше 5 замеров (~20 часов после чистого старта или `make rebuild`) — бейзлайна нет, Meme Season не может сработать, остальные сезоны работают без изменений.
-
-Пороги (`_MEME_ALT_INDEX_HI`, `_MEME_BTC_DOM_LO`, `_MEME_FEAR_GREED_HI`, `_MEME_LAUNCH_RATE_MULTIPLIER` в `src/season_detector.py`) — первая рабочая гипотеза, не откалиброванная реальными данными. Смотрите логи (`Season check: ... signal=meme`), чтобы понять, адекватно ли срабатывает сигнал, прежде чем на него полагаться.
-
-```env
-# PumpPortal — бесплатный API для темпа лаунчей на pump.fun (Meme Season)
-# Получить ключ: pumpportal.fun/trading-api/setup → "Create Wallet & API Key"
-# Депозит SOL не нужен — только для чтения событий (subscribeNewToken бесплатен)
-# Если не задан — Meme Season просто не детектится, Altcoin/BTC Season работают как обычно
-PUMPPORTAL_API_KEY=
-```
-
-### Пример уведомления
-
-```
-🟡 Обнаружен АЛЬТСЕЗОН
-
-Альт-индекс: [████████░░] 80/100
-BTC Dominance: 38.5%
-BTC 30d: +12.3%
-
-76 из 95 альтов обогнали BTC за 30 дней.
-BTC Dominance: 38.5%
-
-Рекомендуется переключиться на профиль Альткоины.
-
-[✅ Переключить на Альты]  [❌ Оставить как есть]
-```
-
-Детектор работает в **обе стороны** — уведомит как о начале альтсезона, так и о возврате к BTC Season.
-
-### Режимы реакции
-
-| Режим | Поведение |
-|-------|-----------|
-| `alert` *(по умолчанию)* | Telegram-уведомление с кнопками **Переключить / Оставить**. Ты решаешь. |
-| `auto` | Профиль переключается автоматически без подтверждения. |
-
-Режим можно менять **динамически через Telegram** без перезапуска:
-
-**⚙️ Настройки → 🔔 Сезон: Алерт → авто**
-
-При включении `auto` бот показывает предупреждение:
-> ⚠️ SAC модель обучена на конкретном профиле — после автосмены торговля идёт на AI/Local до переобучения. Рекомендуется иметь обученные модели для обоих профилей.
-
-Настройка сохраняется в Redis и переживает перезапуск. `.env` задаёт только начальное значение.
-
-### Настройка в .env
-
-```env
-# Начальный режим (можно изменить через Telegram)
-SEASON_SWITCH_MODE=alert
-
-# Интервал проверки CoinGecko в часах
-SEASON_CHECK_INTERVAL_H=4
-```
-
----
-
-## Мониторинг
-
-### Веб-дашборд (http://localhost:8080)
-- Текущий баланс и открытые позиции
-- История сделок с PnL по каждой
-- Win rate и Expected Value
-
-### Grafana (http://localhost:3000)
-Метрики в реальном времени. Настроенные алерты:
-- **HighDrawdown** — просадка >10% за 5 мин → предупреждение в Telegram
-- **SilentDeath** — нет торговли >6 часов
-
-### Prometheus (http://localhost:9090)
-```
-bitbot_balance          — текущий баланс USDT
-bitbot_peak_balance     — максимальный баланс (для расчёта drawdown)
-bitbot_open_positions   — количество открытых позиций
-bitbot_cycle_total      — количество торговых циклов
-```
-
-### Telegram уведомления
-
-**Система "живых сообщений"** — повторяющиеся алерты не создают новые сообщения, а редактируют одно и то же. Чат остаётся чистым.
-
-| Тип | Поведение | Управление |
-|-----|-----------|------------|
-| Сигнал (Trade/Skip) | Новое сообщение с кнопками | Всегда |
-| Открытие позиции | Новое сообщение | `/alerts` → 📈 вкл/выкл |
-| Закрытие позиции | Новое сообщение с PnL | `/alerts` → 💰 вкл/выкл |
-| ⚡ ATR Spike | Редактирует одно сообщение | `/alerts` → cooldown |
-| 📉 Drawdown (paper) | Редактирует одно сообщение | `/alerts` → вкл/выкл + cooldown |
-| 🔒 Daily limit (paper) | Редактирует одно сообщение | `/alerts` → вкл/выкл + cooldown |
-| 🔇 BotStalled | Редактирует + **закрепляет**, открепляет при восстановлении | `/alerts` → вкл/выкл + cooldown |
-
-- Алерт при тишине >6 часов — `SILENT_DEATH_HOURS` в `.env`
-- Funding arbitrage: если |funding| >0.05%
-
----
-
-## Обучение SAC-модели
-
-SAC нужна только для режимов `dqn` и `hybrid`. Для `MODE=ai` — не нужна.
-
----
-
-### Полный путь от старта до live торговли
-
-```
-ШАГ 1 — Paper режим, накопить сделки
-  PAPER_TRADING=true, MODE=ai, MAX_POSITIONS=15 (кнопка 🚀 Paper макс)
-  Цель: 100+ закрытых сделок в experiences.jsonl
-  Время: ~2–4 недели при активном рынке
-  Контроль: /status → смотришь кол-во сделок
-
-ШАГ 2 — Первое обучение SAC (train_sac)
-  make train   ИЛИ   кнопка ⚙️ Настройки → Обучить SAC
-  Время: ~60 мин на CPU
-  Результат: models/sac_model.zip
-  После: бэктест — посмотреть насколько модель лучше Buy&Hold
-
-ШАГ 3 — Переключить в Hybrid режим
-  Telegram: /mode hybrid   ИЛИ   ⚙️ Настройки → режим
-  Теперь SAC + AI работают вместе
-  Продолжить накапливать сделки
-
-ШАГ 4 — Тюнинг гиперпараметров (tune_sac) — когда 300+ сделок
-  make tune   ИЛИ   кнопка 🔬 Тюнинг SAC в настройках
-  Время: ~2–3 ч (Optuna, 30 итераций)
-  Результат: models/best_hyperparams.json — оптимальные параметры сети
-  После тюнинга: АВТОМАТИЧЕСКИ запускается train_sac с новыми параметрами
-
-ШАГ 5 — Бэктест после тюнинга
-  make backtest   ИЛИ   кнопка 📊 Бэктест в уведомлении
-  Сравниваем: SAC vs Buy&Hold на последних 20% данных (holdout)
-  Если SAC хуже на >10% — кнопка 🔄 Откатить к предыдущей модели
-
-ШАГ 6 — Переход в Live (когда win rate >50% на paper)
-  Пополнить баланс DeepSeek/Groq для AI
-  make live → переключает PAPER_TRADING=false
-  Рекомендуемый режим: hybrid или hybrid + Chronos
-```
-
----
-
-### train_sac vs tune_sac — в чём разница
-
-| | `train_sac` | `tune_sac` |
+| Сервис | URL | Назначение |
 |---|---|---|
-| Что делает | Обучает нейросеть SAC на исторических данных | Ищет оптимальные гиперпараметры (Optuna, 30 итераций) |
-| Время | ~60 мин | ~2–3 ч |
-| Результат | `models/sac_model.zip` | `models/best_hyperparams.json` |
-| Когда использовать | Первое обучение, ежемесячное переобучение | Раз в 60+ дней, когда модель перестала улучшаться |
-| Зависимость | Может работать без гиперпараметров (дефолты) | После tune → автоматически запускает train |
-| Сделок нужно | 100+ | 300+ |
+| **Веб-дашборд** | http://localhost:8080 | Баланс, открытые позиции, история сделок |
+| **Grafana** | http://localhost:3000 | Дашборды по метрикам бота |
+| **Prometheus** | http://localhost:9090 | Сырые метрики |
+| **Health check** | http://localhost:8080/health | Статус для supervisor/оркестрации |
+| **Telegram** | — | Сигналы, Trade/Skip, silent death, arb-алерты |
 
-**Правильный порядок:**
-```
-Первый раз:    train_sac  (быстро получить рабочую модель)
-Через 60 дней: tune_sac → train_sac  (автоматически последовательно)
-Раз в месяц:  train_sac  (дообучение на свежих данных)
-```
-
-> ⚠️ Не нужно запускать tune_sac каждый раз — это долго и нецелесообразно.
-> tune_sac нужен только когда модель "застыла" и перестала улучшаться.
+Дашборд закрыт через nginx (HTTP basic auth, `DASHBOARD_USER`/`DASHBOARD_PASSWORD`), не доступен напрямую.
 
 ---
 
-### Автоматическое улучшение — OnlineLearner
+## 🎓 Обучение SAC-модели
 
-После каждой **50-й закрытой сделки** бот автоматически запускает переобучение SAC в фоне — без остановки торговли:
-
-```
-Сделка #50 закрыта
-  → OnlineLearner запускает train_sac в фоновом потоке
-  → Торговля продолжается на старой модели
-  → Новая модель проходит проверку: SAC vs Buy&Hold − 10%
-      ✅ Прошла → новая модель подменяет старую, уведомление в Telegram
-      ❌ Не прошла → старая модель остаётся, повтор через 50 сделок
-
-Сделка #100 закрыта → снова переобучение
-Сделка #150 закрыта → снова переобучение
-...и так далее
+```bash
+make train           # локальное обучение (Optuna + walk-forward)
+make train-docker     # то же самое в Docker (~60 мин)
+make tune             # только hyperparameter search
 ```
 
-Это означает что **модель постоянно учится на свежем опыте бота** — чем дольше работает, тем точнее. Именно поэтому важно накопить как можно больше сделок в paper режиме перед переходом на live.
+До завершения обучения используйте `MODE=ai`; переключение на `dqn`/`hybrid` доступно из Telegram без
+перезапуска сразу после того, как обучение завершится. `OnlineLearner` дообучает модель автоматически
+после каждой закрытой сделки (`periodic`/`hybrid`/`online` режимы).
 
-Управление через `.env`:
-```env
-ONLINE_LEARNING_MODE=periodic   # periodic = каждые N сделок [рекомендуется]
-ONLINE_LEARNING_TRIGGER=50      # N = 50 сделок до следующего переобучения
+---
+
+## 🔬 Бэктест и валидация альфы
+
+Порядок важен — каждый шаг проверяет то, что предыдущий не может:
+
+```bash
+make backtest          # walk-forward, holdout 20%, overfit ratio (должен быть <2×)
+make alpha-report       # bootstrap Sharpe + Wilcoxon — значима ли альфа статистически
+make live-divergence    # проскальзывание/задержка исполнения live vs бэктест
+make ai-isolation       # даёт ли AI-слой edge поверх голых индикаторов (жжёт AI-квоту)
 ```
 
-| `ONLINE_LEARNING_MODE` | Поведение |
+`alpha-report` требует минимум 30–50 сделок на группу, иначе `INSUFFICIENT DATA` — это сигнал
+наблюдать дольше, а не считать проверку пройденной.
+
+---
+
+## 🛠 Makefile команды
+
+<details>
+<summary>Полный список (развернуть)</summary>
+
+| Команда | Назначение |
 |---|---|
-| `disabled` | Автообучение выключено, только ручной `make train` |
-| `periodic` | Переобучение каждые 50 сделок в фоне ✅ рекомендуется |
-| `online` | Gradient steps после каждой сделки ⚠️ нестабильно |
-| `hybrid` | periodic + динамические веса стратегий (после 500+ сделок) |
+| `make setup` | Первый запуск: сборка + htpasswd + docker compose up |
+| `make up` / `make down` | Старт / остановка контейнеров |
+| `make rebuild` | Полная пересборка (сброс Redis) |
+| `make logs` | Логи бота (`./logs.sh`) |
+| `make train` / `make train-long` / `make train-docker` | Обучение SAC |
+| `make tune` / `make tune-bluechip` / `make tune-altcoin` | Optuna hyperparameter search |
+| `make retrain` | Дообучение на новых данных |
+| `make backtest` / `make backtest-eth` | Walk-forward бэктест |
+| `make alpha-report` | Статистическая значимость альфы |
+| `make live-divergence` | Сравнение live vs backtest исполнения |
+| `make ai-isolation` | Изоляция вклада AI-слоя |
+| `make paper` / `make paper-ai` | Paper trading (local / AI режим) |
+| `make live` | Live-торговля |
+| `make test` / `make lint` / `make fmt` | pytest / ruff / форматирование |
+| `make htpasswd` | Генерация пароля для nginx basic auth |
+
+</details>
 
 ---
 
-### Когда использовать backtest
-
-Бэктест проверяет **уже обученную модель** на исторических данных которые она не видела при обучении (holdout 20%).
-
-| Ситуация | Нужен backtest? |
-|---|---|
-| После `train_sac` | ✅ Да — проверить стал ли SAC лучше Buy&Hold |
-| После `tune_sac` | ✅ Да — подтвердить улучшение |
-| Перед переходом на Live | ✅ Обязательно |
-| После каждых 50 сделок (OnlineLearner) | ❌ Нет — бот проверяет автоматически |
-| Без обученной модели | ❌ Нет смысла |
-
-```bash
-make backtest               # последние 3 месяца, топ-20 монет
-BT_MONTHS=6 make backtest  # 6 месяцев истории
-```
-
-Или через Telegram: ⚙️ Настройки → **📊 Бэктест стратегий**.
-
----
-
-```bash
-make train          # локально: 500k шагов, ~60 мин на CPU
-make train-long     # локально: 1M шагов, ~2 ч на CPU
-make train-docker   # в Docker: запускает trainer контейнер разово, не мешает боту
-make tune           # Optuna: поиск лучших гиперпараметров (30 итераций, ~3 ч)
-```
-
-> **В Docker:** trainer контейнер не стартует автоматически с `make up`.  
-> Текущие сделки дообучают SAC через `OnlineLearner` (каждые 50 сделок, в фоне).  
-> `make train-docker` запускать раз в месяц для полного переобучения на свежих данных.
-
-**Уведомления в Telegram во время обучения:**  
-При запуске `train_sac.py` бот отправляет уведомления на ключевых этапах:
-- `🧠 SAC обучение запущено` — количество шагов, размер датасета
-- `📊 SAC тест out-of-sample` — сравнение с Buy&Hold после завершения
-- `✅ SAC обучение завершено` — путь к модели, подсказка переключить режим
-- `❌ SAC обучение упало` — текст ошибки
-
-**Фильтр данных:**  
-Символы с менее чем `TRAIN_MIN_CANDLES` свечами (по умолчанию 2880 = ~1 месяц) пропускаются. Переопределяется через `.env`:
-```env
-TRAIN_MIN_CANDLES=2880   # минимум свечей для включения символа в датасет
-```
-
-**Observation space: 21 фича**
-
-Все ценовые фичи нормализованы относительно текущего close — BTC ($90k) и SOL ($150) дают одинаковый масштаб входных данных, что критично для корректной работы градиентов нейросети.
-
-| Индекс | Фича | Формула |
-|--------|------|---------|
-| [0] | open_rel | `open/close − 1` |
-| [1] | high_rel | `high/close − 1` |
-| [2] | low_rel | `low/close − 1` |
-| [3] | in_position | `1.0` если есть позиция, иначе `0.0` |
-| [4] | vol_norm | `log1p(volume) / 15` |
-| [5] | rsi_norm | `rsi / 100` |
-| [6] | macd_norm | `macd / close` |
-| [7] | macd_sig_norm | `macd_signal / close` |
-| [8] | bb_upper_rel | `bb_upper / close − 1` |
-| [9] | bb_mid_rel | `bb_middle / close − 1` |
-| [10] | bb_lower_rel | `bb_lower / close − 1` |
-| [11] | balance_norm | `balance / initial_balance` |
-| [12] | pos_value_norm | `position × close / initial_balance` |
-| [13] | val_norm | `portfolio_value / initial_balance` |
-| [14] | funding_rate | `funding_rate × 1000` |
-| [15] | ob_imbalance | orderbook bid/ask дисбаланс `[−1, 1]` |
-| [16] | pcr_norm | `put_call_ratio / 3` |
-| [17] | fear_greed | `fear_greed / 100` |
-| [18] | iv_skew_norm | `iv_skew / 20` |
-| [19] | basis_norm | `basis_pct / 5` |
-| [20] | google_trends | `google_trends / 100` |
-
-После обучения — оценка на out-of-sample данных (последние 20%):
-```
-IN-SAMPLE  (80% данных) — Sharpe: 1.84
-OUT-SAMPLE (20% данных) — Sharpe: 1.21  Overfit ratio: 1.52x  ✓
-```
-Overfit ratio > 2× = переобучение → уменьшить `TOTAL_TIMESTEPS` или добавить данных.
-
-Модель: `models/sac_model.zip`
-
----
-
-## Бэктест
-
-В проекте четыре разных скрипта с "бэктест" в названии — они проверяют разное и запускаются в разное время, а не все сразу. Коротко:
-
-| # | Скрипт | Что проверяет | Данные | Когда запускать |
-|---|--------|---------------|--------|------------------|
-| 1 | `backtest.py` (`make backtest`) | Есть ли у стратегий/SAC edge на исторических свечах вообще (walk-forward, holdout 20%, overfit ratio) | Историческая OHLCV (симуляция) | После обучения SAC, после тюнинга, периодически |
-| 2 | `paper_alpha_report.py` (`make alpha-report`) | Статистически значима ли альфа на **реально совершённых** paper/live сделках (bootstrap Sharpe + Wilcoxon + Bonferroni) | `data/trades_paper.db` / `trades_live.db` | Перед переходом paper → live, и периодически в live |
-| 3 | `backtest_live_divergence.py` (`make live-divergence`) | Совпадает ли реальная цена исполнения с тем, что предсказывала бы модель market impact — ловит задержку исполнения (Telegram-подтверждение, API round-trip) | Реальные закрытые сделки vs исторический кэш | Перед переходом paper → live, если подозреваете проскальзывание |
-| 4 | `ai_signal_isolation_backtest.py` (`make ai-isolation`) | Даёт ли AI(LLM)-слой edge поверх голых индикаторов (тот же walk-forward что и №1, но сигнал — реальные вызовы LLM на сэмплированных точках) | Историческая OHLCV + **реальные платные/лимитированные вызовы AI-провайдера** | Точечно, при сомнении в ценности AI-слоя — не рутинная проверка |
-
-**Порядок для перехода на live** — см. чеклист «Перед реальной торговлей» ниже, это только объяснение *что есть что*.
-
-**1 — walk-forward бэктест стратегий/SAC:**
-```bash
-make backtest                                         # топ-20 монет, 15m, последние 3 месяца
-BT_MONTHS=6 make backtest                            # 6 месяцев истории
-BT_SYMBOLS=BTC/USDT,ETH/USDT,SOL/USDT make backtest # конкретные монеты
-BT_TIMEFRAME=1h make backtest                        # другой таймфрейм
-```
-Walk-forward с holdout 20% — показывает IN-SAMPLE и OUT-SAMPLE Sharpe отдельно.
-Результаты: `data/backtest_results.json`. Доступен также через Telegram: ⚙️ Настройки → **📊 Бэктест стратегий**.
-
-**2 — значимость альфы на реальных сделках:**
-```bash
-make alpha-report                          # data/trades_paper.db по умолчанию
-python3 paper_alpha_report.py --db data/trades_live.db
-```
-Bootstrap Sharpe CI + Wilcoxon + Bonferroni-поправка на реально закрытых сделках, отдельно по стратегии, по активному рыночному профилю (bluechip/altcoin/meme) и по типу рынка (spot/futures) на момент входа — механика сделки (плечо, шорт, funding, ликвидация) настолько разная между spot и futures, что смешивать их в одну выборку так же некорректно, как смешивать разные профили. Все три тега пишутся в `context_flags` сделки при входе (`signal_combiner.py`), тип рынка также попадает в `experiences.jsonl` для раздельной статистики при переобучении SAC. Нужно минимум 30-50 закрытых сделок на группу, иначе вердикт будет `INSUFFICIENT DATA` — это не ошибка, а честный сигнал "рано делать выводы".
-
-**3 — расхождение live/backtest:**
-```bash
-make live-divergence
-python3 backtest_live_divergence.py --db data/trades_live.db
-```
-Сравнивает реальную цену входа/комиссию из закрытых сделок с тем, что предсказала бы AC-модель импакта на последней свече строго до `entry_time`. Большое расхождение — сигнал, что реальное исполнение (сеть, подтверждение в Telegram, цикл `TRADING_INTERVAL`) съедает больше, чем бэктест закладывает.
-
-**4 — изоляция вклада AI(LLM)-сигнала:**
-```bash
-make ai-isolation                                        # BTC/ETH/AVAX, 6 мес, 150 сэмплов
-AIB_SAMPLES=300 AIB_SYMBOLS=BTC/USDT make ai-isolation   # больше сэмплов, один символ
-```
-⚠️ Каждый сэмпл — минимум один реальный вызов AI-провайдера (как в проде). 150 сэмплов ≈ до 150 вызовов, это может задеть дневные лимиты бесплатных тиров (Groq/Gemini/DeepSeek) — те же лимиты, которыми живёт сам бот. Запускать осознанно, не как рутинную CI-проверку. SAC этим скриптом не проверяется — `models/` должен содержать обученную `sac_model.zip` для отдельной темы (не реализовано).
-
-**Telegram:** все три "дешёвых" скрипта доступны из ⚙️ Настройки → **📊 Бэктест стратегий** — №1 (`backtest.py`, «▶ Запустить», прогресс стримится в реальном времени, ~5-10 мин), №2 («📈 Значимость альфы») и №3 («📐 Live vs Backtest») запускаются как subprocess и присылают готовый отчёт текстом за секунды. №4 (`ai_signal_isolation_backtest.py`) в Telegram сознательно не вынесен — случайное нажатие кнопки сожгло бы часть дневной AI-квоты, которая и так в дефиците (см. «Сколько стоят AI-вызовы в сутки?» в Частых вопросах); запускать только вручную с терминала.
-
----
-
-## Makefile команды
-
-| Команда | Описание |
-|---------|----------|
-| `make setup` | **Первый запуск**: htpasswd + сборка + запуск всего стека |
-| `make up` | Запустить Docker стек (без пересборки) |
-| `make down` | Остановить Docker стек |
-| `make logs` | Логи бота в реальном времени |
-| `make rebuild` | Полный сброс Docker (down -v + build --no-cache + up) |
-| `make htpasswd` | Обновить пароль дашборда (из `.env` → `nginx/htpasswd`) |
-| `make paper` | Paper trading (MODE=local, без AI) |
-| `make paper-ai` | Paper trading с AI |
-| `make live` | Живая торговля (PAPER_TRADING=false) |
-| `make train` | Обучить SAC-модель локально (500k шагов, ~60 мин) |
-| `make train-long` | Обучить SAC-модель локально (1M шагов, ~2 ч) |
-| `make train-docker` | Обучить SAC-модель в Docker (разово, не мешает боту) |
-| `make tune` | Optuna поиск гиперпараметров (30 trials) |
-| `make retrain` | Walk-forward retraining |
-| `make backtest` | Walk-forward бэктест стратегий/SAC (топ-20 монет) |
-| `make alpha-report` | Значимость альфы на реальных paper/live сделках |
-| `make live-divergence` | Расхождение реального исполнения с backtest-моделью импакта |
-| `make ai-isolation` | Изоляция вклада AI(LLM)-сигнала (реальные вызовы AI-провайдера) |
-| `make test` | Запустить тесты с coverage |
-| `make lint` | flake8 + mypy |
-| `make fmt` | black + isort (форматирование кода) |
-
----
-
-## Архитектура
-
-```
-supervisor.py
-  └── TradingBot (src/trading_bot.py)
-        ├── MarketScanner       — топ-N монет по объёму, фильтр стейблкоинов
-        ├── DataLoader          — OHLCV ccxt async, кэш CSV 24ч
-        ├── RegimeDetector      — GaussianHMM per-symbol, TTL-кэш 5 мин
-        ├── MarketContext       — 10+ источников с TTL-кэшем (5–240 мин)
-        │     funding/OI/liquidation · Fear&Greed · Orderbook · Basis
-        │     Deribit PCR+IV · Google Trends · ETF Flows · Reddit · Twitter
-        ├── PortfolioOptimizer  — CVaR / Markowitz (scipy)
-        ├── CorrelationFilter   — блокировка коррелированных позиций
-        ├── NewsAnalyzer        — NewsAPI + RSS (CoinDesk/CoinTelegraph) + VADER
-        ├── TwitterAnalyzer     — Twitter API v2 + VADER (профиль Meme, graceful fallback)
-        ├── TelegramSentiment   — Telethon MTProto, публичные памп-каналы (профиль Meme)
-        ├── SentimentPoller     — фоновый asyncio-опросчик Twitter+Telegram → Redis
-        ├── FundingArbDetector  — delta-neutral арбитраж алерты
-        ├── MacroCalendar       — blackout за 30 мин до/после FOMC/CPI/NFP
-        ├── SignalCombiner      — SAC + AI [+ Chronos] + контекстные сигналы → топ-3 по composite score
-        ├── ChronosAnalyzer     — amazon/chronos-t5-small, предсказание направления цены
-        ├── CryptoSentimentAnalyzer — ElKulako/cryptobert, sentiment постов Reddit
-        ├── OrderExecutor       — CVaR→Kelly→AC + лимитный ордер + dynamic leverage
-        │     liquidity filter · drawdown scaling
-        ├── PositionMonitor     — SL/TP/trailing + partial TP + dynamic exits
-        ├── OnlineLearner       — авто-переобучение SAC (periodic/hybrid/online)
-        ├── BybitAPI            — ccxt async, linear+spot, exchange SL/TP
-        ├── TelegramNotifier    — сигналы, Trade/Skip, silent death, arb алерты
-        ├── TradeHistory        — SQLite: win rate, EV, история сделок
-        └── HealthServer        — /health + /metrics (Prometheus)
-
-reinforcement_learning/
-  ├── rl_env.py      — TradingEnv (Gymnasium), OBS_DIM=21, exec по open[i+1]
-  ├── train_sac.py   — SAC: 80/20 split, Optuna, walk-forward, online finetune
-  └── tune_sac.py    — Optuna hyperparameter search
-
-backtest.py          — walk-forward с holdout 20%, overfit ratio
-dashboard.py         — FastAPI :8080 (баланс, позиции, история)
-supervisor.py        — перезапуск при падении, SIGTERM handling
-```
-
----
-
-## Тесты
+## ✅ Тесты
 
 ```bash
 make test
 # pytest tests/ -v --cov=src --cov-fail-under=50
 ```
 
-**1242 unit-теста** — индикаторы, стратегии, риск-менеджмент, CVaR, Kelly, Almgren-Chriss, корреляция, SAC-инференс, dynamic leverage, partial TP, drawdown scaling, liquidity filter, dynamic exits, position monitor, online learner, runtime config, e2e торговый цикл.  
-Coverage: **69%**.
+**1242 unit-теста** — индикаторы, стратегии, риск-менеджмент, CVaR, Kelly, Almgren-Chriss,
+корреляция, SAC-инференс, dynamic leverage, partial TP, drawdown scaling, liquidity filter,
+dynamic exits, position monitor, online learner, runtime config, e2e торговый цикл. Coverage: **69%**.
 
 ---
 
-## Частые вопросы
+## ❓ FAQ
 
-**Q: Бот пишет `Top 0 by volume` и не торгует**  
-A: Убедиться что `MARKET_TYPE=linear` в .env. При linear Bybit возвращает символы как `BTC/USDT:USDT` — бот нормализует автоматически. Если ошибка остаётся — проверить `BYBIT_API_KEY`.
+<details>
+<summary><b>Бот пишет "Top 0 by volume" и не торгует</b></summary><br>
 
-**Q: Telegram не получает сообщения**  
-A: `TELEGRAM_CHAT_ID` должен быть **вашим числовым ID** из @userinfobot (напр. `123456789`), а не ID бота. Написать своему боту любое сообщение для активации чата.
+Убедиться что `MARKET_TYPE=linear` в `.env`. Bybit при linear возвращает символы как `BTC/USDT:USDT` —
+бот нормализует автоматически. Если ошибка остаётся — проверить `BYBIT_API_KEY`.
+</details>
 
-**Q: `MODE=dqn` или `hybrid` падает с ошибкой о модели**  
-A: Нужно сначала обучить модель: `make train` (локально) или `make train-docker` (в Docker, ~60 мин). До завершения использовать `MODE=ai`. Переключить на `dqn` можно через Telegram без перезапуска — после завершения обучения нажать Настройки → Режим → DQN.
+<details>
+<summary><b>Telegram не получает сообщения</b></summary><br>
 
-**Q: Как проверить что сигналы адекватные?**  
-A: Запустить `make paper-ai` на 2 недели. Win rate в дашборде (http://localhost:8080) должен быть >50% на 50+ сделках.
+`TELEGRAM_CHAT_ID` должен быть **вашим числовым ID** из @userinfobot, а не ID бота. Написать боту
+любое сообщение для активации чата.
+</details>
 
-**Q: Сколько стоят AI-вызовы в сутки?**  
-A: DeepSeek: ~$0.002/запрос × 200 = ~$0.40/день. Claude Sonnet: ~$0.01/запрос × 200 = ~$2/день. Установить `AI_DAILY_BUDGET=100` для экономии.
+<details>
+<summary><b>MODE=dqn или hybrid падает с ошибкой о модели</b></summary><br>
 
-**Q: Как изменить настройки без перезапуска?**  
-A: Большинство параметров меняются прямо в Telegram — режим, стратегии, риск-профиль, часы торговли, символы. Все изменения сохраняются в Redis и переживают рестарты. Перезапуск нужен только при изменении инфраструктурных параметров (порты, REDIS_HOST, ключи API).
+Сначала обучить: `make train` или `make train-docker` (~60 мин). До завершения — `MODE=ai`.
+</details>
 
-**Q: Бот перезапустился и потерял мои настройки из Telegram**  
-A: Не должен терять — настройки хранятся в Redis с AOF-персистентностью (сбрасывается на диск каждую секунду). Данные сохраняются при `docker compose down/up`. Только `docker compose down -v` или `make rebuild` сбрасывает Redis полностью.
+<details>
+<summary><b>Почему бот иногда не торгует часами</b></summary><br>
 
-**Q: Как закрыт дашборд от посторонних?**  
-A: Через nginx с HTTP basic auth. Логин и пароль задаются в `.env` (`DASHBOARD_USER` / `DASHBOARD_PASSWORD`). Сгенерировать/обновить: `make htpasswd`. Дашборд не доступен напрямую — только через nginx.
+Нормально — защита от overtrading. Live ждёт confidence ≥ `MIN_SIGNAL_CONFIDENCE` (0.65), в боковике
+локальные стратегии дают ~0.60. Порог настраивается в Telegram: ⚖️ Риск-профиль.
+</details>
 
-**Q: Что будет если сервер перезагрузится с открытыми позициями?**  
-A: Все контейнеры имеют `restart: unless-stopped` — поднимаются автоматически при старте Docker. Бот при запуске сверяет `_monitored` с реальными позициями на бирже (`_reconcile_positions`) и восстанавливает мониторинг открытых позиций.
+<details>
+<summary><b>Что происходит при hard drawdown halt / ATR spike</b></summary><br>
 
-**Q: Бот в paper режиме остановился после нескольких убытков**  
-A: Circuit breaker и дневной лимит в paper режиме **не останавливают торговлю** — бот присылает предупреждение в Telegram и продолжает. Если бот остановился — проверьте логи: `make logs`. Возможная причина: ошибка подключения к Bybit или Redis.
+**Drawdown halt**: убыточные позиции закрываются, прибыльные получают SL в breakeven, новые входы
+блокируются на `DRAWDOWN_HALT_HOURS`. **ATR spike**: все позиции закрываются, пауза 1 час. В paper
+режиме — только уведомление, торговля продолжается.
+</details>
 
-**Q: Что происходит при срабатывании hard drawdown halt или ATR spike?**  
-A: **Hard drawdown halt**: (1) убыточные позиции закрываются по рынку — они причина просадки; (2) прибыльные позиции получают SL на уровне breakeven (цена входа) — не могут уйти в минус, но возьмут профит при росте; (3) новые входы блокируются на `DRAWDOWN_HALT_HOURS` часов. **ATR spike**: все позиции закрываются, пауза 1 час. В paper режиме — только уведомление в Telegram, торговля продолжается. Количество циклов подтверждения настраивается через ⚖️ Риск-профиль → 🛡 Flash-защита.
+<details>
+<summary><b>Что такое Chronos и нужно ли его обучать</b></summary><br>
 
-**Q: Что такое Chronos и нужно ли его обучать?**  
-A: Chronos — предобученная нейросеть от Amazon для предсказания временных рядов. Обучение не нужно. При первом включении скачивается автоматически (~400MB) и кешируется. Используется только в hybrid режиме с включённым "усиленным контролем", работает одинаково в paper и live — как мягкий модификатор confidence, а не жёсткое условие входа.
+Предобученная модель Amazon для time-series. Обучение не нужно, скачивается автоматически (~400MB)
+при первом включении. Работает как мягкий модификатор confidence в hybrid-режиме, не жёсткое условие.
+</details>
 
-**Q: Бот открывает сделки, но они сразу закрываются**  
-A: Проверить логи `make logs`. Возможные причины: слишком высокий `MIN_SIGNAL_CONFIDENCE`, сработал trailing stop из-за волатильности, или Chronos в hybrid снизил confidence ниже порога.
+<details>
+<summary><b>Бот перезапустился и потерял настройки из Telegram</b></summary><br>
 
-**Q: Почему бот иногда не торгует часами?**  
-A: Нормально. В live режиме бот ждёт сигналы с confidence ≥ `MIN_SIGNAL_CONFIDENCE` (0.65). В боковом рынке локальные стратегии дают confidence 0.60 — ниже порога, поэтому бот молчит. Это защита от overtrading. В paper режиме порог ниже (`MIN_SIGNAL_CONFIDENCE_PAPER=0.60`) — больше сделок для обучения SAC. Понизить порог можно через Telegram: ⚖️ Риск-профиль → 🎯 Live ▼/▲ или 📄 Paper ▼/▲.
+Не должен — настройки в Redis с AOF-персистентностью (сброс на диск каждую секунду). Полный сброс
+только через `docker compose down -v` или `make rebuild`.
+</details>
 
 ---
 
-## Перед реальной торговлей
+## 🎯 Перед реальной торговлей
 
-Порядок важен — каждый шаг проверяет то, что предыдущий не может. См. также раздел [«Бэктест»](#бэктест) выше — там подробно, что делает каждый скрипт.
+Порядок важен — каждый шаг проверяет то, что предыдущий не может:
 
 1. ✅ Заполнить `.env` — Bybit API, AI-ключ, Telegram, `REDIS_PASSWORD`, `DASHBOARD_PASSWORD`
-2. ✅ `make setup` — первый запуск одной командой
-3. ✅ Нажать **Обучить сейчас** в Telegram при первом запуске (или `make train-docker`)
-4. ✅ `make backtest` — есть ли у стратегий/SAC edge на истории вообще, overfit ratio должен быть <2×. Если нет — нет смысла идти дальше, сначала разбираться со стратегиями/моделью.
-5. ✅ Наблюдать минимум **2 недели** в paper trading (`PAPER_TRADING=true`, `AUTO_EXECUTE=false`) — набрать реальные (не симулированные) сделки
-6. ✅ `make alpha-report` — значима ли альфа статистически (bootstrap Sharpe + Wilcoxon), а не только "win rate выглядит неплохо". Меньше 30-50 сделок на группу → `INSUFFICIENT DATA`, значит наблюдать дольше, а не считать паузу пройденной.
-7. ✅ `make live-divergence` — если подозреваете проскальзывание/задержку исполнения относительно того, что предполагает бэктест
-8. ⬜ *(опционально, не блокирует переход)* `make ai-isolation` — если сомневаетесь, даёт ли AI-слой edge поверх голых индикаторов; жжёт реальную AI-квоту, не гоняйте рутинно
-9. ✅ Начать с консервативных настроек: `RISK_PER_TRADE=0.01`, `MAX_POSITIONS=2`, `LEVERAGE=2`
-10. ✅ Держать `DAILY_LOSS_LIMIT=0.03` на первое время
-11. ✅ Включать `PAPER_TRADING=false` только после того, как шаг 6 показал значимую альфу — не просто "по ощущениям"
+2. ✅ `make setup`
+3. ✅ Обучить SAC (кнопка в Telegram при первом запуске, или `make train-docker`)
+4. ✅ `make backtest` — overfit ratio <2×, иначе сначала разбираться со стратегиями
+5. ✅ Минимум **2 недели** paper trading (`PAPER_TRADING=true`, `AUTO_EXECUTE=false`)
+6. ✅ `make alpha-report` — альфа значима статистически, не просто "выглядит неплохо"
+7. ✅ `make live-divergence` — если есть подозрение на проскальзывание/задержку
+8. ⬜ *(опционально)* `make ai-isolation` — не блокирует переход, жжёт AI-квоту
+9. ✅ Начать консервативно: `RISK_PER_TRADE=0.01`, `MAX_POSITIONS=2`, `LEVERAGE=2`
+10. ✅ `DAILY_LOSS_LIMIT=0.03` на первое время
+11. ✅ `PAPER_TRADING=false` только после того, как шаг 6 показал значимую альфу
 
 ---
 
-## Отказ от ответственности
+## ⚠️ Отказ от ответственности
 
-Торговля криптовалютой сопряжена с высоким риском потери средств.  
-Этот бот не является финансовым советником. Используйте на свой риск.  
-Всегда начинайте с бумажной торговли (`PAPER_TRADING=true`).
+Торговля криптовалютой сопряжена с высоким риском потери средств. Этот бот не является финансовым
+советником. Используйте на свой риск. Всегда начинайте с бумажной торговли (`PAPER_TRADING=true`).
