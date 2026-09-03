@@ -14,7 +14,9 @@ Claude / DeepSeek / OpenAI / Groq / Gemini · SAC (RL) · Amazon Chronos · 10+ 
 [![Tests](https://img.shields.io/badge/tests-1242%20passing-brightgreen)](#-тесты)
 [![Coverage](https://img.shields.io/badge/coverage-69%25-yellow)](#-тесты)
 [![Bybit](https://img.shields.io/badge/exchange-Bybit%20Futures-F7A600)](https://www.bybit.com/)
-[![License](https://img.shields.io/badge/license-Proprietary-lightgrey)](#-отказ-от-ответственности)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
+🌐 **Русский** · [English](README.en.md) · [中文](README.zh.md) · [Español](README.es.md) · [Deutsch](README.de.md)
 
 </div>
 
@@ -850,6 +852,12 @@ dynamic exits, position monitor, online learner, runtime config, e2e торго�
 9. ✅ Начать консервативно: `RISK_PER_TRADE=0.01`, `MAX_POSITIONS=2`, `LEVERAGE=2`
 10. ✅ `DAILY_LOSS_LIMIT=0.03` на первое время
 11. ✅ `PAPER_TRADING=false` только после того, как шаг 6 показал значимую альфу
+
+---
+
+## 📄 Лицензия
+
+Проект распространяется под лицензией [MIT](LICENSE).
 
 ---
 
