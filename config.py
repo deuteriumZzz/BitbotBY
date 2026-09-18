@@ -260,6 +260,18 @@ class Config:
     ATR_SPIKE_MULT: float = float(os.getenv("ATR_SPIKE_MULT", "3.0"))
     # Кол-во свечей для расчёта базового ATR (медиана)
     ATR_SPIKE_LOOKBACK: int = int(os.getenv("ATR_SPIKE_LOOKBACK", "20"))
+    # Pre-committed kill-switch: если live EV стратегии за последние
+    # LIVE_ALPHA_KILL_MIN_TRADES сделок хуже LIVE_ALPHA_KILL_EV_THRESHOLD —
+    # новые сделки по этой стратегии блокируются до ручного вмешательства.
+    # Решение принято ДО того, как стратегия начала терять деньги, не
+    # постфактум, когда просадка уже случилась.
+    LIVE_ALPHA_KILL_ENABLED: bool = (
+        os.getenv("LIVE_ALPHA_KILL_ENABLED", "true").lower() == "true"
+    )
+    LIVE_ALPHA_KILL_MIN_TRADES: int = int(os.getenv("LIVE_ALPHA_KILL_MIN_TRADES", "20"))
+    LIVE_ALPHA_KILL_EV_THRESHOLD: float = float(
+        os.getenv("LIVE_ALPHA_KILL_EV_THRESHOLD", "-0.5")
+    )
     # True → использовать Bybit testnet
     TESTNET: bool = os.getenv("TESTNET", "false").lower() == "true"
 

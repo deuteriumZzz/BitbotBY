@@ -297,6 +297,23 @@ class OrderExecutor:
                 strategy, lookback=TRADE_HISTORY_LOOKBACK, market_type=_market_type
             )
 
+            if (
+                Config.LIVE_ALPHA_KILL_ENABLED
+                and live_n >= Config.LIVE_ALPHA_KILL_MIN_TRADES
+                and live_ev <= Config.LIVE_ALPHA_KILL_EV_THRESHOLD
+            ):
+                logger.warning(
+                    "Kill-switch: %s live EV %.3f%% over last %d trades <= "
+                    "threshold %.3f%% (market_type=%s) — blocking new entries "
+                    "until manual review",
+                    strategy,
+                    live_ev,
+                    live_n,
+                    Config.LIVE_ALPHA_KILL_EV_THRESHOLD,
+                    _market_type,
+                )
+                return
+
             _rc = getattr(self, "_runtime_config", None)
             _auto_exec = (
                 _rc.get_auto_execute() if _rc is not None else Config.AUTO_EXECUTE
