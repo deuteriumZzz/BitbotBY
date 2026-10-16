@@ -216,8 +216,9 @@ def test_account_mode_validates_body(keyed):
 def test_ws_rejects_wrong_token(keyed):
     with keyed.websocket_connect("/ws") as ws:
         ws.send_json({"type": "auth", "token": "nope"})
-        with pytest.raises(WebSocketDisconnect):
+        with pytest.raises(WebSocketDisconnect) as closed:
             ws.receive_json()
+    assert closed.value.code == 4401  # приложение по этому коду идёт на вход
 
 
 def test_update_position_needs_fields(keyed):

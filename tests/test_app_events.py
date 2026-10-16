@@ -118,6 +118,21 @@ async def test_close_fraction_paper_keeps_sl_by_default():
     assert monitored["BTC/USDT"]["qty"] == 0.5 and unprotected is False
 
 
+# ── Кнопка MiniApp в Telegram ─────────────────────────────────────────────────
+
+
+def test_main_panel_opens_miniapp_only_over_https(monkeypatch):
+    from src.telegram_commander import _kb_main
+
+    monkeypatch.setenv("WEBAPP_URL", "https://bot.example.com/app/")
+    first = _kb_main(paper=True).inline_keyboard[0][0]
+    assert first.web_app.url == "https://bot.example.com/app/"
+
+    monkeypatch.setenv("WEBAPP_URL", "http://bot.example.com/app/")
+    rows = _kb_main(paper=True).inline_keyboard
+    assert all(b.web_app is None for row in rows for b in row)
+
+
 # ── Ответ на предложение сделки из приложения ─────────────────────────────────
 
 

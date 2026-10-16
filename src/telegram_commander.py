@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from typing import Any, Callable, Dict, Optional
 
 from config import Config
@@ -39,7 +40,13 @@ from config import Config
 logger = logging.getLogger(__name__)
 
 try:
-    from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+    from telegram import (
+        InlineKeyboardButton,
+        InlineKeyboardMarkup,
+        MenuButtonWebApp,
+        Update,
+        WebAppInfo,
+    )
     from telegram.ext import (
         CallbackQueryHandler,
         CommandHandler,
@@ -56,13 +63,26 @@ except ImportError:
 # ── Клавиатуры ────────────────────────────────────────────────────────────────
 
 
+def _webapp_url() -> str:
+    """Адрес MiniApp из WEBAPP_URL. Telegram открывает только https — иначе пусто."""
+    url = os.getenv("WEBAPP_URL", "").strip()
+    return url if url.startswith("https://") else ""
+
+
 def _kb_main(paper: "bool | None" = None) -> "InlineKeyboardMarkup":
     """Главная панель — появляется после /start и /help."""
     if paper is None:
         paper = Config.PAPER_TRADING
     mode_label = "📄 Режим: PAPER  →  Live" if paper else "💰 Режим: LIVE  →  Paper"
+    url = _webapp_url()
+    app_row = (
+        [[InlineKeyboardButton("🖥 Открыть терминал", web_app=WebAppInfo(url=url))]]
+        if url
+        else []
+    )
     return InlineKeyboardMarkup(
-        [
+        app_row
+        + [
             [
                 InlineKeyboardButton("📊 Статус", callback_data="status"),
                 InlineKeyboardButton("📈 P&L", callback_data="pnl"),
@@ -956,16 +976,28 @@ class TelegramCommander:
             ("trainn", "Переобучить SAC"),
             ("help", "Справка"),
         ]
+        setup = [app.bot.set_my_commands(bot_commands)]
+        url = _webapp_url()
+        chat = str(self._notifier._chat_id or "")
+        if url and chat.lstrip("-").isdigit():
+            # Кнопка у поля ввода — открывает MiniApp с initData владельца.
+            setup.append(
+                app.bot.set_chat_menu_button(
+                    chat_id=int(chat),
+                    menu_button=MenuButtonWebApp("Терминал", WebAppInfo(url=url)),
+                )
+            )
         try:
             import asyncio as _asyncio
 
             loop = _asyncio.get_event_loop()
-            if loop.is_running():
-                _asyncio.ensure_future(app.bot.set_my_commands(bot_commands))
-            else:
-                loop.run_until_complete(app.bot.set_my_commands(bot_commands))
+            for coro in setup:
+                if loop.is_running():
+                    _asyncio.ensure_future(coro)
+                else:
+                    loop.run_until_complete(coro)
         except Exception as e:
-            logger.warning("set_my_commands failed: %s", e)
+            logger.warning("Telegram commands/menu setup failed: %s", e)
         logger.info("TelegramCommander: %d команд зарегистрировано", len(commands))
 
     # ── Auth & helpers ────────────────────────────────────────────────────────

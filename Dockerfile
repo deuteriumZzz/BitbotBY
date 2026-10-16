@@ -1,3 +1,11 @@
+# Фронтенд приложения (MiniApp / десктоп): собирается здесь, дашборд отдаёт его по /app/
+FROM node:20-alpine AS webapp
+WORKDIR /webapp
+COPY webapp/package.json webapp/package-lock.json ./
+RUN npm ci
+COPY webapp/ ./
+RUN npm run build
+
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -18,6 +26,7 @@ RUN pip install --no-cache-dir --timeout 300 -r requirements.txt
 
 # Copy source
 COPY . .
+COPY --from=webapp /webapp/dist ./webapp/dist
 
 # Create data directory
 RUN mkdir -p data/cache models logs

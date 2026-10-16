@@ -791,7 +791,10 @@ async def _ws_authorized(ws: WebSocket) -> bool:
 async def ws_events(ws: WebSocket) -> None:
     await ws.accept()
     if not await _ws_authorized(ws):
-        await ws.close(code=4401)
+        try:
+            await ws.close(code=4401)
+        except RuntimeError:
+            pass  # клиент ушёл, не дождавшись проверки, — сокет уже закрыт
         return
     await ws.send_json({"type": "state", "ts": time.time(), "data": build_state()})
 

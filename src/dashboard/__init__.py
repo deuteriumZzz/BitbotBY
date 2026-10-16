@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -45,6 +46,22 @@ async def _api_key_middleware(request: Request, call_next):
             return JSONResponse({"error": "Unauthorized"}, status_code=401)
     return await call_next(request)
 
+
+# Десктоп (Tauri) открывает приложение со своего origin и ходит в /api с
+# заголовком Authorization — браузерному движку нужен CORS. Добавлен после
+# проверки ключа, поэтому стоит снаружи: отвечает на preflight (он приходит без
+# ключа) и ставит заголовки и на ответы 401. Ключ или сессия по-прежнему нужны.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "tauri://localhost",  # macOS, Linux
+        "http://tauri.localhost",  # Windows
+        "https://tauri.localhost",
+    ],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allow_headers=["Authorization", "Content-Type", "X-Client", "X-API-Key"],
+    max_age=600,
+)
 
 app.include_router(_api.router)
 app.include_router(_control.router)

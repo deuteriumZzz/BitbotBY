@@ -12,3 +12,8 @@ models/
 data/cache/
 data/trades.db
 logs/
+
+# Фронтенд собирается в отдельной стадии Dockerfile; десктоп в образ не нужен
+webapp/node_modules
+webapp/dist
+desktop/

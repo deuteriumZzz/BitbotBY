@@ -176,3 +176,27 @@ def test_webapp_static_skips_api_key(monkeypatch):
         assert c.get("/app/assets/none.js").status_code != 401
         assert c.get("/apple").status_code == 401
         assert c.get("/api/state").status_code == 401
+
+
+def test_desktop_origin_gets_cors(monkeypatch):
+    # Tauri: preflight приходит без ключа и должен пройти; данные — всё равно с ключом.
+    monkeypatch.setenv("DASHBOARD_API_KEY", "secret")
+    from src.dashboard import app
+
+    c = TestClient(app, raise_server_exceptions=False)
+    pre = c.options(
+        "/api/state",
+        headers={
+            "Origin": "tauri://localhost",
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "authorization",
+        },
+    )
+    assert pre.status_code == 200
+    assert pre.headers["access-control-allow-origin"] == "tauri://localhost"
+    with patch.object(data, "get_redis", return_value=FakeRedis()):
+        anon = c.get("/api/state", headers={"Origin": "http://tauri.localhost"})
+        evil = c.get("/api/state", headers={"Origin": "https://evil.example"})
+    assert anon.status_code == 401
+    assert anon.headers["access-control-allow-origin"] == "http://tauri.localhost"
+    assert "access-control-allow-origin" not in evil.headers
