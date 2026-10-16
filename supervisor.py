@@ -20,6 +20,8 @@ import signal  # noqa: E402
 
 from config import Config  # noqa: E402
 from src.health_server import start_health_server  # noqa: E402
+from src.secrets_store import apply_secrets  # noqa: E402
+from src.settings_registry import effective_config  # noqa: E402
 from src.trading_bot import TradingBot  # noqa: E402
 
 logger = logging.getLogger(__name__)
@@ -86,8 +88,10 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
+    # Ключи, введённые в приложении, участвуют в проверке так же, как .env.
+    apply_secrets(Config)
     try:
-        Config().validate()
+        effective_config(Config).validate()
     except ValueError as exc:
         print(f"[CONFIG ERROR] {exc}", file=sys.stderr)
         sys.exit(1)

@@ -34,3 +34,6 @@ feedparser>=6.0.8
 black>=24.0.0
 isort>=5.13.0
 mypy>=1.9.0
+# Хранилище ключей и их проверка (уже приходят с ccxt и python-telegram-bot)
+cryptography>=41.0
+httpx>=0.25

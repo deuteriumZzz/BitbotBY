@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from typing import TYPE_CHECKING, Callable, Dict, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Tuple
 
 import ccxt
 
@@ -53,6 +53,7 @@ class PositionMonitor:
         redis: "Optional[RedisClient]" = None,
         online_learner: "Optional[OnlineLearner]" = None,
         on_position_closed: "Optional[Callable[[str], None]]" = None,
+        emit: "Optional[Callable[[str, Dict[str, Any]], None]]" = None,
     ) -> None:
         self._api = api
         self._trade_history = trade_history
@@ -64,6 +65,7 @@ class PositionMonitor:
         self._redis = redis
         self._online_learner = online_learner
         self._on_position_closed = on_position_closed
+        self._emit = emit
         # Load persisted counter so circuit breaker survives bot restarts.
         self._consecutive_losses: int = self._load_cb_state()
         # State for dynamic exits — updated each cycle via update_market_state().
@@ -76,6 +78,30 @@ class PositionMonitor:
         self._EXIT_CONFIRM_THRESHOLD = 3
         # Keeps strong references to fire-and-forget tasks so GC can't destroy them.
         self._background_tasks: set = set()
+
+    def _publish(self, type_: str, data: Dict[str, Any]) -> None:
+        if self._emit is not None:
+            try:
+                self._emit(type_, data)
+            except Exception as e:
+                logger.debug("event %s not published: %s", type_, e)
+
+    def _publish_tick(self, sym: str, pos: PositionRecord, price: float) -> None:
+        """Цена и текущие уровни позиции — для живых карточек в приложении."""
+        self._publish(
+            "tick",
+            {
+                "symbol": sym,
+                "trade_id": pos.get("trade_id"),
+                "price": price,
+                "side": "long" if pos.get("side", "buy") == "buy" else "short",
+                "entry": pos.get("entry"),
+                "qty": pos.get("qty"),
+                "sl": pos.get("stop_loss"),
+                "tp": pos.get("take_profit"),
+                "trailing": pos.get("trailing", True),
+            },
+        )
 
     async def run(
         self,
@@ -110,6 +136,7 @@ class PositionMonitor:
                         pos = new_pos
                     # УЛУЧШЕНИЕ 3: частичная фиксация прибыли
                     pos = await self._check_partial_tp(sym, pos, price, monitored, lock)
+                    self._publish_tick(sym, pos, price)
                     try:
                         exit_action, reason = self._check_dynamic_exit(sym, pos)
                         if exit_action == "force_close":
@@ -328,7 +355,7 @@ class PositionMonitor:
                     None, [pos.get("exchange_sl_id"), pos.get("exchange_tp_id")]
                 ):
                     try:
-                        await self._api.cancel_order(sym, oid)
+                        await self._api.cancel_order(order_id=oid, symbol=sym)
                     except Exception as _e:
                         logger.debug("Cancel order %s failed: %s", oid, _e)
                 await self._api.create_order(
@@ -383,7 +410,7 @@ class PositionMonitor:
                         None, [pos.get("exchange_sl_id"), pos.get("exchange_tp_id")]
                     ):
                         try:
-                            await self._api.cancel_order(sym, oid)
+                            await self._api.cancel_order(order_id=oid, symbol=sym)
                         except Exception as _e:
                             logger.debug("Cancel order %s failed: %s", oid, _e)
                     await self._api.create_order(
@@ -406,7 +433,7 @@ class PositionMonitor:
                         None, [pos.get("exchange_sl_id"), pos.get("exchange_tp_id")]
                     ):
                         try:
-                            await self._api.cancel_order(sym, oid)
+                            await self._api.cancel_order(order_id=oid, symbol=sym)
                         except Exception as _e:
                             logger.debug("Cancel SL/TP %s failed: %s", oid, _e)
                     try:
@@ -508,8 +535,55 @@ class PositionMonitor:
         if progress < trigger:
             return pos
 
+        updated, remaining_unprotected = await self.close_fraction(
+            sym, pos, fraction, monitored, lock, sl_after=entry, label="partial_tp"
+        )
+        if updated is None:
+            return pos
+        async with lock:
+            if sym in monitored and monitored[sym] is not None:
+                monitored[sym]["partial_tp_triggered"] = True
+
+        logger.info(
+            "Partial TP triggered for %s: closed %.1f%% (%.6f units),"
+            " SL moved to breakeven %.4f",
+            sym,
+            fraction * 100,
+            qty * fraction,
+            entry,
+        )
+        # При remaining_unprotected критический алерт уже отправлен —
+        # не дублируем его успокаивающим сообщением про "SL → breakeven".
+        if not remaining_unprotected:
+            await self._telegram.notify(
+                f"Partial TP *{sym}*: closed {fraction:.0%},"
+                f" SL → breakeven ${entry:.4f}"
+            )
+        return {**updated, "partial_tp_triggered": True}  # type: ignore[return-value]
+
+    async def close_fraction(
+        self,
+        sym: str,
+        pos: PositionRecord,
+        fraction: float,
+        monitored: Dict[str, PositionRecord],
+        lock: asyncio.Lock,
+        sl_after: Optional[float] = None,
+        label: str = "partial",
+    ) -> Tuple[Optional[PositionRecord], bool]:
+        """Закрывает долю позиции по рынку и переставляет SL/TP на остаток.
+
+        Общий путь для автоматической частичной фиксации и ручного закрытия
+        из приложения. sl_after — новый SL для остатка (None — прежний).
+
+        :return: (обновлённая запись или None, если ордер не прошёл;
+            True, если остаток остался без защиты на бирже).
+        """
+        side = pos.get("side", "buy")
+        qty = pos.get("qty", 0.0)
         partial_qty = qty * fraction
         new_qty = qty * (1.0 - fraction)
+        new_sl = float(pos.get("stop_loss") or 0) if sl_after is None else sl_after
 
         close_side = "sell" if side == "buy" else "buy"
         new_sl_id: str | None = None
@@ -520,20 +594,20 @@ class PositionMonitor:
             # иначе биржа попытается закрыть полный объём при достижении TP.
             exchange_sl_id = pos.get("exchange_sl_id")
             exchange_tp_id = pos.get("exchange_tp_id")
-            for oid, label in ((exchange_sl_id, "SL"), (exchange_tp_id, "TP")):
+            for oid, kind in ((exchange_sl_id, "SL"), (exchange_tp_id, "TP")):
                 if oid:
                     try:
-                        await self._api.cancel_order(sym, oid)
+                        await self._api.cancel_order(order_id=oid, symbol=sym)
                     except Exception as exc:
                         logger.warning(
-                            "Partial TP: cancel %s %s failed: %s", label, oid, exc
+                            "%s: cancel %s %s failed: %s", label, kind, oid, exc
                         )
             try:
                 await self._api.create_order(
-                    sym, "market", close_side, partial_qty, lock_suffix="partial_tp"
+                    sym, "market", close_side, partial_qty, lock_suffix=label
                 )
             except Exception as exc:
-                logger.error("Partial TP order failed for %s: %s", sym, exc)
+                logger.error("%s order failed for %s: %s", label, sym, exc)
                 # SL/TP уже отменены — восстанавливаем защиту для полного объёма
                 sl_orig = float(pos.get("stop_loss") or 0)
                 tp_orig = float(pos.get("take_profit") or 0)
@@ -548,31 +622,32 @@ class PositionMonitor:
                                 monitored[sym]["exchange_tp_id"] = r_tp
                     except Exception as re_exc:
                         logger.critical(
-                            "Partial TP: restore SL/TP for %s failed: %s", sym, re_exc
+                            "%s: restore SL/TP for %s failed: %s", label, sym, re_exc
                         )
                         await self._telegram.notify(
                             f"🚨 *{sym}*: не удалось восстановить SL/TP после "
-                            f"неудачного partial TP — позиция БЕЗ защиты на бирже! "
-                            f"Требуется ручное вмешательство."
+                            f"неудачного частичного закрытия — позиция БЕЗ защиты "
+                            f"на бирже! Требуется ручное вмешательство."
                         )
-                return pos
-            # Выставляем новые SL (breakeven) и TP для оставшегося объёма
+                return None, False
+            # Выставляем SL и TP для оставшегося объёма
             tp_price = float(pos.get("take_profit") or 0)
-            if entry or tp_price:
+            if new_sl or tp_price:
                 try:
                     new_sl_id, new_tp_id = await self._api.place_exchange_sl_tp(
-                        sym, close_side, new_qty, entry, tp_price
+                        sym, close_side, new_qty, new_sl, tp_price
                     )
                 except Exception as exc:
                     logger.critical(
-                        "Partial TP: re-place SL/TP for %s failed — remaining "
+                        "%s: re-place SL/TP for %s failed — remaining "
                         "position has NO exchange-side protection: %s",
+                        label,
                         sym,
                         exc,
                     )
                     remaining_unprotected = True
                     await self._telegram.notify(
-                        f"🚨 *{sym}*: partial TP закрыт, но новый SL/TP на "
+                        f"🚨 *{sym}*: часть позиции закрыта, но новый SL/TP на "
                         f"оставшийся объём не выставлен — позиция БЕЗ защиты "
                         f"на бирже! Требуется ручное вмешательство."
                     )
@@ -580,33 +655,53 @@ class PositionMonitor:
         async with lock:
             if sym in monitored and monitored[sym] is not None:
                 monitored[sym]["qty"] = new_qty
-                monitored[sym]["stop_loss"] = entry  # breakeven
-                monitored[sym]["partial_tp_triggered"] = True
+                monitored[sym]["stop_loss"] = new_sl
                 if not Config.PAPER_TRADING:
                     monitored[sym]["exchange_sl_id"] = new_sl_id
                     monitored[sym]["exchange_tp_id"] = new_tp_id
+        updated = {**pos, "qty": new_qty, "stop_loss": new_sl}
+        if not Config.PAPER_TRADING:
+            updated.update(exchange_sl_id=new_sl_id, exchange_tp_id=new_tp_id)
+        return updated, remaining_unprotected  # type: ignore[return-value]
 
-        logger.info(
-            "Partial TP triggered for %s: closed %.1f%% (%.6f units),"
-            " SL moved to breakeven %.4f",
-            sym,
-            fraction * 100,
-            partial_qty,
-            entry,
-        )
-        # При remaining_unprotected критический алерт уже отправлен выше —
-        # не дублируем его успокаивающим сообщением про "SL → breakeven".
-        if not remaining_unprotected:
-            await self._telegram.notify(
-                f"Partial TP *{sym}*: closed {fraction:.0%},"
-                f" SL → breakeven ${entry:.4f}"
+    async def update_levels(
+        self,
+        sym: str,
+        pos: PositionRecord,
+        sl: float,
+        tp: float,
+        monitored: Dict[str, PositionRecord],
+        lock: asyncio.Lock,
+    ) -> PositionRecord:
+        """Меняет SL/TP позиции; в Live — перевыставляет ордера на бирже.
+
+        Новые ордера ставятся до отмены старых: позиция ни на миг не остаётся
+        без защиты. Если новые не встали — старые не трогаем и бросаем ошибку.
+        """
+        updated: PositionRecord = {**pos, "stop_loss": sl, "take_profit": tp}
+        if not Config.PAPER_TRADING:
+            close_side = "sell" if pos.get("side", "buy") == "buy" else "buy"
+            new_sl_id, new_tp_id = await self._api.place_exchange_sl_tp(
+                sym, close_side, float(pos.get("qty") or 0), sl, tp
             )
-        return {  # type: ignore[return-value]
-            **pos,
-            "qty": new_qty,
-            "stop_loss": entry,
-            "partial_tp_triggered": True,
-        }
+            for oid in (pos.get("exchange_sl_id"), pos.get("exchange_tp_id")):
+                if oid:
+                    try:
+                        await self._api.cancel_order(order_id=oid, symbol=sym)
+                    except Exception as exc:
+                        logger.warning("update_levels: cancel %s failed: %s", oid, exc)
+            updated["exchange_sl_id"] = new_sl_id
+            updated["exchange_tp_id"] = new_tp_id
+        async with lock:
+            if sym in monitored and monitored[sym] is not None:
+                monitored[sym] = {
+                    **monitored[sym],
+                    "stop_loss": updated["stop_loss"],
+                    "take_profit": updated["take_profit"],
+                    "exchange_sl_id": updated.get("exchange_sl_id"),
+                    "exchange_tp_id": updated.get("exchange_tp_id"),
+                }
+        return updated
 
     def _apply_trailing_stop(
         self,
@@ -631,6 +726,8 @@ class PositionMonitor:
         atr = pos.get("atr", 0.0)
         mult = Config.TRAILING_STOP_ATR_MULT
         if not (atr and atr > 0 and mult > 0):
+            return pos
+        if pos.get("trailing") is False:  # выключен для этой позиции в приложении
             return pos
 
         side = pos.get("side", "buy")
@@ -723,7 +820,7 @@ class PositionMonitor:
             sl_tp_ids = [pos.get("exchange_sl_id"), pos.get("exchange_tp_id")]
             for oid in filter(None, sl_tp_ids):
                 try:
-                    await self._api.cancel_order(sym, oid)
+                    await self._api.cancel_order(order_id=oid, symbol=sym)
                 except Exception as _e:
                     logger.debug("Cancel order %s failed: %s", oid, _e)
             close_order = await self._api.create_order(
@@ -826,7 +923,7 @@ class PositionMonitor:
             exchange_tp_id = pos.get("exchange_tp_id")
             if exchange_sl_id:
                 try:
-                    await self._api.cancel_order(sym, exchange_sl_id)
+                    await self._api.cancel_order(order_id=exchange_sl_id, symbol=sym)
                 except Exception as _ce:
                     logger.warning(
                         "Cancel SL order %s failed: %s — proceeding with close",
@@ -835,7 +932,7 @@ class PositionMonitor:
                     )
             if exchange_tp_id:
                 try:
-                    await self._api.cancel_order(sym, exchange_tp_id)
+                    await self._api.cancel_order(order_id=exchange_tp_id, symbol=sym)
                 except Exception as _ce:
                     logger.warning(
                         "Cancel TP order %s failed: %s — proceeding with close",
@@ -996,6 +1093,16 @@ class PositionMonitor:
                     msg = (
                         f"⛔ Circuit breaker: {self._consecutive_losses}"
                         " losses in a row. Trading halted automatically."
+                    )
+                    self._publish(
+                        "guard",
+                        {
+                            "kind": "circuit_breaker",
+                            "active": True,
+                            "detail": (
+                                f"{self._consecutive_losses} убыточных сделок подряд"
+                            ),
+                        },
                     )
                     self._set_running(False)
                 logger.critical(msg)

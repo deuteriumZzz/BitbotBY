@@ -2550,12 +2550,8 @@ class TelegramCommander:
                 )
 
         elif data == "confirm_mode_switch":
-            import os as _os
-
             new_paper = not Config.PAPER_TRADING
-            Config.PAPER_TRADING = new_paper
-            _os.environ["PAPER_TRADING"] = "true" if new_paper else "false"
-            self._rc.set_paper_trading_override(new_paper)
+            self._rc.apply_paper_trading(new_paper)
             # Очищаем paper-позиции и синхронизируем с биржей
             if self._on_mode_switch:
                 try:

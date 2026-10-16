@@ -141,6 +141,8 @@ class OrderExecutor:
         set_last_trade_at: Callable[[float], None],
         get_current_regime: Callable[[], str],
         runtime_config: "Any | None" = None,
+        on_position_opened: "Callable[[str, PositionRecord], None] | None" = None,
+        emit: "Callable[[str, Dict[str, Any]], None] | None" = None,
     ) -> None:
         self._api = api
         self._trade_history = trade_history
@@ -149,6 +151,8 @@ class OrderExecutor:
         self._portfolio_optimizer = portfolio_optimizer
         self._corr_filter = corr_filter
         self._runtime_config = runtime_config
+        self._on_position_opened = on_position_opened
+        self._emit = emit
         # Getters instead of direct references so that tests or runtime code that
         # replace bot._monitored (e.g. bot._monitored = {}) don't leave the executor
         # holding a stale reference to the old dict object.
@@ -174,6 +178,18 @@ class OrderExecutor:
             self._risk_manager.risk_per_trade = risk_per_trade
         if drawdown_scale_enabled is not None:
             self._risk_manager.drawdown_scale_enabled = drawdown_scale_enabled
+
+    def _stage(self, sym: str, stage: str, reason: str = "") -> None:
+        """Событие радара для приложения: этап «Проверки» и причина отказа."""
+        if self._emit is None:
+            return
+        data: Dict[str, Any] = {"symbol": sym, "stage": stage}
+        if reason:
+            data["reason"] = reason
+        try:
+            self._emit("radar.stage", data)
+        except Exception as e:
+            logger.debug("radar.stage not published: %s", e)
 
     async def execute(
         self,
@@ -208,6 +224,7 @@ class OrderExecutor:
             # шорта не существует — игнорируем сигнал вместо ошибочного входа.
             logger.debug("Spot mode: sell-as-entry ignored for %s (no shorting)", sym)
             return
+        self._stage(sym, "guards")
         self._api.sync_market_type()
 
         # УЛУЧШЕНИЕ 4: фильтр по времени суток (UTC)
@@ -223,6 +240,7 @@ class OrderExecutor:
                         _trading_hours,
                         sym,
                     )
+                    self._stage(sym, "rejected", "вне торговых часов")
                     return
             else:
                 hour = datetime.datetime.utcnow().hour
@@ -239,6 +257,7 @@ class OrderExecutor:
                             _trading_hours,
                             sym,
                         )
+                        self._stage(sym, "rejected", "вне торговых часов")
                         return
                 except ValueError:
                     pass
@@ -258,9 +277,11 @@ class OrderExecutor:
                     _max,
                     sym,
                 )
+                self._stage(sym, "rejected", "все слоты заняты")
                 return
             if sym in monitored:
                 logger.info("%s already monitored, skipping duplicate", sym)
+                self._stage(sym, "rejected", "по монете уже есть позиция")
                 return
             # Placeholder: claim the slot before releasing lock.
             # Cleared in the finally-block if anything goes wrong before
@@ -281,6 +302,7 @@ class OrderExecutor:
                     max_corr,
                     Config.MAX_CORRELATION,
                 )
+                self._stage(sym, "rejected", "сильная корреляция с открытой позицией")
                 return
 
             strategy = top.get("strategy", Config.DEFAULT_STRATEGY)
@@ -312,6 +334,7 @@ class OrderExecutor:
                     Config.LIVE_ALPHA_KILL_EV_THRESHOLD,
                     _market_type,
                 )
+                self._stage(sym, "rejected", "стратегия отключена kill-switch")
                 return
 
             _rc = getattr(self, "_runtime_config", None)
@@ -341,6 +364,7 @@ class OrderExecutor:
                 )
             if not confirmed:
                 logger.info("Trade rejected via Telegram: %s", sym)
+                self._stage(sym, "rejected", "сделку отклонили")
                 return
 
             entry = top.get("entry", 0.0)
@@ -349,6 +373,7 @@ class OrderExecutor:
 
             # УЛУЧШЕНИЕ 5: фильтр по ликвидности (спред + объём)
             if not await self._check_liquidity(sym, entry):
+                self._stage(sym, "rejected", "мало ликвидности или широкий спред")
                 return
 
             sl_price = top.get("stop_loss", 0.0)
@@ -364,6 +389,7 @@ class OrderExecutor:
                         entry,
                         sl_price,
                     )
+                    self._stage(sym, "rejected", "неверный стоп-лосс")
                     return
                 if tp_price and tp_price <= entry:
                     logger.error(
@@ -372,6 +398,7 @@ class OrderExecutor:
                         entry,
                         tp_price,
                     )
+                    self._stage(sym, "rejected", "неверный тейк-профит")
                     return
             elif action == "sell":
                 if sl_price and sl_price <= entry:
@@ -381,6 +408,7 @@ class OrderExecutor:
                         entry,
                         sl_price,
                     )
+                    self._stage(sym, "rejected", "неверный стоп-лосс")
                     return
                 if tp_price and tp_price >= entry:
                     logger.error(
@@ -389,6 +417,7 @@ class OrderExecutor:
                         entry,
                         tp_price,
                     )
+                    self._stage(sym, "rejected", "неверный тейк-профит")
                     return
 
             quantity = self._size_position(top, balance, live_wr, live_n, entry)
@@ -420,6 +449,7 @@ class OrderExecutor:
                         current_notional,
                         sym,
                     )
+                    self._stage(sym, "rejected", "достигнут лимит нагрузки портфеля")
                     return
                 if proposed_notional > headroom:
                     scaled_qty = headroom / entry
@@ -462,6 +492,11 @@ class OrderExecutor:
                         entry,
                         sl_price,
                     )
+                    self._stage(
+                        sym,
+                        "rejected",
+                        "неверный стоп-лосс после поправки на проскальзывание",
+                    )
                     return
                 if tp_price and tp_price <= entry:
                     logger.error(
@@ -470,6 +505,11 @@ class OrderExecutor:
                         sym,
                         entry,
                         tp_price,
+                    )
+                    self._stage(
+                        sym,
+                        "rejected",
+                        "неверный тейк-профит после поправки на проскальзывание",
                     )
                     return
             elif action == "sell":
@@ -481,6 +521,11 @@ class OrderExecutor:
                         entry,
                         sl_price,
                     )
+                    self._stage(
+                        sym,
+                        "rejected",
+                        "неверный стоп-лосс после поправки на проскальзывание",
+                    )
                     return
                 if tp_price and tp_price >= entry:
                     logger.error(
@@ -490,10 +535,16 @@ class OrderExecutor:
                         entry,
                         tp_price,
                     )
+                    self._stage(
+                        sym,
+                        "rejected",
+                        "неверный тейк-профит после поправки на проскальзывание",
+                    )
                     return
 
             quantity = self._api.round_quantity(sym, quantity)
             if quantity <= 0:
+                self._stage(sym, "rejected", "объём после округления равен нулю")
                 return
 
             # Default commission — used in paper trading and as fallback when the
@@ -577,6 +628,12 @@ class OrderExecutor:
             async with lock:
                 monitored[sym] = pos
             position_opened = True
+            self._stage(sym, "open")
+            if self._on_position_opened:
+                try:
+                    self._on_position_opened(sym, pos)
+                except Exception as _e:
+                    logger.debug("on_position_opened callback failed: %s", _e)
 
             self._set_last_trade_at(time.time())
             await self._telegram.notify(

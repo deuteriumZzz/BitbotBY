@@ -907,6 +907,18 @@ class RuntimeConfig:
     def set_paper_trading_override(self, paper: bool) -> None:
         self._set(_KEY_PAPER_TRADING, "1" if paper else "0")
 
+    def apply_paper_trading(self, paper: bool) -> None:
+        """Переключает Paper/Live в процессе и запоминает выбор в Redis.
+
+        Общий путь для Telegram-кнопки и команды из приложения; после него
+        вызывающий синхронизирует позиции (TradingBot._handle_mode_switch).
+        """
+        import os as _os
+
+        Config.PAPER_TRADING = paper
+        _os.environ["PAPER_TRADING"] = "true" if paper else "false"
+        self.set_paper_trading_override(paper)
+
     # ── Season switch mode ────────────────────────────────────────────────────
 
     def get_season_switch_mode(self) -> str:

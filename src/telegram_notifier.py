@@ -14,7 +14,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Optional
+import time
+from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,9 @@ class TelegramNotifier:
         self._polling_task: Optional[asyncio.Task] = None
         self._pending: dict = {}  # message_id → asyncio.Event
         self._decisions: dict = {}  # message_id → bool
+        self._decided_by: dict = {}  # message_id → "app" (ответ из приложения)
+        # Публикация событий для приложения (MiniApp / Desktop); задаёт TradingBot.
+        self._emit: "Callable[[str, dict], None] | None" = None
         self._enabled = bool(_TG_AVAILABLE and token and chat_id)
         self._live_msg_ids: dict = {}  # key → message_id for edit_notify
 
@@ -221,6 +225,33 @@ class TelegramNotifier:
             event = asyncio.Event()
             self._pending[mid] = event
             self._decisions[mid] = True  # default: всегда авто-исполнение
+            signal_id = f"sig{mid}"
+            self._publish(
+                "signal.pending",
+                {
+                    "id": signal_id,
+                    "symbol": symbol,
+                    "side": "long" if action == "BUY" else "short",
+                    "confidence": confidence,
+                    "strategy": strategy,
+                    "entry": entry,
+                    "stop_loss": sl,
+                    "take_profit": tp,
+                    "expires_at": time.time() + timeout,
+                    # По таймауту: True — исполнить, False — пропустить.
+                    "on_timeout_execute": auto_execute,
+                    "backtest": {
+                        "win_rate": bt_win_rate,
+                        "trades": bt_trades,
+                        "ev": bt_ev,
+                    },
+                    "live": {
+                        "win_rate": live_win_rate,
+                        "trades": live_trades,
+                        "ev": live_ev,
+                    },
+                },
+            )
 
             timed_out = False
             try:
@@ -235,14 +266,29 @@ class TelegramNotifier:
 
             decision = self._decisions.pop(mid, auto_execute)
             self._pending.pop(mid, None)
+            by = self._decided_by.pop(mid, "timeout" if timed_out else "telegram")
+            self._publish(
+                "signal.resolved",
+                {"id": signal_id, "symbol": symbol, "confirmed": decision, "by": by},
+            )
 
+            footer = None
             if timed_out:
-                timeout_text = "⚡ *Авто-исполнено*"
+                footer = (
+                    "⚡ *Авто-исполнено*" if decision else "⏭ *Нет ответа — пропущено*"
+                )
+            elif by == "app":
+                footer = (
+                    "✅ *Trade — принято в приложении*"
+                    if decision
+                    else "❌ *Skip — пропущено в приложении*"
+                )
+            if footer:
                 try:
                     await bot.edit_message_text(
                         chat_id=self._chat_id,
                         message_id=mid,
-                        text=text + f"\n\n{timeout_text}",
+                        text=text + f"\n\n{footer}",
                         parse_mode="Markdown",
                     )
                 except Exception:
@@ -252,6 +298,30 @@ class TelegramNotifier:
         except Exception as e:
             logger.error("Telegram error: %s", e)
             return False  # C3: fail-closed — skip trade on Telegram errors
+
+    def set_event_emitter(self, emit: "Callable[[str, dict], None]") -> None:
+        self._emit = emit
+
+    def _publish(self, type_: str, data: dict) -> None:
+        if self._emit is not None:
+            try:
+                self._emit(type_, data)
+            except Exception as e:
+                logger.debug("event %s not published: %s", type_, e)
+
+    def resolve_pending(self, signal_id: str, confirmed: bool) -> bool:
+        """Ответ на предложение сделки из приложения. False — уже не ждём ответа."""
+        try:
+            mid = int(str(signal_id).removeprefix("sig"))
+        except ValueError:
+            return False
+        event = self._pending.get(mid)
+        if event is None or event.is_set():
+            return False
+        self._decisions[mid] = confirmed
+        self._decided_by[mid] = "app"
+        event.set()
+        return True
 
     async def edit_notify(
         self,

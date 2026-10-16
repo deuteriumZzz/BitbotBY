@@ -6,6 +6,7 @@
 """
 
 import asyncio
+import json
 import logging
 import os
 import time
@@ -17,6 +18,8 @@ import pandas as pd
 
 from config import Config
 from src.ai_analyzer import AIAnalyzer
+from src.bot_bus import CommandConsumer, emit
+from src.bot_commands import BotCommands
 from src.bybit_api import BybitAPI
 from src.constants import REDIS_TTL_MARKET_DATA, SILENT_DEATH_ALERT_COOLDOWN
 from src.correlation_filter import CorrelationFilter
@@ -40,7 +43,11 @@ from src.regime_detector import RegimeDetector
 from src.risk_management import RiskManager
 from src.runtime_config import RuntimeConfig
 from src.season_detector import SeasonDetector
+from src.secrets_store import SERVICES as SECRET_SERVICES
+from src.secrets_store import apply_secrets
 from src.sentiment_poller import SentimentPoller
+from src.settings_registry import apply_overrides as apply_config_overrides
+from src.settings_registry import effective_config
 from src.signal_combiner import SignalCombiner
 from src.strategies import TradingStrategy
 from src.telegram_commander import (
@@ -80,6 +87,9 @@ class TradingBot:
 
     def __init__(self) -> None:
         self.redis = RedisClient()
+        # Настройки, изменённые в приложении, — до создания компонентов и validate().
+        apply_config_overrides(Config, self._bus)
+        apply_secrets(Config)  # ключи из приложения важнее .env
         self._runtime_config = RuntimeConfig(redis_client=self.redis)
         # Восстанавливаем runtime-переключение Paper/Live после рестарта
         override = self._runtime_config.get_paper_trading_override()
@@ -120,6 +130,7 @@ class TradingBot:
         self._monitored: Dict[str, PositionRecord] = {}
         self._monitored_lock: asyncio.Lock = asyncio.Lock()
         self._monitor_task: Optional[asyncio.Task[None]] = None
+        self._command_task: Optional[asyncio.Task[None]] = None
         self.trade_history = TradeHistory()
         self.telegram = TelegramNotifier(
             Config.TELEGRAM_BOT_TOKEN,
@@ -152,14 +163,14 @@ class TradingBot:
         if Config.PAPER_TRADING:
             logger.warning("*** PAPER TRADING MODE — no real orders will be placed ***")
         # Регистрируем секреты для маскировки в логах
+        # (все секретные поля из реестра ключей — и из .env, и из приложения).
         _SecretFilter.register(
-            Config.BYBIT_API_KEY,
-            Config.BYBIT_API_SECRET,
-            Config.ANTHROPIC_API_KEY,
-            Config.DEEPSEEK_API_KEY,
-            Config.TELEGRAM_BOT_TOKEN,
-            getattr(Config, "OPENAI_API_KEY", ""),
-            getattr(Config, "NEWS_API_KEY", ""),
+            *(
+                str(getattr(Config, f.env, "") or os.getenv(f.env, ""))
+                for svc in SECRET_SERVICES
+                for f in svc.fields
+                if f.secret
+            )
         )
 
         # Мониторинг и исполнение — отдельные объекты: каждый отвечает за своё
@@ -174,9 +185,8 @@ class TradingBot:
             set_running=lambda v: setattr(self, "is_running", v),
             redis=self.redis,
             online_learner=self._online_learner,
-            on_position_closed=lambda sym: self._symbol_cooldown.update(
-                {sym: time.time()}
-            ),
+            on_position_closed=self._on_position_closed,
+            emit=self._publish_event,
         )
         self._executor = OrderExecutor(
             api=self.api,
@@ -194,7 +204,10 @@ class TradingBot:
             set_last_trade_at=lambda v: setattr(self, "_last_trade_at", v),
             get_current_regime=lambda: self._current_regime,
             runtime_config=self._runtime_config,
+            on_position_opened=self._on_position_opened,
+            emit=self._publish_event,
         )
+        self.telegram.set_event_emitter(self._publish_event)
         self._commander = TelegramCommander(
             notifier=self.telegram,
             runtime_config=self._runtime_config,
@@ -223,7 +236,8 @@ class TradingBot:
 
         :raises Exception: Если инициализация не удалась.
         """
-        Config().validate()
+        # Действующие значения: с учётом настроек и ключей из приложения.
+        effective_config(Config).validate()
         try:
             await self.api.initialize(
                 Config.BYBIT_API_KEY,
@@ -612,6 +626,77 @@ class TradingBot:
         except Exception as exc:
             logger.warning("RegimeDetector fit skipped: %s", exc)
 
+    @property
+    def _bus(self) -> Any:
+        """Сырой redis-клиент для событий; None, если Redis не подключён."""
+        return getattr(getattr(self, "redis", None), "redis_client", None)
+
+    def _publish_event(self, type_: str, data: Dict[str, Any]) -> None:
+        emit(self._bus, type_, data)
+        # Ожидающее подтверждения предложение сделки храним, пока оно живо,
+        # чтобы приложение увидело его и после переподключения.
+        r = self._bus
+        if r is None or type_ not in ("signal.pending", "signal.resolved"):
+            return
+        key = f"bot:pending_signal:{data.get('id')}"
+        try:
+            if type_ == "signal.pending":
+                ttl = max(1, int(float(data.get("expires_at", 0)) - time.time()))
+                r.set(key, json.dumps(data), ex=ttl)
+            else:
+                r.delete(key)
+        except Exception as e:
+            logger.debug("pending signal not stored: %s", e)
+
+    def _publish_signal_stages(self, recs: list, passed: list) -> None:
+        """radar.stage «signal» по каждой рекомендации.
+
+        Тем, кто отсеян по балансу, — ещё и «rejected».
+        """
+        kept = {id(r) for r in passed}
+        for r in recs:
+            sym = r.get("symbol")
+            if not sym or r.get("action") not in ("buy", "sell"):
+                continue
+            self._publish_event(
+                "radar.stage",
+                {
+                    "symbol": sym,
+                    "stage": "signal",
+                    "side": "long" if r.get("action") == "buy" else "short",
+                    "confidence": r.get("confidence"),
+                    "strategy": r.get("strategy"),
+                },
+            )
+            if id(r) not in kept:
+                self._publish_event(
+                    "radar.stage",
+                    {
+                        "symbol": sym,
+                        "stage": "rejected",
+                        "reason": "не хватает баланса",
+                    },
+                )
+
+    def _on_position_closed(self, sym: str) -> None:
+        self._symbol_cooldown[sym] = time.time()
+        emit(self._bus, "position.closed", {"symbol": sym})
+
+    def _on_position_opened(self, sym: str, pos: PositionRecord) -> None:
+        emit(
+            self._bus,
+            "position.opened",
+            {
+                "symbol": sym,
+                "trade_id": pos.get("trade_id"),
+                "side": pos.get("side"),
+                "entry": pos.get("entry"),
+                "qty": pos.get("qty"),
+                "stop_loss": pos.get("stop_loss"),
+                "take_profit": pos.get("take_profit"),
+            },
+        )
+
     def _get_bot_state(self) -> Dict[str, Any]:
         """Снэпшот состояния бота для TelegramCommander."""
         positions = [
@@ -717,6 +802,14 @@ class TradingBot:
         if Config.MACRO_BLACKOUT_ENABLED:
             if await self._macro_calendar.is_blackout():
                 logger.warning("Macro blackout active — skipping execution")
+                self._publish_event(
+                    "guard",
+                    {
+                        "kind": "macro",
+                        "active": True,
+                        "detail": "Пауза вокруг макро-новостей",
+                    },
+                )
                 return
         balance = await self._get_balance_usdt()
         max_pos = self._runtime_config.get_max_positions()
@@ -1400,6 +1493,10 @@ class TradingBot:
         self.is_running = True
         self._monitor_task = asyncio.create_task(self._monitor_positions())
         asyncio.create_task(self._season_check_loop())
+        # Команды из приложения (MiniApp / Desktop) — через очередь в Redis.
+        self._command_task = asyncio.create_task(
+            CommandConsumer(self.redis.redis_client, BotCommands(self).handlers()).run()
+        )
         self._pumpfun_tracker.start()
         cycle = 0
         ai_status = "on" if self.ai.enabled else "off"
@@ -1452,6 +1549,7 @@ class TradingBot:
             t0 = loop.time()
 
             if self._runtime_config.is_paused():
+                self._publish_event("cycle", {"state": "paused"})
                 await asyncio.sleep(Config.TRADING_INTERVAL)
                 continue
 
@@ -1529,6 +1627,10 @@ class TradingBot:
                 await self._inject_sentiment(market_data)
                 snapshots = await self._cycle.collect_snapshots(
                     list(market_data.keys()), market_data
+                )
+                self._publish_event(
+                    "radar.stage",
+                    {"stage": "scan", "symbols": [s.get("symbol") for s in snapshots]},
                 )
                 balance = await self._get_balance_usdt()
 
@@ -1616,7 +1718,19 @@ class TradingBot:
                                 f" {Config.DRAWDOWN_HALT_HOURS:.0f}ч."
                             )
                             self._drawdown_consec = 0
+                            self._publish_event(
+                                "guard",
+                                {
+                                    "kind": "drawdown_halt",
+                                    "active": True,
+                                    "detail": f"Просадка {dd_pct:.1f}% от пика",
+                                    "until": time.time() + halt_secs,
+                                },
+                            )
                             await asyncio.sleep(halt_secs)
+                            self._publish_event(
+                                "guard", {"kind": "drawdown_halt", "active": False}
+                            )
                             self._peak_balance = await self._get_balance_usdt()
                             continue
                     else:
@@ -1695,6 +1809,15 @@ class TradingBot:
                             "Daily loss limit hit — blocking new entries,"
                             " checking recovery every 60s until midnight UTC",
                         )
+                        self._publish_event(
+                            "guard",
+                            {
+                                "kind": "daily_limit",
+                                "active": True,
+                                "detail": "Дневной лимит убытка достигнут",
+                                "until": time.time() + sleep_secs,
+                            },
+                        )
                         _check_interval = 60
                         _elapsed = 0.0
                         while _elapsed < sleep_secs:
@@ -1714,6 +1837,9 @@ class TradingBot:
                                     f"Торговля возобновлена досрочно."
                                 )
                                 break
+                        self._publish_event(
+                            "guard", {"kind": "daily_limit", "active": False}
+                        )
                         continue
 
                 # ── [П.1] ATR spike / volatility circuit breaker ──────────
@@ -1730,6 +1856,16 @@ class TradingBot:
                             "Volatility circuit breaker triggered — skipping cycle"
                         )
                         await self._close_all_open_positions("atr_spike")
+                        self._publish_event(
+                            "guard",
+                            {
+                                "kind": "atr_spike",
+                                "active": True,
+                                "detail": (
+                                    "Резкий всплеск волатильности — позиции закрыты"
+                                ),
+                            },
+                        )
                         if self._runtime_config.get_alert_enabled("atr_spike"):
                             await self.telegram.edit_notify(
                                 "atr_spike",
@@ -1748,6 +1884,9 @@ class TradingBot:
                 _slots = _max - _open
 
                 if _slots <= 0:
+                    self._publish_event(
+                        "cycle", {"state": "monitor", "used": _open, "max": _max}
+                    )
                     # РЕЖИМ МОНИТОРИНГА: слоты заняты — сканируем только открытые монеты
                     # Это даёт PositionMonitor актуальные сигналы для раннего выхода
                     # (разворот, смена режима, funding squeeze) без лишних токенов
@@ -1837,6 +1976,16 @@ class TradingBot:
                 # по быстрым метрикам — до отправки в AI
                 _ai_limit = int(os.getenv("AI_MAX_SYMBOLS", "30"))
                 ai_snapshots = self._prescore_snapshots(snapshots, regimes, _ai_limit)
+                self._publish_event(
+                    "cycle", {"state": "scan", "used": _open, "max": _max}
+                )
+                self._publish_event(
+                    "radar.stage",
+                    {
+                        "stage": "prescore",
+                        "symbols": [s.get("symbol") for s in ai_snapshots],
+                    },
+                )
                 recs = await self._generate_signals(
                     ai_snapshots,
                     balance,
@@ -1859,6 +2008,7 @@ class TradingBot:
                     rec.setdefault("_snap", snap_map.get(rec.get("symbol")))
 
                 filtered = self._filter_by_balance(recs, balance)
+                self._publish_signal_stages(recs, filtered)
                 filtered.sort(key=self._composite_score, reverse=True)
 
                 self._cycle.print_recommendations(filtered, balance, cycle)
@@ -1894,6 +2044,8 @@ class TradingBot:
 
     async def stop(self) -> None:
         self.is_running = False
+        if self._command_task:
+            self._command_task.cancel()
         if self._monitor_task:
             self._monitor_task.cancel()
             try:

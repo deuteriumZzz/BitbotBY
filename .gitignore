@@ -18,3 +18,7 @@ claude/
 .pytest_cache/
 *.egg-info/
 nginx/htpasswd
+
+# Ключи API из приложения (зашифрованы, но всё равно не для git)
+data/secrets.enc.json
+data/.secrets.*

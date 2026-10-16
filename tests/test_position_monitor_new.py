@@ -770,7 +770,10 @@ class TestCheckAndCloseLive:
                 "BTC/USDT", pos, 48000.0, monitored, lock
             )
         assert closed is True
-        calls = [c.args[1] for c in monitor._api.cancel_order.await_args_list]
+        # BybitAPI.cancel_order(order_id, symbol) — раньше аргументы шли наоборот.
+        calls = [
+            c.kwargs["order_id"] for c in monitor._api.cancel_order.await_args_list
+        ]
         assert "sl_abc" in calls
         assert "tp_xyz" in calls
 

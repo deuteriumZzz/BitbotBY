@@ -22,6 +22,7 @@ from src.dashboard.data import (
     g_trades,
     g_win_rate,
     get_stats,
+    portfolio_key,
     redis_get,
 )
 
@@ -31,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 @router.get("/metrics")
 async def metrics() -> Response:
-    portfolio = redis_get("portfolio_state") or {}
+    portfolio = redis_get(portfolio_key()) or {}
     stats = get_stats()
     g_running.set(1 if check_healthcheck() else 0)
     g_balance.set(portfolio.get("balance", Config.INITIAL_BALANCE))

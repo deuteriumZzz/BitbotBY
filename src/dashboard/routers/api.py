@@ -10,14 +10,20 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
 from config import Config
-from src.dashboard.data import check_healthcheck, get_stats, get_trades, redis_get
+from src.dashboard.data import (
+    check_healthcheck,
+    get_stats,
+    get_trades,
+    portfolio_key,
+    redis_get,
+)
 
 router = APIRouter()
 
 
 @router.get("/api/status")
 async def get_status() -> JSONResponse:
-    portfolio = redis_get("portfolio_state") or {}
+    portfolio = redis_get(portfolio_key()) or {}
     alive = check_healthcheck()
     stats = get_stats()
     return JSONResponse(

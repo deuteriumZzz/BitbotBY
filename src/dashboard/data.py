@@ -141,3 +141,162 @@ def check_healthcheck() -> bool:
         return (datetime.now() - ts).total_seconds() < 120
     except Exception:
         return False
+
+
+# ── Режим счёта и состояние бота (для MiniApp / Desktop API) ─────────────────
+
+
+def paper_mode() -> bool:
+    """Paper/Live с учётом переключения из Telegram или приложения.
+
+    Бот хранит выбор в Redis (`bot:paper_trading_override`), а env дашборда
+    его не видит — поэтому сначала Redis, потом env.
+    """
+    r = get_redis()
+    if r:
+        try:
+            v = r.get("bot:paper_trading_override")
+            if v in ("1", "0"):
+                return v == "1"
+        except Exception:
+            pass
+    return os.getenv("PAPER_TRADING", "").lower() == "true"
+
+
+def _mode_suffix() -> str:
+    return "paper" if paper_mode() else "live"
+
+
+def portfolio_key() -> str:
+    """Бот пишет портфель под portfolio_state_{paper|live} (portfolio_manager)."""
+    return f"portfolio_state_{_mode_suffix()}"
+
+
+def db_path() -> str:
+    return os.path.join("data", f"trades_{_mode_suffix()}.db")
+
+
+def get_open_positions() -> List[dict]:
+    """Открытые позиции из снимка бота `monitored_positions_{paper|live}`."""
+    raw = redis_get(f"monitored_positions_{_mode_suffix()}") or {}
+    out = []
+    for sym, p in raw.items():
+        if not p:
+            continue
+        out.append(
+            {
+                "id": str(p.get("trade_id") or sym),
+                "trade_id": p.get("trade_id"),
+                "symbol": sym,
+                "side": "long" if p.get("side", "buy") == "buy" else "short",
+                "entry": p.get("entry"),
+                "qty": p.get("qty"),
+                "sl": p.get("stop_loss"),
+                "tp": p.get("take_profit"),
+                "pnl_pct": p.get("pnl_pct"),
+                "partial_tp_done": bool(p.get("partial_tp_triggered")),
+            }
+        )
+    return out
+
+
+def get_closed_trades(since: Optional[datetime] = None) -> List[dict]:
+    """Закрытые сделки по возрастанию времени выхода.
+
+    `pnl` в базе — уже за вычетом комиссий.
+    """
+    path = db_path()
+    if not os.path.exists(path):
+        return []
+    sql = (
+        "SELECT symbol, strategy, pnl, commission, exit_time FROM trades "
+        "WHERE status='closed' AND pnl IS NOT NULL AND exit_time IS NOT NULL"
+    )
+    params: tuple = ()
+    if since is not None:
+        sql += " AND exit_time >= ?"
+        params = (since.isoformat(),)
+    try:
+        conn = sqlite3.connect(path)
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(sql + " ORDER BY exit_time", params).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+    except Exception as e:
+        logger.error("Closed trades query error: %s", e)
+        return []
+
+
+SHARPE_MIN_TRADES = 50
+
+
+def compute_metrics(trades: List[dict], start_balance: float) -> dict:
+    """Метрики эффективности по закрытым сделкам (порядок — по времени выхода).
+
+    `pnl` в базе уже за вычетом комиссий, поэтому `net` = сумма pnl,
+    а `realized` (до комиссий) = net + fees. Sharpe — по дневной доходности
+    и только от SHARPE_MIN_TRADES сделок: на меньшей выборке он случаен.
+    """
+    n = len(trades)
+    pnls = [float(t["pnl"]) for t in trades]
+    fees = sum(float(t.get("commission") or 0) for t in trades)
+    net = sum(pnls)
+    wins = [p for p in pnls if p > 0]
+    losses = [-p for p in pnls if p < 0]
+    avg_win = sum(wins) / len(wins) if wins else None
+    avg_loss = sum(losses) / len(losses) if losses else None
+
+    equity = peak = float(start_balance)
+    max_dd = 0.0
+    for p in pnls:
+        equity += p
+        peak = max(peak, equity)
+        if peak > 0:
+            max_dd = max(max_dd, (peak - equity) / peak)
+
+    sharpe = None
+    if n >= SHARPE_MIN_TRADES and start_balance > 0:
+        daily: dict = {}
+        for t in trades:
+            day = str(t["exit_time"])[:10]
+            daily[day] = daily.get(day, 0.0) + float(t["pnl"])
+        rets = [v / start_balance for v in daily.values()]
+        if len(rets) > 1:
+            mean = sum(rets) / len(rets)
+            sd = (sum((r - mean) ** 2 for r in rets) / (len(rets) - 1)) ** 0.5
+            sharpe = round(mean / sd * 365**0.5, 3) if sd > 0 else None
+
+    return {
+        "n": n,
+        "net": round(net, 2),
+        "fees": round(fees, 2),
+        "realized": round(net + fees, 2),
+        "win_rate": round(len(wins) / n, 4) if n else None,
+        "profit_factor": round(sum(wins) / sum(losses), 3) if losses else None,
+        "avg_win": round(avg_win, 2) if avg_win is not None else None,
+        "avg_loss": round(avg_loss, 2) if avg_loss is not None else None,
+        "rr": round(avg_win / avg_loss, 3) if avg_win and avg_loss else None,
+        "max_drawdown_pct": round(max_dd * 100, 2),
+        "sharpe": sharpe,
+    }
+
+
+def daily_pnl(trades: List[dict]) -> List[dict]:
+    """P&L по дням выхода: [{date, net, fees, trades}] по возрастанию даты."""
+    days: dict = {}
+    for t in trades:
+        d = days.setdefault(
+            str(t["exit_time"])[:10], {"net": 0.0, "fees": 0.0, "trades": 0}
+        )
+        d["net"] += float(t["pnl"])
+        d["fees"] += float(t.get("commission") or 0)
+        d["trades"] += 1
+    return [
+        {
+            "date": k,
+            "net": round(v["net"], 2),
+            "fees": round(v["fees"], 2),
+            "trades": v["trades"],
+        }
+        for k, v in sorted(days.items())
+    ]
