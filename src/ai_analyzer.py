@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, List, Tuple
+import os
+import re
+import time
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import pandas as pd
 
 from config import Config
+from src import ai_providers as catalog
 from src.strategies import STRATEGY_REGISTRY, create_strategy, get_all_strategies
 
 logger = logging.getLogger(__name__)
@@ -19,82 +23,69 @@ _SYSTEM_PROMPT = (
     "with risk. Always respond with valid JSON only."
 )
 
-_DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+
+def _env(name: str) -> str:
+    """Значение настройки: Config (туда же попадают ключи из приложения) или env."""
+    if not name:
+        return ""
+    value = getattr(Config, name, None)
+    if isinstance(value, str) and value:
+        return value
+    return os.getenv(name, "")
 
 
-def _resolve_provider() -> str:
-    """
-    Определяет активного AI-провайдера согласно Config.AI_PROVIDER.
+def _retry_after(message: str) -> Optional[float]:
+    """Срок из текста ошибки 429: «retry in 1m30s» или «try again in 12.5s»."""
+    m = re.search(
+        r"(?:try again|retry) in (\d+)m(\d+(?:\.\d+)?)?s?|"
+        r"(?:try again|retry) in (\d+(?:\.\d+)?)s",
+        message,
+        re.IGNORECASE,
+    )
+    if not m:
+        return None
+    if m.group(1):
+        return int(m.group(1)) * 60 + float(m.group(2) or 0)
+    return float(m.group(3))
 
-    auto      → Anthropic → OpenAI → DeepSeek → Groq → Gemini → OpenRouter
-                → NVIDIA → none
-    anthropic → Claude
-    deepseek  → DeepSeek
-    openai    → ChatGPT
-    groq      → Groq
-    gemini    → Google Gemini
-    openrouter→ OpenRouter (бесплатные ":free" модели)
-    nvidia    → NVIDIA NIM
-    """
-    p = Config.AI_PROVIDER
-    if p == "anthropic":
-        return "anthropic" if Config.ANTHROPIC_API_KEY else "none"
-    if p == "deepseek":
-        return "deepseek" if Config.DEEPSEEK_API_KEY else "none"
-    if p == "openai":
-        return "openai" if Config.OPENAI_API_KEY else "none"
-    if p == "groq":
-        return "groq" if getattr(Config, "GROQ_API_KEY", "") else "none"
-    if p == "gemini":
-        return "gemini" if getattr(Config, "GEMINI_API_KEY", "") else "none"
-    if p == "openrouter":
-        return "openrouter" if getattr(Config, "OPENROUTER_API_KEY", "") else "none"
-    if p == "nvidia":
-        return "nvidia" if getattr(Config, "NVIDIA_API_KEY", "") else "none"
-    # auto: prefer paid flagship, then cheaper/free options, free-tier-only
-    # providers (OpenRouter/NVIDIA) last — см. память project_senior_quant_
-    # roadmap: не тратить их скромные дневные лимиты, пока доступны более
-    # щедрые провайдеры выше по списку.
-    if Config.ANTHROPIC_API_KEY:
-        return "anthropic"
-    if Config.OPENAI_API_KEY:
-        return "openai"
-    if Config.DEEPSEEK_API_KEY:
-        return "deepseek"
-    if getattr(Config, "GROQ_API_KEY", ""):
-        return "groq"
-    if getattr(Config, "GEMINI_API_KEY", ""):
-        return "gemini"
-    if getattr(Config, "OPENROUTER_API_KEY", ""):
-        return "openrouter"
-    if getattr(Config, "NVIDIA_API_KEY", ""):
-        return "nvidia"
-    return "none"
+
+def _classify(exc: Exception) -> Tuple[str, float]:
+    """(статус провайдера, пауза в секундах) по ошибке вызова."""
+    code = getattr(exc, "status_code", None)
+    if code == 429:
+        wait = _retry_after(str(exc))
+        return "rate_limit", (wait + 5) if wait else catalog.COOLDOWN_RATE_LIMIT
+    if code == 402:
+        return "no_balance", catalog.COOLDOWN_NO_BALANCE
+    if code in (401, 403):
+        return "bad_key", catalog.COOLDOWN_BAD_KEY
+    if code == 404:
+        return "bad_model", catalog.COOLDOWN_BAD_MODEL
+    if code == 400:
+        return "bad_request", 0.0
+    return "error", 0.0
 
 
 class AIAnalyzer:
     """
-    Анализирует рынок через Claude, DeepSeek или OpenAI (ChatGPT).
+    Анализирует рынок через цепочку AI-провайдеров (каталог — src/ai_providers.py).
 
-    Провайдер выбирается через AI_PROVIDER (.env):
-      auto      → Claude → DeepSeek → OpenAI (первый найденный ключ)
-      anthropic → только Claude
-      deepseek  → только DeepSeek
-      openai    → только ChatGPT
+    Порядок, режим (только бесплатные / сначала бесплатные / только платные),
+    модели и включённые провайдеры задаются в приложении и действуют со
+    следующего цикла. AI_PROVIDER (/provider в Telegram) ставит выбранного
+    провайдера первым. Ошибка или лимит — сразу следующий провайдер; после
+    лимита, отказа ключа, «нет денег» или неизвестной модели провайдер
+    пропускается до конца паузы.
 
     Принимает снэпшоты нескольких монет, отправляет один batch-запрос,
     возвращает список торговых рекомендаций с reasoning на русском.
     """
-
-    # HTTP status codes treated as billing/quota exhaustion → try next provider
-    _BILLING_CODES: frozenset = frozenset({402, 429})
 
     def __init__(
         self,
         runtime_config: "Any | None" = None,
         telegram: "Any | None" = None,
     ) -> None:
-        self._provider = _resolve_provider()
         self._runtime_config = runtime_config
         self._telegram = telegram
         self.strategies = get_all_strategies()
@@ -102,117 +93,14 @@ class AIAnalyzer:
         # Кулдаун уведомлений: не спамим одним и тем же сообщением
         self._notified_at: Dict[str, float] = {}
         self._NOTIFY_COOLDOWN = 3600.0  # раз в час максимум
-        # Retry-after: провайдер сообщил "retry in Xm" — пропускаем до этого времени
+        # Пауза провайдера после лимита или ошибки ключа — до этого времени пропуск
         self._provider_retry_after: Dict[str, float] = {}
+        self._clients: Dict[str, Any] = {}
+        # События для приложения (ai.status); TradingBot подставляет свой emit
+        self._emit: Optional[Callable[[str, Dict[str, Any]], None]] = None
 
-        # Initialise clients for ALL providers that have keys (for fallback)
-        self._anthropic = None
-        self._deepseek = None
-        self._openai = None
-        self._groq = None
-        self._gemini = None
-        self._openrouter = None
-        self._nvidia = None
-
-        if Config.ANTHROPIC_API_KEY:
-            import anthropic
-
-            self._anthropic = anthropic.AsyncAnthropic(api_key=Config.ANTHROPIC_API_KEY)
-            self._anthropic_model = Config.AI_MODEL
-
-        if Config.DEEPSEEK_API_KEY:
-            from openai import AsyncOpenAI
-
-            self._deepseek = AsyncOpenAI(
-                api_key=Config.DEEPSEEK_API_KEY,
-                base_url=_DEEPSEEK_BASE_URL,
-                max_retries=0,
-                timeout=30.0,
-            )
-            self._deepseek_model = Config.DEEPSEEK_MODEL
-
-        if Config.OPENAI_API_KEY:
-            from openai import AsyncOpenAI
-
-            self._openai = AsyncOpenAI(
-                api_key=Config.OPENAI_API_KEY,
-                max_retries=0,
-                timeout=30.0,
-            )
-            self._openai_model = Config.OPENAI_MODEL
-
-        if getattr(Config, "GROQ_API_KEY", ""):
-            from openai import AsyncOpenAI
-
-            self._groq = AsyncOpenAI(
-                api_key=Config.GROQ_API_KEY,
-                base_url="https://api.groq.com/openai/v1",
-                max_retries=0,
-                timeout=30.0,
-            )
-            self._groq_model = getattr(Config, "GROQ_MODEL", "llama-3.3-70b-versatile")
-
-        if getattr(Config, "GEMINI_API_KEY", ""):
-            from openai import AsyncOpenAI
-
-            self._gemini = AsyncOpenAI(
-                api_key=Config.GEMINI_API_KEY,
-                base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-                max_retries=0,  # без авто-ретраев — 429 сразу идёт в fallback
-                timeout=30.0,
-            )
-            self._gemini_model = getattr(Config, "GEMINI_MODEL", "gemini-3.6-flash")
-
-        if getattr(Config, "OPENROUTER_API_KEY", ""):
-            from openai import AsyncOpenAI
-
-            self._openrouter = AsyncOpenAI(
-                api_key=Config.OPENROUTER_API_KEY,
-                base_url="https://openrouter.ai/api/v1",
-                max_retries=0,
-                timeout=30.0,
-            )
-            self._openrouter_model = getattr(
-                Config, "OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free"
-            )
-
-        if getattr(Config, "NVIDIA_API_KEY", ""):
-            from openai import AsyncOpenAI
-
-            self._nvidia = AsyncOpenAI(
-                api_key=Config.NVIDIA_API_KEY,
-                base_url="https://integrate.api.nvidia.com/v1",
-                max_retries=0,
-                timeout=30.0,
-            )
-            self._nvidia_model = getattr(
-                Config, "NVIDIA_MODEL", "meta/llama-3.3-70b-instruct"
-            )
-
-        # Ordered list of available providers (primary first). Бесплатные
-        # provider-only-fallback (openrouter/nvidia) — последними: не тратим
-        # их скромные дневные лимиты, пока доступны более щедрые выше.
-        _all = [
-            "anthropic",
-            "openai",
-            "deepseek",
-            "groq",
-            "gemini",
-            "openrouter",
-            "nvidia",
-        ]
-        available = [p for p in _all if getattr(self, f"_{p}") is not None]
-        # Put the configured primary provider first
-        if self._provider in available:
-            available.remove(self._provider)
-            available.insert(0, self._provider)
-        self._provider_order: List[str] = available
-        # bool(_provider_order) — а не self._provider != "none" — потому что
-        # _resolve_provider()'s auto-цепочка исторически не включала все
-        # провайдеры (например, был баг: если задан ТОЛЬКО GEMINI_API_KEY,
-        # _provider возвращал "none" и enabled=False, хотя клиент был жив).
+        self._provider_order: List[str] = [pid for pid, _ in self._chain()]
         self.enabled = bool(self._provider_order)
-
         if self._provider_order:
             self.logger.info(
                 "AIAnalyzer → %s (fallback: %s)",
@@ -223,6 +111,64 @@ class AIAnalyzer:
             self.logger.warning(
                 "AIAnalyzer: нет ключей AI — бот использует локальные стратегии"
             )
+
+    # ── Цепочка провайдеров ───────────────────────────────────────────────────
+
+    def _settings(self) -> Dict[str, Any]:
+        rc = self._runtime_config
+        if rc is None:
+            return {}
+        try:
+            return dict(rc.get_ai_chain())
+        except Exception:
+            return {}
+
+    def _chain(self) -> List[Tuple[str, str]]:
+        """[(провайдер, модель)] по текущим настройкам — пересчёт каждый цикл."""
+        settings = self._settings()
+        keyless = set(settings.get("keyless", []))
+        available = [
+            p.id
+            for p in catalog.PROVIDERS
+            if (_env(p.key_env) or (p.key_optional and p.id in keyless))
+            and (p.kind != "openai" or p.url(_env))
+        ]
+        env_models = {
+            p.id: _env(p.model_env)
+            for p in catalog.PROVIDERS
+            if p.model_env and _env(p.model_env)
+        }
+        pinned = "auto"
+        if self._runtime_config is not None:
+            try:
+                pinned = self._runtime_config.get_ai_provider()
+            except Exception:
+                pass
+        elif isinstance(getattr(Config, "AI_PROVIDER", None), str):
+            pinned = Config.AI_PROVIDER
+        return catalog.chain(settings, available, env_models, pinned)
+
+    def _client(self, provider: str) -> Any:
+        """Клиент провайдера — создаётся при первом обращении."""
+        if provider not in self._clients:
+            p = catalog.BY_ID[provider]
+            key = _env(p.key_env)
+            if p.kind == "anthropic":
+                import anthropic
+
+                self._clients[provider] = anthropic.AsyncAnthropic(
+                    api_key=key, max_retries=0, timeout=60.0
+                )
+            else:
+                from openai import AsyncOpenAI
+
+                self._clients[provider] = AsyncOpenAI(
+                    api_key=key or "not-needed",  # LLM7 и Ollama — без ключа
+                    base_url=p.url(_env),
+                    max_retries=0,  # без авто-ретраев — 429 сразу идёт в фолбэк
+                    timeout=120.0 if provider == "ollama" else 30.0,
+                )
+        return self._clients[provider]
 
     def _build_strategy_list(self) -> str:
         """
@@ -366,27 +312,27 @@ class AIAnalyzer:
         except Exception:
             pass
 
-    async def _call_anthropic(self, prompt: str) -> str:
-        """Вызов Claude (Anthropic API)."""
-        message = await self._anthropic.messages.create(
-            model=self._anthropic_model,
-            max_tokens=4096,
-            system=_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        usage = getattr(message, "usage", None)
-        if usage is not None:
-            total = getattr(usage, "input_tokens", 0) + getattr(
-                usage, "output_tokens", 0
+    async def _call(self, provider: str, model: str, prompt: str) -> str:
+        """Один запрос к провайдеру; ответ — текст модели."""
+        client = self._client(provider)
+        if catalog.BY_ID[provider].kind == "anthropic":
+            message = await client.messages.create(
+                model=model,
+                max_tokens=4096,
+                system=_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": prompt}],
             )
-            self._record_usage("anthropic", total)
-        block = message.content[0]
-        return block.text if hasattr(block, "text") else ""
-
-    async def _call_deepseek(self, prompt: str) -> str:
-        """Вызов DeepSeek (OpenAI-совместимый API)."""
-        response = await self._deepseek.chat.completions.create(
-            model=self._deepseek_model,
+            usage = getattr(message, "usage", None)
+            if usage is not None:
+                self._record_usage(
+                    provider,
+                    getattr(usage, "input_tokens", 0)
+                    + getattr(usage, "output_tokens", 0),
+                )
+            block = message.content[0]
+            return block.text if hasattr(block, "text") else ""
+        response = await client.chat.completions.create(
+            model=model,
             max_tokens=4096,
             messages=[
                 {"role": "system", "content": _SYSTEM_PROMPT},
@@ -394,78 +340,34 @@ class AIAnalyzer:
             ],
         )
         usage = getattr(response, "usage", None)
-        self._record_usage("deepseek", getattr(usage, "total_tokens", None))
+        self._record_usage(provider, getattr(usage, "total_tokens", None))
         return response.choices[0].message.content or ""
 
-    async def _call_openai(self, prompt: str) -> str:
-        """Вызов ChatGPT (OpenAI API)."""
-        response = await self._openai.chat.completions.create(
-            model=self._openai_model,
-            max_tokens=4096,
-            messages=[
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user", "content": prompt},
-            ],
-        )
-        usage = getattr(response, "usage", None)
-        self._record_usage("openai", getattr(usage, "total_tokens", None))
-        return response.choices[0].message.content or ""
-
-    async def _call_groq(self, prompt: str) -> str:
-        """Вызов Groq (Llama 3.3 70B через OpenAI-совместимый API)."""
-        response = await self._groq.chat.completions.create(
-            model=self._groq_model,
-            max_tokens=4096,
-            messages=[
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user", "content": prompt},
-            ],
-        )
-        usage = getattr(response, "usage", None)
-        self._record_usage("groq", getattr(usage, "total_tokens", None))
-        return response.choices[0].message.content or ""
-
-    async def _call_gemini(self, prompt: str) -> str:
-        """Вызов Google Gemini Flash через OpenAI-совместимый API."""
-        response = await self._gemini.chat.completions.create(
-            model=self._gemini_model,
-            max_tokens=4096,
-            messages=[
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user", "content": prompt},
-            ],
-        )
-        usage = getattr(response, "usage", None)
-        self._record_usage("gemini", getattr(usage, "total_tokens", None))
-        return response.choices[0].message.content or ""
-
-    async def _call_openrouter(self, prompt: str) -> str:
-        """Вызов OpenRouter (бесплатные ':free' модели, OpenAI-совместимый API)."""
-        response = await self._openrouter.chat.completions.create(
-            model=self._openrouter_model,
-            max_tokens=4096,
-            messages=[
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user", "content": prompt},
-            ],
-        )
-        usage = getattr(response, "usage", None)
-        self._record_usage("openrouter", getattr(usage, "total_tokens", None))
-        return response.choices[0].message.content or ""
-
-    async def _call_nvidia(self, prompt: str) -> str:
-        """Вызов NVIDIA NIM (build.nvidia.com, OpenAI-совместимый API)."""
-        response = await self._nvidia.chat.completions.create(
-            model=self._nvidia_model,
-            max_tokens=4096,
-            messages=[
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user", "content": prompt},
-            ],
-        )
-        usage = getattr(response, "usage", None)
-        self._record_usage("nvidia", getattr(usage, "total_tokens", None))
-        return response.choices[0].message.content or ""
+    def _mark(self, provider: str, model: str, status: str, until: float = 0.0) -> None:
+        """Статус провайдера: в Redis (Telegram, приложение) и событием ai.status."""
+        rc = self._runtime_config
+        if rc is not None:
+            try:
+                rc.set_provider_status(provider, status)
+                rc.set_provider_cooldown(provider, until)
+                rc.record_ai_call(provider)
+                if status == "ok":
+                    rc.set_last_ai_provider(provider)
+            except Exception:
+                pass
+        if self._emit is not None:
+            try:
+                self._emit(
+                    "ai.status",
+                    {
+                        "provider": provider,
+                        "model": model,
+                        "status": status,
+                        "until": until or None,
+                    },
+                )
+            except Exception:
+                pass
 
     async def refresh_deepseek_balance(self) -> None:
         """Запрашивает актуальный баланс DeepSeek и кэширует в RuntimeConfig.
@@ -473,15 +375,14 @@ class AIAnalyzer:
         Вызывается периодически (раз в 4ч из _season_check_loop) — баланс
         pay-per-use меняется медленно, частый опрос не нужен.
         """
-        if self._deepseek is None:
-            return
+        key = _env("DEEPSEEK_API_KEY")
         rc = getattr(self, "_runtime_config", None)
-        if rc is None:
+        if not key or rc is None:
             return
         try:
             import aiohttp
 
-            headers = {"Authorization": f"Bearer {Config.DEEPSEEK_API_KEY}"}
+            headers = {"Authorization": f"Bearer {key}"}
             async with aiohttp.ClientSession() as session:
                 async with session.get(
                     "https://api.deepseek.com/user/balance",
@@ -507,215 +408,122 @@ class AIAnalyzer:
         balance: float,
     ) -> List[Dict[str, Any]]:
         """
-        Отправляет снэпшоты в AI (Claude или DeepSeek), возвращает рекомендации.
+        Отправляет снэпшоты по цепочке провайдеров, возвращает рекомендации.
 
-        При отсутствии ключа или ошибке — пустой список,
+        Нет доступных провайдеров или все отказали — пустой список,
         trading_bot автоматически переключается на локальные стратегии.
 
         :param snapshots: Список снэпшотов из MarketScanner.
         :param balance: Баланс пользователя в USDT.
         :return: Отфильтрованный список рекомендаций.
         """
-        if not self.enabled or not snapshots:
+        if not snapshots:
+            return []
+        chain = self._chain()
+        self.enabled = bool(chain)
+        if not chain:
             return []
 
         prompt = self._build_prompt(snapshots, balance)
-
-        # Если провайдер переключён из Telegram — ставим его первым
-        provider_order = list(self._provider_order)
-        _rc = getattr(self, "_runtime_config", None)
-        if _rc is not None:
-            try:
-                rt_provider = self._runtime_config.get_ai_provider()
-                if (
-                    rt_provider != "auto"
-                    and rt_provider in provider_order
-                    and provider_order[0] != rt_provider
-                ):
-                    provider_order.remove(rt_provider)
-                    provider_order.insert(0, rt_provider)
-            except Exception:
-                pass
-
-        import time as _time
-
-        _now = _time.time()
-        for provider in provider_order:
-            # Skip provider if it told us to retry later
-            _retry_at = self._provider_retry_after.get(provider, 0)
-            if _retry_at > _now:
-                _wait = int(_retry_at - _now)
+        now = time.time()
+        for provider, model in chain:
+            wait = self._provider_retry_after.get(provider, 0) - now
+            if wait > 0:
                 self.logger.debug(
-                    "Provider %s on cooldown for %ds — skipping", provider, _wait
+                    "Provider %s on cooldown for %ds — skipping", provider, wait
                 )
                 continue
             try:
-                if provider == "anthropic":
-                    raw = await self._call_anthropic(prompt)
-                elif provider == "deepseek":
-                    raw = await self._call_deepseek(prompt)
-                elif provider == "groq":
-                    raw = await self._call_groq(prompt)
-                elif provider == "gemini":
-                    raw = await self._call_gemini(prompt)
-                elif provider == "openrouter":
-                    raw = await self._call_openrouter(prompt)
-                elif provider == "nvidia":
-                    raw = await self._call_nvidia(prompt)
-                else:
-                    raw = await self._call_openai(prompt)
-
+                raw = await self._call(provider, model, prompt)
                 valid = self._parse_response(raw)
-                self.logger.info(
-                    "AI [%s]: %d signals from %d symbols",
-                    provider,
-                    len(valid),
-                    len(snapshots),
-                )
-                _rc = getattr(self, "_runtime_config", None)
-                if _rc is not None:
-                    try:
-                        _rc.set_last_ai_provider(provider)
-                        _rc.set_provider_status(provider, "ok")
-                    except Exception:
-                        pass
-                return valid
-
             except json.JSONDecodeError as e:
                 self.logger.warning(
                     "AI [%s] JSON parse error — trying next: %s", provider, e
                 )
+                self._mark(provider, model, "bad_format")
                 continue
             except Exception as e:
-                status = getattr(e, "status_code", None)
-                if status == 400:
-                    self.logger.error("AI [%s] bad request (400): %s", provider, e)
-                    return []
+                status, pause = _classify(e)
                 self.logger.warning(
-                    "AI [%s] error (HTTP %s) — trying next provider: %s",
+                    "AI [%s/%s] %s (HTTP %s) — trying next provider: %s",
                     provider,
-                    status or "?",
+                    model,
+                    status,
+                    getattr(e, "status_code", None) or "?",
                     e,
                 )
-                # Parse "retry in Xm Ys" or "retry in Xs" from 429 messages
-                if status == 429:
-                    import re as _re
-
-                    _msg = str(e)
-                    _m = _re.search(
-                        r"(?:try again|retry) in (\d+)m(\d+(?:\.\d+)?)?s?|"
-                        r"(?:try again|retry) in (\d+(?:\.\d+)?)s",
-                        _msg,
-                        _re.IGNORECASE,
-                    )
-                    if _m:
-                        if _m.group(1):  # "Xm Ys" form
-                            _secs = int(_m.group(1)) * 60 + float(_m.group(2) or 0)
-                        else:  # "Xs" form
-                            _secs = float(_m.group(3))
-                        self._provider_retry_after[provider] = _time.time() + _secs + 5
-                        self.logger.info(
-                            "Provider %s rate-limited — cooldown %.0fs",
-                            provider,
-                            _secs,
-                        )
-                _rc2 = getattr(self, "_runtime_config", None)
-                if _rc2 is not None:
-                    try:
-                        _rc2.set_provider_status(
-                            provider,
-                            "no_balance" if status == 402 else "rate_limit",
-                        )
-                    except Exception:
-                        pass
-                await self._notify_provider_failure(provider, status)
+                until = time.time() + pause if pause else 0.0
+                if until:
+                    self._provider_retry_after[provider] = until
+                self._mark(provider, model, status, until)
+                if status not in ("error", "bad_request"):
+                    await self._notify_provider_failure(provider, status, model)
                 continue
+            self.logger.info(
+                "AI [%s/%s]: %d signals from %d symbols",
+                provider,
+                model,
+                len(valid),
+                len(snapshots),
+            )
+            self._mark(provider, model, "ok")
+            return valid
 
         self.logger.error("All AI providers exhausted")
-        _rc3 = getattr(self, "_runtime_config", None)
-        if _rc3 is not None:
+        if self._runtime_config is not None:
             try:
-                _rc3.set_last_ai_provider("local")
+                self._runtime_config.set_last_ai_provider("local")
             except Exception:
                 pass
         await self._notify_all_exhausted()
         return []
 
     async def _notify_provider_failure(
-        self, provider: str, status: "int | None"
+        self, provider: str, status: str, model: str = ""
     ) -> None:
         """Уведомляет в Telegram о сбое провайдера — не чаще раза в час."""
-        import time as _time
         from datetime import datetime, timezone
 
         if getattr(self, "_telegram", None) is None:
             return
         key = f"fail:{provider}"
-        now = _time.time()
+        now = time.time()
         _notified = getattr(self, "_notified_at", {})
         if now - _notified.get(key, 0) < getattr(self, "_NOTIFY_COOLDOWN", 3600.0):
             return
         _notified[key] = now
 
-        # Обратный отсчёт до полуночи UTC
+        # Обратный отсчёт до полуночи UTC — когда сбрасываются дневные лимиты
         utc_now = datetime.now(timezone.utc)
         secs_to_reset = (
             86400 - utc_now.hour * 3600 - utc_now.minute * 60 - utc_now.second
         )
         h, m = divmod(secs_to_reset // 60, 60)
-        reset_str = f"через {h}ч {m}мин (полночь UTC)"
-
-        _MESSAGES = {
-            "deepseek": (
-                "⚠️ *DeepSeek*: баланс исчерпан (402).\n"
-                "Переключаюсь на следующего провайдера.\n"
-                "Пополни на $5–10: platform.deepseek.com"
-            ),
-            "groq": (
-                f"⚠️ *Groq*: дневной лимит токенов исчерпан (429).\n"
-                f"Переключаюсь на следующего провайдера.\n"
-                f"Сброс {reset_str}."
-            ),
-            "gemini": (
-                f"⚠️ *Gemini*: лимит запросов исчерпан (429).\n"
-                f"Переключаюсь на следующего провайдера.\n"
-                f"Сброс {reset_str}."
-            ),
-            "openrouter": (
-                f"⚠️ *OpenRouter*: дневной лимит бесплатных запросов исчерпан (429).\n"
-                f"Переключаюсь на следующего провайдера.\n"
-                f"Сброс {reset_str}."
-            ),
-            "nvidia": (
-                f"⚠️ *NVIDIA NIM*: лимит запросов/кредитов исчерпан.\n"
-                f"Переключаюсь на следующего провайдера.\n"
-                f"Сброс {reset_str}."
-            ),
-            "anthropic": (
-                "⚠️ *Claude (Anthropic)*: лимит или нет баланса.\n"
-                "Переключаюсь на следующего провайдера."
-            ),
-            "openai": (
-                "⚠️ *OpenAI*: лимит или нет баланса.\n"
-                "Переключаюсь на следующего провайдера."
-            ),
-        }
-        msg = _MESSAGES.get(provider)
-        if msg:
-            try:
-                await self._telegram.notify(msg)
-            except Exception:
-                pass
+        reason = {
+            "rate_limit": f"лимит запросов исчерпан (429). Сброс через {h}ч {m}мин.",
+            "no_balance": "на счёте нет денег (402).",
+            "bad_key": "ключ не принят (401/403) — проверьте его: Настройки → AI.",
+            "bad_model": f"модель `{model}` не найдена — выберите другую: "
+            "Настройки → AI.",
+        }.get(status)
+        if reason is None:
+            return
+        name = catalog.BY_ID[provider].name if provider in catalog.BY_ID else provider
+        try:
+            await self._telegram.notify(
+                f"⚠️ *{name}*: {reason}\nПереключаюсь на следующего провайдера."
+            )
+        except Exception:
+            pass
 
     async def _notify_all_exhausted(self) -> None:
         """Уведомляет когда все провайдеры недоступны — не чаще раза в час."""
-        import time as _time
         from datetime import datetime, timezone
 
         if getattr(self, "_telegram", None) is None:
             return
         key = "fail:all"
-        now = _time.time()
+        now = time.time()
         _notified = getattr(self, "_notified_at", {})
         if now - _notified.get(key, 0) < getattr(self, "_NOTIFY_COOLDOWN", 3600.0):
             return

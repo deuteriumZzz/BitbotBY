@@ -2,6 +2,7 @@
 
 import json
 import logging
+import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pandas as pd
@@ -51,6 +52,17 @@ def _make_strategy(name: str) -> dict:
     }
 
 
+@pytest.fixture(autouse=True)
+def _no_ai_keys_in_env(monkeypatch):
+    """Ключи из окружения разработчика не должны попадать в цепочку тестов."""
+    from src import ai_providers
+
+    for p in ai_providers.PROVIDERS:
+        for env in (p.key_env, p.model_env, p.url_env):
+            if env:
+                monkeypatch.delenv(env, raising=False)
+
+
 # ---------------------------------------------------------------------------
 # Фикстура: минимальный анализатор без ключей (паттерн из test_ai_parse_response)
 # ---------------------------------------------------------------------------
@@ -84,249 +96,83 @@ def anthropic_analyzer():
 
 
 # ---------------------------------------------------------------------------
-# _resolve_provider()  — определение провайдера
+# Цепочка провайдеров из ключей и настроек (каталог src/ai_providers.py)
 # ---------------------------------------------------------------------------
 
 
-class TestResolveProvider:
-    def _call(self, **kwargs):
+class TestChainFromKeys:
+    def _make(self, rc=None, **kwargs):
         cfg = _make_config(**kwargs)
-        with patch("src.ai_analyzer.Config", cfg):
-            from src.ai_analyzer import _resolve_provider
-
-            return _resolve_provider()
-
-    def test_resolve_anthropic_with_key(self):
-        result = self._call(AI_PROVIDER="anthropic", ANTHROPIC_API_KEY="key123")
-        assert result == "anthropic"
-
-    def test_resolve_anthropic_no_key(self):
-        result = self._call(AI_PROVIDER="anthropic", ANTHROPIC_API_KEY="")
-        assert result == "none"
-
-    def test_resolve_deepseek_with_key(self):
-        result = self._call(AI_PROVIDER="deepseek", DEEPSEEK_API_KEY="key123")
-        assert result == "deepseek"
-
-    def test_resolve_deepseek_no_key(self):
-        result = self._call(AI_PROVIDER="deepseek", DEEPSEEK_API_KEY="")
-        assert result == "none"
-
-    def test_resolve_openai_with_key(self):
-        result = self._call(AI_PROVIDER="openai", OPENAI_API_KEY="key123")
-        assert result == "openai"
-
-    def test_resolve_openai_no_key(self):
-        result = self._call(AI_PROVIDER="openai", OPENAI_API_KEY="")
-        assert result == "none"
-
-    def test_resolve_auto_prefers_anthropic(self):
-        result = self._call(
-            AI_PROVIDER="auto",
-            ANTHROPIC_API_KEY="anthropic_key",
-            DEEPSEEK_API_KEY="deepseek_key",
-            OPENAI_API_KEY="openai_key",
-        )
-        assert result == "anthropic"
-
-    def test_resolve_auto_falls_to_openai(self):
-        # Anthropic → OpenAI → DeepSeek → Groq: без Anthropic берём OpenAI
-        result = self._call(
-            AI_PROVIDER="auto",
-            ANTHROPIC_API_KEY="",
-            OPENAI_API_KEY="openai_key",
-            DEEPSEEK_API_KEY="deepseek_key",
-        )
-        assert result == "openai"
-
-    def test_resolve_auto_falls_to_deepseek(self):
-        # Без Anthropic и OpenAI берём DeepSeek
-        result = self._call(
-            AI_PROVIDER="auto",
-            ANTHROPIC_API_KEY="",
-            OPENAI_API_KEY="",
-            DEEPSEEK_API_KEY="deepseek_key",
-        )
-        assert result == "deepseek"
-
-    def test_resolve_auto_falls_to_groq(self):
-        # Без всех платных берём Groq (бесплатный)
-        result = self._call(
-            AI_PROVIDER="auto",
-            ANTHROPIC_API_KEY="",
-            OPENAI_API_KEY="",
-            DEEPSEEK_API_KEY="",
-            GROQ_API_KEY="groq_key",
-        )
-        assert result == "groq"
-
-    def test_resolve_auto_no_keys(self):
-        result = self._call(
-            AI_PROVIDER="auto",
-            ANTHROPIC_API_KEY="",
-            DEEPSEEK_API_KEY="",
-            OPENAI_API_KEY="",
-        )
-        assert result == "none"
-
-    def test_resolve_gemini_with_key(self):
-        result = self._call(AI_PROVIDER="gemini", GEMINI_API_KEY="g_key")
-        assert result == "gemini"
-
-    def test_resolve_openrouter_with_key(self):
-        result = self._call(AI_PROVIDER="openrouter", OPENROUTER_API_KEY="or_key")
-        assert result == "openrouter"
-
-    def test_resolve_openrouter_no_key(self):
-        result = self._call(AI_PROVIDER="openrouter", OPENROUTER_API_KEY="")
-        assert result == "none"
-
-    def test_resolve_nvidia_with_key(self):
-        result = self._call(AI_PROVIDER="nvidia", NVIDIA_API_KEY="nv_key")
-        assert result == "nvidia"
-
-    def test_resolve_nvidia_no_key(self):
-        result = self._call(AI_PROVIDER="nvidia", NVIDIA_API_KEY="")
-        assert result == "none"
-
-    def test_resolve_auto_falls_to_gemini_before_free_tier_only(self):
-        # Без платных и без Groq — берём Gemini раньше OpenRouter/NVIDIA
-        result = self._call(
-            AI_PROVIDER="auto",
-            ANTHROPIC_API_KEY="",
-            OPENAI_API_KEY="",
-            DEEPSEEK_API_KEY="",
-            GROQ_API_KEY="",
-            GEMINI_API_KEY="g_key",
-            OPENROUTER_API_KEY="or_key",
-        )
-        assert result == "gemini"
-
-    def test_resolve_auto_falls_to_openrouter(self):
-        result = self._call(
-            AI_PROVIDER="auto",
-            ANTHROPIC_API_KEY="",
-            OPENAI_API_KEY="",
-            DEEPSEEK_API_KEY="",
-            GROQ_API_KEY="",
-            GEMINI_API_KEY="",
-            OPENROUTER_API_KEY="or_key",
-            NVIDIA_API_KEY="nv_key",
-        )
-        assert result == "openrouter"
-
-    def test_resolve_auto_falls_to_nvidia_last(self):
-        result = self._call(
-            AI_PROVIDER="auto",
-            ANTHROPIC_API_KEY="",
-            OPENAI_API_KEY="",
-            DEEPSEEK_API_KEY="",
-            GROQ_API_KEY="",
-            GEMINI_API_KEY="",
-            OPENROUTER_API_KEY="",
-            NVIDIA_API_KEY="nv_key",
-        )
-        assert result == "nvidia"
-
-
-# ---------------------------------------------------------------------------
-# AIAnalyzer.__init__()  — инициализация
-# ---------------------------------------------------------------------------
-
-
-class TestAIAnalyzerInit:
-    def _make(self, **kwargs):
-        cfg = _make_config(**kwargs)
-        mock_openai_module = MagicMock()
-        mock_anthropic_module = MagicMock()
         with patch("src.ai_analyzer.Config", cfg), patch(
             "src.ai_analyzer.get_all_strategies", return_value=[]
-        ), patch.dict(
-            "sys.modules",
-            {
-                "anthropic": mock_anthropic_module,
-                "openai": mock_openai_module,
-            },
         ):
             from src.ai_analyzer import AIAnalyzer
 
-            return AIAnalyzer()
+            return AIAnalyzer(runtime_config=rc)
 
-    def test_init_no_keys_disabled(self):
-        ai = self._make(AI_PROVIDER="auto")
+    def _rc(self, chain=None, pinned="auto"):
+        rc = MagicMock()
+        rc.get_ai_chain.return_value = chain or {}
+        rc.get_ai_provider.return_value = pinned
+        return rc
+
+    def test_no_keys_disabled(self):
+        ai = self._make()
         assert ai.enabled is False
         assert ai._provider_order == []
 
-    def test_init_anthropic_key_only(self):
-        ai = self._make(AI_PROVIDER="anthropic", ANTHROPIC_API_KEY="key123")
-        assert ai.enabled is True
-        assert "anthropic" in ai._provider_order
-        assert ai._provider_order[0] == "anthropic"
+    def test_free_by_default_in_catalog_order(self):
+        ai = self._make(GEMINI_API_KEY="g", GROQ_API_KEY="q", OPENROUTER_API_KEY="o")
+        assert ai._provider_order == ["groq", "gemini", "openrouter"]
 
-    def test_init_deepseek_key_only(self):
-        ai = self._make(AI_PROVIDER="deepseek", DEEPSEEK_API_KEY="key123")
-        assert ai.enabled is True
-        assert ai._provider_order[0] == "deepseek"
+    def test_paid_key_alone_is_not_used_in_free_mode(self):
+        ai = self._make(DEEPSEEK_API_KEY="d", ANTHROPIC_API_KEY="a")
+        assert ai.enabled is False
 
-    def test_init_openai_key_only(self):
-        ai = self._make(AI_PROVIDER="openai", OPENAI_API_KEY="key123")
-        assert ai.enabled is True
-        assert ai._provider_order[0] == "openai"
-
-    def test_init_all_keys_primary_first(self):
+    def test_pinned_paid_provider_goes_first_even_in_free_mode(self):
         ai = self._make(
-            AI_PROVIDER="deepseek",
-            ANTHROPIC_API_KEY="a_key",
-            DEEPSEEK_API_KEY="d_key",
-            OPENAI_API_KEY="o_key",
-            GEMINI_API_KEY="g_key",
+            rc=self._rc(pinned="deepseek"), DEEPSEEK_API_KEY="d", GROQ_API_KEY="q"
         )
-        assert ai._provider_order[0] == "deepseek"
-        assert len(ai._provider_order) == 4
+        assert ai._provider_order == ["deepseek", "groq"]
 
-    def test_init_openrouter_key_only(self):
-        ai = self._make(AI_PROVIDER="openrouter", OPENROUTER_API_KEY="or_key")
-        assert ai.enabled is True
-        assert ai._provider_order == ["openrouter"]
-
-    def test_init_nvidia_key_only(self):
-        ai = self._make(AI_PROVIDER="nvidia", NVIDIA_API_KEY="nv_key")
-        assert ai.enabled is True
-        assert ai._provider_order == ["nvidia"]
-
-    def test_init_only_gemini_key_enables_analyzer(self):
-        # Регрессия: раньше _resolve_provider()'s auto-ветка не проверяла
-        # Gemini вообще, и self.enabled оставался False, хотя клиент был жив.
-        ai = self._make(AI_PROVIDER="auto", GEMINI_API_KEY="g_key")
-        assert ai.enabled is True
-        assert ai._provider_order == ["gemini"]
-
-    def test_init_only_openrouter_key_enables_analyzer(self):
-        ai = self._make(AI_PROVIDER="auto", OPENROUTER_API_KEY="or_key")
-        assert ai.enabled is True
-        assert ai._provider_order == ["openrouter"]
-
-    def test_init_only_nvidia_key_enables_analyzer(self):
-        ai = self._make(AI_PROVIDER="auto", NVIDIA_API_KEY="nv_key")
-        assert ai.enabled is True
-        assert ai._provider_order == ["nvidia"]
-
-    def test_init_openrouter_and_nvidia_ordered_after_paid_and_free(self):
+    def test_auto_mode_puts_paid_after_free(self):
         ai = self._make(
-            AI_PROVIDER="auto",
-            ANTHROPIC_API_KEY="a_key",
-            GROQ_API_KEY="groq_key",
-            GEMINI_API_KEY="g_key",
-            OPENROUTER_API_KEY="or_key",
-            NVIDIA_API_KEY="nv_key",
+            rc=self._rc({"mode": "auto"}),
+            ANTHROPIC_API_KEY="a",
+            DEEPSEEK_API_KEY="d",
+            GEMINI_API_KEY="g",
         )
-        assert ai._provider_order == [
-            "anthropic",
-            "groq",
-            "gemini",
-            "openrouter",
-            "nvidia",
-        ]
+        assert ai._provider_order == ["gemini", "deepseek", "anthropic"]
+
+    def test_user_order_and_disabled(self):
+        rc = self._rc({"order": ["gemini", "groq"], "disabled": ["openrouter"]})
+        ai = self._make(
+            rc=rc, GEMINI_API_KEY="g", GROQ_API_KEY="q", OPENROUTER_API_KEY="o"
+        )
+        assert ai._provider_order == ["gemini", "groq"]
+
+    def test_keyless_provider_only_when_switched_on(self):
+        assert self._make().enabled is False
+        ai = self._make(rc=self._rc({"keyless": ["llm7"]}))
+        assert ai._provider_order == ["llm7"]
+
+    def test_model_from_env_then_app_choice(self):
+        cfg = _make_config(GEMINI_API_KEY="g", GEMINI_MODEL="gemini-2.5-flash")
+        with patch("src.ai_analyzer.Config", cfg), patch(
+            "src.ai_analyzer.get_all_strategies", return_value=[]
+        ):
+            from src.ai_analyzer import AIAnalyzer
+
+            ai = AIAnalyzer()
+            assert ai._chain() == [("gemini", "gemini-2.5-flash")]
+            ai._runtime_config = self._rc({"models": {"gemini": "gemini-3.6-flash"}})
+            assert ai._chain() == [("gemini", "gemini-3.6-flash")]
+
+    def test_cloudflare_needs_account_id(self, monkeypatch):
+        monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "t" * 20)
+        assert self._make().enabled is False
+        monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "a" * 32)
+        assert self._make()._provider_order == ["cloudflare"]
 
 
 # ---------------------------------------------------------------------------
@@ -462,226 +308,137 @@ class TestParseResponseAdditional:
 # ---------------------------------------------------------------------------
 
 
-class TestAnalyze:
-    def _make_disabled_ai(self):
-        ai = object.__new__(_get_analyzer_class())
-        ai.enabled = False
-        ai.logger = logging.getLogger("test")
-        ai._provider_order = []
-        return ai
+_REC = json.dumps(
+    [
+        {
+            "symbol": "BTC/USDT",
+            "action": "buy",
+            "strategy": "ema_crossover",
+            "confidence": 0.9,
+        }
+    ]
+)
 
-    def _make_ai(self, provider_order=None):
+
+def _http_error(code, text="error"):
+    e = Exception(text)
+    e.status_code = code
+    return e
+
+
+class TestAnalyze:
+    def _make_ai(self, chain):
         ai = object.__new__(_get_analyzer_class())
-        ai.enabled = True
         ai.logger = logging.getLogger("test")
-        ai._provider_order = provider_order or []
         ai.strategies = []
         ai._provider_retry_after = {}
+        ai._notified_at = {}
+        ai._NOTIFY_COOLDOWN = 3600.0
+        ai._telegram = None
+        ai._emit = MagicMock()
+        ai._runtime_config = MagicMock()
+        ai._runtime_config.get_signal_confidence.return_value = 0.65
+        ai._chain = MagicMock(return_value=chain)
+        ai._build_prompt = MagicMock(return_value="prompt")
         return ai
 
-    @pytest.mark.asyncio
-    async def test_analyze_returns_empty_when_disabled(self):
-        ai = self._make_disabled_ai()
-        result = await ai.analyze([{"symbol": "BTC/USDT"}], 10000)
-        assert result == []
+    async def _run(self, ai, responses):
+        """responses: провайдер → текст ответа или исключение."""
 
-    @pytest.mark.asyncio
-    async def test_analyze_returns_empty_for_empty_snapshots(self):
-        ai = self._make_ai(provider_order=["anthropic"])
-        result = await ai.analyze([], 10000)
-        assert result == []
+        async def call(provider, model, prompt):
+            r = responses[provider]
+            if isinstance(r, Exception):
+                raise r
+            return r
 
-    @pytest.mark.asyncio
-    async def test_analyze_calls_anthropic_and_returns_recs(self):
+        ai._call = AsyncMock(side_effect=call)
         cfg = _make_config(MIN_SIGNAL_CONFIDENCE=0.65)
         with patch("src.ai_analyzer.Config", cfg):
-            ai = self._make_ai(provider_order=["anthropic"])
-            valid_response = json.dumps(
-                [
-                    {
-                        "symbol": "BTC/USDT",
-                        "action": "buy",
-                        "strategy": "ema_crossover",
-                        "confidence": 0.9,
-                        "entry": 50000,
-                        "stop_loss": 48000,
-                        "take_profit": 55000,
-                    }
-                ]
-            )
-            ai._call_anthropic = AsyncMock(return_value=valid_response)
-            ai._build_prompt = MagicMock(return_value="prompt")
-            result = await ai.analyze([{"symbol": "BTC/USDT"}], 10000)
-        assert len(result) == 1
+            return await ai.analyze([{"symbol": "BTC/USDT"}], 10000)
+
+    @pytest.mark.asyncio
+    async def test_empty_without_chain_or_snapshots(self):
+        ai = self._make_ai([])
+        assert await ai.analyze([{"symbol": "BTC/USDT"}], 10000) == []
+        ai = self._make_ai([("groq", "m")])
+        assert await ai.analyze([], 10000) == []
+
+    @pytest.mark.asyncio
+    async def test_success_marks_provider_and_emits_status(self):
+        ai = self._make_ai([("groq", "openai/gpt-oss-120b")])
+        result = await self._run(ai, {"groq": _REC})
         assert result[0]["action"] == "buy"
+        ai._runtime_config.set_last_ai_provider.assert_called_once_with("groq")
+        ai._runtime_config.record_ai_call.assert_called_once_with("groq")
+        type_, data = ai._emit.call_args.args
+        assert type_ == "ai.status" and data["status"] == "ok"
+        assert data["model"] == "openai/gpt-oss-120b"
 
     @pytest.mark.asyncio
-    async def test_analyze_returns_empty_on_json_error(self):
-        ai = self._make_ai(provider_order=["anthropic"])
-        ai._call_anthropic = AsyncMock(side_effect=json.JSONDecodeError("err", "", 0))
-        ai._build_prompt = MagicMock(return_value="prompt")
-        result = await ai.analyze([{"symbol": "BTC/USDT"}], 10000)
+    async def test_json_error_goes_to_next_provider(self):
+        ai = self._make_ai([("groq", "m"), ("gemini", "m")])
+        result = await self._run(
+            ai, {"groq": json.JSONDecodeError("bad", "", 0), "gemini": _REC}
+        )
+        assert len(result) == 1
+        ai._runtime_config.set_provider_status.assert_any_call("groq", "bad_format")
+
+    @pytest.mark.asyncio
+    async def test_rate_limit_pauses_provider_for_seven_minutes(self):
+        ai = self._make_ai([("gemini", "m"), ("openrouter", "m"), ("nvidia", "m")])
+        result = await self._run(
+            ai,
+            {
+                "gemini": _http_error(429, "Too Many Requests"),
+                "openrouter": _http_error(429, "Rate limit, retry in 30s"),
+                "nvidia": _REC,
+            },
+        )
+        assert len(result) == 1
+        now = time.time()
+        assert 400 < ai._provider_retry_after["gemini"] - now <= 420
+        assert 30 < ai._provider_retry_after["openrouter"] - now <= 35
+
+    @pytest.mark.asyncio
+    async def test_no_balance_bad_key_and_missing_model(self):
+        ai = self._make_ai([("deepseek", "m"), ("groq", "m"), ("gemini", "x")])
+        result = await self._run(
+            ai,
+            {
+                "deepseek": _http_error(402),
+                "groq": _http_error(401),
+                "gemini": _http_error(404),
+            },
+        )
         assert result == []
+        rc = ai._runtime_config
+        rc.set_provider_status.assert_any_call("deepseek", "no_balance")
+        rc.set_provider_status.assert_any_call("groq", "bad_key")
+        rc.set_provider_status.assert_any_call("gemini", "bad_model")
+        assert ai._provider_retry_after["deepseek"] - time.time() > 5 * 3600
+        rc.set_last_ai_provider.assert_called_with("local")
 
     @pytest.mark.asyncio
-    async def test_analyze_falls_back_on_billing_error(self):
-        cfg = _make_config(MIN_SIGNAL_CONFIDENCE=0.65)
-        with patch("src.ai_analyzer.Config", cfg):
-            ai = self._make_ai(provider_order=["anthropic", "deepseek"])
-            # First provider raises 429
-            billing_error = Exception("Too Many Requests")
-            billing_error.status_code = 429
-            ai._call_anthropic = AsyncMock(side_effect=billing_error)
-            valid_response = json.dumps(
-                [
-                    {
-                        "symbol": "ETH/USDT",
-                        "action": "sell",
-                        "strategy": "rsi_momentum",
-                        "confidence": 0.85,
-                    }
-                ]
-            )
-            ai._call_deepseek = AsyncMock(return_value=valid_response)
-            ai._build_prompt = MagicMock(return_value="prompt")
-            result = await ai.analyze([{"symbol": "ETH/USDT"}], 5000)
+    async def test_bad_request_does_not_stop_the_chain(self):
+        # Раньше 400 обрывал цикл; с десятком провайдеров один капризный
+        # (не принял параметры запроса) не должен оставлять бота без AI.
+        ai = self._make_ai([("cohere", "m"), ("groq", "m")])
+        result = await self._run(ai, {"cohere": _http_error(400), "groq": _REC})
         assert len(result) == 1
-        assert result[0]["action"] == "sell"
 
     @pytest.mark.asyncio
-    async def test_analyze_returns_empty_when_all_providers_fail(self):
-        ai = self._make_ai(provider_order=["anthropic", "deepseek"])
-        billing_error_1 = Exception("Ошибка биллинга")
-        billing_error_1.status_code = 429
-        billing_error_2 = Exception("Квота исчерпана")
-        billing_error_2.status_code = 429
-        ai._call_anthropic = AsyncMock(side_effect=billing_error_1)
-        ai._call_deepseek = AsyncMock(side_effect=billing_error_2)
-        ai._build_prompt = MagicMock(return_value="prompt")
-        result = await ai.analyze([{"symbol": "BTC/USDT"}], 10000)
-        assert result == []
-
-    @pytest.mark.asyncio
-    async def test_analyze_returns_empty_on_unexpected_error(self):
-        ai = self._make_ai(provider_order=["anthropic"])
-        unexpected_error = Exception("Таймаут сети")
-        # Нет status_code — обрабатывается как общая ошибка
-        ai._call_anthropic = AsyncMock(side_effect=unexpected_error)
-        ai._build_prompt = MagicMock(return_value="prompt")
-        result = await ai.analyze([{"symbol": "BTC/USDT"}], 10000)
-        assert result == []
-
-    @pytest.mark.asyncio
-    async def test_analyze_sets_last_ai_provider_on_success(self):
-        cfg = _make_config(MIN_SIGNAL_CONFIDENCE=0.65)
-        with patch("src.ai_analyzer.Config", cfg):
-            ai = self._make_ai(provider_order=["groq"])
-            valid_response = json.dumps(
-                [
-                    {
-                        "symbol": "BTC/USDT",
-                        "action": "buy",
-                        "strategy": "ema_crossover",
-                        "confidence": 0.9,
-                    }
-                ]
-            )
-            ai._call_groq = AsyncMock(return_value=valid_response)
-            ai._build_prompt = MagicMock(return_value="prompt")
-            rc = MagicMock()
-            rc.get_signal_confidence.return_value = 0.65
-            ai._runtime_config = rc
-            await ai.analyze([{"symbol": "BTC/USDT"}], 10000)
-        rc.set_last_ai_provider.assert_called_once_with("groq")
-
-    @pytest.mark.asyncio
-    async def test_analyze_calls_openrouter_and_returns_recs(self):
-        cfg = _make_config(MIN_SIGNAL_CONFIDENCE=0.65)
-        with patch("src.ai_analyzer.Config", cfg):
-            ai = self._make_ai(provider_order=["openrouter"])
-            valid_response = json.dumps(
-                [
-                    {
-                        "symbol": "BTC/USDT",
-                        "action": "buy",
-                        "strategy": "ema_crossover",
-                        "confidence": 0.9,
-                    }
-                ]
-            )
-            ai._call_openrouter = AsyncMock(return_value=valid_response)
-            ai._build_prompt = MagicMock(return_value="prompt")
-            result = await ai.analyze([{"symbol": "BTC/USDT"}], 10000)
+    async def test_provider_on_pause_is_skipped(self):
+        ai = self._make_ai([("groq", "m"), ("gemini", "m")])
+        ai._provider_retry_after["groq"] = time.time() + 60
+        result = await self._run(ai, {"groq": _REC, "gemini": _REC})
         assert len(result) == 1
-        assert result[0]["action"] == "buy"
+        assert [c.args[0] for c in ai._call.await_args_list] == ["gemini"]
 
     @pytest.mark.asyncio
-    async def test_analyze_calls_nvidia_and_returns_recs(self):
-        cfg = _make_config(MIN_SIGNAL_CONFIDENCE=0.65)
-        with patch("src.ai_analyzer.Config", cfg):
-            ai = self._make_ai(provider_order=["nvidia"])
-            valid_response = json.dumps(
-                [
-                    {
-                        "symbol": "ETH/USDT",
-                        "action": "sell",
-                        "strategy": "rsi_momentum",
-                        "confidence": 0.85,
-                    }
-                ]
-            )
-            ai._call_nvidia = AsyncMock(return_value=valid_response)
-            ai._build_prompt = MagicMock(return_value="prompt")
-            result = await ai.analyze([{"symbol": "ETH/USDT"}], 10000)
-        assert len(result) == 1
-        assert result[0]["action"] == "sell"
-
-    @pytest.mark.asyncio
-    async def test_analyze_falls_back_from_gemini_to_openrouter_to_nvidia(self):
-        cfg = _make_config(MIN_SIGNAL_CONFIDENCE=0.65)
-        with patch("src.ai_analyzer.Config", cfg):
-            ai = self._make_ai(provider_order=["gemini", "openrouter", "nvidia"])
-            rate_limited = Exception("Too Many Requests")
-            rate_limited.status_code = 429
-            ai._call_gemini = AsyncMock(side_effect=rate_limited)
-            ai._call_openrouter = AsyncMock(side_effect=rate_limited)
-            valid_response = json.dumps(
-                [
-                    {
-                        "symbol": "BTC/USDT",
-                        "action": "buy",
-                        "strategy": "ema_crossover",
-                        "confidence": 0.9,
-                    }
-                ]
-            )
-            ai._call_nvidia = AsyncMock(return_value=valid_response)
-            ai._build_prompt = MagicMock(return_value="prompt")
-            result = await ai.analyze([{"symbol": "BTC/USDT"}], 10000)
-        assert len(result) == 1
-        ai._call_gemini.assert_awaited_once()
-        ai._call_openrouter.assert_awaited_once()
-        ai._call_nvidia.assert_awaited_once()
-
-    @pytest.mark.asyncio
-    async def test_analyze_no_runtime_config_does_not_raise(self):
-        cfg = _make_config(MIN_SIGNAL_CONFIDENCE=0.65)
-        with patch("src.ai_analyzer.Config", cfg):
-            ai = self._make_ai(provider_order=["groq"])
-            valid_response = json.dumps(
-                [
-                    {
-                        "symbol": "SOL/USDT",
-                        "action": "sell",
-                        "strategy": "rsi_momentum",
-                        "confidence": 0.8,
-                    }
-                ]
-            )
-            ai._call_groq = AsyncMock(return_value=valid_response)
-            ai._build_prompt = MagicMock(return_value="prompt")
-            result = await ai.analyze([{"symbol": "SOL/USDT"}], 10000)
-        assert len(result) == 1
+    async def test_network_error_has_no_pause(self):
+        ai = self._make_ai([("groq", "m")])
+        assert await self._run(ai, {"groq": Exception("timeout")}) == []
+        assert "groq" not in ai._provider_retry_after
 
 
 def _get_analyzer_class():
@@ -838,81 +595,69 @@ class TestRecordUsage:
         no_key_analyzer._record_usage("groq", 500)  # must not raise
 
 
+def _deepseek_key(value="dk"):
+    return patch(
+        "src.ai_analyzer._env",
+        side_effect=lambda n: value if n == "DEEPSEEK_API_KEY" else "",
+    )
+
+
+def _aiohttp_session(status, payload=None):
+    resp = MagicMock()
+    resp.status = status
+    resp.json = AsyncMock(return_value=payload or {})
+    resp.__aenter__ = AsyncMock(return_value=resp)
+    resp.__aexit__ = AsyncMock(return_value=False)
+    session = MagicMock()
+    session.__aenter__ = AsyncMock(return_value=session)
+    session.__aexit__ = AsyncMock(return_value=False)
+    session.get = MagicMock(return_value=resp)
+    return session
+
+
 class TestRefreshDeepseekBalance:
     @pytest.mark.asyncio
-    async def test_noop_without_deepseek_client(self, no_key_analyzer):
-        no_key_analyzer._deepseek = None
+    async def test_noop_without_deepseek_key(self, no_key_analyzer):
         no_key_analyzer._runtime_config = MagicMock()
-        await no_key_analyzer.refresh_deepseek_balance()
+        with _deepseek_key(""):
+            await no_key_analyzer.refresh_deepseek_balance()
         no_key_analyzer._runtime_config.set_deepseek_balance.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_noop_without_runtime_config(self, no_key_analyzer):
-        no_key_analyzer._deepseek = MagicMock()
         no_key_analyzer._runtime_config = None
-        await no_key_analyzer.refresh_deepseek_balance()  # must not raise
+        with _deepseek_key():
+            await no_key_analyzer.refresh_deepseek_balance()  # must not raise
 
     @pytest.mark.asyncio
     async def test_caches_usd_balance_on_success(self, no_key_analyzer):
-        no_key_analyzer._deepseek = MagicMock()
         no_key_analyzer._runtime_config = MagicMock()
-
-        resp = MagicMock()
-        resp.status = 200
-        resp.json = AsyncMock(
-            return_value={
-                "is_available": True,
-                "balance_infos": [
-                    {
-                        "currency": "USD",
-                        "total_balance": "12.34",
-                        "granted_balance": "10.00",
-                        "topped_up_balance": "2.34",
-                    }
-                ],
-            }
-        )
-        resp.__aenter__ = AsyncMock(return_value=resp)
-        resp.__aexit__ = AsyncMock(return_value=False)
-
-        session = MagicMock()
-        session.__aenter__ = AsyncMock(return_value=session)
-        session.__aexit__ = AsyncMock(return_value=False)
-        session.get = MagicMock(return_value=resp)
-
-        with patch("aiohttp.ClientSession", return_value=session):
+        payload = {
+            "is_available": True,
+            "balance_infos": [{"currency": "USD", "total_balance": "12.34"}],
+        }
+        with _deepseek_key(), patch(
+            "aiohttp.ClientSession", return_value=_aiohttp_session(200, payload)
+        ):
             await no_key_analyzer.refresh_deepseek_balance()
-
         no_key_analyzer._runtime_config.set_deepseek_balance.assert_called_once_with(
             12.34
         )
 
     @pytest.mark.asyncio
     async def test_skips_caching_on_non_200(self, no_key_analyzer):
-        no_key_analyzer._deepseek = MagicMock()
         no_key_analyzer._runtime_config = MagicMock()
-
-        resp = MagicMock()
-        resp.status = 401
-        resp.__aenter__ = AsyncMock(return_value=resp)
-        resp.__aexit__ = AsyncMock(return_value=False)
-
-        session = MagicMock()
-        session.__aenter__ = AsyncMock(return_value=session)
-        session.__aexit__ = AsyncMock(return_value=False)
-        session.get = MagicMock(return_value=resp)
-
-        with patch("aiohttp.ClientSession", return_value=session):
+        with _deepseek_key(), patch(
+            "aiohttp.ClientSession", return_value=_aiohttp_session(401)
+        ):
             await no_key_analyzer.refresh_deepseek_balance()
-
         no_key_analyzer._runtime_config.set_deepseek_balance.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_swallows_network_exception(self, no_key_analyzer):
-        no_key_analyzer._deepseek = MagicMock()
         no_key_analyzer._runtime_config = MagicMock()
-
-        with patch("aiohttp.ClientSession", side_effect=ConnectionError("boom")):
+        with _deepseek_key(), patch(
+            "aiohttp.ClientSession", side_effect=ConnectionError("boom")
+        ):
             await no_key_analyzer.refresh_deepseek_balance()  # must not raise
-
         no_key_analyzer._runtime_config.set_deepseek_balance.assert_not_called()

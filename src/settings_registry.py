@@ -23,6 +23,8 @@ import os
 from dataclasses import asdict, dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from src import ai_providers
+
 logger = logging.getLogger(__name__)
 
 OVERRIDES_KEY = "bot:config_overrides"
@@ -625,15 +627,10 @@ SETTINGS: Tuple[Setting, ...] = (
         "choice",
         "auto",
         options=(
-            ("auto", "Авто — по списку"),
-            ("groq", "Groq"),
-            ("gemini", "Gemini"),
-            ("anthropic", "Claude"),
-            ("deepseek", "DeepSeek"),
-            ("openai", "OpenAI"),
-            ("openrouter", "OpenRouter"),
-            ("nvidia", "NVIDIA"),
+            ("auto", "Авто — по цепочке"),
+            *((p.id, p.name) for p in ai_providers.PROVIDERS),
         ),
+        hint="Выбранный провайдер идёт первым; остальная цепочка — в разделе AI.",
         **_rc("set_ai_provider", "get_ai_provider"),
     ),
     Setting(

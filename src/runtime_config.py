@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from typing import Any, List, Optional, Set
 
 from config import Config
+from src import ai_providers
 
 logger = logging.getLogger(__name__)
 
@@ -59,18 +60,7 @@ _KEY_LAUNCH_RATE_HISTORY = "bot:launch_rate_history"
 _KEY_CONFIDENCE_LIVE = "bot:signal_confidence_live"
 _KEY_CONFIDENCE_PAPER = "bot:signal_confidence_paper"
 
-_AI_PROVIDERS = frozenset(
-    {
-        "auto",
-        "anthropic",
-        "openai",
-        "deepseek",
-        "groq",
-        "gemini",
-        "openrouter",
-        "nvidia",
-    }
-)
+_AI_PROVIDERS = frozenset({"auto", *ai_providers.BY_ID})
 _LEVERAGE_MODES = frozenset({"fixed", "volatility", "full"})
 _MARKET_TYPES = frozenset({"spot", "linear"})
 
@@ -482,6 +472,50 @@ class RuntimeConfig:
     def get_provider_status(self, provider: str) -> str:
         """Возвращает последний известный статус провайдера."""
         return self._get(f"bot:provider_status:{provider}") or "unknown"
+
+    # ── Цепочка AI-провайдеров (раздел «AI» в приложении) ─────────────────────
+
+    def get_ai_chain(self) -> dict:
+        """Режим, порядок, модели и включённые провайдеры; пусто — по умолчанию."""
+        raw = self._get("bot:ai_chain")
+        try:
+            return ai_providers.clean_chain(json.loads(raw)) if raw else {}
+        except (ValueError, TypeError):
+            return {}
+
+    def set_ai_chain(self, changes: dict) -> dict:
+        """Сливает проверенные изменения с текущими; ValueError — неверные."""
+        merged = {**self.get_ai_chain(), **ai_providers.clean_chain(changes)}
+        self._set("bot:ai_chain", json.dumps(merged))
+        logger.info("Runtime: ai_chain → %s", merged)
+        return merged
+
+    def set_provider_cooldown(self, provider: str, until: float) -> None:
+        """До какого времени (epoch) провайдер на паузе; 0 — паузы нет."""
+        self._set(f"bot:provider_cooldown:{provider}", str(int(until)))
+
+    def get_provider_cooldown(self, provider: str) -> float:
+        try:
+            return float(self._get(f"bot:provider_cooldown:{provider}") or 0)
+        except ValueError:
+            return 0.0
+
+    def record_ai_call(self, provider: str) -> None:
+        """Счётчик запросов к провайдеру за текущие UTC-сутки."""
+        today = datetime.now(timezone.utc).date().isoformat()
+        key = f"bot:ai_calls:{provider}:{today}"
+        try:
+            self._r.redis_client.incr(key)
+            self._r.redis_client.expire(key, 2 * 24 * 3600)
+        except Exception as e:
+            logger.warning("RuntimeConfig record_ai_call failed: %s", e)
+
+    def get_ai_calls_today(self, provider: str) -> int:
+        today = datetime.now(timezone.utc).date().isoformat()
+        try:
+            return int(self._get(f"bot:ai_calls:{provider}:{today}") or 0)
+        except ValueError:
+            return 0
 
     def record_token_usage(self, provider: str, tokens: int) -> None:
         """Накапливает счётчик токенов за текущие UTC-сутки для провайдера."""

@@ -22,6 +22,8 @@ import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
+from src import ai_providers
+
 logger = logging.getLogger(__name__)
 audit = logging.getLogger("audit")
 
@@ -56,6 +58,32 @@ def _key(env: str, label: str = "API Key", **kw: Any) -> Field:
     return Field(env, label, **kw)
 
 
+def _ai_service(p: ai_providers.Provider) -> Service:
+    """Карточка ключа AI-провайдера — из каталога src/ai_providers.py.
+
+    Модель выбирается в разделе «AI» приложения, поэтому поля модели здесь нет.
+    """
+    fields: List[Field] = []
+    if p.key_env:
+        fields.append(_key(p.key_env, optional=p.key_optional))
+    if p.url_env:
+        fields.append(
+            Field(
+                p.url_env,
+                p.url_label,
+                secret=False,
+                optional=p.key_optional,  # у Ollama есть адрес по умолчанию
+                min_len=8,
+            )
+        )
+    return Service(p.id, p.name, "AI-модели", tuple(fields), validator=p.id)
+
+
+_AI_SERVICES: Tuple[Service, ...] = tuple(
+    _ai_service(p) for p in ai_providers.PROVIDERS
+)
+
+
 SERVICES: Tuple[Service, ...] = (
     Service(
         "bybit",
@@ -64,55 +92,7 @@ SERVICES: Tuple[Service, ...] = (
         (_key("BYBIT_API_KEY"), _key("BYBIT_API_SECRET", "API Secret")),
         validator="bybit",
     ),
-    Service("groq", "Groq", "AI-модели", (_key("GROQ_API_KEY"),), "GROQ_MODEL", "groq"),
-    Service(
-        "gemini",
-        "Gemini",
-        "AI-модели",
-        (_key("GEMINI_API_KEY"),),
-        "GEMINI_MODEL",
-        "gemini",
-    ),
-    Service(
-        "anthropic",
-        "Claude",
-        "AI-модели",
-        (_key("ANTHROPIC_API_KEY"),),
-        "AI_MODEL",
-        "anthropic",
-    ),
-    Service(
-        "deepseek",
-        "DeepSeek",
-        "AI-модели",
-        (_key("DEEPSEEK_API_KEY"),),
-        "DEEPSEEK_MODEL",
-        "deepseek",
-    ),
-    Service(
-        "openai",
-        "OpenAI",
-        "AI-модели",
-        (_key("OPENAI_API_KEY"),),
-        "OPENAI_MODEL",
-        "openai",
-    ),
-    Service(
-        "openrouter",
-        "OpenRouter",
-        "AI-модели",
-        (_key("OPENROUTER_API_KEY"),),
-        "OPENROUTER_MODEL",
-        "openrouter",
-    ),
-    Service(
-        "nvidia",
-        "NVIDIA",
-        "AI-модели",
-        (_key("NVIDIA_API_KEY"),),
-        "NVIDIA_MODEL",
-        "nvidia",
-    ),
+    *_AI_SERVICES,
     Service(
         "telegram",
         "Telegram-бот",
@@ -428,37 +408,17 @@ def _http_result(code: int, ok_message: str) -> Result:
     return "warn", f"Сервис ответил {code} — ключ сохранён, проверим позже."
 
 
-_OPENAI_COMPAT = {
-    "groq": "https://api.groq.com/openai/v1/models",
-    "deepseek": "https://api.deepseek.com/models",
-    "openai": "https://api.openai.com/v1/models",
-    "openrouter": "https://openrouter.ai/api/v1/auth/key",
-    "nvidia": "https://integrate.api.nvidia.com/v1/models",
-}
-
-
 async def _check_http(client: Any, service_id: str, values: Dict[str, str]) -> Result:
-    if service_id in _OPENAI_COMPAT:
-        env = BY_ID[service_id].fields[0].env
-        resp = await client.get(
-            _OPENAI_COMPAT[service_id],
-            headers={"Authorization": f"Bearer {values[env]}"},
-        )
-        return _http_result(resp.status_code, "Ключ работает.")
-    if service_id == "anthropic":
-        resp = await client.get(
-            "https://api.anthropic.com/v1/models",
-            headers={
-                "x-api-key": values["ANTHROPIC_API_KEY"],
-                "anthropic-version": "2023-06-01",
-            },
-        )
-        return _http_result(resp.status_code, "Ключ работает.")
-    if service_id == "gemini":
-        resp = await client.get(
-            "https://generativelanguage.googleapis.com/v1beta/models",
-            headers={"x-goog-api-key": values["GEMINI_API_KEY"]},
-        )
+    p = ai_providers.BY_ID.get(service_id)
+    if p is not None:
+        # Бесплатный запрос (список моделей или проверка токена) — лимит не тратит.
+        key = values.get(p.key_env, "") if p.key_env else ""
+        if p.kind == "anthropic":
+            headers = {"x-api-key": key, "anthropic-version": "2023-06-01"}
+        else:
+            headers = {"Authorization": f"Bearer {key}"} if key else {}
+        url = p.check_url or p.url(lambda env: values.get(env, "")) + "/models"
+        resp = await client.get(url, headers=headers)
         return _http_result(resp.status_code, "Ключ работает.")
     if service_id == "newsapi":
         resp = await client.get(

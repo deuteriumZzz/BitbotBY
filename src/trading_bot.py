@@ -17,6 +17,7 @@ import ccxt
 import pandas as pd
 
 from config import Config
+from src import ai_providers
 from src.ai_analyzer import AIAnalyzer
 from src.bot_bus import CommandConsumer, emit
 from src.bot_commands import BotCommands
@@ -137,6 +138,7 @@ class TradingBot:
             Config.TELEGRAM_CHAT_ID,
         )
         self.ai._telegram = self.telegram
+        self.ai._emit = self._publish_event  # статусы AI-провайдеров для приложения
         self._paper_balance: float = Config.INITIAL_BALANCE
         self._live_balance_cache: float = Config.INITIAL_BALANCE
         # Equity (баланс + unrealized PnL) для drawdown halt
@@ -1518,17 +1520,12 @@ class TradingBot:
         # читает именно os.environ при тегировании experiences.jsonl.
         os.environ["MARKET_TYPE"] = self._runtime_config.get_market_type()
         start_balance = await self._get_balance_usdt()
-        _ai_names = {
-            "anthropic": "Claude",
-            "openai": "OpenAI",
-            "deepseek": "DeepSeek",
-            "groq": "Groq",
-            "gemini": "Gemini",
-        }
         _providers_line = (
-            " → ".join(_ai_names.get(p, p) for p in self.ai._provider_order)
-            if self.ai._provider_order
-            else "нет ключей"
+            " → ".join(
+                ai_providers.BY_ID[p].name if p in ai_providers.BY_ID else p
+                for p in self.ai._provider_order
+            )
+            or "нет ключей"
         )
         await self.telegram.notify(
             f"🤖 *BitbotBY запущен* [{mode}]\n"

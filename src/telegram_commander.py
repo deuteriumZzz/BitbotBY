@@ -36,6 +36,7 @@ import os
 from typing import Any, Callable, Dict, Optional
 
 from config import Config
+from src import ai_providers
 
 logger = logging.getLogger(__name__)
 
@@ -607,24 +608,25 @@ def _kb_market_type_menu(current: str) -> "InlineKeyboardMarkup":
 
 
 def _kb_provider_menu(current: str) -> "InlineKeyboardMarkup":
-    providers = [
-        ("🆓 Groq", "groq"),
-        ("🆓 Gemini", "gemini"),
-        ("🆓 OpenRouter", "openrouter"),
-        ("🆓 NVIDIA", "nvidia"),
-        ("Claude", "anthropic"),
-        ("DeepSeek", "deepseek"),
-        ("OpenAI", "openai"),
+    """Провайдеры с ключом (и выбранный сейчас) по три в ряд; 🆓 — бесплатные."""
+    shown = [
+        p
+        for p in ai_providers.PROVIDERS
+        if (p.key_env and os.getenv(p.key_env)) or p.id == current
     ]
 
-    def _p(label: str, val: str) -> "InlineKeyboardButton":
-        tick = "✅ " if val == current else ""
-        return InlineKeyboardButton(f"{tick}{label}", callback_data=f"provider:{val}")
+    def _p(p: "ai_providers.Provider") -> "InlineKeyboardButton":
+        tick = "✅ " if p.id == current else ""
+        free = "🆓 " if p.free_tier else ""
+        return InlineKeyboardButton(
+            f"{tick}{free}{p.name}", callback_data=f"provider:{p.id}"
+        )
 
     auto_tick = "✅ " if current == "auto" else ""
+    rows = [[_p(p) for p in shown[i : i + 3]] for i in range(0, len(shown), 3)]
     return InlineKeyboardMarkup(
-        [
-            [_p(label, val) for label, val in providers],
+        rows
+        + [
             [
                 InlineKeyboardButton(
                     f"{auto_tick}🔄 auto (цепочка)", callback_data="provider:auto"
@@ -1108,7 +1110,7 @@ class TelegramCommander:
             _bal = self._rc.get_deepseek_balance()
             if _bal:
                 _ai_extra = f" — баланс ${_bal['balance']:.2f}"
-        elif provider in ("groq", "gemini", "openai", "anthropic"):
+        elif provider in ai_providers.BY_ID:
             _used = self._rc.get_token_usage_today(provider)
             if _used:
                 _ai_extra = f" — сегодня {_used:,} токенов".replace(",", " ")
@@ -1630,12 +1632,8 @@ class TelegramCommander:
         args = context.args or []
 
         _PROVIDERS = {
-            "auto": "Авто (Claude → OpenAI → DeepSeek → Groq → Gemini)",
-            "anthropic": "Claude (Anthropic) — лучшее качество",
-            "openai": "ChatGPT (OpenAI)",
-            "deepseek": "DeepSeek — самый дешёвый (~$0.002/запрос)",
-            "groq": "Groq / Llama 3.3 70B — бесплатный, 100k токенов/день",
-            "gemini": "Gemini Flash — бесплатный, 1500 запросов/день",
+            "auto": "Авто — цепочка (порядок и модели — в приложении, раздел AI)",
+            **{p.id: f"{p.name} — {p.note}" for p in ai_providers.PROVIDERS},
         }
 
         if not args:
@@ -2894,56 +2892,34 @@ class TelegramCommander:
 
         # ── AI-провайдер ─────────────────────────────────────────────────────
         elif data == "provider_menu":
-            import os as _os
+            import time as _time
             from datetime import datetime, timezone
 
             current = self._rc.get_ai_provider()
             last = self._rc.get_last_ai_provider()
-
-            # Динамический порядок auto — зависит от настроенных ключей
-            _AUTO_ORDER = [
-                "anthropic",
-                "openai",
-                "deepseek",
-                "groq",
-                "gemini",
-                "openrouter",
-                "nvidia",
-            ]
-            _AUTO_NAMES = {
-                "anthropic": "Claude",
-                "openai": "OpenAI",
-                "deepseek": "DeepSeek",
-                "groq": "Groq",
-                "gemini": "Gemini",
-                "openrouter": "OpenRouter",
-                "nvidia": "NVIDIA",
-            }
-            _AUTO_ENV_KEYS = {
-                "anthropic": "ANTHROPIC_API_KEY",
-                "openai": "OPENAI_API_KEY",
-                "deepseek": "DEEPSEEK_API_KEY",
-                "groq": "GROQ_API_KEY",
-                "gemini": "GEMINI_API_KEY",
-                "openrouter": "OPENROUTER_API_KEY",
-                "nvidia": "NVIDIA_API_KEY",
-            }
-            _configured_auto = [
-                _AUTO_NAMES[p] for p in _AUTO_ORDER if _os.getenv(_AUTO_ENV_KEYS[p])
-            ]
-            _auto_desc = (
-                " → ".join(_configured_auto) if _configured_auto else "нет ключей"
+            _settings = self._rc.get_ai_chain()
+            _keyed = list(
+                dict.fromkeys(
+                    [
+                        p.id
+                        for p in ai_providers.PROVIDERS
+                        if p.key_env and os.getenv(p.key_env)
+                    ]
+                    + list(_settings.get("keyless", []))
+                )
             )
-            desc = {
-                "auto": _auto_desc,
-                "groq": "Llama 3.3 70B — бесплатный, быстрый",
-                "anthropic": "Claude — лучшее качество",
-                "deepseek": "Самый дешёвый платный",
-                "openai": "ChatGPT GPT-4o-mini",
-                "gemini": "Gemini Flash — бесплатный",
-                "openrouter": "OpenRouter — бесплатные ':free' модели",
-                "nvidia": "NVIDIA NIM — бесплатный",
-            }.get(current, current)
+            _chain = ai_providers.chain(_settings, _keyed, pinned=current)
+            _mode = {
+                "free": "только бесплатные",
+                "auto": "сначала бесплатные",
+                "paid": "только платные",
+            }[_settings.get("mode", ai_providers.DEFAULT_MODE)]
+            _names = " → ".join(ai_providers.BY_ID[p].name for p, _ in _chain)
+            desc = (
+                f"{_names or 'нет доступных провайдеров'} ({_mode})"
+                if current == "auto"
+                else ai_providers.BY_ID[current].note
+            )
 
             _utc = datetime.now(timezone.utc)
             _secs = 86400 - _utc.hour * 3600 - _utc.minute * 60 - _utc.second
@@ -2954,30 +2930,25 @@ class TelegramCommander:
                 "ok": "✅",
                 "no_balance": "💸",
                 "rate_limit": "⏳",
+                "bad_key": "🔑",
+                "bad_model": "❔",
                 "unknown": "❓",
             }
             _STATUS_DESC = {
                 "ok": "работает",
                 "no_balance": "нет баланса — пополни",
                 "rate_limit": f"лимит — сброс через {_reset}",
+                "bad_key": "ключ не принят",
+                "bad_model": "модель не найдена — выбери в приложении",
+                "bad_format": "ответ не в нужном формате",
+                "bad_request": "отклонил запрос",
+                "error": "ошибка связи",
                 "unknown": "ещё не использовался",
             }
-            _PROVIDERS = [
-                ("deepseek", "DeepSeek", bool(_os.getenv("DEEPSEEK_API_KEY"))),
-                ("groq", "Groq", bool(_os.getenv("GROQ_API_KEY"))),
-                ("gemini", "Gemini", bool(_os.getenv("GEMINI_API_KEY"))),
-                ("openrouter", "OpenRouter", bool(_os.getenv("OPENROUTER_API_KEY"))),
-                ("nvidia", "NVIDIA", bool(_os.getenv("NVIDIA_API_KEY"))),
-                ("anthropic", "Claude", bool(_os.getenv("ANTHROPIC_API_KEY"))),
-                ("openai", "OpenAI", bool(_os.getenv("OPENAI_API_KEY"))),
-            ]
             lines = []
-            for _p, _name, _has_key in _PROVIDERS:
-                if not _has_key:
-                    lines.append(f"❌ *{_name}* — не настроен")
-                    continue
+            for _p in _keyed:
                 _st = self._rc.get_provider_status(_p)
-                _icon = _STATUS_ICON.get(_st, "❓")
+                _icon = _STATUS_ICON.get(_st, "⚠️")
                 _sdesc = _STATUS_DESC.get(_st, _st)
                 _extra = ""
                 if _p == "deepseek":
@@ -2988,7 +2959,18 @@ class TelegramCommander:
                     _used = self._rc.get_token_usage_today(_p)
                     if _used:
                         _extra = f" — сегодня {_used:,} токенов".replace(",", " ")
+                _until = self._rc.get_provider_cooldown(_p)
+                if _until > _time.time():
+                    _at = datetime.fromtimestamp(_until).strftime("%H:%M")
+                    _extra += f" — пауза до {_at}"
+                _name = ai_providers.BY_ID[_p].name
                 lines.append(f"{_icon} *{_name}* — {_sdesc}{_extra}")
+            _missing = len(ai_providers.PROVIDERS) - len(_keyed)
+            if _missing:
+                lines.append(
+                    f"➕ Ещё {_missing} провайдеров без ключа — "
+                    "добавьте в приложении: Настройки → AI"
+                )
             providers_text = "\n".join(lines)
             _last_str = f"Активен сейчас: `{last}`\n\n" if last else ""
             await self._edit(
@@ -3011,19 +2993,11 @@ class TelegramCommander:
                     _kb_provider_menu(self._rc.get_ai_provider()),
                 )
                 return
-            desc = {
-                "auto": (
-                    "Claude → OpenAI → DeepSeek → Groq → Gemini → "
-                    "OpenRouter → NVIDIA"
-                ),
-                "groq": "Llama 3.3 70B — бесплатный, быстрый",
-                "anthropic": "Claude — лучшее качество",
-                "deepseek": "Самый дешёвый платный",
-                "openai": "ChatGPT GPT-4o-mini",
-                "gemini": "Gemini Flash — бесплатный",
-                "openrouter": "OpenRouter — бесплатные ':free' модели",
-                "nvidia": "NVIDIA NIM — бесплатный",
-            }.get(val, val)
+            desc = (
+                "цепочка — порядок и модели настраиваются в приложении"
+                if val == "auto"
+                else ai_providers.BY_ID[val].note
+            )
             await self._edit(
                 query,
                 f"✅ AI-провайдер: *{val}*\n{desc}\n\n"

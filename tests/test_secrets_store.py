@@ -43,7 +43,7 @@ def test_save_encrypts_and_never_exposes_value(store):
     assert GROQ_KEY not in json.dumps(ss.public_view(), ensure_ascii=False)
     groq = next(i for i in ss.public_view() if i["service"] == "groq")
     assert groq["fields"][0]["last4"] == GROQ_KEY[-4:]
-    assert groq["model"]["value"] == "llama"
+    assert groq["model"] is None  # модель AI выбирается в разделе «AI», не в ключах
 
 
 def test_passwords_show_no_last4(store):
