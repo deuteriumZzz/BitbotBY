@@ -165,6 +165,24 @@ def test_bearer_passes_api_key_middleware(monkeypatch, owner):
         assert c.get("/api/state", headers=headers).status_code == 200
 
 
+def test_reads_need_login_when_telegram_configured(client, owner):
+    # Без DASHBOARD_API_KEY за nginx /api/ без basic auth — данные только по входу.
+    r = FakeRedis()
+    token = auth.create_session(r, OWNER, "miniapp")
+    with patch.object(data, "get_redis", return_value=r):
+        assert client.get("/api/state").status_code == 401
+        assert client.get("/api/metrics").status_code == 401
+        headers = {"Authorization": f"Bearer {token}"}
+        assert client.get("/api/state", headers=headers).status_code == 200
+
+
+def test_reads_open_without_any_login(client):
+    # Локальный запуск без ключа и без Telegram: как раньше, всё открыто.
+    with patch.object(auth, "owner_credentials", return_value=(None, None)):
+        with patch.object(data, "get_redis", return_value=FakeRedis()):
+            assert client.get("/api/state").status_code == 200
+
+
 def test_webapp_static_skips_api_key(monkeypatch):
     # MiniApp грузит /app/ без заголовков; данные по-прежнему только с ключом.
     monkeypatch.setenv("DASHBOARD_API_KEY", "secret")

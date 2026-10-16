@@ -18,8 +18,11 @@ export class ApiError extends Error {
   }
 }
 
+type ErrorInfo = { code?: string; message?: string; fields?: Record<string, string> };
+// Наши ответы — {error}; проверка входа на уровне роутера FastAPI отдаёт {detail}.
 interface ErrorBody {
-  error?: { code?: string; message?: string; fields?: Record<string, string> };
+  error?: ErrorInfo;
+  detail?: ErrorInfo | string;
 }
 
 export async function api<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -45,7 +48,8 @@ export async function api<T>(method: string, path: string, body?: unknown): Prom
   }
   const data: unknown = await res.json().catch(() => ({}));
   if (!res.ok && res.status !== 202) {
-    const err = (data as ErrorBody).error;
+    const { error, detail } = data as ErrorBody;
+    const err = error ?? (typeof detail === "object" ? detail : undefined);
     throw new ApiError(
       res.status,
       err?.code ?? `http_${res.status}`,

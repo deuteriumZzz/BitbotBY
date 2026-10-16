@@ -19,8 +19,16 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.responses import JSONResponse
+from starlette.requests import HTTPConnection
 
 from config import Config
 from src import bot_bus, secrets_store
@@ -28,7 +36,26 @@ from src import settings_registry as registry
 from src.dashboard import auth, data
 from src.runtime_config import RuntimeConfig
 
-router = APIRouter()
+
+async def _owner_only(conn: HTTPConnection) -> None:
+    """Данные бота видит только владелец, если вход через Telegram настроен.
+
+    С DASHBOARD_API_KEY это уже проверил middleware. Без ключа и без входа
+    дашборд открыт, как раньше (локальный запуск). /ws проверяет сессию сам.
+    """
+    path = conn.url.path
+    if path.startswith("/api/auth/") or path == "/ws":
+        return
+    if os.getenv("DASHBOARD_API_KEY") or not auth.telegram_auth_configured():
+        return
+    if not auth.check_session(data.get_redis(), auth.bearer_token(conn.headers)):
+        raise HTTPException(
+            401,
+            {"code": "unauthorized", "message": "Войдите через Telegram."},
+        )
+
+
+router = APIRouter(dependencies=[Depends(_owner_only)])
 
 PERIODS: Dict[str, Optional[timedelta]] = {
     "24h": timedelta(days=1),
