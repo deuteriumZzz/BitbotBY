@@ -17,7 +17,7 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import (
     APIRouter,
@@ -31,7 +31,7 @@ from fastapi.responses import JSONResponse
 from starlette.requests import HTTPConnection
 
 from config import Config
-from src import bot_bus, secrets_store
+from src import ai_providers, bot_bus, secrets_store
 from src import settings_registry as registry
 from src.dashboard import auth, data
 from src.runtime_config import RuntimeConfig
@@ -98,6 +98,7 @@ def build_state() -> Dict[str, Any]:
             "paper": data.paper_mode(),
             "mode": _redis_str(r, "bot:mode") or Config.MODE,
             "profile": _redis_str(r, "bot:market_profile"),
+            "ai": _redis_str(r, "bot:last_ai_provider"),
         },
         "balance": portfolio.get("balance", Config.INITIAL_BALANCE),
         "slots": {"used": len(positions), "max": max_pos},
@@ -616,6 +617,150 @@ async def get_candles(symbol: str, tf: str = "15m", limit: int = 200) -> JSONRes
             {"time": int(ts // 1000), "open": o, "high": h, "low": low, "close": c}
         )
     return JSONResponse(out)
+
+
+# ── AI-провайдеры (src/ai_providers.py) ───────────────────────────────────────
+
+
+def _model_env(p: ai_providers.Provider) -> str:
+    return os.getenv(p.model_env, "") if p.model_env else ""
+
+
+def _secret(env: str) -> str:
+    return (secrets_store.get_value(env) or "") if env else ""
+
+
+def _ai_view(rc: Any) -> Dict[str, Any]:
+    """Каталог, ключи, настройки цепочки и живые статусы — для раздела «AI».
+
+    Значения ключей не отдаются — только есть ключ или нет.
+    """
+    settings = rc.get_ai_chain() if rc else {}
+    pinned = rc.get_ai_provider() if rc else Config.AI_PROVIDER
+    keyless = set(settings.get("keyless", []))
+    models = settings.get("models", {})
+    order = [p for p in settings.get("order", []) if p in ai_providers.BY_ID]
+    order += [p.id for p in ai_providers.PROVIDERS if p.id not in order]
+    now = time.time()
+    available: List[str] = []
+    providers = []
+    for pid in order:
+        p = ai_providers.BY_ID[pid]
+        key_set = bool(_secret(p.key_env))
+        url_ok = p.kind != "openai" or bool(p.url(_secret))
+        usable = (key_set or (p.key_optional and pid in keyless)) and url_ok
+        if usable:
+            available.append(pid)
+        model = models.get(pid) or _model_env(p) or p.default_model
+        known = p.model(model)
+        until = rc.get_provider_cooldown(pid) if rc else 0.0
+        source = "app" if pid in models else "env" if _model_env(p) else "catalog"
+        providers.append(
+            {
+                "id": pid,
+                "name": p.name,
+                "note": p.note,
+                "signup": p.signup,
+                "free_tier": p.free_tier,
+                "key_optional": p.key_optional,
+                "url_label": p.url_label if "{}" in p.base_url else "",
+                "key_set": key_set,
+                "url_ok": url_ok,
+                "usable": usable,
+                "keyless_on": pid in keyless,
+                "disabled": pid in settings.get("disabled", []),
+                "model": model,
+                "model_source": source,
+                "free": p.is_free(model),
+                "strong": known.strong if known else True,
+                "models": [
+                    {
+                        "id": m.id,
+                        "free": m.free,
+                        "strong": m.strong,
+                        "recommended": m.recommended,
+                    }
+                    for m in p.models
+                ],
+                "verified": p.verified,
+                "status": rc.get_provider_status(pid) if rc else "unknown",
+                "cooldown_until": until if until > now else None,
+                "calls_today": rc.get_ai_calls_today(pid) if rc else 0,
+                "tokens_today": rc.get_token_usage_today(pid) if rc else 0,
+            }
+        )
+    env_models = {p.id: _model_env(p) for p in ai_providers.PROVIDERS if _model_env(p)}
+    chain = ai_providers.chain(settings, available, env_models, pinned)
+    return {
+        "mode": settings.get("mode", ai_providers.DEFAULT_MODE),
+        "pinned": pinned,
+        "last": rc.get_last_ai_provider() if rc else "",
+        "providers": providers,
+        "chain": [{"provider": pid, "model": m} for pid, m in chain],
+    }
+
+
+@router.get("/api/ai")
+async def get_ai() -> JSONResponse:
+    r = data.get_redis()
+    return JSONResponse(_ai_view(_runtime_config(r) if r is not None else None))
+
+
+@router.put("/api/ai/chain")
+async def put_ai_chain(request: Request) -> JSONResponse:
+    """Режим, порядок, включённые, модели, провайдеры без ключа — бот применит
+    со следующего цикла."""
+    rc, r, denied = _rc_or_error(request)
+    if denied is not None:
+        return denied
+    try:
+        rc.set_ai_chain(await _body(request))
+    except ValueError as e:
+        return _err(400, "bad_request", str(e))
+    bot_bus.emit(r, "config.changed", {"keys": ["AI_CHAIN"]})
+    return JSONResponse(_ai_view(rc))
+
+
+@router.get("/api/ai/providers/{provider_id}/models")
+async def get_ai_models(provider_id: str, request: Request) -> JSONResponse:
+    """Живой список моделей провайдера по сохранённому ключу (лимит не тратит)."""
+    denied = _control_denied(request)
+    if denied is not None:
+        return denied
+    p = ai_providers.BY_ID.get(provider_id)
+    if p is None:
+        return _err(404, "unknown_provider", "Нет такого провайдера.")
+    key = _secret(p.key_env)
+    if not key and not p.key_optional:
+        return _err(400, "no_key", "Сначала добавьте ключ.")
+    if p.kind == "anthropic":
+        url = "https://api.anthropic.com/v1/models"
+        headers = {"x-api-key": key, "anthropic-version": "2023-06-01"}
+    else:
+        base = p.url(_secret)
+        if not base:
+            return _err(400, "no_url", f"Укажите {p.url_label}.")
+        url = base + "/models"
+        headers = {"Authorization": f"Bearer {key}"} if key else {}
+    import httpx  # noqa: PLC0415
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(url, headers=headers)
+        payload = resp.json() if resp.status_code == 200 else None
+    except (httpx.HTTPError, ValueError):
+        return _err(502, "provider_unreachable", f"{p.name} не ответил.")
+    if payload is None:
+        return _err(502, "provider_error", f"{p.name} ответил {resp.status_code}.")
+    items = payload.get("data") if isinstance(payload, dict) else payload
+    ids = sorted(
+        {
+            str(m["id"]).removeprefix("models/")
+            for m in items or []
+            if isinstance(m, dict) and m.get("id")
+        }
+    )
+    return JSONResponse({"provider": p.id, "models": ids})
 
 
 # ── Ключи API (src/secrets_store.py) ──────────────────────────────────────────

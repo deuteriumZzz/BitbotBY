@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import datetime, timedelta
 from unittest.mock import patch
@@ -298,3 +299,88 @@ def test_profile_and_strategy_validation(keyed):
         )
         resp = keyed.patch("/api/strategies/nope", json={"enabled": False}, headers=H)
         assert resp.status_code == 404
+
+
+# ── AI-провайдеры ─────────────────────────────────────────────────────────────
+
+_KEY = "k" * 20
+
+
+def _keys(*envs):
+    """Ключи «сохранены» только для перечисленных переменных."""
+    return patch.object(
+        control.secrets_store,
+        "get_value",
+        side_effect=lambda env: _KEY if env in envs else None,
+    )
+
+
+def test_ai_view_free_chain_by_default(client):
+    with patch.object(data, "get_redis", return_value=StrRedis()), _keys(
+        "GROQ_API_KEY", "DEEPSEEK_API_KEY"
+    ):
+        body = client.get("/api/ai").json()
+    assert body["mode"] == "free"
+    assert [c["provider"] for c in body["chain"]] == ["groq"]  # DeepSeek платный
+    groq = next(p for p in body["providers"] if p["id"] == "groq")
+    assert groq["key_set"] and groq["usable"] and groq["free"]
+    assert len(body["providers"]) == 16
+    assert _KEY not in json.dumps(body)  # значения ключей не отдаются
+
+
+def test_put_ai_chain_applies_and_validates(keyed):
+    r = StrRedis()
+    h = {"X-API-Key": "secret"}
+    with patch.object(data, "get_redis", return_value=r), _keys(
+        "GROQ_API_KEY", "DEEPSEEK_API_KEY"
+    ):
+        bad = keyed.put("/api/ai/chain", json={"mode": "cheap"}, headers=h)
+        ok = keyed.put(
+            "/api/ai/chain",
+            json={"mode": "auto", "models": {"groq": "openai/gpt-oss-20b"}},
+            headers=h,
+        )
+    assert bad.status_code == 400
+    assert ok.status_code == 200
+    chain = ok.json()["chain"]
+    assert [c["provider"] for c in chain] == ["groq", "deepseek"]
+    assert chain[0]["model"] == "openai/gpt-oss-20b"
+    assert json.loads(r.get("bot:ai_chain"))["mode"] == "auto"
+    assert r.published[-1][0] == bot_bus.EVENTS_CHANNEL
+    assert r.published[-1][1]["data"] == {"keys": ["AI_CHAIN"]}
+
+
+def test_put_ai_chain_needs_login(client):
+    with patch.object(data, "get_redis", return_value=StrRedis()):
+        resp = client.put("/api/ai/chain", json={"mode": "auto"})
+    assert resp.status_code in (401, 403)
+
+
+def test_ai_models_live_list(keyed, monkeypatch):
+    class Resp:
+        status_code = 200
+
+        def json(self):
+            return {"data": [{"id": "models/gemini-x"}, {"id": "b"}]}
+
+    class Client:
+        def __init__(self, **kw):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def get(self, url, headers=None):
+            assert url.endswith("/openai/models")
+            assert headers == {"Authorization": f"Bearer {_KEY}"}
+            return Resp()
+
+    monkeypatch.setattr("httpx.AsyncClient", Client)
+    with _keys("GEMINI_API_KEY"):
+        resp = keyed.get(
+            "/api/ai/providers/gemini/models", headers={"X-API-Key": "secret"}
+        )
+    assert resp.json() == {"provider": "gemini", "models": ["b", "gemini-x"]}
