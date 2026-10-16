@@ -32,7 +32,7 @@ _KEY_AI_PROVIDER = "bot:ai_provider"
 _KEY_MARKET_TYPE = "bot:market_type"
 _KEY_LEVERAGE_MODE = "bot:leverage_mode"
 _KEY_LEVERAGE_TARGET_RISK = "bot:leverage_target_risk"
-_KEY_MAX_DRAWDOWN = "bot:max_drawdown_percent"
+_KEY_LEVERAGE_DD = "bot:leverage_dd_threshold"
 _KEY_DRAWDOWN_CONFIRM = "bot:drawdown_confirm_cycles"
 _KEY_SAC_PROMPTED = "bot:sac_prompted"
 _KEY_CONFIRM_TIMEOUT = "bot:confirm_timeout"
@@ -534,23 +534,23 @@ class RuntimeConfig:
 
     # ── Leverage ──────────────────────────────────────────────────────────────
 
-    def get_max_drawdown_percent(self) -> float:
-        """Порог просадки для режима плеча full (0.05–0.5)."""
-        val = self._get(_KEY_MAX_DRAWDOWN)
-        try:
-            return (
-                max(0.05, min(float(val), 0.5))
-                if val
-                else float(getattr(Config, "MAX_DRAWDOWN_PERCENT", 0.15))
-            )
-        except (ValueError, TypeError):
-            return 0.15
+    def get_leverage_dd_threshold(self) -> float:
+        """Порог просадки для режима плеча full (0.05–0.5).
 
-    def set_max_drawdown_percent(self, pct: float) -> bool:
+        Не hard drawdown halt: тот читает Config.MAX_DRAWDOWN_PERCENT напрямую.
+        """
+        default = float(getattr(Config, "LEVERAGE_DD_THRESHOLD", 0.15))
+        val = self._get(_KEY_LEVERAGE_DD)
+        try:
+            return max(0.05, min(float(val), 0.5)) if val else default
+        except (ValueError, TypeError):
+            return default
+
+    def set_leverage_dd_threshold(self, pct: float) -> bool:
         if not (0.05 <= pct <= 0.5):
             return False
-        self._set(_KEY_MAX_DRAWDOWN, str(pct))
-        logger.info("Runtime: max_drawdown_percent → %.2f", pct)
+        self._set(_KEY_LEVERAGE_DD, str(pct))
+        logger.info("Runtime: leverage_dd_threshold → %.2f", pct)
         return True
 
     def get_leverage_mode(self) -> str:
@@ -1118,7 +1118,7 @@ class RuntimeConfig:
         _KEY_MARKET_TYPE,
         _KEY_LEVERAGE_MODE,
         _KEY_LEVERAGE_TARGET_RISK,
-        _KEY_MAX_DRAWDOWN,
+        _KEY_LEVERAGE_DD,
         _KEY_DRAWDOWN_CONFIRM,
         _KEY_MARKET_PROFILE,
         _KEY_TIMEFRAME,

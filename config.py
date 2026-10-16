@@ -108,6 +108,12 @@ class Config:
     LEVERAGE_TARGET_RISK: float = float(os.getenv("LEVERAGE_TARGET_RISK", "0.01"))
     LEVERAGE_MAX: int = int(os.getenv("LEVERAGE_MAX", "5"))
     LEVERAGE_MIN: int = int(os.getenv("LEVERAGE_MIN", "1"))
+    # Порог просадки для LEVERAGE_MODE=full: плечо снижается по мере просадки
+    # (не ниже 30% от расчётного). Не путать с MAX_DRAWDOWN_PERCENT (hard halt).
+    # Не задан → старый MAX_DRAWDOWN_PERCENT (раньше он обслуживал оба порога).
+    LEVERAGE_DD_THRESHOLD: float = float(
+        os.getenv("LEVERAGE_DD_THRESHOLD", os.getenv("MAX_DRAWDOWN_PERCENT", "0.15"))
+    )
 
     # ── Trading ────────────────────────────────────────────────────────────
     INITIAL_BALANCE: float = float(os.getenv("INITIAL_BALANCE", "10000.0"))
@@ -171,6 +177,7 @@ class Config:
     # в доках, зависят от аккаунта; проверять в личном кабинете build.nvidia.com.
     NVIDIA_API_KEY: str = os.getenv("NVIDIA_API_KEY", "")
     NVIDIA_MODEL: str = os.getenv("NVIDIA_MODEL", "meta/llama-3.3-70b-instruct")
+    # Hard drawdown halt (trading_bot): закрыть всё и пауза DRAWDOWN_HALT_HOURS
     MAX_DRAWDOWN_PERCENT: float = float(os.getenv("MAX_DRAWDOWN_PERCENT", "0.2"))
     PUMPPORTAL_API_KEY: str = os.getenv("PUMPPORTAL_API_KEY", "")
 
@@ -409,6 +416,11 @@ class Config:
             raise ValueError(
                 f"MAX_DRAWDOWN_PERCENT={self.MAX_DRAWDOWN_PERCENT} must be a "
                 "fraction in (0, 0.5] — e.g. 0.2 for 20%, not 20.0."
+            )
+        if not (0 < self.LEVERAGE_DD_THRESHOLD <= 0.5):
+            raise ValueError(
+                f"LEVERAGE_DD_THRESHOLD={self.LEVERAGE_DD_THRESHOLD} must be a "
+                "fraction in (0, 0.5] — e.g. 0.15 for 15%, not 15.0."
             )
         if self.DAILY_LOSS_LIMIT > self.MAX_DRAWDOWN_PERCENT:
             raise ValueError(

@@ -1,3 +1,8 @@
+import os
+import subprocess
+import sys
+from pathlib import Path
+
 import pytest
 
 from config import Config
@@ -165,3 +170,46 @@ class TestConfigValidate:
     def test_daily_loss_limit_exceeding_max_drawdown_rejected(self):
         with pytest.raises(ValueError, match="MAX_DRAWDOWN_PERCENT"):
             _paper(DAILY_LOSS_LIMIT=0.4, MAX_DRAWDOWN_PERCENT=0.2).validate()
+
+    def test_leverage_dd_threshold_as_percent_typo_rejected(self):
+        with pytest.raises(ValueError, match="LEVERAGE_DD_THRESHOLD"):
+            _paper(LEVERAGE_DD_THRESHOLD=15.0).validate()
+
+
+def _load_dd_thresholds(**env: str) -> tuple[float, float]:
+    """Импортирует config в чистом процессе с заданным env (без утечки в другие тесты)."""
+    clean = {
+        k: v
+        for k, v in os.environ.items()
+        if k not in ("LEVERAGE_DD_THRESHOLD", "MAX_DRAWDOWN_PERCENT")
+    }
+    out = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from config import Config as C;"
+            "print(C.LEVERAGE_DD_THRESHOLD, C.MAX_DRAWDOWN_PERCENT)",
+        ],
+        env={**clean, **env},
+        cwd=Path(__file__).resolve().parent.parent,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()
+    return float(out[0]), float(out[1])
+
+
+class TestDrawdownThresholdsSplit:
+    """Плечо (LEVERAGE_DD_THRESHOLD) и hard halt (MAX_DRAWDOWN_PERCENT) — разные пороги."""
+
+    def test_both_set_are_independent(self):
+        assert _load_dd_thresholds(
+            LEVERAGE_DD_THRESHOLD="0.15", MAX_DRAWDOWN_PERCENT="0.20"
+        ) == (0.15, 0.20)
+
+    def test_legacy_env_falls_back_to_max_drawdown(self):
+        # Старый .env без нового ключа: плечо ведёт себя как раньше
+        assert _load_dd_thresholds(MAX_DRAWDOWN_PERCENT="0.25") == (0.25, 0.25)
+
+    def test_defaults(self):
+        assert _load_dd_thresholds() == (0.15, 0.2)

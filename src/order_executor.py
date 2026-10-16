@@ -97,14 +97,14 @@ def _calc_dynamic_leverage(
             if peak_balance > 0 and balance > 0 and peak_balance > balance:
                 dd_pct = (peak_balance - balance) / peak_balance
                 try:
-                    max_dd = (
-                        runtime_config.get_max_drawdown_percent()
+                    lev_dd = (
+                        runtime_config.get_leverage_dd_threshold()
                         if runtime_config is not None
-                        else float(getattr(Config, "MAX_DRAWDOWN_PERCENT", 0.15))
+                        else float(getattr(Config, "LEVERAGE_DD_THRESHOLD", 0.15))
                     )
                 except Exception:
-                    max_dd = float(getattr(Config, "MAX_DRAWDOWN_PERCENT", 0.15))
-                drawdown_mult = max(0.3, 1.0 - dd_pct / max(max_dd, 0.01))
+                    lev_dd = float(getattr(Config, "LEVERAGE_DD_THRESHOLD", 0.15))
+                drawdown_mult = max(0.3, 1.0 - dd_pct / max(lev_dd, 0.01))
             else:
                 drawdown_mult = 1.0
 
