@@ -39,6 +39,10 @@ export async function api<T>(method: string, path: string, body?: unknown): Prom
   } catch {
     throw new ApiError(0, "network", "Нет связи с сервером бота.");
   }
+  // Все ответы API — JSON. HTML (SPA-заглушка Tauri, чужой сайт) — значит, адрес не тот.
+  if (!res.headers.get("content-type")?.includes("application/json")) {
+    throw new ApiError(0, "not_bot", "По этому адресу не отвечает сервер бота.");
+  }
   const data: unknown = await res.json().catch(() => ({}));
   if (!res.ok && res.status !== 202) {
     const err = (data as ErrorBody).error;
@@ -93,6 +97,7 @@ export async function command(
 export function subscribe(
   onEvent: (e: BotEvent) => void,
   onStatus: (up: boolean) => void,
+  onDenied: () => void = () => undefined,
 ): () => void {
   if (isMock) {
     let off = (): void => undefined;
@@ -129,8 +134,14 @@ export function subscribe(
         /* битое сообщение — пропускаем */
       }
     };
-    ws.onclose = () => {
+    ws.onclose = (e) => {
       onStatus(false);
+      // 4401 — сервер не принял сессию: переподключение не поможет, нужен вход.
+      if (e.code === 4401) {
+        closed = true;
+        onDenied();
+        return;
+      }
       if (!closed) timer = setTimeout(open, Math.min(30_000, 1000 * 2 ** retry++));
     };
   };

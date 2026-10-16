@@ -186,6 +186,11 @@ export const useStore = create<Store>((set, get) => {
 
     async boot() {
       platform.init();
+      // Десктоп без адреса сервера: без этого запрос уйдёт в tauri://localhost/api/…
+      if (!isMock && platform.kind === "desktop" && !platform.apiBase()) {
+        set({ needLogin: true, ready: true });
+        return;
+      }
       if (!isMock && platform.kind === "miniapp" && !platform.getToken()) {
         try {
           const r = await api<{ token: string }>("POST", "/api/auth/telegram", {
@@ -199,7 +204,9 @@ export const useStore = create<Store>((set, get) => {
       try {
         await get().loadState();
       } catch (e) {
-        if (e instanceof ApiError && e.status === 401) {
+        // На десктопе любая ошибка — на вход: там можно исправить адрес сервера.
+        if (e instanceof ApiError && (e.status === 401 || platform.kind === "desktop")) {
+          if (e.status !== 401) get().say(e.message);
           set({ needLogin: true, ready: true });
           return;
         }
@@ -220,6 +227,10 @@ export const useStore = create<Store>((set, get) => {
       unsubscribe = subscribe(
         (e) => get().apply(e),
         (up) => set({ wsUp: up }),
+        () => {
+          platform.setToken(null);
+          set({ needLogin: true });
+        },
       );
     },
 

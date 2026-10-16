@@ -315,7 +315,7 @@ const CYCLE_PILL: Record<string, [string, string]> = {
 
 /** Что сейчас делает бот — одно слово для радара и верхней панели. */
 export function cycleKind(s: Store): "off" | "paused" | "guard" | "monitor" | "scan" {
-  if (!s.alive) return "off";
+  if (!s.alive || s.cycle.state === "offline") return "off";
   if (s.bot?.paused || s.cycle.state === "paused") return "paused";
   if (Object.values(s.guards).some((g) => g.active)) return "guard";
   return s.cycle.state === "monitor" ? "monitor" : "scan";
