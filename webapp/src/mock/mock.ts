@@ -1,0 +1,591 @@
+// Мок-бот для разработки и демо (?mock=1): те же ответы REST и события WS,
+// что у настоящего сервера, но рынок и сделки выдуманы.
+
+import { ApiError } from "../lib/api";
+import type {
+  Alert,
+  BotEvent,
+  Candle,
+  ConfigValues,
+  DailyRow,
+  Metrics,
+  PendingSignal,
+  Position,
+  SecretItem,
+  SettingDef,
+  Side,
+  Strategy,
+} from "../lib/types";
+import fixtures from "./fixtures.json";
+
+// Тело запроса приходит нетипизированным — как JSON на сервере.
+type Body = Record<string, any>;
+
+// ── Детерминированный сид: одинаковая история при каждом запуске ──────────────
+function mulberry32(a: number): () => number {
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const seeded = mulberry32(42);
+
+const PRICES: Record<string, number> = {
+  "BTC/USDT": 64210,
+  "ETH/USDT": 3120,
+  "SOL/USDT": 182.4,
+  "XRP/USDT": 0.6123,
+  "DOGE/USDT": 0.1542,
+  "LINK/USDT": 14.82,
+  "AAVE/USDT": 142.3,
+  "SUI/USDT": 1.842,
+  "NEAR/USDT": 5.412,
+  "HYPE/USDT": 28.4,
+  "ENA/USDT": 0.4821,
+  "UNI/USDT": 9.62,
+  "WLD/USDT": 2.214,
+  "ONDO/USDT": 1.124,
+  "MNT/USDT": 0.8812,
+  "ARB/USDT": 0.7421,
+};
+const SYMBOLS = Object.keys(PRICES);
+const REJECTS = [
+  "сильная корреляция с открытой позицией",
+  "мало ликвидности или широкий спред",
+  "достигнут лимит нагрузки портфеля",
+  "стратегия отключена kill-switch",
+];
+
+// ── Состояние ─────────────────────────────────────────────────────────────────
+const schema = fixtures.schema as SettingDef[];
+const config = structuredClone(fixtures.config) as ConfigValues;
+const strategies = structuredClone(fixtures.strategies) as Strategy[];
+const secrets = structuredClone(fixtures.secrets) as SecretItem[];
+for (const s of secrets) {
+  if (!["bybit", "groq", "telegram"].includes(s.service)) continue;
+  Object.assign(s, { status: "ok", message: "Ключ проверен.", checked_at: Date.now() / 1000 - 3600 });
+  for (const f of s.fields)
+    if (!f.optional) Object.assign(f, { set: true, last4: f.secret ? "a9F2" : null, value: f.secret ? null : "1200450" });
+}
+const alerts: Alert[] = [
+  ["atr_spike", "Всплеск волатильности"],
+  ["drawdown", "Просадка"],
+  ["daily_limit", "Дневной лимит убытка"],
+  ["bot_stalled", "Бот перестал работать"],
+  ["new_signal", "Новые сигналы"],
+  ["position_open", "Открытие позиции"],
+  ["position_close", "Закрытие позиции"],
+].map(([kind, label]) => ({ kind, label, enabled: kind !== "new_signal", cooldown_min: kind === "atr_spike" ? 30 : 0 }));
+const lists = { forced: ["SOL/USDT"], excluded: ["PUMP/USDT"] };
+
+const bot = { paused: false, paper: true, mode: "ai", profile: "altcoin" as string | null };
+let balance = 10_000;
+let tradeSeq = 1000;
+type Live = Position & { price: number };
+const positions: Record<string, Live> = {};
+const pending: Record<string, PendingSignal> = {};
+const results: Record<string, unknown> = {};
+
+interface Closed {
+  exit: number; // мс
+  net: number;
+  fees: number;
+}
+const closed: Closed[] = [];
+// 35 дней истории: 1–5 сделок в день, слабый плюс — как у честного paper-бота.
+{
+  const now = Date.now();
+  for (let day = 35; day >= 1; day--) {
+    const n = 1 + Math.floor(seeded() * 5);
+    for (let i = 0; i < n; i++) {
+      const size = 20 + seeded() * 120;
+      const net = seeded() < 0.47 ? size * 1.6 : -size;
+      closed.push({ exit: now - day * 86_400_000 + i * 3_600_000, net, fees: 1 + seeded() * 3 });
+      balance += net;
+    }
+  }
+}
+
+const publicPos = (p: Position) => ({
+  symbol: p.symbol,
+  trade_id: p.trade_id,
+  side: p.side,
+  entry: p.entry,
+  qty: p.qty,
+  sl: p.sl,
+  tp: p.tp,
+  trailing: p.trailing,
+});
+
+function open(symbol: string, side: Side): Live {
+  const price = PRICES[symbol];
+  const dist = price * (0.012 + Math.random() * 0.01);
+  const dir = side === "long" ? 1 : -1;
+  const id = ++tradeSeq;
+  const p: Live = {
+    id: String(id),
+    trade_id: id,
+    symbol,
+    side,
+    entry: price,
+    qty: +((balance * 0.02) / dist).toPrecision(4),
+    sl: price - dir * dist,
+    tp: price + dir * dist * 2,
+    price,
+    trailing: true,
+  };
+  positions[symbol] = p;
+  return p;
+}
+
+// Демо-позиции, чтобы терминал не был пустым при первом открытии.
+for (const [sym, side, move] of [["SOL/USDT", "long", 1.006], ["ETH/USDT", "short", 0.997]] as const) {
+  const p = open(sym, side);
+  p.price = PRICES[sym] = p.entry * move;
+}
+
+function closePos(symbol: string, fraction = 1): void {
+  const p = positions[symbol];
+  if (!p) return;
+  const dir = p.side === "long" ? 1 : -1;
+  const qty = fraction >= 1 ? p.qty : p.qty * fraction;
+  const fees = p.price * qty * 0.0011;
+  const net = (p.price - p.entry) * qty * dir - fees;
+  balance += net;
+  closed.push({ exit: Date.now(), net, fees });
+  if (fraction >= 1) {
+    delete positions[symbol];
+    emit("position.closed", { symbol });
+  } else {
+    p.qty = +(p.qty - qty).toPrecision(4);
+    emit("position.updated", publicPos(p));
+  }
+}
+
+const maxPositions = (): number => Number(config.MAX_POSITIONS?.value ?? 3);
+
+function state() {
+  return {
+    bot: { alive: true, ...bot },
+    balance: +balance.toFixed(2),
+    slots: { used: Object.keys(positions).length, max: maxPositions() },
+    positions: Object.values(positions).map((p) => ({ ...publicPos(p), id: p.id, pnl_pct: null, partial_tp_done: false })),
+    timestamp: new Date().toISOString(),
+  };
+}
+
+// ── Метрики — та же логика, что compute_metrics на сервере ───────────────────
+const DAY = 86_400_000;
+const PERIOD_MS: Record<string, number> = { "24h": DAY, "7d": 7 * DAY, "30d": 30 * DAY };
+
+function metrics(period: string): Metrics {
+  const since = PERIOD_MS[period] ? Date.now() - PERIOD_MS[period] : 0;
+  const t = closed.filter((c) => c.exit >= since);
+  const sum = (a: Closed[]) => a.reduce((s, c) => s + c.net, 0);
+  const wins = t.filter((c) => c.net > 0);
+  const losses = t.filter((c) => c.net <= 0);
+  const net = sum(t);
+  const fees = t.reduce((s, c) => s + c.fees, 0);
+  const avgWin = wins.length ? sum(wins) / wins.length : null;
+  const avgLoss = losses.length ? sum(losses) / losses.length : null;
+  let eq = 0;
+  let peak = 0;
+  let dd = 0;
+  for (const c of t) {
+    eq += c.net;
+    peak = Math.max(peak, eq);
+    dd = Math.max(dd, (peak - eq) / (10_000 + peak));
+  }
+  const rets = t.map((c) => c.net / 10_000);
+  const mean = rets.reduce((a, b) => a + b, 0) / (rets.length || 1);
+  const sd = Math.sqrt(rets.reduce((a, b) => a + (b - mean) ** 2, 0) / (rets.length || 1));
+  return {
+    period: period as Metrics["period"],
+    n: t.length,
+    net: +net.toFixed(2),
+    fees: +fees.toFixed(2),
+    realized: +(net + fees).toFixed(2),
+    win_rate: t.length ? wins.length / t.length : null,
+    profit_factor: losses.length ? sum(wins) / -sum(losses) : null,
+    avg_win: avgWin,
+    avg_loss: avgLoss,
+    rr: avgWin !== null && avgLoss ? avgWin / -avgLoss : null,
+    max_drawdown_pct: +(dd * 100).toFixed(2),
+    sharpe: t.length >= 50 && sd > 0 ? +((mean / sd) * Math.sqrt(365)).toFixed(2) : null,
+  };
+}
+
+function daily(days: number): DailyRow[] {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Array.from({ length: days }, (_, k) => {
+    const start = today.getTime() - (days - 1 - k) * DAY;
+    const t = closed.filter((c) => c.exit >= start && c.exit < start + DAY);
+    return {
+      date: new Date(start).toISOString().slice(0, 10),
+      net: +t.reduce((s, c) => s + c.net, 0).toFixed(2),
+      fees: +t.reduce((s, c) => s + c.fees, 0).toFixed(2),
+      trades: t.length,
+    };
+  });
+}
+
+function candles(symbol: string, limit: number): Candle[] {
+  const step = 900;
+  const now = Math.floor(Date.now() / 1000 / step) * step;
+  let c = PRICES[symbol] ?? 100;
+  const out: Candle[] = [];
+  // Идём назад от текущей цены, чтобы последняя свеча совпала с тиками.
+  for (let i = 0; i < limit; i++) {
+    const o = c * (1 + (Math.random() - 0.5) * 0.008);
+    const high = Math.max(o, c) * (1 + Math.random() * 0.003);
+    const low = Math.min(o, c) * (1 - Math.random() * 0.003);
+    out.push({ time: now - i * step, open: o, high, low, close: c });
+    c = o;
+  }
+  return out.reverse();
+}
+
+// ── События ───────────────────────────────────────────────────────────────────
+const listeners = new Set<(e: BotEvent) => void>();
+function emit(type: string, data: Record<string, unknown>): void {
+  const e = { type, ts: Date.now() / 1000, data };
+  listeners.forEach((l) => l(e));
+}
+
+let timers: ReturnType<typeof setInterval>[] = [];
+let cycleNo = 0;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const pick = <T,>(a: T[]): T => a[Math.floor(Math.random() * a.length)];
+
+function tick(): void {
+  for (const s of SYMBOLS) PRICES[s] *= 1 + (Math.random() - 0.495) * 0.0016;
+  for (const p of Object.values(positions)) {
+    p.price = PRICES[p.symbol];
+    const dir = p.side === "long" ? 1 : -1;
+    // Трейлинг: SL тянется за ценой на исходной дистанции, только в сторону прибыли.
+    const dist = Math.abs(p.entry - p.sl);
+    const next = p.price - dir * dist;
+    if (p.trailing && (p.price - p.entry) * dir > dist && (next - p.sl) * dir > 0) p.sl = next;
+    emit("tick", { ...publicPos(p), price: p.price });
+    if ((p.price - p.sl) * dir <= 0 || (p.price - p.tp) * dir >= 0) closePos(p.symbol);
+  }
+}
+
+async function cycle(): Promise<void> {
+  if (bot.paused) {
+    emit("cycle", { state: "paused" });
+    return;
+  }
+  cycleNo++;
+  const used = Object.keys(positions).length;
+  const max = maxPositions();
+  if (used >= max) {
+    emit("cycle", { state: "monitor", used, max });
+    return;
+  }
+  const scan = SYMBOLS.filter((s) => !lists.excluded.includes(s));
+  emit("radar.stage", { stage: "scan", symbols: scan });
+  await sleep(900);
+  emit("cycle", { state: "scan", used, max });
+  const pre = scan.filter(() => Math.random() < 0.45).slice(0, 6);
+  emit("radar.stage", { stage: "prescore", symbols: pre });
+  await sleep(1100);
+  const enabled = strategies.filter((s) => s.enabled).map((s) => s.name);
+  const picks = pre.filter(() => Math.random() < 0.5).slice(0, 3);
+  const sides: Record<string, Side> = {};
+  for (const sym of picks) {
+    sides[sym] = config.MARKET_TYPE?.value === "spot" || Math.random() < 0.6 ? "long" : "short";
+    emit("radar.stage", {
+      stage: "signal",
+      symbol: sym,
+      side: sides[sym],
+      confidence: +(0.55 + Math.random() * 0.3).toFixed(2),
+      strategy: enabled.length ? pick(enabled) : "ema_crossover",
+    });
+    await sleep(500);
+  }
+  for (const sym of picks) {
+    emit("radar.stage", { stage: "guards", symbol: sym });
+    await sleep(700);
+    const reject = (reason: string) => emit("radar.stage", { stage: "rejected", symbol: sym, reason });
+    if (Object.keys(positions).length >= maxPositions()) reject("все слоты заняты");
+    else if (positions[sym]) reject("по монете уже есть позиция");
+    else if (Math.random() < 0.55) reject(pick(REJECTS));
+    else if (cycleNo % 3 === 0) ask(sym, sides[sym]);
+    else openAndEmit(sym, sides[sym]);
+  }
+}
+
+function openAndEmit(sym: string, side: Side): void {
+  const p = open(sym, side);
+  emit("radar.stage", { stage: "open", symbol: sym });
+  emit("position.opened", {
+    symbol: sym,
+    trade_id: p.trade_id,
+    side: side === "long" ? "buy" : "sell",
+    entry: p.entry,
+    qty: p.qty,
+    stop_loss: p.sl,
+    take_profit: p.tp,
+  });
+}
+
+function ask(sym: string, side: Side): void {
+  const price = PRICES[sym];
+  const dir = side === "long" ? 1 : -1;
+  const id = `sig${++tradeSeq}`;
+  const sig: PendingSignal = {
+    id,
+    symbol: sym,
+    side,
+    confidence: +(0.6 + Math.random() * 0.25).toFixed(2),
+    strategy: "ema_crossover",
+    entry: price,
+    stop_loss: price * (1 - dir * 0.015),
+    take_profit: price * (1 + dir * 0.03),
+    expires_at: Date.now() / 1000 + 60,
+    on_timeout_execute: true,
+    backtest: { win_rate: 0.34, trades: 2931, ev: -0.12 },
+    live: { win_rate: 0.41, trades: 17, ev: 0.08 },
+  };
+  pending[id] = sig;
+  emit("signal.pending", { ...sig });
+  setTimeout(() => resolve(id, sig.on_timeout_execute, "timeout"), 60_000);
+}
+
+function resolve(id: string, confirmed: boolean, by: string): boolean {
+  const sig = pending[id];
+  if (!sig) return false;
+  delete pending[id];
+  emit("signal.resolved", { id, symbol: sig.symbol, confirmed, by });
+  const reason = !confirmed
+    ? "сделку отклонили"
+    : positions[sig.symbol]
+      ? "по монете уже есть позиция"
+      : Object.keys(positions).length >= maxPositions()
+        ? "все слоты заняты"
+        : "";
+  if (reason) emit("radar.stage", { stage: "rejected", symbol: sig.symbol, reason });
+  else openAndEmit(sig.symbol, sig.side);
+  return true;
+}
+
+function start(): void {
+  if (timers.length) return;
+  timers = [
+    setInterval(tick, 1000),
+    setInterval(() => void cycle(), 7000),
+    setInterval(() => emit("heartbeat", { alive: true }), 10_000),
+  ];
+  setTimeout(() => void cycle(), 600);
+}
+
+function stop(): void {
+  timers.forEach(clearInterval);
+  timers = [];
+}
+
+// ── REST ──────────────────────────────────────────────────────────────────────
+function fail(status: number, code: string, message: string, fields?: Record<string, string>): never {
+  throw new ApiError(status, code, message, fields);
+}
+
+/** Команда исполнилась сразу — как будто бот ответил в пределах 8 с. */
+function done(body: Body, result: Record<string, unknown>) {
+  const id = String(body.request_id ?? Math.random());
+  return (results[id] = { request_id: id, status: "done", result });
+}
+const err = (code: string, message: string) => ({ ok: false, error: { code, message } });
+const findPos = (tradeId: string) => Object.values(positions).find((p) => String(p.trade_id) === tradeId);
+const NUMERIC = ["int", "float", "pct"];
+
+function patchConfig(changes: Body) {
+  const fields: Record<string, string> = {};
+  for (const [key, raw] of Object.entries(changes)) {
+    const def = schema.find((s) => s.key === key);
+    const num = Number(raw);
+    if (!def || def.readonly) fields[key] = "Эту настройку нельзя менять из приложения.";
+    else if (!NUMERIC.includes(def.type)) continue;
+    else if (!Number.isFinite(num)) fields[key] = "Нужно число.";
+    else if (def.min !== null && num < def.min) fields[key] = `Не меньше ${def.min}.`;
+    else if (def.max !== null && num > def.max) fields[key] = `Не больше ${def.max}.`;
+  }
+  if (Object.keys(fields).length) fail(400, "invalid", "Проверьте значения.", fields);
+  const out = { applied_hot: [] as string[], pending_restart: [] as string[], failed: {} };
+  for (const [key, value] of Object.entries(changes)) {
+    const def = schema.find((s) => s.key === key)!;
+    config[key] = { value: NUMERIC.includes(def.type) ? Number(value) : value, source: def.hot ? "live" : "ui" };
+    (def.hot ? out.applied_hot : out.pending_restart).push(key);
+  }
+  emit("config.changed", { keys: Object.keys(changes).sort() });
+  return out;
+}
+
+function putSymbols(b: Body) {
+  const norm = (l: unknown) =>
+    (Array.isArray(l) ? l : [])
+      .map((s) => String(s).toUpperCase().replace(/[^A-Z0-9/]/g, ""))
+      .filter(Boolean)
+      .map((s) => (s.includes("/") ? s : `${s}/USDT`));
+  const forced = norm(b.forced);
+  const excluded = norm(b.excluded);
+  if (forced.some((s) => excluded.includes(s))) fail(400, "conflict", "Монета не может быть сразу в обоих списках.");
+  lists.forced = [...new Set(forced)].sort();
+  lists.excluded = [...new Set(excluded)].sort();
+  emit("config.changed", { keys: ["SYMBOLS"] });
+  return lists;
+}
+
+function secret(method: string, id: string, b: Body) {
+  const s = secrets.find((x) => x.service === id) ?? fail(404, "unknown_service", "Нет такого сервиса.");
+  if (method === "DELETE") {
+    s.fields.forEach((f) => Object.assign(f, { set: false, last4: null, value: null }));
+    Object.assign(s, { status: "unset", message: "", checked_at: null });
+  } else {
+    const values: Record<string, string> = b.fields ?? {};
+    for (const f of s.fields) {
+      const v = values[f.env];
+      if (v) Object.assign(f, { set: true, last4: f.secret ? v.slice(-4) : null, value: f.secret ? null : v });
+    }
+    if (s.model && b.model) s.model.value = b.model;
+    Object.assign(s, { status: "ok", message: "Демо: ключ принят без проверки.", checked_at: Date.now() / 1000 });
+  }
+  emit("secret.changed", { service: s.service, status: s.status });
+  return { ...s, restart_required: true };
+}
+
+// Как настоящая сеть: каждый ответ — новая копия, а не ссылка на состояние мока.
+async function request(method: string, path: string, body: unknown): Promise<unknown> {
+  await sleep(120 + Math.random() * 180);
+  return structuredClone(route(method, path, body));
+}
+
+function route(method: string, path: string, body: unknown): unknown {
+  const b = (body ?? {}) as Body;
+  const url = new URL(path, "http://mock");
+  const p = url.pathname;
+  const q = url.searchParams;
+  const route = `${method} ${p}`;
+
+  switch (route) {
+    case "GET /api/state":
+      return state();
+    case "GET /api/positions":
+      return state().positions;
+    case "GET /api/metrics":
+      return metrics(q.get("period") ?? "30d");
+    case "GET /api/pnl/daily":
+      return daily(Number(q.get("days") ?? 35));
+    case "GET /api/strategies":
+      return strategies;
+    case "GET /api/config/schema":
+      return schema;
+    case "GET /api/config":
+      return config;
+    case "GET /api/secrets":
+      return secrets;
+    case "GET /api/signals/pending":
+      return Object.values(pending);
+    case "GET /api/symbols":
+      return lists;
+    case "GET /api/alerts":
+      return alerts;
+    case "GET /api/candles":
+      return candles(q.get("symbol") ?? "BTC/USDT", Number(q.get("limit") ?? 200));
+
+    case "POST /api/bot/pause":
+    case "POST /api/bot/resume":
+      bot.paused = route.endsWith("pause");
+      emit("cycle", { state: bot.paused ? "paused" : "scan" });
+      return done(b, { ok: true, paused: bot.paused });
+    case "POST /api/bot/panic": {
+      const syms = Object.keys(positions);
+      syms.forEach((s) => closePos(s));
+      bot.paused = true;
+      emit("cycle", { state: "paused" });
+      return done(b, { ok: true, closed: syms.length, paused: true });
+    }
+    case "POST /api/bot/restart":
+      return done(b, { ok: true, restarting: true });
+    case "POST /api/account/mode":
+      if (!b.paper && b.pin !== "1234") return done(b, err("bad_pin", "Неверный PIN. В демо PIN — 1234."));
+      bot.paper = Boolean(b.paper);
+      emit("account.mode", { paper: bot.paper });
+      return done(b, { ok: true, paper: bot.paper });
+    case "PATCH /api/config":
+      return patchConfig(b);
+    case "POST /api/profile":
+      if (!["bluechip", "altcoin", "meme"].includes(b.name)) fail(400, "bad_profile", "Профиль — bluechip, altcoin или meme.");
+      bot.profile = b.name;
+      emit("config.changed", { keys: ["MARKET_PROFILE"], profile: b.name });
+      return { profile: b.name };
+    case "POST /api/strategies/reset":
+      strategies.forEach((s) => (s.enabled = true));
+      emit("config.changed", { keys: ["STRATEGIES"] });
+      return { ok: true };
+    case "PUT /api/symbols":
+      return putSymbols(b);
+    case "POST /api/auth/logout":
+      return { ok: true };
+  }
+
+  let m: RegExpMatchArray | null;
+  if ((m = p.match(/^\/api\/commands\/(.+)$/))) return results[m[1]] ?? { request_id: m[1], status: "pending" };
+  if (method === "POST" && (m = p.match(/^\/api\/positions\/(.+)\/close$/))) {
+    const pos = findPos(m[1]);
+    if (!pos) return done(b, err("not_found", "Позиция уже закрыта."));
+    const f = Number(b.fraction ?? 1);
+    if (!(f === 1 || (f >= 0.1 && f <= 0.9))) return done(b, err("bad_fraction", "Доля — от 10% до 90% или 100%."));
+    closePos(pos.symbol, f);
+    return done(b, { ok: true });
+  }
+  if (method === "PATCH" && (m = p.match(/^\/api\/positions\/(.+)$/))) {
+    const pos = findPos(m[1]);
+    if (!pos) return done(b, err("not_found", "Позиция уже закрыта."));
+    const sl = Number(b.sl ?? pos.sl);
+    const tp = Number(b.tp ?? pos.tp);
+    const ok = pos.side === "long" ? sl < pos.price && pos.price < tp : tp < pos.price && pos.price < sl;
+    if (!ok) return done(b, err("bad_levels", pos.side === "long" ? "Для LONG: SL ниже цены, TP выше." : "Для SHORT: SL выше цены, TP ниже."));
+    Object.assign(pos, { sl, tp, trailing: b.trailing ?? pos.trailing });
+    emit("position.updated", publicPos(pos));
+    return done(b, { ok: true });
+  }
+  if (method === "POST" && (m = p.match(/^\/api\/signals\/(.+)\/(confirm|reject)$/))) {
+    return resolve(m[1], m[2] === "confirm", "app") ? done(b, { ok: true }) : done(b, err("not_pending", "Предложение уже неактуально."));
+  }
+  if (method === "PATCH" && (m = p.match(/^\/api\/strategies\/(.+)$/))) {
+    const name = m[1];
+    const s = strategies.find((x) => x.name === name) ?? fail(404, "unknown_strategy", "Нет такой стратегии.");
+    s.enabled = Boolean(b.enabled);
+    emit("config.changed", { keys: ["STRATEGIES"] });
+    return s;
+  }
+  if (method === "PATCH" && (m = p.match(/^\/api\/alerts\/(.+)$/))) {
+    const kind = m[1];
+    const a = alerts.find((x) => x.kind === kind) ?? fail(404, "unknown_alert", "Нет такого уведомления.");
+    if (b.cooldown_min !== undefined && !(b.cooldown_min >= 0 && b.cooldown_min <= 1440))
+      fail(400, "bad_cooldown", "Пауза — от 0 до 1440 минут.");
+    if (b.enabled !== undefined) a.enabled = Boolean(b.enabled);
+    if (b.cooldown_min !== undefined) a.cooldown_min = Number(b.cooldown_min);
+    return a;
+  }
+  if ((m = p.match(/^\/api\/secrets\/(.+)$/)) && (method === "PUT" || method === "DELETE")) return secret(method, m[1], b);
+  return fail(404, "not_found", `Демо не знает ${route}.`);
+}
+
+export const mock = {
+  request,
+  subscribe(onEvent: (e: BotEvent) => void): () => void {
+    listeners.add(onEvent);
+    onEvent({ type: "state", ts: Date.now() / 1000, data: state() });
+    start();
+    return () => {
+      listeners.delete(onEvent);
+      if (!listeners.size) stop();
+    };
+  },
+};

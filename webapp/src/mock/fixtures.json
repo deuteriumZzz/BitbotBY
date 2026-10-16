@@ -1,0 +1,2396 @@
+{
+ "schema": [
+  {
+   "key": "MARKET_TYPE",
+   "group": "Торговля",
+   "label": "Рынок",
+   "type": "choice",
+   "default": "linear",
+   "min": null,
+   "max": null,
+   "step": null,
+   "unit": "",
+   "options": [
+    {
+     "value": "linear",
+     "label": "Фьючерсы"
+    },
+    {
+     "value": "spot",
+     "label": "Спот"
+    }
+   ],
+   "hint": "Спот — только покупки. Фьючерсы — лонг и шорт с плечом.",
+   "readonly": false,
+   "hot": true
+  },
+  {
+   "key": "TIMEFRAME",
+   "group": "Торговля",
+   "label": "Таймфрейм свечей",
+   "type": "choice",
+   "default": "15m",
+   "min": null,
+   "max": null,
+   "step": null,
+   "unit": "",
+   "options": [
+    {
+     "value": "1m",
+     "label": "1m"
+    },
+    {
+     "value": "3m",
+     "label": "3m"
+    },
+    {
+     "value": "5m",
+     "label": "5m"
+    },
+    {
+     "value": "15m",
+     "label": "15m"
+    },
+    {
+     "value": "1h",
+     "label": "1h"
+    },
+    {
+     "value": "4h",
+     "label": "4h"
+    },
+    {
+     "value": "1d",
+     "label": "1d"
+    }
+   ],
+   "hint": "Профиль рынка при переключении ставит своё значение.",
+   "readonly": false,
+   "hot": true
+  },
+  {
+   "key": "TRADING_INTERVAL",
+   "group": "Торговля",
+   "label": "Как часто бот проверяет рынок",
+   "type": "int",
+   "default": 30,
+   "min": 10,
+   "max": 3600,
+   "step": null,
+   "unit": "с",
+   "options": [],
+   "hint": "Пауза между циклами. Меньше — быстрее реакция, но больше AI-запросов.",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "SCAN_TOP_N",
+   "group": "Торговля",
+   "label": "Сколько монет сканировать",
+   "type": "int",
+   "default": 20,
+   "min": 1,
+   "max": 200,
+   "step": null,
+   "unit": "",
+   "options": [],
+   "hint": "Топ монет по объёму за 24 часа.",
+   "readonly": false,
+   "hot": true
+  },
+  {
+   "key": "TRADING_SYMBOL",
+   "group": "Торговля",
+   "label": "Монета по умолчанию",
+   "type": "str",
+   "default": "BTC/USDT",
+   "min": null,
+   "max": null,
+   "step": null,
+   "unit": "",
+   "options": [],
+   "hint": "Используется, когда сканер не нашёл кандидатов.",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "TRADING_HOURS",
+   "group": "Торговля",
+   "label": "Торговые часы (UTC)",
+   "type": "str",
+   "default": "",
+   "min": null,
+   "max": null,
+   "step": null,
+   "unit": "",
+   "options": [],
+   "hint": "Например 8-22. Пусто — круглосуточно.",
+   "readonly": false,
+   "hot": true
+  },
+  {
+   "key": "AUTO_EXECUTE",
+   "group": "Торговля",
+   "label": "Открывать сделки без подтверждения",
+   "type": "bool",
+   "default": false,
+   "min": null,
+   "max": null,
+   "step": null,
+   "unit": "",
+   "options": [],
+   "hint": "",
+   "readonly": false,
+   "hot": true
+  },
+  {
+   "key": "TELEGRAM_CONFIRM_TIMEOUT",
+   "group": "Торговля",
+   "label": "Сколько ждать подтверждения",
+   "type": "int",
+   "default": 60,
+   "min": 0,
+   "max": 300,
+   "step": null,
+   "unit": "с",
+   "options": [],
+   "hint": "0 — ждать ответа без ограничения.",
+   "readonly": false,
+   "hot": true
+  },
+  {
+   "key": "INITIAL_BALANCE",
+   "group": "Торговля",
+   "label": "Стартовый баланс Paper",
+   "type": "float",
+   "default": 10000.0,
+   "min": 100,
+   "max": 10000000,
+   "step": 100,
+   "unit": "$",
+   "options": [],
+   "hint": "",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "COMMISSION_RATE",
+   "group": "Торговля",
+   "label": "Комиссия в расчётах",
+   "type": "pct",
+   "default": 0.001,
+   "min": 0,
+   "max": 0.01,
+   "step": 0.0001,
+   "unit": "",
+   "options": [],
+   "hint": "Для бэктеста и paper-торговли.",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "RISK_PER_TRADE",
+   "group": "Риск на сделку",
+   "label": "Риск на сделку",
+   "type": "pct",
+   "default": 0.02,
+   "min": 0.001,
+   "max": 0.1,
+   "step": 0.001,
+   "unit": "",
+   "options": [],
+   "hint": "Сколько баланса бот готов потерять, если сработает стоп.",
+   "readonly": false,
+   "hot": true
+  },
+  {
+   "key": "MAX_POSITIONS",
+   "group": "Риск на сделку",
+   "label": "Сделок одновременно",
+   "type": "int",
+   "default": 3,
+   "min": 1,
+   "max": 20,
+   "step": null,
+   "unit": "",
+   "options": [],
+   "hint": "В Paper можно до 15 — статистика копится быстрее.",
+   "readonly": false,
+   "hot": true
+  },
+  {
+   "key": "MAX_POSITION_SIZE",
+   "group": "Риск на сделку",
+   "label": "Максимальный размер позиции",
+   "type": "pct",
+   "default": 0.1,
+   "min": 0.01,
+   "max": 1,
+   "step": 0.01,
+   "unit": "",
+   "options": [],
+   "hint": "Доля баланса в одной позиции.",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "STOP_LOSS_PERCENT",
+   "group": "Риск на сделку",
+   "label": "Стоп-лосс по умолчанию",
+   "type": "pct",
+   "default": 0.05,
+   "min": 0.005,
+   "max": 0.3,
+   "step": 0.005,
+   "unit": "",
+   "options": [],
+   "hint": "Профиль рынка может задать свой.",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "MAX_PORTFOLIO_EXPOSURE",
+   "group": "Риск на сделку",
+   "label": "Общая нагрузка портфеля",
+   "type": "float",
+   "default": 1.5,
+   "min": 0,
+   "max": 10,
+   "step": 0.1,
+   "unit": "× баланса",
+   "options": [],
+   "hint": "0 — без ограничения.",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "DAILY_LOSS_LIMIT",
+   "group": "Риск на сделку",
+   "label": "Дневной лимит убытка",
+   "type": "pct",
+   "default": 0.05,
+   "min": 0.005,
+   "max": 0.5,
+   "step": 0.005,
+   "unit": "",
+   "options": [],
+   "hint": "При превышении бот закрывает всё и ждёт новых суток UTC.",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "CIRCUIT_BREAKER_LOSSES",
+   "group": "Риск на сделку",
+   "label": "Стоп после убытков подряд",
+   "type": "int",
+   "default": 3,
+   "min": 0,
+   "max": 20,
+   "step": null,
+   "unit": "сделок",
+   "options": [],
+   "hint": "0 — выключено.",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "SYMBOL_COOLDOWN_HOURS",
+   "group": "Риск на сделку",
+   "label": "Пауза по монете после сделки",
+   "type": "float",
+   "default": 3.0,
+   "min": 0,
+   "max": 72,
+   "step": 0.5,
+   "unit": "ч",
+   "options": [],
+   "hint": "",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "MAX_DRAWDOWN_PERCENT",
+   "group": "Аварийная защита",
+   "label": "Предельная просадка",
+   "type": "pct",
+   "default": 0.2,
+   "min": 0.01,
+   "max": 0.5,
+   "step": 0.01,
+   "unit": "",
+   "options": [],
+   "hint": "От пика баланса. Бот закрывает всё и встаёт на паузу.",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "DRAWDOWN_HALT_HOURS",
+   "group": "Аварийная защита",
+   "label": "Пауза после остановки",
+   "type": "float",
+   "default": 4.0,
+   "min": 0,
+   "max": 72,
+   "step": null,
+   "unit": "ч",
+   "options": [],
+   "hint": "",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "DRAWDOWN_CONFIRM_CYCLES",
+   "group": "Аварийная защита",
+   "label": "Подтверждений до остановки",
+   "type": "int",
+   "default": 3,
+   "min": 1,
+   "max": 10,
+   "step": null,
+   "unit": "циклов",
+   "options": [],
+   "hint": "Защита от ложного срабатывания на резком проколе цены.",
+   "readonly": false,
+   "hot": true
+  },
+  {
+   "key": "ATR_SPIKE_MULT",
+   "group": "Аварийная защита",
+   "label": "Всплеск волатильности",
+   "type": "float",
+   "default": 3.0,
+   "min": 1.5,
+   "max": 10,
+   "step": 0.5,
+   "unit": "× ATR",
+   "options": [],
+   "hint": "Если волатильность выросла во столько раз — закрыть всё и пауза 1 ч.",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "ATR_SPIKE_LOOKBACK",
+   "group": "Аварийная защита",
+   "label": "Окно средней волатильности",
+   "type": "int",
+   "default": 20,
+   "min": 5,
+   "max": 200,
+   "step": null,
+   "unit": "свечей",
+   "options": [],
+   "hint": "",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "DRAWDOWN_SCALE_ENABLED",
+   "group": "Аварийная защита",
+   "label": "Уменьшать сделки при просадке",
+   "type": "bool",
+   "default": true,
+   "min": null,
+   "max": null,
+   "step": null,
+   "unit": "",
+   "options": [],
+   "hint": "",
+   "readonly": false,
+   "hot": true
+  },
+  {
+   "key": "DRAWDOWN_SCALE_THRESHOLD",
+   "group": "Аварийная защита",
+   "label": "С какой просадки уменьшать",
+   "type": "pct",
+   "default": 0.1,
+   "min": 0.01,
+   "max": 0.5,
+   "step": 0.01,
+   "unit": "",
+   "options": [],
+   "hint": "",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "DRAWDOWN_SCALE_FACTOR",
+   "group": "Аварийная защита",
+   "label": "Размер сделки при просадке",
+   "type": "pct",
+   "default": 0.5,
+   "min": 0.1,
+   "max": 1,
+   "step": 0.05,
+   "unit": "",
+   "options": [],
+   "hint": "0.5 — сделки вдвое меньше обычных.",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "MACRO_BLACKOUT_ENABLED",
+   "group": "Аварийная защита",
+   "label": "Пауза на макро-новостях",
+   "type": "bool",
+   "default": true,
+   "min": null,
+   "max": null,
+   "step": null,
+   "unit": "",
+   "options": [],
+   "hint": "Не входить за 30 мин до и после FOMC, CPI, NFP. Нужен ключ Finnhub.",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "LEVERAGE_MODE",
+   "group": "Плечо",
+   "label": "Режим плеча",
+   "type": "choice",
+   "default": "volatility",
+   "min": null,
+   "max": null,
+   "step": null,
+   "unit": "",
+   "options": [
+    {
+     "value": "fixed",
+     "label": "Фикс"
+    },
+    {
+     "value": "volatility",
+     "label": "По волатильности"
+    },
+    {
+     "value": "full",
+     "label": "Макс"
+    }
+   ],
+   "hint": "",
+   "readonly": false,
+   "hot": true
+  },
+  {
+   "key": "LEVERAGE",
+   "group": "Плечо",
+   "label": "Плечо в режиме «Фикс»",
+   "type": "int",
+   "default": 3,
+   "min": 1,
+   "max": 20,
+   "step": null,
+   "unit": "×",
+   "options": [],
+   "hint": "",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "LEVERAGE_MIN",
+   "group": "Плечо",
+   "label": "Минимальное плечо",
+   "type": "int",
+   "default": 1,
+   "min": 1,
+   "max": 20,
+   "step": null,
+   "unit": "×",
+   "options": [],
+   "hint": "",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "LEVERAGE_MAX",
+   "group": "Плечо",
+   "label": "Максимальное плечо",
+   "type": "int",
+   "default": 5,
+   "min": 1,
+   "max": 20,
+   "step": null,
+   "unit": "×",
+   "options": [],
+   "hint": "",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "LEVERAGE_TARGET_RISK",
+   "group": "Плечо",
+   "label": "Риск на одно движение ATR",
+   "type": "pct",
+   "default": 0.01,
+   "min": 0.001,
+   "max": 0.1,
+   "step": 0.001,
+   "unit": "",
+   "options": [],
+   "hint": "По нему подбирается плечо в режимах «По волатильности» и «Макс».",
+   "readonly": false,
+   "hot": true
+  },
+  {
+   "key": "LEVERAGE_DD_THRESHOLD",
+   "group": "Плечо",
+   "label": "Просадка, при которой плечо снижается",
+   "type": "pct",
+   "default": 0.15,
+   "min": 0.05,
+   "max": 0.5,
+   "step": 0.01,
+   "unit": "",
+   "options": [],
+   "hint": "В режиме «Макс» плечо падает до 30% от расчётного. Отдельно от предельной просадки.",
+   "readonly": false,
+   "hot": true
+  },
+  {
+   "key": "TRAILING_STOP_ATR_MULT",
+   "group": "Выход из сделки",
+   "label": "Отступ трейлинг-стопа",
+   "type": "float",
+   "default": 1.0,
+   "min": 0.2,
+   "max": 5,
+   "step": 0.1,
+   "unit": "× ATR",
+   "options": [],
+   "hint": "",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "PARTIAL_TP_ENABLED",
+   "group": "Выход из сделки",
+   "label": "Частичная фиксация прибыли",
+   "type": "bool",
+   "default": true,
+   "min": null,
+   "max": null,
+   "step": null,
+   "unit": "",
+   "options": [],
+   "hint": "",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "PARTIAL_TP_TRIGGER",
+   "group": "Выход из сделки",
+   "label": "Когда фиксировать",
+   "type": "pct",
+   "default": 0.6,
+   "min": 0.1,
+   "max": 0.95,
+   "step": 0.05,
+   "unit": "",
+   "options": [],
+   "hint": "Какую часть пути до тейк-профита должна пройти цена.",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "PARTIAL_TP_FRACTION",
+   "group": "Выход из сделки",
+   "label": "Какую часть закрывать",
+   "type": "pct",
+   "default": 0.5,
+   "min": 0.1,
+   "max": 0.9,
+   "step": 0.05,
+   "unit": "",
+   "options": [],
+   "hint": "",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "MIN_SIGNAL_CONFIDENCE",
+   "group": "Фильтры входа",
+   "label": "Мин. уверенность сигнала · Live",
+   "type": "float",
+   "default": 0.65,
+   "min": 0.4,
+   "max": 0.95,
+   "step": 0.01,
+   "unit": "",
+   "options": [],
+   "hint": "",
+   "readonly": false,
+   "hot": true
+  },
+  {
+   "key": "MIN_SIGNAL_CONFIDENCE_PAPER",
+   "group": "Фильтры входа",
+   "label": "Мин. уверенность сигнала · Paper",
+   "type": "float",
+   "default": 0.6,
+   "min": 0.4,
+   "max": 0.95,
+   "step": 0.01,
+   "unit": "",
+   "options": [],
+   "hint": "Ниже, чем в Live, чтобы быстрее копить сделки для обучения.",
+   "readonly": false,
+   "hot": true
+  },
+  {
+   "key": "MAX_CORRELATION",
+   "group": "Фильтры входа",
+   "label": "Макс. корреляция с открытыми · Live",
+   "type": "float",
+   "default": 0.7,
+   "min": 0,
+   "max": 1,
+   "step": 0.05,
+   "unit": "",
+   "options": [],
+   "hint": "0 — фильтр выключен.",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "MAX_CORRELATION_PAPER",
+   "group": "Фильтры входа",
+   "label": "Макс. корреляция с открытыми · Paper",
+   "type": "float",
+   "default": 0.85,
+   "min": 0,
+   "max": 1,
+   "step": 0.05,
+   "unit": "",
+   "options": [],
+   "hint": "",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "CORRELATION_WINDOW",
+   "group": "Фильтры входа",
+   "label": "Окно корреляции",
+   "type": "int",
+   "default": 50,
+   "min": 10,
+   "max": 500,
+   "step": null,
+   "unit": "свечей",
+   "options": [],
+   "hint": "",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "MIN_VOLUME_USDT",
+   "group": "Фильтры входа",
+   "label": "Мин. объём за 24 ч",
+   "type": "float",
+   "default": 1000000.0,
+   "min": 0,
+   "max": 10000000000,
+   "step": 100000,
+   "unit": "$",
+   "options": [],
+   "hint": "",
+   "readonly": false,
+   "hot": true
+  },
+  {
+   "key": "MAX_VOLUME_USDT",
+   "group": "Фильтры входа",
+   "label": "Макс. объём за 24 ч",
+   "type": "float",
+   "default": 0.0,
+   "min": 0,
+   "max": 100000000000,
+   "step": 1000000,
+   "unit": "$",
+   "options": [],
+   "hint": "0 — без ограничения. Для Altcoin отсекает BTC и ETH.",
+   "readonly": false,
+   "hot": true
+  },
+  {
+   "key": "MAX_SPREAD_PCT",
+   "group": "Фильтры входа",
+   "label": "Макс. спред",
+   "type": "float",
+   "default": 0.3,
+   "min": 0.01,
+   "max": 5,
+   "step": 0.01,
+   "unit": "%",
+   "options": [],
+   "hint": "",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "VOLUME_SPIKE_THRESHOLD",
+   "group": "Фильтры входа",
+   "label": "Порог всплеска объёма",
+   "type": "float",
+   "default": 2.5,
+   "min": 1.5,
+   "max": 6,
+   "step": 0.1,
+   "unit": "× среднего",
+   "options": [],
+   "hint": "",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "MODE",
+   "group": "AI и решения",
+   "label": "Кто принимает решение",
+   "type": "choice",
+   "default": "ai",
+   "min": null,
+   "max": null,
+   "step": null,
+   "unit": "",
+   "options": [
+    {
+     "value": "local",
+     "label": "Local"
+    },
+    {
+     "value": "ai",
+     "label": "AI"
+    },
+    {
+     "value": "dqn",
+     "label": "SAC"
+    },
+    {
+     "value": "hybrid",
+     "label": "Hybrid"
+    }
+   ],
+   "hint": "",
+   "readonly": false,
+   "hot": true
+  },
+  {
+   "key": "AI_PROVIDER",
+   "group": "AI и решения",
+   "label": "AI-провайдер",
+   "type": "choice",
+   "default": "auto",
+   "min": null,
+   "max": null,
+   "step": null,
+   "unit": "",
+   "options": [
+    {
+     "value": "auto",
+     "label": "Авто — по списку"
+    },
+    {
+     "value": "groq",
+     "label": "Groq"
+    },
+    {
+     "value": "gemini",
+     "label": "Gemini"
+    },
+    {
+     "value": "anthropic",
+     "label": "Claude"
+    },
+    {
+     "value": "deepseek",
+     "label": "DeepSeek"
+    },
+    {
+     "value": "openai",
+     "label": "OpenAI"
+    },
+    {
+     "value": "openrouter",
+     "label": "OpenRouter"
+    },
+    {
+     "value": "nvidia",
+     "label": "NVIDIA"
+    }
+   ],
+   "hint": "",
+   "readonly": false,
+   "hot": true
+  },
+  {
+   "key": "CHRONOS_ENABLED",
+   "group": "AI и решения",
+   "label": "Прогноз Chronos в режиме Hybrid",
+   "type": "bool",
+   "default": false,
+   "min": null,
+   "max": null,
+   "step": null,
+   "unit": "",
+   "options": [],
+   "hint": "Модель Amazon Chronos чуть повышает или понижает уверенность сигнала.",
+   "readonly": false,
+   "hot": true
+  },
+  {
+   "key": "AI_DAILY_BUDGET",
+   "group": "AI и решения",
+   "label": "AI-запросов в сутки",
+   "type": "int",
+   "default": 200,
+   "min": 0,
+   "max": 10000,
+   "step": null,
+   "unit": "",
+   "options": [],
+   "hint": "Сверх лимита — простой анализ настроения без AI.",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "AI_MAX_SYMBOLS",
+   "group": "AI и решения",
+   "label": "Монет в AI за цикл",
+   "type": "int",
+   "default": 30,
+   "min": 1,
+   "max": 100,
+   "step": null,
+   "unit": "",
+   "options": [],
+   "hint": "",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "ACTIVE_STRATEGY",
+   "group": "AI и решения",
+   "label": "Стратегия по умолчанию",
+   "type": "choice",
+   "default": "ema_crossover",
+   "min": null,
+   "max": null,
+   "step": null,
+   "unit": "",
+   "options": [
+    {
+     "value": "ema_crossover",
+     "label": "ema_crossover"
+    },
+    {
+     "value": "rsi_momentum",
+     "label": "rsi_momentum"
+    },
+    {
+     "value": "macd_crossover",
+     "label": "macd_crossover"
+    },
+    {
+     "value": "bollinger_bands",
+     "label": "bollinger_bands"
+    },
+    {
+     "value": "scalping",
+     "label": "scalping"
+    },
+    {
+     "value": "swing_trading",
+     "label": "swing_trading"
+    },
+    {
+     "value": "breakout",
+     "label": "breakout"
+    },
+    {
+     "value": "mean_reversion",
+     "label": "mean_reversion"
+    },
+    {
+     "value": "trend_following",
+     "label": "trend_following"
+    },
+    {
+     "value": "volume_spike",
+     "label": "volume_spike"
+    }
+   ],
+   "hint": "",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "LIVE_ALPHA_KILL_ENABLED",
+   "group": "Kill-switch стратегий",
+   "label": "Отключать убыточные стратегии",
+   "type": "bool",
+   "default": true,
+   "min": null,
+   "max": null,
+   "step": null,
+   "unit": "",
+   "options": [],
+   "hint": "В live стратегия выключается, если её результат хуже порога.",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "LIVE_ALPHA_KILL_MIN_TRADES",
+   "group": "Kill-switch стратегий",
+   "label": "Оценивать после",
+   "type": "int",
+   "default": 20,
+   "min": 5,
+   "max": 500,
+   "step": null,
+   "unit": "сделок",
+   "options": [],
+   "hint": "",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "LIVE_ALPHA_KILL_EV_THRESHOLD",
+   "group": "Kill-switch стратегий",
+   "label": "Порог среднего результата сделки",
+   "type": "float",
+   "default": -0.5,
+   "min": -10,
+   "max": 0,
+   "step": 0.1,
+   "unit": "",
+   "options": [],
+   "hint": "",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "NEWS_UPDATE_INTERVAL",
+   "group": "Новости и соцсети",
+   "label": "Обновлять новости каждые",
+   "type": "int",
+   "default": 900,
+   "min": 60,
+   "max": 86400,
+   "step": null,
+   "unit": "с",
+   "options": [],
+   "hint": "",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "TWITTER_MAX_RESULTS",
+   "group": "Новости и соцсети",
+   "label": "Твитов за запрос",
+   "type": "int",
+   "default": 10,
+   "min": 10,
+   "max": 100,
+   "step": null,
+   "unit": "",
+   "options": [],
+   "hint": "Меньше — экономнее тариф Basic.",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "TELEGRAM_SENTIMENT_CHANNELS",
+   "group": "Новости и соцсети",
+   "label": "Telegram-каналы для мониторинга",
+   "type": "str",
+   "default": "CryptoMoonAlerts,pumpsignalscrypto,memecoinsnews",
+   "min": null,
+   "max": null,
+   "step": null,
+   "unit": "",
+   "options": [],
+   "hint": "Через запятую, без @.",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "SENTIMENT_POLL_INTERVAL",
+   "group": "Новости и соцсети",
+   "label": "Опрашивать соцсети каждые",
+   "type": "int",
+   "default": 300,
+   "min": 60,
+   "max": 3600,
+   "step": null,
+   "unit": "с",
+   "options": [],
+   "hint": "",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "SENTIMENT_CACHE_TTL",
+   "group": "Новости и соцсети",
+   "label": "Хранить оценку настроения",
+   "type": "int",
+   "default": 600,
+   "min": 60,
+   "max": 7200,
+   "step": null,
+   "unit": "с",
+   "options": [],
+   "hint": "",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "SENTIMENT_BUY_THRESHOLD",
+   "group": "Новости и соцсети",
+   "label": "Порог покупки по настроению",
+   "type": "float",
+   "default": 0.4,
+   "min": 0,
+   "max": 1,
+   "step": 0.05,
+   "unit": "",
+   "options": [],
+   "hint": "",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "SENTIMENT_SELL_THRESHOLD",
+   "group": "Новости и соцсети",
+   "label": "Порог продажи по настроению",
+   "type": "float",
+   "default": -0.4,
+   "min": -1,
+   "max": 0,
+   "step": 0.05,
+   "unit": "",
+   "options": [],
+   "hint": "",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "SEASON_SWITCH_MODE",
+   "group": "Сезон рынка",
+   "label": "При смене сезона",
+   "type": "choice",
+   "default": "alert",
+   "min": null,
+   "max": null,
+   "step": null,
+   "unit": "",
+   "options": [
+    {
+     "value": "alert",
+     "label": "Спросить в Telegram"
+    },
+    {
+     "value": "auto",
+     "label": "Переключить самому"
+    }
+   ],
+   "hint": "",
+   "readonly": false,
+   "hot": true
+  },
+  {
+   "key": "SEASON_CHECK_INTERVAL_H",
+   "group": "Сезон рынка",
+   "label": "Проверять сезон каждые",
+   "type": "float",
+   "default": 4.0,
+   "min": 1,
+   "max": 48,
+   "step": null,
+   "unit": "ч",
+   "options": [],
+   "hint": "",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "ONLINE_LEARNING_MODE",
+   "group": "Обучение SAC и бэктест",
+   "label": "Автообучение",
+   "type": "choice",
+   "default": "periodic",
+   "min": null,
+   "max": null,
+   "step": null,
+   "unit": "",
+   "options": [
+    {
+     "value": "disabled",
+     "label": "Выключено"
+    },
+    {
+     "value": "periodic",
+     "label": "Периодически"
+    },
+    {
+     "value": "online",
+     "label": "После каждой сделки"
+    },
+    {
+     "value": "hybrid",
+     "label": "Периодически + веса стратегий"
+    }
+   ],
+   "hint": "«После каждой сделки» — рискованно, только для экспериментов.",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "ONLINE_LEARNING_TRIGGER",
+   "group": "Обучение SAC и бэктест",
+   "label": "Переобучать каждые",
+   "type": "int",
+   "default": 50,
+   "min": 10,
+   "max": 1000,
+   "step": null,
+   "unit": "сделок",
+   "options": [],
+   "hint": "",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "ONLINE_LEARNING_GRADIENT_STEPS",
+   "group": "Обучение SAC и бэктест",
+   "label": "Шагов за онлайн-обновление",
+   "type": "int",
+   "default": 50,
+   "min": 1,
+   "max": 50,
+   "step": null,
+   "unit": "",
+   "options": [],
+   "hint": "",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "TRAIN_TOP_N",
+   "group": "Обучение SAC и бэктест",
+   "label": "Монет для обучения",
+   "type": "int",
+   "default": 20,
+   "min": 1,
+   "max": 100,
+   "step": null,
+   "unit": "",
+   "options": [],
+   "hint": "",
+   "readonly": false,
+   "hot": true
+  },
+  {
+   "key": "TRAIN_MIN_CANDLES",
+   "group": "Обучение SAC и бэктест",
+   "label": "Минимум свечей на монету",
+   "type": "int",
+   "default": 2880,
+   "min": 500,
+   "max": 50000,
+   "step": 100,
+   "unit": "",
+   "options": [],
+   "hint": "",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "TOTAL_TIMESTEPS",
+   "group": "Обучение SAC и бэктест",
+   "label": "Шагов обучения",
+   "type": "int",
+   "default": 50000,
+   "min": 1000,
+   "max": 5000000,
+   "step": 1000,
+   "unit": "",
+   "options": [],
+   "hint": "",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "EXPERIENCES_MAX",
+   "group": "Обучение SAC и бэктест",
+   "label": "Хранить записей опыта",
+   "type": "int",
+   "default": 10000,
+   "min": 1000,
+   "max": 1000000,
+   "step": 1000,
+   "unit": "",
+   "options": [],
+   "hint": "",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "BT_HOLDOUT_RATIO",
+   "group": "Обучение SAC и бэктест",
+   "label": "Отложенная выборка в бэктесте",
+   "type": "pct",
+   "default": 0.2,
+   "min": 0.05,
+   "max": 0.5,
+   "step": 0.05,
+   "unit": "",
+   "options": [],
+   "hint": "Последняя часть истории, на которой проверяется стратегия.",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "SAC_MODEL_PATH",
+   "group": "Обучение SAC и бэктест",
+   "label": "Файл модели SAC",
+   "type": "str",
+   "default": "models/sac_model.zip",
+   "min": null,
+   "max": null,
+   "step": null,
+   "unit": "",
+   "options": [],
+   "hint": "",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "SILENT_DEATH_HOURS",
+   "group": "Мониторинг и логи",
+   "label": "Тревога «бот молчит» через",
+   "type": "float",
+   "default": 6.0,
+   "min": 0.5,
+   "max": 48,
+   "step": 0.5,
+   "unit": "ч",
+   "options": [],
+   "hint": "",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "REGIME_CACHE_TTL",
+   "group": "Мониторинг и логи",
+   "label": "Кэш режима рынка",
+   "type": "int",
+   "default": 300,
+   "min": 30,
+   "max": 3600,
+   "step": null,
+   "unit": "с",
+   "options": [],
+   "hint": "",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "LOG_LEVEL",
+   "group": "Мониторинг и логи",
+   "label": "Подробность логов",
+   "type": "choice",
+   "default": "INFO",
+   "min": null,
+   "max": null,
+   "step": null,
+   "unit": "",
+   "options": [
+    {
+     "value": "DEBUG",
+     "label": "DEBUG"
+    },
+    {
+     "value": "INFO",
+     "label": "INFO"
+    },
+    {
+     "value": "WARNING",
+     "label": "WARNING"
+    },
+    {
+     "value": "ERROR",
+     "label": "ERROR"
+    }
+   ],
+   "hint": "",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "JSON_LOGS",
+   "group": "Мониторинг и логи",
+   "label": "Логи в формате JSON",
+   "type": "bool",
+   "default": false,
+   "min": null,
+   "max": null,
+   "step": null,
+   "unit": "",
+   "options": [],
+   "hint": "",
+   "readonly": false,
+   "hot": false
+  },
+  {
+   "key": "REDIS_URL",
+   "group": "Сервер",
+   "label": "Адрес Redis",
+   "type": "str",
+   "default": "redis://localhost:6379/0",
+   "min": null,
+   "max": null,
+   "step": null,
+   "unit": "",
+   "options": [],
+   "hint": "Меняется только в .env: настройки сами хранятся в Redis.",
+   "readonly": true,
+   "hot": false
+  },
+  {
+   "key": "HEALTH_PORT",
+   "group": "Сервер",
+   "label": "Порт health-сервера",
+   "type": "int",
+   "default": 8080,
+   "min": null,
+   "max": null,
+   "step": null,
+   "unit": "",
+   "options": [],
+   "hint": "Меняется только в .env и docker-compose.",
+   "readonly": true,
+   "hot": false
+  },
+  {
+   "key": "DASHBOARD_USER",
+   "group": "Сервер",
+   "label": "Логин дашборда",
+   "type": "str",
+   "default": "admin",
+   "min": null,
+   "max": null,
+   "step": null,
+   "unit": "",
+   "options": [],
+   "hint": "Меняется в .env, затем make htpasswd.",
+   "readonly": true,
+   "hot": false
+  }
+ ],
+ "config": {
+  "MARKET_TYPE": {
+   "value": "linear",
+   "source": "default"
+  },
+  "TIMEFRAME": {
+   "value": "15m",
+   "source": "default"
+  },
+  "TRADING_INTERVAL": {
+   "value": 30,
+   "source": "default"
+  },
+  "SCAN_TOP_N": {
+   "value": 20,
+   "source": "default"
+  },
+  "TRADING_SYMBOL": {
+   "value": "BTC/USDT",
+   "source": "default"
+  },
+  "TRADING_HOURS": {
+   "value": "",
+   "source": "default"
+  },
+  "AUTO_EXECUTE": {
+   "value": false,
+   "source": "default"
+  },
+  "TELEGRAM_CONFIRM_TIMEOUT": {
+   "value": 60,
+   "source": "default"
+  },
+  "INITIAL_BALANCE": {
+   "value": 10000.0,
+   "source": "default"
+  },
+  "COMMISSION_RATE": {
+   "value": 0.001,
+   "source": "default"
+  },
+  "RISK_PER_TRADE": {
+   "value": 0.02,
+   "source": "default"
+  },
+  "MAX_POSITIONS": {
+   "value": 3,
+   "source": "default"
+  },
+  "MAX_POSITION_SIZE": {
+   "value": 0.1,
+   "source": "default"
+  },
+  "STOP_LOSS_PERCENT": {
+   "value": 0.05,
+   "source": "default"
+  },
+  "MAX_PORTFOLIO_EXPOSURE": {
+   "value": 1.5,
+   "source": "default"
+  },
+  "DAILY_LOSS_LIMIT": {
+   "value": 0.05,
+   "source": "default"
+  },
+  "CIRCUIT_BREAKER_LOSSES": {
+   "value": 3,
+   "source": "default"
+  },
+  "SYMBOL_COOLDOWN_HOURS": {
+   "value": 3.0,
+   "source": "default"
+  },
+  "MAX_DRAWDOWN_PERCENT": {
+   "value": 0.2,
+   "source": "default"
+  },
+  "DRAWDOWN_HALT_HOURS": {
+   "value": 4.0,
+   "source": "default"
+  },
+  "DRAWDOWN_CONFIRM_CYCLES": {
+   "value": 3,
+   "source": "default"
+  },
+  "ATR_SPIKE_MULT": {
+   "value": 3.0,
+   "source": "default"
+  },
+  "ATR_SPIKE_LOOKBACK": {
+   "value": 20,
+   "source": "default"
+  },
+  "DRAWDOWN_SCALE_ENABLED": {
+   "value": true,
+   "source": "default"
+  },
+  "DRAWDOWN_SCALE_THRESHOLD": {
+   "value": 0.1,
+   "source": "default"
+  },
+  "DRAWDOWN_SCALE_FACTOR": {
+   "value": 0.5,
+   "source": "default"
+  },
+  "MACRO_BLACKOUT_ENABLED": {
+   "value": true,
+   "source": "default"
+  },
+  "LEVERAGE_MODE": {
+   "value": "volatility",
+   "source": "default"
+  },
+  "LEVERAGE": {
+   "value": 3,
+   "source": "default"
+  },
+  "LEVERAGE_MIN": {
+   "value": 1,
+   "source": "default"
+  },
+  "LEVERAGE_MAX": {
+   "value": 5,
+   "source": "default"
+  },
+  "LEVERAGE_TARGET_RISK": {
+   "value": 0.01,
+   "source": "default"
+  },
+  "LEVERAGE_DD_THRESHOLD": {
+   "value": 0.15,
+   "source": "default"
+  },
+  "TRAILING_STOP_ATR_MULT": {
+   "value": 1.0,
+   "source": "default"
+  },
+  "PARTIAL_TP_ENABLED": {
+   "value": true,
+   "source": "default"
+  },
+  "PARTIAL_TP_TRIGGER": {
+   "value": 0.6,
+   "source": "default"
+  },
+  "PARTIAL_TP_FRACTION": {
+   "value": 0.5,
+   "source": "default"
+  },
+  "MIN_SIGNAL_CONFIDENCE": {
+   "value": 0.65,
+   "source": "default"
+  },
+  "MIN_SIGNAL_CONFIDENCE_PAPER": {
+   "value": 0.6,
+   "source": "default"
+  },
+  "MAX_CORRELATION": {
+   "value": 0.7,
+   "source": "default"
+  },
+  "MAX_CORRELATION_PAPER": {
+   "value": 0.85,
+   "source": "default"
+  },
+  "CORRELATION_WINDOW": {
+   "value": 50,
+   "source": "default"
+  },
+  "MIN_VOLUME_USDT": {
+   "value": 1000000.0,
+   "source": "default"
+  },
+  "MAX_VOLUME_USDT": {
+   "value": 0.0,
+   "source": "default"
+  },
+  "MAX_SPREAD_PCT": {
+   "value": 0.3,
+   "source": "default"
+  },
+  "VOLUME_SPIKE_THRESHOLD": {
+   "value": 2.5,
+   "source": "default"
+  },
+  "MODE": {
+   "value": "ai",
+   "source": "default"
+  },
+  "AI_PROVIDER": {
+   "value": "auto",
+   "source": "default"
+  },
+  "CHRONOS_ENABLED": {
+   "value": false,
+   "source": "default"
+  },
+  "AI_DAILY_BUDGET": {
+   "value": 200,
+   "source": "default"
+  },
+  "AI_MAX_SYMBOLS": {
+   "value": 30,
+   "source": "default"
+  },
+  "ACTIVE_STRATEGY": {
+   "value": "ema_crossover",
+   "source": "default"
+  },
+  "LIVE_ALPHA_KILL_ENABLED": {
+   "value": true,
+   "source": "default"
+  },
+  "LIVE_ALPHA_KILL_MIN_TRADES": {
+   "value": 20,
+   "source": "default"
+  },
+  "LIVE_ALPHA_KILL_EV_THRESHOLD": {
+   "value": -0.5,
+   "source": "default"
+  },
+  "NEWS_UPDATE_INTERVAL": {
+   "value": 900,
+   "source": "default"
+  },
+  "TWITTER_MAX_RESULTS": {
+   "value": 10,
+   "source": "default"
+  },
+  "TELEGRAM_SENTIMENT_CHANNELS": {
+   "value": "CryptoMoonAlerts,pumpsignalscrypto,memecoinsnews",
+   "source": "default"
+  },
+  "SENTIMENT_POLL_INTERVAL": {
+   "value": 300,
+   "source": "default"
+  },
+  "SENTIMENT_CACHE_TTL": {
+   "value": 600,
+   "source": "default"
+  },
+  "SENTIMENT_BUY_THRESHOLD": {
+   "value": 0.4,
+   "source": "default"
+  },
+  "SENTIMENT_SELL_THRESHOLD": {
+   "value": -0.4,
+   "source": "default"
+  },
+  "SEASON_SWITCH_MODE": {
+   "value": "alert",
+   "source": "default"
+  },
+  "SEASON_CHECK_INTERVAL_H": {
+   "value": 4.0,
+   "source": "default"
+  },
+  "ONLINE_LEARNING_MODE": {
+   "value": "periodic",
+   "source": "default"
+  },
+  "ONLINE_LEARNING_TRIGGER": {
+   "value": 50,
+   "source": "default"
+  },
+  "ONLINE_LEARNING_GRADIENT_STEPS": {
+   "value": 50,
+   "source": "default"
+  },
+  "TRAIN_TOP_N": {
+   "value": 20,
+   "source": "default"
+  },
+  "TRAIN_MIN_CANDLES": {
+   "value": 2880,
+   "source": "default"
+  },
+  "TOTAL_TIMESTEPS": {
+   "value": 50000,
+   "source": "default"
+  },
+  "EXPERIENCES_MAX": {
+   "value": 10000,
+   "source": "default"
+  },
+  "BT_HOLDOUT_RATIO": {
+   "value": 0.2,
+   "source": "default"
+  },
+  "SAC_MODEL_PATH": {
+   "value": "models/sac_model.zip",
+   "source": "default"
+  },
+  "SILENT_DEATH_HOURS": {
+   "value": 6.0,
+   "source": "default"
+  },
+  "REGIME_CACHE_TTL": {
+   "value": 300,
+   "source": "default"
+  },
+  "LOG_LEVEL": {
+   "value": "INFO",
+   "source": "default"
+  },
+  "JSON_LOGS": {
+   "value": false,
+   "source": "default"
+  },
+  "REDIS_URL": {
+   "value": "redis://localhost:6379/0",
+   "source": "default"
+  },
+  "HEALTH_PORT": {
+   "value": 8081,
+   "source": "default"
+  },
+  "DASHBOARD_USER": {
+   "value": "admin",
+   "source": "default"
+  }
+ },
+ "secrets": [
+  {
+   "service": "bybit",
+   "name": "Bybit",
+   "group": "Биржа",
+   "fields": [
+    {
+     "env": "BYBIT_API_KEY",
+     "label": "API Key",
+     "secret": true,
+     "optional": false,
+     "set": false,
+     "last4": null,
+     "value": null
+    },
+    {
+     "env": "BYBIT_API_SECRET",
+     "label": "API Secret",
+     "secret": true,
+     "optional": false,
+     "set": false,
+     "last4": null,
+     "value": null
+    }
+   ],
+   "model": null,
+   "status": "unset",
+   "message": "",
+   "checked_at": null
+  },
+  {
+   "service": "groq",
+   "name": "Groq",
+   "group": "AI-модели",
+   "fields": [
+    {
+     "env": "GROQ_API_KEY",
+     "label": "API Key",
+     "secret": true,
+     "optional": false,
+     "set": false,
+     "last4": null,
+     "value": null
+    }
+   ],
+   "model": {
+    "env": "GROQ_MODEL",
+    "value": null
+   },
+   "status": "unset",
+   "message": "",
+   "checked_at": null
+  },
+  {
+   "service": "gemini",
+   "name": "Gemini",
+   "group": "AI-модели",
+   "fields": [
+    {
+     "env": "GEMINI_API_KEY",
+     "label": "API Key",
+     "secret": true,
+     "optional": false,
+     "set": false,
+     "last4": null,
+     "value": null
+    }
+   ],
+   "model": {
+    "env": "GEMINI_MODEL",
+    "value": null
+   },
+   "status": "unset",
+   "message": "",
+   "checked_at": null
+  },
+  {
+   "service": "anthropic",
+   "name": "Claude",
+   "group": "AI-модели",
+   "fields": [
+    {
+     "env": "ANTHROPIC_API_KEY",
+     "label": "API Key",
+     "secret": true,
+     "optional": false,
+     "set": false,
+     "last4": null,
+     "value": null
+    }
+   ],
+   "model": {
+    "env": "AI_MODEL",
+    "value": null
+   },
+   "status": "unset",
+   "message": "",
+   "checked_at": null
+  },
+  {
+   "service": "deepseek",
+   "name": "DeepSeek",
+   "group": "AI-модели",
+   "fields": [
+    {
+     "env": "DEEPSEEK_API_KEY",
+     "label": "API Key",
+     "secret": true,
+     "optional": false,
+     "set": false,
+     "last4": null,
+     "value": null
+    }
+   ],
+   "model": {
+    "env": "DEEPSEEK_MODEL",
+    "value": null
+   },
+   "status": "unset",
+   "message": "",
+   "checked_at": null
+  },
+  {
+   "service": "openai",
+   "name": "OpenAI",
+   "group": "AI-модели",
+   "fields": [
+    {
+     "env": "OPENAI_API_KEY",
+     "label": "API Key",
+     "secret": true,
+     "optional": false,
+     "set": false,
+     "last4": null,
+     "value": null
+    }
+   ],
+   "model": {
+    "env": "OPENAI_MODEL",
+    "value": null
+   },
+   "status": "unset",
+   "message": "",
+   "checked_at": null
+  },
+  {
+   "service": "openrouter",
+   "name": "OpenRouter",
+   "group": "AI-модели",
+   "fields": [
+    {
+     "env": "OPENROUTER_API_KEY",
+     "label": "API Key",
+     "secret": true,
+     "optional": false,
+     "set": false,
+     "last4": null,
+     "value": null
+    }
+   ],
+   "model": {
+    "env": "OPENROUTER_MODEL",
+    "value": null
+   },
+   "status": "unset",
+   "message": "",
+   "checked_at": null
+  },
+  {
+   "service": "nvidia",
+   "name": "NVIDIA",
+   "group": "AI-модели",
+   "fields": [
+    {
+     "env": "NVIDIA_API_KEY",
+     "label": "API Key",
+     "secret": true,
+     "optional": false,
+     "set": false,
+     "last4": null,
+     "value": null
+    }
+   ],
+   "model": {
+    "env": "NVIDIA_MODEL",
+    "value": null
+   },
+   "status": "unset",
+   "message": "",
+   "checked_at": null
+  },
+  {
+   "service": "telegram",
+   "name": "Telegram-бот",
+   "group": "Уведомления",
+   "fields": [
+    {
+     "env": "TELEGRAM_BOT_TOKEN",
+     "label": "Токен бота",
+     "secret": true,
+     "optional": false,
+     "set": false,
+     "last4": null,
+     "value": null
+    },
+    {
+     "env": "TELEGRAM_CHAT_ID",
+     "label": "Ваш chat_id",
+     "secret": false,
+     "optional": false,
+     "set": false,
+     "last4": null,
+     "value": null
+    }
+   ],
+   "model": null,
+   "status": "unset",
+   "message": "",
+   "checked_at": null
+  },
+  {
+   "service": "news",
+   "name": "NewsAPI",
+   "group": "Данные и соцсети",
+   "fields": [
+    {
+     "env": "NEWS_API_KEY",
+     "label": "API Key",
+     "secret": true,
+     "optional": false,
+     "set": false,
+     "last4": null,
+     "value": null
+    }
+   ],
+   "model": null,
+   "status": "unset",
+   "message": "",
+   "checked_at": null
+  },
+  {
+   "service": "finnhub",
+   "name": "Finnhub",
+   "group": "Данные и соцсети",
+   "fields": [
+    {
+     "env": "FINNHUB_API_KEY",
+     "label": "API Key",
+     "secret": true,
+     "optional": false,
+     "set": false,
+     "last4": null,
+     "value": null
+    }
+   ],
+   "model": null,
+   "status": "unset",
+   "message": "",
+   "checked_at": null
+  },
+  {
+   "service": "glassnode",
+   "name": "Glassnode",
+   "group": "Данные и соцсети",
+   "fields": [
+    {
+     "env": "GLASSNODE_API_KEY",
+     "label": "API Key",
+     "secret": true,
+     "optional": false,
+     "set": false,
+     "last4": null,
+     "value": null
+    }
+   ],
+   "model": null,
+   "status": "unset",
+   "message": "",
+   "checked_at": null
+  },
+  {
+   "service": "reddit",
+   "name": "Reddit",
+   "group": "Данные и соцсети",
+   "fields": [
+    {
+     "env": "REDDIT_CLIENT_ID",
+     "label": "Client ID",
+     "secret": false,
+     "optional": false,
+     "set": false,
+     "last4": null,
+     "value": null
+    },
+    {
+     "env": "REDDIT_CLIENT_SECRET",
+     "label": "Client Secret",
+     "secret": true,
+     "optional": false,
+     "set": false,
+     "last4": null,
+     "value": null
+    },
+    {
+     "env": "REDDIT_USER_AGENT",
+     "label": "User-Agent",
+     "secret": false,
+     "optional": true,
+     "set": false,
+     "last4": null,
+     "value": null
+    }
+   ],
+   "model": null,
+   "status": "unset",
+   "message": "",
+   "checked_at": null
+  },
+  {
+   "service": "twitter",
+   "name": "Twitter / X",
+   "group": "Данные и соцсети",
+   "fields": [
+    {
+     "env": "TWITTER_BEARER_TOKEN",
+     "label": "Bearer Token",
+     "secret": true,
+     "optional": true,
+     "set": false,
+     "last4": null,
+     "value": null
+    },
+    {
+     "env": "TWSCRAPE_ACCOUNTS",
+     "label": "Аккаунты twscrape",
+     "secret": true,
+     "optional": true,
+     "set": false,
+     "last4": null,
+     "value": null
+    }
+   ],
+   "model": null,
+   "status": "unset",
+   "message": "",
+   "checked_at": null
+  },
+  {
+   "service": "telethon",
+   "name": "Памп-каналы Telegram",
+   "group": "Данные и соцсети",
+   "fields": [
+    {
+     "env": "TELEGRAM_SENTIMENT_API_ID",
+     "label": "API ID",
+     "secret": false,
+     "optional": false,
+     "set": false,
+     "last4": null,
+     "value": null
+    },
+    {
+     "env": "TELEGRAM_SENTIMENT_API_HASH",
+     "label": "API Hash",
+     "secret": true,
+     "optional": false,
+     "set": false,
+     "last4": null,
+     "value": null
+    },
+    {
+     "env": "TELEGRAM_SENTIMENT_PHONE",
+     "label": "Телефон",
+     "secret": false,
+     "optional": false,
+     "set": false,
+     "last4": null,
+     "value": null
+    }
+   ],
+   "model": null,
+   "status": "unset",
+   "message": "",
+   "checked_at": null
+  },
+  {
+   "service": "pumpportal",
+   "name": "PumpPortal",
+   "group": "Данные и соцсети",
+   "fields": [
+    {
+     "env": "PUMPPORTAL_API_KEY",
+     "label": "API Key",
+     "secret": true,
+     "optional": false,
+     "set": false,
+     "last4": null,
+     "value": null
+    }
+   ],
+   "model": null,
+   "status": "unset",
+   "message": "",
+   "checked_at": null
+  },
+  {
+   "service": "server",
+   "name": "Пароли и PIN",
+   "group": "Сервер и доступ",
+   "fields": [
+    {
+     "env": "TRADING_MODE_PIN",
+     "label": "PIN для перехода в Live",
+     "secret": true,
+     "optional": true,
+     "set": false,
+     "last4": null,
+     "value": null
+    },
+    {
+     "env": "REDIS_PASSWORD",
+     "label": "Пароль Redis",
+     "secret": true,
+     "optional": true,
+     "set": false,
+     "last4": null,
+     "value": null
+    },
+    {
+     "env": "DASHBOARD_API_KEY",
+     "label": "API-ключ дашборда",
+     "secret": true,
+     "optional": true,
+     "set": false,
+     "last4": null,
+     "value": null
+    },
+    {
+     "env": "ALERTMANAGER_WEBHOOK_SECRET",
+     "label": "Секрет вебхука Alertmanager",
+     "secret": true,
+     "optional": true,
+     "set": false,
+     "last4": null,
+     "value": null
+    }
+   ],
+   "model": null,
+   "status": "unset",
+   "message": "",
+   "checked_at": null
+  }
+ ],
+ "strategies": [
+  {
+   "name": "ema_crossover",
+   "enabled": true,
+   "backtest": {
+    "win_rate": 0.3395,
+    "trades": 2931,
+    "sharpe": -0.1233
+   },
+   "live": null
+  },
+  {
+   "name": "rsi_momentum",
+   "enabled": true,
+   "backtest": {
+    "win_rate": 0.365,
+    "trades": 2808,
+    "sharpe": -0.1005
+   },
+   "live": null
+  },
+  {
+   "name": "macd_crossover",
+   "enabled": true,
+   "backtest": {
+    "win_rate": 0.336,
+    "trades": 3937,
+    "sharpe": -0.1397
+   },
+   "live": null
+  },
+  {
+   "name": "bollinger_bands",
+   "enabled": true,
+   "backtest": {
+    "win_rate": 0.3808,
+    "trades": 4259,
+    "sharpe": -0.0915
+   },
+   "live": null
+  },
+  {
+   "name": "scalping",
+   "enabled": true,
+   "backtest": {
+    "win_rate": 0.4,
+    "trades": 10,
+    "sharpe": 0.045
+   },
+   "live": null
+  },
+  {
+   "name": "swing_trading",
+   "enabled": true,
+   "backtest": {
+    "win_rate": 0.3341,
+    "trades": 5082,
+    "sharpe": -0.0929
+   },
+   "live": null
+  },
+  {
+   "name": "breakout",
+   "enabled": true,
+   "backtest": {
+    "win_rate": 0.3259,
+    "trades": 4526,
+    "sharpe": -0.1229
+   },
+   "live": null
+  },
+  {
+   "name": "mean_reversion",
+   "enabled": true,
+   "backtest": {
+    "win_rate": 0.3708,
+    "trades": 2257,
+    "sharpe": -0.1096
+   },
+   "live": null
+  },
+  {
+   "name": "trend_following",
+   "enabled": true,
+   "backtest": {
+    "win_rate": 0.3335,
+    "trades": 5017,
+    "sharpe": -0.0904
+   },
+   "live": null
+  },
+  {
+   "name": "volume_spike",
+   "enabled": true,
+   "backtest": {
+    "win_rate": 0.3292,
+    "trades": 3153,
+    "sharpe": -0.1518
+   },
+   "live": null
+  },
+  {
+   "name": "volume_spike_bluechip",
+   "enabled": true,
+   "backtest": {
+    "win_rate": 0.3234,
+    "trades": 4112,
+    "sharpe": -0.1462
+   },
+   "live": null
+  },
+  {
+   "name": "volume_spike_altcoin",
+   "enabled": true,
+   "backtest": {
+    "win_rate": 0.3285,
+    "trades": 2484,
+    "sharpe": -0.1361
+   },
+   "live": null
+  },
+  {
+   "name": "volume_spike_meme",
+   "enabled": true,
+   "backtest": {
+    "win_rate": 0.3416,
+    "trades": 1007,
+    "sharpe": -0.0933
+   },
+   "live": null
+  },
+  {
+   "name": "momentum_burst",
+   "enabled": true,
+   "backtest": {
+    "win_rate": 0.3667,
+    "trades": 150,
+    "sharpe": -0.0403
+   },
+   "live": null
+  },
+  {
+   "name": "pump_exit",
+   "enabled": true,
+   "backtest": {
+    "win_rate": 0.3217,
+    "trades": 572,
+    "sharpe": -0.1364
+   },
+   "live": null
+  },
+  {
+   "name": "sentiment",
+   "enabled": true,
+   "backtest": {
+    "win_rate": 0.0,
+    "trades": 0,
+    "sharpe": 0.0
+   },
+   "live": null
+  },
+  {
+   "name": "support_resistance",
+   "enabled": true,
+   "backtest": {
+    "win_rate": 0.3629,
+    "trades": 3006,
+    "sharpe": -0.1284
+   },
+   "live": null
+  },
+  {
+   "name": "fibonacci_retracement",
+   "enabled": true,
+   "backtest": {
+    "win_rate": 0.3786,
+    "trades": 1619,
+    "sharpe": -0.0531
+   },
+   "live": null
+  },
+  {
+   "name": "cvd_divergence",
+   "enabled": true,
+   "backtest": {
+    "win_rate": 0.3756,
+    "trades": 1158,
+    "sharpe": -0.1006
+   },
+   "live": null
+  },
+  {
+   "name": "fair_value_gap",
+   "enabled": true,
+   "backtest": {
+    "win_rate": 0.35,
+    "trades": 3057,
+    "sharpe": -0.0861
+   },
+   "live": null
+  },
+  {
+   "name": "inverse_fair_value_gap",
+   "enabled": true,
+   "backtest": {
+    "win_rate": 0.3453,
+    "trades": 2415,
+    "sharpe": -0.1131
+   },
+   "live": null
+  },
+  {
+   "name": "liquidity_sweep",
+   "enabled": true,
+   "backtest": {
+    "win_rate": 0.3924,
+    "trades": 1771,
+    "sharpe": -0.0516
+   },
+   "live": null
+  },
+  {
+   "name": "amd",
+   "enabled": true,
+   "backtest": {
+    "win_rate": 0.4068,
+    "trades": 295,
+    "sharpe": -0.001
+   },
+   "live": null
+  }
+ ]
+}
