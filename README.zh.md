@@ -245,14 +245,24 @@ cp .env.example .env        # 填写密钥 — 参见「配置」一节
 make setup                  # 首次启动:构建、htpasswd、docker compose up
 ```
 
-### 本地启动
+### 本地启动（不使用 Docker）
+
+需要 Python 3.11、Redis 和 Node.js 20+（用于应用）。
 
 ```bash
 python -m venv venv && source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env
-python supervisor.py
+cp .env.example .env                              # 填写密钥，PAPER_TRADING=true
+# Redis: macOS — brew install redis && brew services start redis
+#        Linux — sudo apt install redis-server
+#        任意装有 Docker 的系统 — docker run -d -p 6379:6379 redis:7-alpine
+make webapp                                       # 构建应用: cd webapp && npm ci && npm run build
+python supervisor.py --with-dashboard             # 或: make local
 ```
+
+机器人和仪表盘会自行读取 `.env`（环境变量优先）。应用地址为浏览器中的 http://localhost:8080/app/；在桌面应用中将服务器填写为 `http://localhost:8080`。不加 `--with-dashboard` 时只启动机器人。
+
+Telegram MiniApp 只能通过公网 https 地址打开。在本机可以使用隧道，例如 `cloudflared tunnel --url http://localhost:8080`：把它的地址加上 `/app/` 填入 `WEBAPP_URL` 并重启机器人。在服务器上，`docker compose` 会完成这一切——只需要 https 和 `WEBAPP_URL`。
 
 ### Paper trading 最小 `.env` 配置
 
@@ -759,6 +769,7 @@ make ai-isolation       # AI 层是否在裸指标基础上带来额外 edge(会
 | `make live-divergence` | 实盘 vs 回测执行对比 |
 | `make ai-isolation` | 隔离评估 AI 层的贡献 |
 | `make paper` / `make paper-ai` | Paper trading(本地 / AI 模式) |
+| `make local` / `make webapp` | 不使用 Docker:在本机运行机器人 + 仪表盘 + 应用 / 构建应用 |
 | `make live` | 实盘交易 |
 | `make test` / `make lint` / `make fmt` | pytest / ruff / 代码格式化 |
 | `make htpasswd` | 生成 nginx basic auth 密码 |

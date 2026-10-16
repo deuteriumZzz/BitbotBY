@@ -249,14 +249,24 @@ cp .env.example .env        # Schlüssel eintragen — siehe Abschnitt „Konfig
 make setup                  # Erststart: Build, htpasswd, docker compose up
 ```
 
-### Lokaler Start
+### Lokaler Start (ohne Docker)
+
+Benötigt werden Python 3.11, Redis und Node.js 20+ (für die App).
 
 ```bash
 python -m venv venv && source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env
-python supervisor.py
+cp .env.example .env                              # Schlüssel eintragen, PAPER_TRADING=true
+# Redis: macOS — brew install redis && brew services start redis
+#        Linux — sudo apt install redis-server
+#        jedes OS mit Docker — docker run -d -p 6379:6379 redis:7-alpine
+make webapp                                       # App bauen: cd webapp && npm ci && npm run build
+python supervisor.py --with-dashboard             # oder: make local
 ```
+
+Bot und Dashboard lesen `.env` selbst (Umgebungsvariablen haben Vorrang). Die App läuft unter http://localhost:8080/app/ im Browser; in der Desktop-App `http://localhost:8080` als Server eintragen. Ohne `--with-dashboard` startet nur der Bot.
+
+Die Telegram-MiniApp öffnet sich nur über eine öffentliche https-Adresse. Vom eigenen Rechner aus genügt ein Tunnel, z. B. `cloudflared tunnel --url http://localhost:8080`: dessen Adresse mit `/app/` in `WEBAPP_URL` eintragen und den Bot neu starten. Auf einem Server erledigt `docker compose` das alles — nötig sind nur https und `WEBAPP_URL`.
 
 ### Minimales `.env` für Paper Trading
 
@@ -769,6 +779,7 @@ Signal, länger zu beobachten, nicht die Prüfung als bestanden zu betrachten.
 | `make live-divergence` | Vergleich Live- vs. Backtest-Ausführung |
 | `make ai-isolation` | Isolierung des Beitrags des KI-Layers |
 | `make paper` / `make paper-ai` | Paper Trading (Local-/KI-Modus) |
+| `make local` / `make webapp` | Ohne Docker: Bot + Dashboard + App auf diesem Rechner / App bauen |
 | `make live` | Live-Handel |
 | `make test` / `make lint` / `make fmt` | pytest / ruff / Formatierung |
 | `make htpasswd` | Passwort-Generierung für nginx Basic Auth |

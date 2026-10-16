@@ -1,4 +1,4 @@
-.PHONY: train train-long train-docker tune tune-bluechip tune-altcoin retrain backtest backtest-eth alpha-report live-divergence ai-isolation paper paper-ai live test lint fmt up down logs htpasswd
+.PHONY: train train-long train-docker tune tune-bluechip tune-altcoin retrain backtest backtest-eth alpha-report live-divergence ai-isolation paper paper-ai live test lint fmt up down logs htpasswd local webapp
 
 # ── Training ───────────────────────────────────────────────────────────────────
 train:
@@ -72,6 +72,14 @@ paper:
 paper-ai:
 	@echo ">>> Starting bot in PAPER TRADING + AI mode..."
 	PAPER_TRADING=true MODE=ai PYTHONPATH=. python3 supervisor.py
+
+# ── Локально без Docker: бот + дашборд + приложение (настройки из .env) ─────────
+local:
+	@echo ">>> Bot + dashboard on this computer. App: http://localhost:8080/app/"
+	PYTHONPATH=. python3 supervisor.py --with-dashboard
+
+webapp:
+	cd webapp && npm ci && npm run build
 
 # ── Live trading ───────────────────────────────────────────────────────────────
 live:

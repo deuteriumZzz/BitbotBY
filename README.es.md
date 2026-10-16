@@ -249,14 +249,24 @@ cp .env.example .env        # rellenar las claves — ver la sección «Configur
 make setup                  # primer arranque: build, htpasswd, docker compose up
 ```
 
-### Ejecución local
+### Ejecución local (sin Docker)
+
+Necesitas Python 3.11, Redis y Node.js 20+ (para la app).
 
 ```bash
 python -m venv venv && source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env
-python supervisor.py
+cp .env.example .env                              # completar claves, PAPER_TRADING=true
+# Redis: macOS — brew install redis && brew services start redis
+#        Linux — sudo apt install redis-server
+#        cualquier SO con Docker — docker run -d -p 6379:6379 redis:7-alpine
+make webapp                                       # compilar la app: cd webapp && npm ci && npm run build
+python supervisor.py --with-dashboard             # o: make local
 ```
+
+El bot y el panel leen `.env` por sí mismos (las variables de entorno tienen prioridad). La app está en http://localhost:8080/app/ en el navegador; en la app de escritorio indica `http://localhost:8080` como servidor. Sin `--with-dashboard` solo arranca el bot.
+
+La MiniApp de Telegram solo se abre con una dirección https pública. Desde tu ordenador sirve un túnel, por ejemplo `cloudflared tunnel --url http://localhost:8080`: pon su dirección con `/app/` en `WEBAPP_URL` y reinicia el bot. En un servidor `docker compose` hace todo esto: solo necesitas https y `WEBAPP_URL`.
 
 ### `.env` mínimo para paper trading
 
@@ -769,6 +779,7 @@ make ai-isolation       # si la capa de IA aporta edge por encima de los indicad
 | `make live-divergence` | Comparación de ejecución live vs backtest |
 | `make ai-isolation` | Aislamiento de la contribución de la capa de IA |
 | `make paper` / `make paper-ai` | Paper trading (modo local / AI) |
+| `make local` / `make webapp` | Sin Docker: bot + panel + app en este ordenador / compilar la app |
 | `make live` | Trading en vivo |
 | `make test` / `make lint` / `make fmt` | pytest / ruff / formateo |
 | `make htpasswd` | Generación de contraseña para nginx basic auth |

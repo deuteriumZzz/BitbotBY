@@ -248,14 +248,24 @@ cp .env.example .env        # fill in your keys — see the "Configuration" sect
 make setup                  # first run: build, htpasswd, docker compose up
 ```
 
-### Running Locally
+### Running Locally (without Docker)
+
+You need Python 3.11, Redis and Node.js 20+ (for the app).
 
 ```bash
 python -m venv venv && source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env
-python supervisor.py
+cp .env.example .env                              # fill in keys, PAPER_TRADING=true
+# Redis: macOS — brew install redis && brew services start redis
+#        Linux — sudo apt install redis-server
+#        any OS with Docker — docker run -d -p 6379:6379 redis:7-alpine
+make webapp                                       # build the app: cd webapp && npm ci && npm run build
+python supervisor.py --with-dashboard             # or: make local
 ```
+
+The bot and the dashboard read `.env` themselves (environment variables take precedence). The app is at http://localhost:8080/app/ in a browser; in the desktop app enter `http://localhost:8080` as the server. Without `--with-dashboard` only the bot starts.
+
+The Telegram MiniApp opens only over a public https address. From your computer a tunnel works, e.g. `cloudflared tunnel --url http://localhost:8080`: put its address plus `/app/` into `WEBAPP_URL` and restart the bot. On a server `docker compose` does all of this — you only need https and `WEBAPP_URL`.
 
 ### Minimal `.env` for Paper Trading
 
@@ -766,6 +776,7 @@ that's a signal to keep observing longer, not to treat the check as passed.
 | `make live-divergence` | Compares live vs backtest execution |
 | `make ai-isolation` | Isolates the AI layer's contribution |
 | `make paper` / `make paper-ai` | Paper trading (local / AI mode) |
+| `make local` / `make webapp` | Without Docker: bot + dashboard + app on this computer / build the app |
 | `make live` | Live trading |
 | `make test` / `make lint` / `make fmt` | pytest / ruff / formatting |
 | `make htpasswd` | Generates the password for nginx basic auth |

@@ -5,9 +5,17 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 
-from src.logger import setup_logging
+from dotenv import load_dotenv
+
+# Без Docker настройки берутся из .env рядом с кодом. Docker (env_file) и
+# Makefile задают переменные раньше — уже заданные значения не перезаписываются.
+_ROOT = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(os.path.join(_ROOT, ".env"))
+
+from src.logger import setup_logging  # noqa: E402
 
 setup_logging(
     level=os.getenv("LOG_LEVEL", "INFO"),
@@ -87,6 +95,15 @@ async def main() -> None:
         logger.info("Бот остановлен")
 
 
+def _start_dashboard() -> "subprocess.Popen[bytes]":
+    """Дашборд и приложение /app/ отдельным процессом — для запуска без Docker.
+
+    В Docker у дашборда свой контейнер, поэтому только по флагу --with-dashboard.
+    """
+    logger.info("Запускаю дашборд: приложение — http://localhost:8080/app/")
+    return subprocess.Popen([sys.executable, os.path.join(_ROOT, "dashboard.py")])
+
+
 if __name__ == "__main__":
     # Ключи, введённые в приложении, участвуют в проверке так же, как .env.
     apply_secrets(Config)
@@ -96,4 +113,13 @@ if __name__ == "__main__":
         print(f"[CONFIG ERROR] {exc}", file=sys.stderr)
         sys.exit(1)
 
-    asyncio.run(main())
+    dashboard = _start_dashboard() if "--with-dashboard" in sys.argv else None
+    try:
+        asyncio.run(main())
+    finally:
+        if dashboard is not None:
+            dashboard.terminate()
+            try:
+                dashboard.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                dashboard.kill()

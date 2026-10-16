@@ -247,14 +247,24 @@ cp .env.example .env        # заполнить ключи — см. разде
 make setup                  # первый запуск: сборка, htpasswd, docker compose up
 ```
 
-### Локальный запуск
+### Локальный запуск (без Docker)
+
+Нужны Python 3.11, Redis и Node.js 20+ (для приложения).
 
 ```bash
 python -m venv venv && source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env
-python supervisor.py
+cp .env.example .env                              # заполнить ключи, PAPER_TRADING=true
+# Redis: macOS — brew install redis && brew services start redis
+#        Linux — sudo apt install redis-server
+#        любая ОС с Docker — docker run -d -p 6379:6379 redis:7-alpine
+make webapp                                       # собрать приложение: cd webapp && npm ci && npm run build
+python supervisor.py --with-dashboard             # или: make local
 ```
+
+Бот и дашборд сами читают `.env` (переменные окружения важнее). Приложение — http://localhost:8080/app/ в браузере; в десктоп-приложении укажите сервер `http://localhost:8080`. Без `--with-dashboard` запускается только бот.
+
+Telegram MiniApp открывается только по публичному https-адресу. С компьютера подойдёт туннель, например `cloudflared tunnel --url http://localhost:8080`: его адрес с `/app/` впишите в `WEBAPP_URL` и перезапустите бота. На сервере всё это делает `docker compose` — нужны только https и `WEBAPP_URL`.
 
 ### Минимальный `.env` для paper trading
 
@@ -763,6 +773,7 @@ make ai-isolation       # даёт ли AI-слой edge поверх голых
 | `make live-divergence` | Сравнение live vs backtest исполнения |
 | `make ai-isolation` | Изоляция вклада AI-слоя |
 | `make paper` / `make paper-ai` | Paper trading (local / AI режим) |
+| `make local` / `make webapp` | Без Docker: бот + дашборд + приложение на этом компьютере / сборка приложения |
 | `make live` | Live-торговля |
 | `make test` / `make lint` / `make fmt` | pytest / ruff / форматирование |
 | `make htpasswd` | Генерация пароля для nginx basic auth |
