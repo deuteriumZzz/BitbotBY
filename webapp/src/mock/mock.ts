@@ -539,6 +539,27 @@ const NUMERIC = ["int", "float", "pct"];
 
 const configHistory: { ts: number; by: string; changes: { key: string; label: string; old: unknown; new: unknown }[] }[] = [];
 
+let backtestRunning = false;
+
+/** Имитация бэктеста: ~6 секунд, прогресс по стратегиям, как BACKTEST_PROGRESS у бота. */
+function startBacktest(b: Body) {
+  if (backtestRunning) return done(b, err("busy", "Бэктест уже идёт — дождитесь результата."));
+  backtestRunning = true;
+  const names = strategies.map((s) => s.name);
+  let i = 0;
+  const tick = setInterval(() => {
+    i++;
+    if (i <= names.length) {
+      emit("job.progress", { job: "backtest", pct: Math.round((i / names.length) * 100), symbol: "BTC/USDT", strategy: names[i - 1] });
+      return;
+    }
+    clearInterval(tick);
+    backtestRunning = false;
+    emit("job.done", { job: "backtest", ok: true, n: names.length, months: 12, timeframe: "15m", best: { strategy: "liquidity_sweep", sharpe: -0.05, trades: 1771 } });
+  }, 300);
+  return done(b, { ok: true, started: true });
+}
+
 function patchConfig(changes: Body) {
   const fields: Record<string, string> = {};
   for (const [key, raw] of Object.entries(changes)) {
@@ -676,6 +697,8 @@ function route(method: string, path: string, body: unknown): unknown {
       emit("cycle", { state: "paused" });
       return done(b, { ok: true, closed: syms.length, paused: true });
     }
+    case "POST /api/jobs/backtest":
+      return startBacktest(b);
     case "POST /api/bot/restart":
       return done(b, { ok: true, restarting: true });
     case "POST /api/account/mode":

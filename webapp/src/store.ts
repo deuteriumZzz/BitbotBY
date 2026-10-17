@@ -12,6 +12,7 @@ import type {
   ConfigValues,
   DailyRow,
   Guard,
+  JobState,
   Journal,
   Metrics,
   PendingSignal,
@@ -97,6 +98,7 @@ export interface Store {
   secretsNote: string;
   ai: AiState | null;
   journal: Journal | null;
+  backtest: JobState;
   setupInfo: SetupInfo | null;
   /** Открытый шаг мастера первого запуска; null — мастер закрыт. */
   setup: SetupStep | null;
@@ -207,6 +209,7 @@ export const useStore = create<Store>((set, get) => {
     secretsNote: "",
     ai: null,
     journal: null,
+    backtest: { running: false, pct: 0 },
     setupInfo: null,
     setup: null,
     paramSearch: null,
@@ -377,6 +380,17 @@ export const useStore = create<Store>((set, get) => {
           }
           break;
         }
+        case "job.progress":
+          if (d.job === "backtest")
+            set({ backtest: { running: true, pct: Number(d.pct ?? 0), step: d.strategy ? { symbol: String(d.symbol ?? ""), strategy: String(d.strategy) } : undefined } });
+          break;
+        case "job.done":
+          if (d.job === "backtest") {
+            set({ backtest: { running: false, pct: 100, done: d as JobState["done"] } });
+            feed(d.ok ? "edit" : "guard", d.ok ? `Бэктест готов: ${d.n} стратегий` : "Бэктест не завершился");
+            void get().loadStrategies().catch(() => undefined);
+          }
+          break;
         case "cycle": {
           // Пауза могла прийти из Telegram — цикл бота знает о ней раньше снимка.
           const bot = get().bot;
@@ -582,6 +596,11 @@ export const actions = {
       st().say(`Закрыто ${c} ${plural(c, ["позиция", "позиции", "позиций"])}. Бот на паузе.`);
     }),
   restart: () => st().act(() => command("POST", "/api/bot/restart"), "Бот перезапускается…"),
+  runBacktest: () =>
+    st().act(async () => {
+      await command("POST", "/api/jobs/backtest");
+      useStore.setState({ backtest: { running: true, pct: 0 } });
+    }),
   closePosition: (p: Position, fraction = 1) =>
     st().act(
       () => command("POST", `/api/positions/${p.trade_id}/close`, { fraction }),

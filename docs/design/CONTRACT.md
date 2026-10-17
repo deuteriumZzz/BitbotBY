@@ -111,6 +111,9 @@
 | `GET /api/metrics?period=24h\|7d\|30d\|all` | `{realized, fees, net, n, win_rate, profit_factor, avg_win, avg_loss, rr, max_drawdown, sharpe\|null}`; `sharpe = null` при n < 50 |
 | `GET /api/metrics/execution` | `{latency_ms_avg, slippage_plan, slippage_fact, fees_30d}` |
 | `GET /api/pnl/daily?days=35` | `[{date, net, gross, fees, trades}]` |
+| `POST /api/jobs/backtest` | команда `run_backtest` (как остальные: `request_id`) → `{started: true}`; ошибка `busy`, если бэктест уже идёт. Прогресс — события `job.progress {job, pct, step, total, symbol, strategy}`, итог — `job.done {job, ok, n, best, months, timeframe}` или `{ok: false, error}` |
+| `GET /api/jobs/backtest` | `{running, progress}` — тот же прогресс, что видит Telegram |
+| `GET /api/config/history?limit=50` | `[{ts, by, changes: [{key, label, old, new}]}]` — что меняли из приложения, свежие сверху |
 | `GET /api/setup` | `{keys_in_app, bybit, telegram}` — для мастера первого запуска: ключ есть в приложении или в `.env` (без значений) |
 | `GET /api/journal?period=24h\|7d\|30d\|all` | `{period, limit, trades: [{id, symbol, side, strategy, confidence, entry, exit, qty, pnl, pnl_pct, fees, opened, closed, reason, reasoning}]}` — свежие сверху, не больше `limit` |
 | `GET /api/candles?symbol&tf&limit` | Свечи из кэша `DataLoader` |

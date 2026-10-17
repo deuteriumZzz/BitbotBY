@@ -309,3 +309,50 @@ async def test_signal_answer(fake_bot):
     fake_bot.telegram.resolve_pending.return_value = False
     late = await BotCommands(fake_bot).signal_answer({"signal_id": "sig42"})
     assert late["error"]["code"] == "expired"
+
+
+async def test_backtest_job_runs_once_and_reports_progress(monkeypatch):
+    from src.bot_commands import BotCommands
+
+    r = FakeRedis()
+    rc = MagicMock()
+    rc.get_backtest_progress.return_value = None
+    bot = MagicMock()
+    bot.redis.redis_client = r
+    bot._runtime_config = rc
+
+    class Proc:
+        returncode = 0
+
+        def __init__(self):
+            lines = [
+                b'BACKTEST_PROGRESS:{"pct": 40, "step": 8, "total": 20}\n',
+                b"noise\n",
+            ]
+
+            async def out():
+                for ln in lines:
+                    yield ln
+
+            self.stdout = out()
+            self.stderr = MagicMock(read=AsyncMock(return_value=b""))
+
+        async def wait(self):
+            return 0
+
+    monkeypatch.setattr(
+        "asyncio.create_subprocess_exec", AsyncMock(return_value=Proc())
+    )
+    cmds = BotCommands(bot)
+    assert await cmds.run_backtest({}) == {"started": True}
+    # пока задача жива — повторный запуск отклоняется
+    assert (await cmds.run_backtest({}))["ok"] is False
+    await cmds._backtest
+    types = _event_types(r)
+    assert types[0] == "job.progress" and types[-1] == "job.done"
+    assert any(
+        m["type"] == "job.progress" and m["data"].get("pct") == 40
+        for _, m in r.published
+    )
+    rc.set_backtest_progress.assert_called_once()
+    rc.clear_backtest_progress.assert_called()

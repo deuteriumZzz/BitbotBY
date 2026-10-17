@@ -12,8 +12,11 @@ from __future__ import annotations
 
 import asyncio
 import hmac
+import json
 import logging
-from typing import Any, Dict
+import os
+import sys
+from typing import Any, Dict, Optional
 
 from config import Config
 from src.bot_bus import Handler, emit, error
@@ -28,6 +31,7 @@ class BotCommands:
     def __init__(self, bot: Any) -> None:
         self._bot = bot
         self._tasks: set = set()
+        self._backtest: Optional[asyncio.Task] = None
 
     @property
     def _r(self) -> Any:
@@ -43,6 +47,88 @@ class BotCommands:
             "update_position": self.update_position,
             "signal_answer": self.signal_answer,
             "account_mode": self.account_mode,
+            "run_backtest": self.run_backtest,
+        }
+
+    async def run_backtest(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        """Бэктест всех стратегий в фоне; прогресс — событиями job.progress."""
+        rc = self._bot._runtime_config
+        if (self._backtest and not self._backtest.done()) or rc.get_backtest_progress():
+            return error("busy", "Бэктест уже идёт — дождитесь результата.")
+        self._backtest = asyncio.create_task(self._backtest_job())
+        return {"started": True}
+
+    async def _backtest_job(self) -> None:
+        """Тот же backtest.py, что у Telegram: отдельный процесс, прогресс из stdout."""
+        rc = self._bot._runtime_config
+        rc.clear_backtest_progress()
+        emit(self._r, "job.progress", {"job": "backtest", "pct": 0})
+        err = ""
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                sys.executable,
+                "backtest.py",
+                env={**os.environ, "PYTHONPATH": os.getcwd()},
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+
+            async def read_out() -> None:
+                assert proc.stdout
+                async for raw in proc.stdout:
+                    line = raw.decode(errors="replace").strip()
+                    if not line.startswith("BACKTEST_PROGRESS:"):
+                        continue
+                    try:
+                        info = json.loads(line[len("BACKTEST_PROGRESS:") :])
+                    except ValueError:
+                        continue
+                    rc.set_backtest_progress(info)
+                    emit(self._r, "job.progress", {"job": "backtest", **info})
+
+            async def read_err() -> bytes:
+                assert proc.stderr
+                return await proc.stderr.read()
+
+            _, stderr = await asyncio.gather(read_out(), read_err())
+            await proc.wait()
+            if proc.returncode != 0:
+                err = stderr.decode(errors="replace")[-200:]
+        except Exception as exc:
+            logger.exception("backtest job failed")
+            err = str(exc)[:200]
+        finally:
+            rc.clear_backtest_progress()
+        emit(self._r, "job.done", {"job": "backtest", **self._backtest_summary(err)})
+
+    @staticmethod
+    def _backtest_summary(err: str) -> Dict[str, Any]:
+        if err:
+            return {"ok": False, "error": err}
+        try:
+            with open(
+                os.path.join("data", "backtest_results.json"), encoding="utf-8"
+            ) as f:
+                data = json.load(f)
+            results = data.get("results", [])
+            best = (
+                max(results, key=lambda r: r.get("sharpe_ratio", -9))
+                if results
+                else None
+            )
+        except (OSError, ValueError):
+            return {"ok": True, "n": 0}
+        return {
+            "ok": True,
+            "n": len(results),
+            "months": data.get("months"),
+            "timeframe": data.get("timeframe"),
+            "best": best
+            and {
+                "strategy": best["strategy"],
+                "sharpe": round(best["sharpe_ratio"], 2),
+                "trades": best["total_trades"],
+            },
         }
 
     async def pause(self, args: Dict[str, Any]) -> Dict[str, Any]:

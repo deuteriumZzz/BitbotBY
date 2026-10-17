@@ -306,6 +306,18 @@ async def cmd_panic(request: Request) -> JSONResponse:
     return await _command(request, "panic")
 
 
+@router.post("/api/jobs/backtest")
+async def cmd_backtest(request: Request) -> JSONResponse:
+    return await _command(request, "run_backtest")
+
+
+@router.get("/api/jobs/backtest")
+async def backtest_status() -> JSONResponse:
+    """Идёт ли бэктест и на каком он шаге (то же, что видно в Telegram)."""
+    progress = data.redis_get("bot:backtest_progress")
+    return JSONResponse({"running": bool(progress), "progress": progress})
+
+
 @router.post("/api/bot/restart")
 async def cmd_restart(request: Request) -> JSONResponse:
     return await _command(request, "restart")

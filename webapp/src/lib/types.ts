@@ -94,6 +94,14 @@ export interface SettingDef {
 
 export type ConfigValues = Record<string, { value: unknown; source: string }>;
 
+/** Фоновая задача бота: бэктест. Прогресс приходит событиями job.progress / job.done. */
+export interface JobState {
+  running: boolean;
+  pct: number;
+  step?: { symbol: string; strategy: string };
+  done?: { ok: boolean; error?: string; n?: number; months?: number; timeframe?: string; best?: { strategy: string; sharpe: number; trades: number } | null };
+}
+
 /** Запись журнала изменений настроек (`GET /api/config/history`). */
 export interface ConfigHistoryItem {
   ts: number;
