@@ -145,3 +145,23 @@ def test_secrets_need_auth(keyed):
         auth, "telegram_auth_configured", return_value=True
     ):
         assert keyed.get("/api/secrets").status_code == 401
+
+
+def test_twscrape_accounts_format_is_checked():
+    svc = ss.BY_ID["twitter"]
+    ok = "user:pass:me@mail.com:mailpass,user2:p2:b@mail.com:mp2"
+    assert ss.check_input(svc, {"TWSCRAPE_ACCOUNTS": ok}) == {}
+    for bad in ("user:pass", "user:pass:mail:mp:extra", "user::mail:mp", "а,б"):
+        assert "TWSCRAPE_ACCOUNTS" in ss.check_input(svc, {"TWSCRAPE_ACCOUNTS": bad})
+
+
+def test_twitter_fields_explain_themselves(store):
+    fields = {
+        f["env"]: f
+        for f in next(i for i in ss.public_view() if i["service"] == "twitter")[
+            "fields"
+        ]
+    }
+    assert "платный" in fields["TWITTER_BEARER_TOKEN"]["hint"].lower()
+    assert "почта" in fields["TWSCRAPE_ACCOUNTS"]["hint"].lower()
+    assert fields["TWSCRAPE_ACCOUNTS"]["placeholder"]

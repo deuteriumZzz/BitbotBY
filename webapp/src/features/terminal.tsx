@@ -40,8 +40,10 @@ function HealthStrip() {
   const agoText = ago === null ? "ещё не было" : ago < 60 ? `${ago} с назад` : `${Math.round(ago / 60)} мин назад`;
   // Цикл идёт каждые несколько минут; тишина дольше 15 минут при работающем боте — повод насторожиться.
   const stale = !paused && alive && ago !== null && ago > 900;
+  // «Бот работает» уже видно в шапке (переключатель и «онлайн»): здесь — только когда не так.
+  const down = !wsUp || !alive;
   const items: [string, string, string][] = [
-    ["Бот", !wsUp ? "нет связи" : alive ? (paused ? "на паузе" : "работает") : "молчит", !wsUp || !alive ? "bad" : paused ? "warn" : "ok"],
+    ...(down ? [["Бот", !wsUp ? "нет связи" : "молчит", "bad"] as [string, string, string]] : []),
     ["Решает", mode === "local" ? "локальные стратегии" : ai && ai !== "local" ? `AI · ${ai}` : "AI, ждёт ответа", mode === "local" || ai ? "ok" : "warn"],
     ["Цикл", agoText, stale ? "bad" : ago === null ? "warn" : "ok"],
   ];

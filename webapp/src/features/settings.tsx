@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { api } from "../lib/api";
+import { OWN_HOME, type SettingsPane } from "../lib/where";
 import { fmtN, plural } from "../lib/format";
 import type { ConfigHistoryItem, ConfigValues, SecretItem, SettingDef } from "../lib/types";
 import { actions, useStore, type PatchResult } from "../store";
@@ -10,7 +11,7 @@ import { Icon, Q, Seg, Toggle, useArm } from "../ui";
 import { AiPane } from "./ai";
 import { cfg } from "./bots";
 
-type Pane = "main" | "ai" | "conn" | "all";
+type Pane = SettingsPane;
 
 export function Settings() {
   const [pane, setPane] = useState<Pane>("main");
@@ -36,7 +37,7 @@ export function Settings() {
       {pane === "main" && <Main go={setPane} />}
       {pane === "ai" && <AiPane />}
       {pane === "conn" && <Keys />}
-      {pane === "all" && <AllParams />}
+      {pane === "all" && <AllParams go={setPane} />}
     </section>
   );
 }
@@ -446,7 +447,7 @@ const KEY_INFO: Record<string, [string, string?]> = {
   finnhub: ["Календарь FOMC, CPI, NFP для макро-паузы. Без ключа пауза не работает.", "https://finnhub.io"],
   glassnode: ["On-chain метрики, например запас стейблкоинов.", "https://glassnode.com"],
   reddit: ["Посты r/CryptoCurrency для анализа настроения моделью CryptoBERT.", "https://www.reddit.com/prefs/apps"],
-  twitter: ["Настроение по твитам, только профиль Meme. Нужен платный тариф API или аккаунты для twscrape.", "https://developer.twitter.com"],
+  twitter: ["Настроение по твитам, только профиль Meme. Два способа: официальный платный API или бесплатный обход через аккаунты X. Если указаны оба, работает официальный API.", "https://developer.twitter.com"],
   telethon: ["Чтение публичных каналов через Telethon, только профиль Meme. При первом входе Telegram пришлёт код.", "https://my.telegram.org"],
   pumpportal: ["Темп запуска новых токенов на pump.fun — признак мем-сезона.", "https://pumpportal.fun"],
   server: ["PIN для перехода в Live, доступ к Redis и API дашборда, секрет вебхука алертов."],
@@ -564,6 +565,7 @@ export function KeyCard({ item }: { item: SecretItem }) {
               <span>{f.label}</span>
               <span className="saved">{tail}</span>
             </label>
+            {f.hint && <small className="kf-h">{f.hint}</small>}
             {f.secret ? (
               <div className="pw">
                 <input
@@ -572,7 +574,7 @@ export function KeyCard({ item }: { item: SecretItem }) {
                   type={shown[f.env] ? "text" : "password"}
                   autoComplete="off"
                   spellCheck={false}
-                  placeholder={f.set ? "Вставьте новый, чтобы заменить" : "Вставьте ключ"}
+                  placeholder={f.set ? "Вставьте новый, чтобы заменить" : (f.placeholder ?? "Вставьте ключ")}
                   value={values[f.env] ?? ""}
                   onChange={(e) => setValues({ ...values, [f.env]: e.target.value })}
                 />
@@ -654,7 +656,7 @@ const SOURCE: Record<string, string> = {
   default: "",
 };
 
-function AllParams() {
+function AllParams({ go }: { go: (pane: Pane) => void }) {
   const schema = useStore((s) => s.schema);
   const config = useStore((s) => s.config);
   const jump = useStore((s) => s.paramSearch);
@@ -684,8 +686,9 @@ function AllParams() {
   const needle = q.trim().toLowerCase();
   // Поиск ищет по всем параметрам; без поиска — основные или все.
   const hit = (d: SettingDef) =>
-    needle ? `${d.label} ${d.key} ${d.hint}`.toLowerCase().includes(needle) : advanced || d.basic || d.key in pending;
+    needle ? `${d.label} ${d.key} ${d.hint}`.toLowerCase().includes(needle) : !(d.key in OWN_HOME) && (advanced || d.basic || d.key in pending);
   const found = schema.filter(hit).length;
+  const elsewhere = schema.filter((d) => d.key in OWN_HOME).length;
 
   const change = (d: SettingDef, raw: unknown) => {
     const cur = config[d.key]?.value;
@@ -748,6 +751,12 @@ function AllParams() {
         <span className="tag hot">сразу</span> применяется без перезапуска · <span className="tag rst">перезапуск</span> вступит в силу после
         перезапуска бота. Ключи — в «Подключения» и «AI», Paper/Live — в «Основное».
       </p>
+      {!needle && elsewhere > 0 && (
+        <p className="cfg-legend">
+          {elsewhere} {plural(elsewhere, ["настройка", "настройки", "настроек"])} здесь не показано: у них есть свои разделы (риск, открытие сделок, режим, часы, AI,
+          обучение). Найти любую и перейти к ней можно поиском.
+        </p>
+      )}
       <div className="cfg">
         {groups.map(([g, defs]) => {
           const rows = defs.filter(hit);
@@ -771,9 +780,13 @@ function AllParams() {
                 <span className="cnt">{rows.length}</span>
                 {changed > 0 && <span className="chgb">изменено {changed}</span>}
               </summary>
-              {rows.map((d) => (
+              {rows.map((d) =>
+                OWN_HOME[d.key] ? (
+                  <HomeRow key={d.key} d={d} go={go} />
+                ) : (
                 <ParamRow key={d.key} d={d} value={d.key in pending ? pending[d.key] : config[d.key]?.value} source={config[d.key]?.source ?? "default"} changed={d.key in pending} err={bad[d.key]} onChange={(v) => change(d, v)} onReset={() => change(d, rawOf(d, d.default))} />
-              ))}
+                ),
+              )}
             </details>
           );
         })}
@@ -822,6 +835,31 @@ function AllParams() {
           </span>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Параметр с собственным разделом: вместо второго поля — ссылка туда. */
+function HomeRow({ d, go }: { d: SettingDef; go: (pane: Pane) => void }) {
+  const home = OWN_HOME[d.key];
+  const setTab = useStore((s) => s.setTab);
+  const open = () => {
+    if (home.tab === "settings" && home.pane) go(home.pane);
+    else setTab(home.tab);
+  };
+  return (
+    <div className="prm home">
+      <div className="prm-l">
+        <label>{d.label}</label>
+        <code>{d.key}</code>
+        {d.hint && <p>{d.hint}</p>}
+      </div>
+      <div className="prm-c">
+        <span className="tag hot">{home.where}</span>
+        <button className="btn" type="button" onClick={open}>
+          Открыть
+        </button>
+      </div>
     </div>
   );
 }

@@ -42,6 +42,8 @@ class Field:
     optional: bool = False
     min_len: int = 16
     show_last4: bool = True
+    hint: str = ""  # подсказка под названием поля: формат, где взять, предупреждения
+    placeholder: str = ""
 
 
 @dataclass(frozen=True)
@@ -139,8 +141,31 @@ SERVICES: Tuple[Service, ...] = (
         "Twitter / X",
         "Данные и соцсети",
         (
-            _key("TWITTER_BEARER_TOKEN", "Bearer Token", optional=True),
-            _key("TWSCRAPE_ACCOUNTS", "Аккаунты twscrape", optional=True),
+            _key(
+                "TWITTER_BEARER_TOKEN",
+                "Официальный API (Bearer Token)",
+                optional=True,
+                hint=(
+                    "Платный тариф X API (около $100 в месяц). Если он задан, "
+                    "аккаунты ниже не используются."
+                ),
+            ),
+            _key(
+                "TWSCRAPE_ACCOUNTS",
+                "Аккаунты без официального API (бесплатно)",
+                optional=True,
+                min_len=7,
+                show_last4=False,
+                hint=(
+                    "По одной записи на аккаунт: логин:пароль:почта:пароль_от_почты; "
+                    "несколько записей — через запятую. Почта и её пароль нужны, "
+                    "чтобы библиотека сама прочитала код подтверждения при входе "
+                    "в X. Берите отдельные аккаунты, не основной: это обход правил "
+                    "X, аккаунты могут заблокировать. Двоеточие и запятая внутри "
+                    "пароля ломают формат."
+                ),
+                placeholder="логин:пароль:почта:пароль_почты",
+            ),
         ),
     ),
     Service(
@@ -301,6 +326,8 @@ def public_view() -> List[Dict[str, Any]]:
                     "label": fl.label,
                     "secret": fl.secret,
                     "optional": fl.optional,
+                    "hint": fl.hint,
+                    "placeholder": fl.placeholder,
                     "set": v is not None,
                     "last4": v[-4:] if v and fl.secret and fl.show_last4 else None,
                     "value": v if v is not None and not fl.secret else None,
@@ -344,6 +371,18 @@ def check_input(service: Service, fields: Dict[str, Any]) -> Dict[str, str]:
         elif env in ("TELEGRAM_CHAT_ID", "TELEGRAM_SENTIMENT_API_ID"):
             if not value.lstrip("-").isdigit():
                 errors[env] = f"{fl.label} — это число."
+        elif env == "TWSCRAPE_ACCOUNTS":
+            entries = [e for e in value.split(",") if e.strip()]
+            if not entries or any(
+                len([p for p in e.strip().split(":") if p]) != 4
+                or e.strip().count(":") != 3
+                for e in entries
+            ):
+                errors[env] = (
+                    "Каждая запись — четыре части через двоеточие: "
+                    "логин:пароль:почта:пароль_почты. Несколько записей — "
+                    "через запятую."
+                )
         elif env == "TELEGRAM_SENTIMENT_PHONE":
             if not (value.startswith("+") and value[1:].isdigit() and len(value) >= 9):
                 errors[env] = "Телефон в формате +375291234567."

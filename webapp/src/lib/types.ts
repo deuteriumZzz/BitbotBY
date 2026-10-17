@@ -151,6 +151,9 @@ export interface SecretField {
   label: string;
   secret: boolean;
   optional: boolean;
+  /** Подсказка под названием поля: формат, где взять, предупреждения. */
+  hint?: string;
+  placeholder?: string;
   set: boolean;
   last4: string | null;
   value: string | null;

@@ -178,3 +178,15 @@ def test_local_fallback_is_a_hot_toggle_and_off_by_default():
     s = reg.BY_KEY["LOCAL_FALLBACK"]
     assert s.type == "bool" and s.default is False and s.hot
     assert Config.LOCAL_FALLBACK is False
+
+
+def test_settings_with_their_own_section_exist_in_the_registry():
+    """Ключи из webapp/src/lib/where.ts (скрыты в «Параметрах», там ссылка на раздел)
+    должны быть настоящими настройками: иначе ссылка ведёт в никуда."""
+    import re
+    from pathlib import Path
+
+    text = Path("webapp/src/lib/where.ts").read_text(encoding="utf-8")
+    keys = set(re.findall(r"^\s{2}([A-Z][A-Z_]+):", text, flags=re.M))
+    assert len(keys) >= 15
+    assert keys <= set(reg.BY_KEY), keys - set(reg.BY_KEY)
