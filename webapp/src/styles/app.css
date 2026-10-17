@@ -371,7 +371,9 @@ summary .chgb{font:600 10px/1 var(--f-num);padding:3px 6px;border-radius:var(--r
 .btn.armed{background:var(--down);color:#fff;border-color:var(--down)}
 .banner.season{background:color-mix(in oklab,var(--cyan) 7%,var(--bg));border-color:color-mix(in oklab,var(--cyan) 30%,transparent)}
 .b-acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
-.strat .row-r{display:flex;align-items:center;gap:8px}
+.strat .row-r{grid-column:1/-1;display:flex;align-items:center;flex-wrap:wrap;gap:6px 8px}
+.strat .row-r .tgl{margin-left:auto}
+.strat .row-r .pill{white-space:nowrap}
 .strat.off .nm b{color:var(--ink-3)}
 .strat.off .nums{opacity:.5}
 .confirm-box{margin-top:12px;padding:12px;border-radius:var(--r);border:1px solid color-mix(in oklab,var(--down) 45%,transparent);background:color-mix(in oklab,var(--down) 6%,var(--bg));display:flex;flex-direction:column;gap:10px;font-size:13px;line-height:1.45;color:var(--ink-2)}
@@ -784,3 +786,5 @@ details.risk-box>:not(summary){margin-top:10px}
 .season-kv{display:flex;gap:24px;margin:0}
 .season-kv dt{font:500 12px/1.4 var(--f-ui);color:var(--ink-3)}
 .season-kv dd{margin:0;font:600 15px/1.4 var(--f-ui)}
+.strat-tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0}
+.strat-tools .inp{flex:1 1 160px;min-width:0}

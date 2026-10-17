@@ -16,6 +16,7 @@ from config import Config
 from .redis_client import RedisClient
 from .strategies_base import BaseStrategy
 from .strategies_ported import PORTED_STRATEGIES
+from .strategies_ported_ind import IND_STRATEGIES
 
 logger = logging.getLogger(__name__)
 
@@ -1330,6 +1331,7 @@ STRATEGY_REGISTRY: Dict[str, Type[BaseStrategy]] = {
 # Стратегии из Argent-Systems (см. strategies_ported.py) — отдельным блоком,
 # чтобы было видно, что их преимущество не доказано.
 STRATEGY_REGISTRY.update(PORTED_STRATEGIES)
+STRATEGY_REGISTRY.update(IND_STRATEGIES)
 
 
 # Профильные варианты volume_spike слиты в одну стратегию; старые имена остаются

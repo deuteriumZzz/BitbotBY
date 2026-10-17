@@ -5,7 +5,11 @@ import pandas as pd
 import pytest
 
 from src.strategies import STRATEGY_REGISTRY, create_strategy
-from src.strategies_ported import PORTED_STRATEGIES, PortedStrategy
+from src.strategies_ported import PORTED_STRATEGIES as FIRST
+from src.strategies_ported import PortedStrategy
+from src.strategies_ported_ind import IND_STRATEGIES
+
+PORTED_STRATEGIES = {**FIRST, **IND_STRATEGIES}
 
 
 def _walk(n: int = 1100, seed: int = 7) -> pd.DataFrame:
@@ -24,12 +28,16 @@ def _walk(n: int = 1100, seed: int = 7) -> pd.DataFrame:
     )
 
 
-def test_all_seven_are_registered_with_market_flags():
-    assert len(PORTED_STRATEGIES) == 7
+def test_all_ports_are_registered_with_market_flags():
+    assert len(FIRST) == 15 and len(IND_STRATEGIES) == 34
+    assert len(PORTED_STRATEGIES) == 49
     assert all(n in STRATEGY_REGISTRY for n in PORTED_STRATEGIES)
     assert STRATEGY_REGISTRY["bear_hedge"].markets == "futures"
+    assert STRATEGY_REGISTRY["shooting_star"].markets == "futures"
     assert all(
-        c.markets == "both" for n, c in PORTED_STRATEGIES.items() if n != "bear_hedge"
+        c.markets == "both"
+        for n, c in PORTED_STRATEGIES.items()
+        if n not in ("bear_hedge", "shooting_star")
     )
 
 

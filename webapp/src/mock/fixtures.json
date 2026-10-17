@@ -2882,6 +2882,102 @@
     "sharpe": -0.143
    },
    "live": null
+  },
+  {
+   "name": "williams_r",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.3763,
+    "trades": 3330,
+    "sharpe": -0.052
+   },
+   "live": null
+  },
+  {
+   "name": "stoch_rsi",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.359,
+    "trades": 3919,
+    "sharpe": -0.065
+   },
+   "live": null
+  },
+  {
+   "name": "keltner_fade",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.3883,
+    "trades": 2315,
+    "sharpe": -0.079
+   },
+   "live": null
+  },
+  {
+   "name": "ichimoku",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.3392,
+    "trades": 3016,
+    "sharpe": -0.111
+   },
+   "live": null
+  },
+  {
+   "name": "mfi_trend",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.3336,
+    "trades": 3630,
+    "sharpe": -0.138
+   },
+   "live": null
+  },
+  {
+   "name": "vortex",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.3377,
+    "trades": 3776,
+    "sharpe": -0.145
+   },
+   "live": null
+  },
+  {
+   "name": "parabolic_sar",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.3346,
+    "trades": 3954,
+    "sharpe": -0.147
+   },
+   "live": null
+  },
+  {
+   "name": "obv_trend",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.3295,
+    "trades": 3909,
+    "sharpe": -0.156
+   },
+   "live": null
   }
  ],
  "ai": {

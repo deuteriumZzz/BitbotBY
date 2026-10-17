@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { fmtN, plural, tone } from "../lib/format";
-import type { ConfigValues } from "../lib/types";
+import type { ConfigValues, Strategy } from "../lib/types";
 import { actions, useStore } from "../store";
 import { Icon, Q, Seg, Toggle } from "../ui";
 
@@ -39,6 +39,48 @@ export const STRATEGY_NAME: Record<string, string> = {
   vwap_reversion: "Возврат к VWAP",
   crash_bounce: "Отскок после обвала",
   bear_hedge: "Медвежий шорт",
+  ichimoku: "Ишимоку",
+  parabolic_sar: "Parabolic SAR",
+  vortex: "Vortex",
+  stoch_rsi: "StochRSI",
+  williams_r: "Williams %R",
+  keltner_fade: "Кельтнер: возврат",
+  obv_trend: "OBV-тренд",
+  mfi_trend: "MFI-тренд",
+  chaikin_osc: "Осциллятор Чайкина",
+  coppock: "Кривая Коппока",
+  coral_trend: "Coral Trend",
+  kst: "KST",
+  rvi: "RVI",
+  waddah_attar: "Waddah Attar",
+  zlsma: "ZLSMA",
+  cci_aroon: "CCI + Aroon",
+  engulfing_trend: "Поглощение по тренду",
+  chaikin_money_flow: "Chaikin Money Flow",
+  fisher_transform: "Fisher Transform",
+  kdj: "KDJ",
+  klinger: "Klinger",
+  awesome_saucer: "Awesome Oscillator",
+  heikin_ashi: "Heikin Ashi",
+  rsi_divergence: "Дивергенция RSI",
+  shooting_star: "Падающая звезда",
+  cci_reversion: "CCI: возврат",
+  ifr2: "IFR2",
+  stochastic: "Стохастик",
+  adx_dmi: "ADX/DMI",
+  chandelier: "Chandelier Exit",
+  halftrend: "HalfTrend",
+  ssl_channel: "SSL Channel",
+  ad_line_trend: "Линия A/D",
+  ease_of_movement: "Ease of Movement",
+  elder_force: "Индекс силы Элдера",
+  vwap_trend: "VWAP-тренд",
+  vw_macd: "MACD по VWMA",
+  poc_reversion: "Возврат к POC",
+  bollinger_reentry: "Возврат в Боллинджер",
+  dual_momentum: "Двойной моментум",
+  gtaa_ma: "Тайминг по SMA",
+  spike_reversal: "Разворот после всплеска",
 };
 export const stratName = (k: string): string => STRATEGY_NAME[k] ?? k;
 
@@ -491,16 +533,24 @@ const MODE_ROLE: Record<string, { title: string; text: string }> = {
 
 function StrategiesCard() {
   const all0 = useStore((s) => s.strategies);
-  const spot = useStore((s) => cfg<string>(s.config, "MARKET_TYPE", "linear") === "spot");
+  const marketSpot = useStore((s) => cfg<string>(s.config, "MARKET_TYPE", "linear") === "spot");
   const mode = useStore((s) => s.bot?.mode ?? "ai");
   const fallback = useStore((s) => cfg<boolean>(s.config, "LOCAL_FALLBACK", false));
   const [all, setAll] = useState(false);
-  // Показываем только то, что подходит текущему рынку: на споте нет шортов,
-  // стратегии «только фьючерсы» там не работают, и наоборот.
-  const strategies = all0.filter((s) => s.markets === "both" || s.markets === (spot ? "spot" : "futures"));
+  const [view, setView] = useState<"futures" | "spot" | null>(null);
+  const [q, setQ] = useState("");
+  // Что показываем: по умолчанию рынок из настроек; переключатель только меняет вид списка.
+  // На споте нет шортов, поэтому стратегии «только фьючерсы» там не работают.
+  const shown: "futures" | "spot" = view ?? (marketSpot ? "spot" : "futures");
+  const spot = shown === "spot";
+  const fits = (s: Strategy, m: "futures" | "spot") => s.markets === "both" || s.markets === m;
+  const counts = { futures: all0.filter((s) => fits(s, "futures")).length, spot: all0.filter((s) => fits(s, "spot")).length };
+  const strategies = all0.filter((s) => fits(s, shown));
   const hidden = all0.length - strategies.length;
-  const sorted = [...strategies].sort((a, b) => (b.backtest?.sharpe ?? -9) - (a.backtest?.sharpe ?? -9));
-  const rows = all ? sorted : sorted.slice(0, 6);
+  const needle = q.trim().toLowerCase();
+  const found = needle ? strategies.filter((s) => stratName(s.name).toLowerCase().includes(needle) || s.name.includes(needle)) : strategies;
+  const sorted = [...found].sort((a, b) => (b.backtest?.sharpe ?? -9) - (a.backtest?.sharpe ?? -9));
+  const rows = all || needle ? sorted : sorted.slice(0, 6);
   const on = strategies.filter((s) => s.enabled).length;
   const tested = strategies.filter((s) => s.backtest && s.backtest.trades > 0);
   const edge = tested.filter((s) => s.backtest!.trades >= 100 && s.backtest!.sharpe > 0);
@@ -526,6 +576,22 @@ function StrategiesCard() {
           </div>
         </div>
       )}
+      <div className="strat-tools">
+        <Seg
+          className="sm"
+          value={shown}
+          options={[
+            ["futures", `Фьючерсы · ${counts.futures}`],
+            ["spot", `Спот · ${counts.spot}`],
+          ]}
+          onChange={setView}
+          label="Для какого рынка показать стратегии"
+        />
+        <input className="inp" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Найти стратегию" aria-label="Найти стратегию" autoComplete="off" />
+      </div>
+      {view && view !== (marketSpot ? "spot" : "futures") && (
+        <p className="note-soon">Это просмотр: бот сейчас торгует на рынке «{marketSpot ? "Спот" : "Фьючерсы"}». Переключить — выше, в «Рынок».</p>
+      )}
       <ul className="strats">
         {rows.map((s) => {
           const bt = s.backtest;
@@ -542,11 +608,9 @@ function StrategiesCard() {
                     эксперимент
                   </span>
                 )}
-                {s.markets === "futures" && (
-                  <span className="pill" title="Сигналы только на продажу: открыть можно лишь шорт">
-                    только фьючерсы
-                  </span>
-                )}
+                <span className="pill" title={s.markets === "futures" ? "Сигналы только на продажу: открыть можно лишь шорт, на споте их нет" : "Покупки работают и на споте, продажи (шорты) — только на фьючерсах"}>
+                  {s.markets === "futures" ? "только фьючерсы" : "спот и фьючерсы"}
+                </span>
                 <span className={`pill ${st[0]}`}>{st[1]}</span>
                 <Toggle on={s.enabled} label={`Стратегия «${stratName(s.name)}»`} onChange={(v) => void actions.setStrategy(s.name, v)} />
               </div>
@@ -576,7 +640,7 @@ function StrategiesCard() {
         </p>
       )}
       <div className="btn-row" style={{ marginTop: 8 }}>
-        {strategies.length > 6 && (
+        {found.length > 6 && !needle && (
           <button className="btn" type="button" onClick={() => setAll(!all)}>
             {all ? "Свернуть" : `Показать все ${strategies.length}`}
           </button>

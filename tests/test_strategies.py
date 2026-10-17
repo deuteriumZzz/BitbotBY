@@ -86,6 +86,7 @@ def test_only_sell_only_strategies_are_futures_only():
     ) == [
         "bear_hedge",
         "pump_exit",
+        "shooting_star",
     ]
     assert all(
         c.markets in ("spot", "futures", "both") for c in STRATEGY_REGISTRY.values()
