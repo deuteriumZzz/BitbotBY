@@ -21,6 +21,7 @@ _KEY_MODE = "bot:mode"
 _KEY_SCAN_TOP_N = "bot:scan_top_n"
 _KEY_PAUSED = "bot:paused"
 _KEY_AUTO_EXECUTE = "bot:auto_execute"
+_KEY_LOCAL_FALLBACK = "bot:local_fallback"
 _KEY_FORCED = "bot:forced_symbols"
 _KEY_EXCLUDED = "bot:excluded_symbols"
 _KEY_DISABLED_STRATS = "bot:disabled_strategies"
@@ -257,6 +258,16 @@ class RuntimeConfig:
     def set_auto_execute(self, enabled: bool) -> None:
         self._set(_KEY_AUTO_EXECUTE, "1" if enabled else "0")
         logger.info("Runtime: auto_execute → %s", "ВКЛ" if enabled else "ВЫКЛ")
+
+    def get_local_fallback(self) -> bool:
+        val = self._get(_KEY_LOCAL_FALLBACK)
+        if val is None:
+            return Config.LOCAL_FALLBACK
+        return val == "1"
+
+    def set_local_fallback(self, enabled: bool) -> None:
+        self._set(_KEY_LOCAL_FALLBACK, "1" if enabled else "0")
+        logger.info("Runtime: local_fallback → %s", "ВКЛ" if enabled else "ВЫКЛ")
 
     # ── Symbol overrides ──────────────────────────────────────────────────────
 
@@ -1238,6 +1249,7 @@ class RuntimeConfig:
         _KEY_SCAN_TOP_N,
         _KEY_PAUSED,
         _KEY_AUTO_EXECUTE,
+        _KEY_LOCAL_FALLBACK,
         _KEY_FORCED,
         _KEY_EXCLUDED,
         _KEY_DISABLED_STRATS,

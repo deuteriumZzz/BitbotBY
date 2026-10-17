@@ -263,6 +263,13 @@ export const Icon = {
     20,
   ),
   settings: svg(<path d="M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3M14 2v4M8 10v4M16 18v4" />, 20),
+  learn: svg(
+    <>
+      <path d="M22 10 12 5 2 10l10 5 10-5z" />
+      <path d="M6 12v5c3 2 9 2 12 0v-5" />
+    </>,
+    20,
+  ),
   journal: svg(<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />, 20),
   panic: (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

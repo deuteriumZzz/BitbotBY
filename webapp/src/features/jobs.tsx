@@ -162,20 +162,63 @@ function JobRow({ def }: { def: JobDef }) {
   );
 }
 
-export function JobsCard() {
+const MODEL_JOBS: JobId[] = ["train", "tune"];
+const ALPHA_JOBS: JobId[] = ["backtest", "alpha_report", "live_divergence", "ai_isolation"];
+
+/** Нейросеть SAC участвует в решениях только в режимах SAC и Hybrid. */
+function sacRole(mode: string): { used: boolean; text: string } {
+  if (mode === "dqn") return { used: true, text: "Сейчас сделки решает именно эта нейросеть — качество обучения напрямую влияет на торговлю." };
+  if (mode === "hybrid") return { used: true, text: "Сделка открывается, когда нейросеть и AI согласны, поэтому плохая модель режет и хорошие сигналы AI." };
+  return { used: false, text: "Сейчас режим не использует SAC, и обучение ни на что не повлияет, пока вы не включите режим SAC или Hybrid (Настройки → Параметры → «Кто принимает решение»)." };
+}
+
+function TrainingStep() {
+  const n = useStore((s) => Number(s.config.TRAIN_TOP_N?.value ?? 20));
+  const [v, setV] = useState<number | null>(null);
+  const shown = v ?? n;
+  const set = (x: number) => {
+    const next = Math.max(1, Math.min(100, x));
+    setV(next);
+    void actions.patchConfig({ TRAIN_TOP_N: next }).then(() => setV(null));
+  };
+  return (
+    <div className="row-tgl">
+      <span>
+        Монет для обучения <Q tip="Сколько самых ликвидных монет попадёт в обучающую выборку. Больше — дольше обучение и шире охват. Применится при следующем запуске." />
+      </span>
+      <span className="stepper">
+        <button className="btn" type="button" aria-label="Меньше монет" onClick={() => set(shown - 5)}>
+          −
+        </button>
+        <output>{shown}</output>
+        <button className="btn" type="button" aria-label="Больше монет" onClick={() => set(shown + 5)}>
+          +
+        </button>
+      </span>
+    </div>
+  );
+}
+
+function ModelCard() {
+  const mode = useStore((s) => s.bot?.mode ?? "ai");
   const canRollback = useStore((s) => s.rollbackAvailable);
   const sacBusy = useStore((s) => "sac" in s.jobGroups || Boolean(s.jobs.train?.running || s.jobs.tune?.running));
   const online = useStore((s) => s.alive);
   const [confirm, setConfirm] = useState(false);
+  const role = sacRole(mode);
   return (
     <article className="card">
       <div className="card-h">
-        <h2>Модель и проверки</h2>
-        <Q tip="То же, что в меню Telegram. Всё идёт в фоне — бот продолжает торговать. Одну и ту же задачу нельзя запустить дважды, откуда бы вы её ни запускали." />
+        <h2>Нейросеть SAC</h2>
+        <span className={`pill sp ${role.used ? "ok" : ""}`}>{role.used ? "участвует в решениях" : "сейчас не используется"}</span>
       </div>
+      <p className="note-soon role">{role.text}</p>
       <ul className="jobs">
-        {JOBS.map((j) => (
-          <JobRow key={j.id} def={j} />
+        <li className="job">
+          <TrainingStep />
+        </li>
+        {MODEL_JOBS.map((id) => (
+          <JobRow key={id} def={JOBS.find((j) => j.id === id)!} />
         ))}
         <li className="job">
           <div className="job-h">
@@ -211,5 +254,41 @@ export function JobsCard() {
         </li>
       </ul>
     </article>
+  );
+}
+
+function AlphaCard() {
+  return (
+    <article className="card">
+      <div className="card-h">
+        <h2>Поиск преимущества (альфы)</h2>
+        <Q tip="Альфа — это то, что стратегия зарабатывает сверх случайности. Эти проверки отвечают на вопрос: есть ли у ваших стратегий и у AI настоящее преимущество, или пока везение." />
+      </div>
+      <p className="note-soon role">
+        Бэктест прогоняет стратегии по истории; значимость альфы проверяет ваши закрытые Paper-сделки статистикой; остальные две сравнивают реальное
+        исполнение с моделью и отделяют вклад AI от индикаторов. Всё в фоне, бот продолжает торговать.
+      </p>
+      <ul className="jobs">
+        {ALPHA_JOBS.map((id) => (
+          <JobRow key={id} def={JOBS.find((j) => j.id === id)!} />
+        ))}
+      </ul>
+    </article>
+  );
+}
+
+/** Вкладка «Обучение»: нейросеть и поиск преимущества — всё, что можно улучшить и проверить. */
+export function Learn() {
+  return (
+    <section className="view enter" aria-label="Обучение">
+      <div className="cols">
+        <div className="col">
+          <ModelCard />
+        </div>
+        <div className="col">
+          <AlphaCard />
+        </div>
+      </div>
+    </section>
   );
 }

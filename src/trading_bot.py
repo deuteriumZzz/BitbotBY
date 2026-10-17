@@ -1284,8 +1284,10 @@ class TradingBot:
             "swing_trading",
         }
 
-        if not recs:
-            logger.info("MODE=%s, no signals — local fallback", Config.MODE)
+        # Local — основной путь; в остальных режимах запасной путь можно выключить.
+        _mode = self._runtime_config.get_mode()
+        if not recs and (_mode == "local" or self._runtime_config.get_local_fallback()):
+            logger.info("MODE=%s, no signals — local fallback", _mode)
             for snap in snapshots:
                 sym = snap["symbol"]
                 sym_regime = regimes.get(sym, self._current_regime)

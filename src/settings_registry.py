@@ -82,6 +82,7 @@ BASIC = frozenset(
         "SCAN_TOP_N",
         "TRADING_HOURS",
         "AUTO_EXECUTE",
+        "LOCAL_FALLBACK",
         "TELEGRAM_CONFIRM_TIMEOUT",
         "CONFIRM_ON_TIMEOUT",
         "INITIAL_BALANCE",
@@ -673,6 +674,17 @@ SETTINGS: Tuple[Setting, ...] = (
             ("hybrid", "Hybrid"),
         ),
         **_rc("set_mode", "get_mode"),
+    ),
+    Setting(
+        "LOCAL_FALLBACK",
+        _G_AI,
+        "Если AI молчит — торговать локальными стратегиями",
+        "bool",
+        True,
+        hint="В режимах AI, SAC и Hybrid бывают циклы без сигналов. Включено: тогда "
+        "бот сам ищет вход по включённым локальным стратегиям. Выключено: нет "
+        "сигнала от AI/SAC — нет сделки. В режиме Local не используется.",
+        **_rc("set_local_fallback", "get_local_fallback"),
     ),
     Setting(
         "AI_PROVIDER",

@@ -87,7 +87,7 @@ select.sel{background:var(--bg);color:var(--ink);border:1px solid var(--line-ui)
 .banner svg{flex:none;margin-top:1px}
 
 .nav{display:flex;justify-content:space-around;background:var(--panel);border-top:1px solid var(--line-soft);padding:6px 8px max(8px,env(safe-area-inset-bottom,0px));position:relative;z-index:3}
-.nav button{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:6px 10px;border-radius:var(--r);color:var(--ink-3);font:500 11px/1.1 var(--f-ui);min-width:72px;min-height:48px;position:relative;z-index:1;transition:color .25s}
+.nav button{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:6px 6px;border-radius:var(--r);color:var(--ink-3);font:500 11px/1.1 var(--f-ui);min-width:62px;min-height:48px;position:relative;z-index:1;transition:color .25s}
 .nav button[aria-current="page"]{color:var(--ink)}
 .nav button[aria-current="page"] svg{color:var(--brand);filter:drop-shadow(0 0 4px color-mix(in oklab,var(--brand) 55%,transparent))}
 .nav button.ping::after{content:"";position:absolute;top:6px;right:16px;width:8px;height:8px;border-radius:50%;background:var(--brand-ink);color:color-mix(in oklab,var(--brand) 60%,transparent);box-shadow:0 0 0 2px var(--panel);animation:pulse 1.6s infinite}
@@ -687,3 +687,9 @@ li:last-child>.jr-strat{border-bottom:0}
 .job-res{width:100%}
 .job-out{margin:6px 0 0;padding:10px;max-height:220px;overflow:auto;font:11px/1.45 var(--f-num);background:var(--bg);border:1px solid var(--line-soft);border-radius:var(--r);white-space:pre-wrap;overflow-wrap:anywhere;color:var(--ink-2)}
 .job .confirm-box{width:100%;margin-top:0}
+/* свёрнутый блок «что это и как влияет» */
+details.more>summary{cursor:pointer;list-style:none;font:500 13px var(--f-ui);color:var(--ink-2);padding:2px 0 10px}
+details.more>summary::-webkit-details-marker{display:none}
+details.more>summary::before{content:"▸ ";color:var(--ink-3)}
+details.more[open]>summary::before{content:"▾ "}
+.note-soon.role{margin-bottom:10px;color:var(--ink-2);font-size:13px;line-height:1.5}

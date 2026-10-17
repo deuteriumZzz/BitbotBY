@@ -862,6 +862,22 @@
    "basic": true
   },
   {
+   "key": "LOCAL_FALLBACK",
+   "group": "AI и решения",
+   "label": "Если AI молчит — торговать локальными стратегиями",
+   "type": "bool",
+   "default": true,
+   "min": null,
+   "max": null,
+   "step": null,
+   "unit": "",
+   "options": [],
+   "hint": "В режимах AI, SAC и Hybrid бывают циклы без сигналов. Включено: тогда бот сам ищет вход по включённым локальным стратегиям. Выключено: нет сигнала от AI/SAC — нет сделки. В режиме Local не используется.",
+   "readonly": false,
+   "hot": true,
+   "basic": true
+  },
+  {
    "key": "AI_PROVIDER",
    "group": "AI и решения",
    "label": "AI-провайдер",
@@ -1891,6 +1907,10 @@
   "DASHBOARD_USER": {
    "value": "admin",
    "source": "default"
+  },
+  "LOCAL_FALLBACK": {
+   "value": true,
+   "source": "live"
   }
  },
  "secrets": [

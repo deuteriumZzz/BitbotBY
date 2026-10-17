@@ -6,7 +6,6 @@ import { fmtN, plural, tone } from "../lib/format";
 import type { ConfigValues } from "../lib/types";
 import { actions, useStore } from "../store";
 import { Icon, Q, Seg, Toggle } from "../ui";
-import { JobsCard } from "./jobs";
 
 export const STRATEGY_NAME: Record<string, string> = {
   scalping: "Скальпинг",
@@ -116,7 +115,6 @@ export function Bots() {
         <div className="col">
           <WhatCard />
           <StrategiesCard />
-          <JobsCard />
         </div>
       </div>
     </section>
@@ -474,23 +472,51 @@ function WhatCard() {
 
 // ── Стратегии ─────────────────────────────────────────────────────────────────
 
+/** Кто принимает решение о сделке: от этого зависит, насколько важны стратегии. */
+const MODE_ROLE: Record<string, { title: string; text: string }> = {
+  local: { title: "Стратегии", text: "" },
+  ai: {
+    title: "Запасные стратегии и подсказки для AI",
+    text: "Сделку решает AI. Включённые стратегии он видит как список типов сетапов и подписывает ими свои сделки — это подсказка, а не проверка: код стратегии при этом не запускается. Отключённых AI не видит.",
+  },
+  hybrid: {
+    title: "Запасные стратегии и подсказки для AI",
+    text: "Сделку открывают, когда AI и нейросеть SAC согласны. Включённые стратегии AI видит как подсказку, а нейросеть их не использует вовсе.",
+  },
+  dqn: {
+    title: "Запасные стратегии",
+    text: "Сделку решает нейросеть SAC и стратегии не использует. Они нужны только как запасной путь, если SAC не дала сигнала.",
+  },
+};
+
 function StrategiesCard() {
-  const strategies = useStore((s) => s.strategies);
+  const all0 = useStore((s) => s.strategies);
   const spot = useStore((s) => cfg<string>(s.config, "MARKET_TYPE", "linear") === "spot");
+  const mode = useStore((s) => s.bot?.mode ?? "ai");
+  const fallback = useStore((s) => cfg<boolean>(s.config, "LOCAL_FALLBACK", true));
   const [all, setAll] = useState(false);
+  // Показываем только то, что подходит текущему рынку: на споте нет шортов,
+  // стратегии «только фьючерсы» там не работают, и наоборот.
+  const strategies = all0.filter((s) => s.markets === "both" || s.markets === (spot ? "spot" : "futures"));
+  const hidden = all0.length - strategies.length;
   const sorted = [...strategies].sort((a, b) => (b.backtest?.sharpe ?? -9) - (a.backtest?.sharpe ?? -9));
   const rows = all ? sorted : sorted.slice(0, 6);
   const on = strategies.filter((s) => s.enabled).length;
   const tested = strategies.filter((s) => s.backtest && s.backtest.trades > 0);
   const edge = tested.filter((s) => s.backtest!.trades >= 100 && s.backtest!.sharpe > 0);
-  return (
-    <article className="card">
-      <div className="card-h">
-        <h2>Стратегии</h2>
-        <span className="pill sp">
-          включено {on} из {strategies.length}
-        </span>
-      </div>
+  const role = MODE_ROLE[mode] ?? MODE_ROLE.ai;
+  const body = (
+    <>
+      {role.text && <p className="note-soon role">{role.text}</p>}
+      {mode !== "local" && (
+        <div className="row-tgl">
+          <span>
+            Если решение не пришло — торговать по этим стратегиям{" "}
+            <Q tip="Бывают циклы, когда AI или SAC не дали ни одного сигнала. Включено: тогда бот сам ищет вход по включённым стратегиям ниже. Выключено: нет сигнала от модели — нет сделки." />
+          </span>
+          <Toggle on={fallback} label="Запасной путь по локальным стратегиям" onChange={(v) => void actions.patchConfig({ LOCAL_FALLBACK: v })} />
+        </div>
+      )}
       {tested.length > 0 && !edge.length && (
         <div className="honest">
           {Icon.warn}
@@ -504,10 +530,8 @@ function StrategiesCard() {
         {rows.map((s) => {
           const bt = s.backtest;
           const st = !bt || !bt.trades ? ["", "нет данных"] : bt.trades < 100 ? ["", "мало сделок"] : bt.sharpe > 0 ? ["ok", "есть плюс"] : ["warn", "нет edge"];
-          // На споте нет шортов: стратегия «только фьючерсы» там не участвует, сколько её ни включай.
-          const blocked = spot && s.markets === "futures";
           return (
-            <li key={s.name} className={`strat${s.enabled && !blocked ? "" : " off"}`}>
+            <li key={s.name} className={`strat${s.enabled ? "" : " off"}`}>
               <div className="nm">
                 <b>{stratName(s.name)}</b>
                 <code>{s.name}</code>
@@ -519,8 +543,8 @@ function StrategiesCard() {
                   </span>
                 )}
                 {s.markets === "futures" && (
-                  <span className={`pill ${blocked ? "warn" : ""}`} title="Сигналы только на продажу: открыть можно лишь шорт">
-                    {blocked ? "не для спота" : "фьючерсы"}
+                  <span className="pill" title="Сигналы только на продажу: открыть можно лишь шорт">
+                    только фьючерсы
                   </span>
                 )}
                 <span className={`pill ${st[0]}`}>{st[1]}</span>
@@ -546,6 +570,11 @@ function StrategiesCard() {
           );
         })}
       </ul>
+      {hidden > 0 && (
+        <p className="note-soon">
+          Скрыто {hidden}: {plural(hidden, ["стратегия не подходит", "стратегии не подходят", "стратегий не подходят"])} рынку «{spot ? "Спот" : "Фьючерсы"}».
+        </p>
+      )}
       <div className="btn-row" style={{ marginTop: 8 }}>
         {strategies.length > 6 && (
           <button className="btn" type="button" onClick={() => setAll(!all)}>
@@ -556,6 +585,25 @@ function StrategiesCard() {
           Включить все
         </button>
       </div>
+    </>
+  );
+  // Когда решают AI или SAC, стратегии вторичны — список свёрнут, чтобы не отвлекать.
+  return (
+    <article className="card">
+      <div className="card-h">
+        <h2>{role.title}</h2>
+        <span className="pill sp">
+          включено {on} из {strategies.length}
+        </span>
+      </div>
+      {mode === "local" ? (
+        body
+      ) : (
+        <details className="more">
+          <summary>Что это и как влияет</summary>
+          {body}
+        </details>
+      )}
     </article>
   );
 }

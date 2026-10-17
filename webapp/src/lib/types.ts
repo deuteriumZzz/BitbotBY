@@ -2,7 +2,7 @@
 
 export type Side = "long" | "short";
 export type Period = "24h" | "7d" | "30d" | "all";
-export type Tab = "terminal" | "bots" | "journal" | "settings";
+export type Tab = "terminal" | "bots" | "learn" | "journal" | "settings";
 
 export interface Position {
   id: string;

@@ -7,6 +7,7 @@ import { base, fmtN, plural, price, usd } from "./lib/format";
 import * as platform from "./lib/platform";
 import type { Tab } from "./lib/types";
 import { Bots, profileName, stratName } from "./features/bots";
+import { Learn } from "./features/jobs";
 import { Journal } from "./features/journal";
 import { Settings } from "./features/settings";
 import { Setup } from "./features/setup";
@@ -62,6 +63,7 @@ export function App() {
           <>
             {tab === "terminal" && <Terminal />}
             {tab === "bots" && <Bots />}
+            {tab === "learn" && <Learn />}
             {tab === "journal" && <Journal />}
             {tab === "settings" && <Settings />}
           </>
@@ -256,6 +258,7 @@ function Banners() {
 const TABS: [Tab, string, JSX.Element][] = [
   ["terminal", "Терминал", Icon.terminal],
   ["bots", "Боты", Icon.bots],
+  ["learn", "Обучение", Icon.learn],
   ["journal", "Журнал", Icon.journal],
   ["settings", "Настройки", Icon.settings],
 ];

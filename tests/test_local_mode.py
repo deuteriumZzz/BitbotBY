@@ -3,6 +3,7 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pandas as pd
+import pytest
 
 from src.experience_buffer import LOCAL_REASONING_PREFIX, is_local_reasoning
 from src.trading_bot import TradingBot
@@ -44,3 +45,20 @@ async def test_local_signal_explains_itself_in_russian():
 
 async def test_below_min_confidence_makes_no_trade():
     assert await _run(_bot(("breakout", 0.5, {"action": "buy"}))) == []
+
+
+@pytest.mark.parametrize(
+    "mode, fallback, trades",
+    [
+        ("local", False, True),  # Local — основной путь, переключатель не влияет
+        ("ai", True, True),  # AI молчит, запасной путь включён
+        ("ai", False, False),  # запасной путь выключен: нет сигнала — нет сделки
+        ("dqn", False, False),
+        ("hybrid", True, True),
+    ],
+)
+async def test_local_fallback_switch(mode, fallback, trades):
+    bot = _bot()
+    bot._runtime_config.get_mode.return_value = mode
+    bot._runtime_config.get_local_fallback.return_value = fallback
+    assert bool(await _run(bot)) is trades

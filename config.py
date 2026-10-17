@@ -203,6 +203,9 @@ class Config:
     SCAN_TOP_N: int = int(os.getenv("SCAN_TOP_N", "20"))
     # True → автоматически исполнять топ-1 рекомендацию
     AUTO_EXECUTE: bool = os.getenv("AUTO_EXECUTE", "false").lower() == "true"
+    # Когда AI/SAC/Hybrid не дали ни одного сигнала, бот может открыть сделку по
+    # локальным стратегиям. В режиме Local это и есть основной путь, там не влияет.
+    LOCAL_FALLBACK: bool = os.getenv("LOCAL_FALLBACK", "true").lower() == "true"
 
     # ── News ───────────────────────────────────────────────────────────────
     NEWS_API_KEY: str = os.getenv("NEWS_API_KEY", "")
