@@ -933,6 +933,61 @@ async def put_secret(service_id: str, request: Request) -> JSONResponse:
     return JSONResponse({**_secret_item(service.id), "restart_required": True})
 
 
+_X_MAX = 200
+
+
+@router.post("/api/secrets/twitter/accounts")
+async def add_x_account(request: Request) -> JSONResponse:
+    """Добавляет аккаунт X для бесплатного обхода (twscrape): четыре отдельных поля."""
+    denied = _secrets_unavailable(request)
+    if denied is not None:
+        return denied
+    body = await _body(request)
+    names = ("login", "password", "email", "email_password")
+    vals = {k: str(body.get(k) or "").strip() for k in names}
+    errors = {k: "Заполните поле." for k, v in vals.items() if not v}
+    errors.update(
+        {k: "Слишком длинное значение." for k, v in vals.items() if len(v) > _X_MAX}
+    )
+    if vals["email"] and "@" not in vals["email"]:
+        errors["email"] = "Это должен быть адрес почты."
+    if errors:
+        return JSONResponse(
+            {
+                "error": {
+                    "code": "invalid",
+                    "message": "Проверьте поля.",
+                    "fields": errors,
+                }
+            },
+            status_code=422,
+        )
+    secrets_store.x_add_account(
+        vals["login"],
+        vals["password"],
+        vals["email"],
+        vals["email_password"],
+        _source(request),
+    )
+    bot_bus.emit(
+        data.get_redis(), "secret.changed", {"service": "twitter", "status": "warn"}
+    )
+    return JSONResponse({**_secret_item("twitter"), "restart_required": True})
+
+
+@router.delete("/api/secrets/twitter/accounts/{login}")
+async def remove_x_account(login: str, request: Request) -> JSONResponse:
+    denied = _secrets_unavailable(request)
+    if denied is not None:
+        return denied
+    if not secrets_store.x_remove_account(login, _source(request)):
+        return _err(404, "unknown_account", "Такого аккаунта нет.")
+    bot_bus.emit(
+        data.get_redis(), "secret.changed", {"service": "twitter", "status": "warn"}
+    )
+    return JSONResponse({**_secret_item("twitter"), "restart_required": True})
+
+
 @router.delete("/api/secrets/{service_id}")
 async def delete_secret(service_id: str, request: Request) -> JSONResponse:
     denied = _secrets_unavailable(request)

@@ -14,6 +14,7 @@ import asyncio
 import logging
 import time
 from typing import Dict, List, Tuple
+from urllib.parse import unquote
 
 from config import Config
 
@@ -41,7 +42,15 @@ def _parse_twscrape_accounts(raw: str) -> List[Tuple[str, str, str, str]]:
                 "(ожидается user:pass:email:email_pass)"
             )
             continue
-        accounts.append((fields[0], fields[1], fields[2], fields[3]))
+        # Приложение кодирует «:», «,» и «%» внутри значений как %3A, %2C, %25.
+        accounts.append(
+            (
+                unquote(fields[0]),
+                unquote(fields[1]),
+                unquote(fields[2]),
+                unquote(fields[3]),
+            )
+        )
     return accounts
 
 

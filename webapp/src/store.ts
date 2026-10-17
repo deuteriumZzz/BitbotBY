@@ -688,6 +688,10 @@ export const actions = {
       () => api("PUT", `/api/secrets/${service}`, { fields, ...(model ? { model } : {}) }).then(() => st().loadSecrets()),
       "Ключ сохранён. Заработает после перезапуска бота.",
     ),
+  addXAccount: (body: { login: string; password: string; email: string; email_password: string }) =>
+    st().act(() => api("POST", "/api/secrets/twitter/accounts", body).then(() => st().loadSecrets()), "Аккаунт добавлен. Заработает после перезапуска бота."),
+  removeXAccount: (login: string) =>
+    st().act(() => api("DELETE", `/api/secrets/twitter/accounts/${encodeURIComponent(login)}`).then(() => st().loadSecrets()), "Аккаунт удалён."),
   putAiChain: (changes: AiChainChanges, ok?: string) =>
     st().act(() => api<AiState>("PUT", "/api/ai/chain", changes).then((ai) => useStore.setState({ ai })), ok),
   /** Живой список моделей провайдера по сохранённому ключу. */

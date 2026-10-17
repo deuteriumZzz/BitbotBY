@@ -21,6 +21,7 @@ import tempfile
 import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import quote, unquote
 
 from src import ai_providers
 
@@ -281,6 +282,77 @@ def load_values() -> Dict[str, str]:
     return out
 
 
+# ── Аккаунты X для обхода официального API (twscrape) ─────────────────────────
+# В хранилище это одна строка «логин:пароль:почта:пароль_почты,…». Приложение
+# собирает её из отдельных полей; двоеточие, запятая и % внутри значений
+# кодируются, так что любые пароли безопасны.
+
+X_ENV = "TWSCRAPE_ACCOUNTS"
+_X_SAFE = "@._-+"
+
+
+def x_encode(part: str) -> str:
+    return quote(part.strip(), safe=_X_SAFE)
+
+
+def x_parse(raw: Optional[str]) -> List[Tuple[str, str, str, str]]:
+    """Строка из хранилища или .env → список (логин, пароль, почта, пароль_почты)."""
+    out: List[Tuple[str, str, str, str]] = []
+    for entry in (raw or "").split(","):
+        p = entry.strip().split(":")
+        if len(p) == 4 and all(p):
+            out.append((unquote(p[0]), unquote(p[1]), unquote(p[2]), unquote(p[3])))
+    return out
+
+
+def _mask_email(email: str) -> str:
+    name, _, host = email.partition("@")
+    return f"{name[:1]}***@{host}" if host else "***"
+
+
+def x_accounts_public(raw: Optional[str]) -> List[Dict[str, str]]:
+    """Что можно показать в приложении: логин и спрятанная почта, без паролей."""
+    return [{"login": a[0], "email": _mask_email(a[2])} for a in x_parse(raw)]
+
+
+def _x_save(accounts: List[Tuple[str, str, str, str]], source: str) -> None:
+    service = BY_ID["twitter"]
+    raw = _load_raw()
+    if accounts:
+        value = ",".join(":".join(x_encode(p) for p in acc) for acc in accounts)
+        save(
+            service,
+            {X_ENV: value},
+            None,
+            "warn",
+            "Аккаунты сохранены. Бот войдёт в X при первом запросе — проверить "
+            "заранее нельзя.",
+            source,
+        )
+    else:
+        raw["items"].pop(X_ENV, None)
+        _save_raw(raw)
+        audit.info("secret.deleted service=twitter field=%s source=%s", X_ENV, source)
+
+
+def x_add_account(
+    login: str, password: str, email: str, email_password: str, source: str
+) -> None:
+    """Добавляет аккаунт к уже сохранённым (или заменяет с тем же логином)."""
+    accounts = [a for a in x_parse(get_value(X_ENV)) if a[0] != login.strip()]
+    accounts.append((login.strip(), password, email.strip(), email_password))
+    _x_save(accounts, source)
+
+
+def x_remove_account(login: str, source: str) -> bool:
+    accounts = x_parse(get_value(X_ENV))
+    kept = [a for a in accounts if a[0] != login]
+    if len(kept) == len(accounts):
+        return False
+    _x_save(kept, source)
+    return True
+
+
 def get_value(env: str) -> Optional[str]:
     """Значение из хранилища, иначе из окружения."""
     try:
@@ -348,6 +420,15 @@ def public_view() -> List[Dict[str, Any]]:
                 "status": meta.get("status", "unchecked" if any_set else "unset"),
                 "message": meta.get("message", ""),
                 "checked_at": meta.get("checked_at"),
+                **(
+                    {
+                        "accounts": x_accounts_public(
+                            values.get(X_ENV) or os.getenv(X_ENV)
+                        )
+                    }
+                    if s.id == "twitter"
+                    else {}
+                ),
             }
         )
     return out

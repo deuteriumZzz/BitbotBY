@@ -165,3 +165,56 @@ def test_twitter_fields_explain_themselves(store):
     assert "платный" in fields["TWITTER_BEARER_TOKEN"]["hint"].lower()
     assert "почта" in fields["TWSCRAPE_ACCOUNTS"]["hint"].lower()
     assert fields["TWSCRAPE_ACCOUNTS"]["placeholder"]
+
+
+def test_x_accounts_survive_awkward_passwords_and_hide_secrets(store):
+    ss.x_add_account("alice", "p:a,s%s", "al@mail.com", "m:p", "test")
+    ss.x_add_account("bob", "pw2", "bob@mail.com", "mp2", "test")
+    raw = ss.get_value(ss.X_ENV)
+    assert raw.count(",") == 1 and raw.count(":") == 6  # формат не сломан
+    assert ss.x_parse(raw)[0] == ("alice", "p:a,s%s", "al@mail.com", "m:p")
+    # то же разбирает и сам бот
+    from src.twitter_analyzer import _parse_twscrape_accounts
+
+    assert _parse_twscrape_accounts(raw)[0] == (
+        "alice",
+        "p:a,s%s",
+        "al@mail.com",
+        "m:p",
+    )
+    # в приложение уходят только логин и спрятанная почта
+    twitter = next(i for i in ss.public_view() if i["service"] == "twitter")
+    assert twitter["accounts"] == [
+        {"login": "alice", "email": "a***@mail.com"},
+        {"login": "bob", "email": "b***@mail.com"},
+    ]
+    assert "pw2" not in json.dumps(ss.public_view(), ensure_ascii=False)
+
+
+def test_x_account_replace_and_remove(store):
+    ss.x_add_account("alice", "one", "a@m.com", "x", "test")
+    ss.x_add_account("alice", "two", "a@m.com", "x", "test")  # тот же логин — замена
+    assert [a[1] for a in ss.x_parse(ss.get_value(ss.X_ENV))] == ["two"]
+    assert ss.x_remove_account("nobody", "test") is False
+    assert ss.x_remove_account("alice", "test") is True
+    assert ss.x_parse(ss.get_value(ss.X_ENV)) == []
+
+
+def test_x_account_routes(keyed):
+    body = {
+        "login": "alice",
+        "password": "pw",
+        "email": "a@m.com",
+        "email_password": "mp",
+    }
+    with patch.object(data, "get_redis", return_value=FakeRedis()):
+        bad = keyed.post(
+            "/api/secrets/twitter/accounts", json={**body, "email": "no-at"}, headers=H
+        )
+        ok = keyed.post("/api/secrets/twitter/accounts", json=body, headers=H)
+        gone = keyed.delete("/api/secrets/twitter/accounts/alice", headers=H)
+        again = keyed.delete("/api/secrets/twitter/accounts/alice", headers=H)
+    assert bad.status_code == 422 and "email" in bad.json()["error"]["fields"]
+    assert ok.status_code == 200 and "pw" not in ok.text and "mp" not in ok.text
+    assert ok.json()["accounts"] == [{"login": "alice", "email": "a***@m.com"}]
+    assert gone.json()["accounts"] == [] and again.status_code == 404

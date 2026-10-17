@@ -581,6 +581,15 @@ function startJob(job: string, b: Body) {
   return done(b, { ok: true, started: true, job });
 }
 
+function xAccount(b: Body) {
+  const tw = secrets.find((x) => x.service === "twitter")!;
+  const email = String(b.email ?? "");
+  if (!b.login || !b.password || !email.includes("@") || !b.email_password) fail(422, "invalid", "Проверьте поля.");
+  tw.accounts = [...(tw.accounts ?? []).filter((a) => a.login !== b.login), { login: String(b.login), email: `${email[0]}***@${email.split("@")[1]}` }];
+  tw.status = "warn";
+  return tw;
+}
+
 function patchConfig(changes: Body) {
   const fields: Record<string, string> = {};
   for (const [key, raw] of Object.entries(changes)) {
@@ -798,6 +807,12 @@ function route(method: string, path: string, body: unknown): unknown {
     if (b.enabled !== undefined) a.enabled = Boolean(b.enabled);
     if (b.cooldown_min !== undefined) a.cooldown_min = Number(b.cooldown_min);
     return a;
+  }
+  if (method === "POST" && p === "/api/secrets/twitter/accounts") return xAccount(b);
+  if (method === "DELETE" && (m = p.match(/^\/api\/secrets\/twitter\/accounts\/(.+)$/))) {
+    const tw = secrets.find((x) => x.service === "twitter")!;
+    tw.accounts = (tw.accounts ?? []).filter((a) => a.login !== decodeURIComponent(m![1]));
+    return tw;
   }
   if ((m = p.match(/^\/api\/secrets\/(.+)$/)) && (method === "PUT" || method === "DELETE")) return secret(method, m[1], b);
   return fail(404, "not_found", `Демо не знает ${route}.`);

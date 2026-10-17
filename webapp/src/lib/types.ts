@@ -165,6 +165,8 @@ export interface SecretItem {
   group: string;
   fields: SecretField[];
   model: { env: string; value: string | null } | null;
+  /** Только у X/Twitter: сохранённые аккаунты для обхода официального API (без паролей). */
+  accounts?: { login: string; email: string }[];
   status: "ok" | "warn" | "bad" | "unset" | "unchecked";
   message: string;
   checked_at: number | null;
