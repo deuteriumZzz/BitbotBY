@@ -325,6 +325,7 @@ export const useStore = create<Store>((set, get) => {
             strategy: d.strategy ?? get().radar.signal[d.symbol]?.strategy,
             confidence: d.confidence ?? get().radar.signal[d.symbol]?.confidence,
             reasoning: d.reasoning || get().radar.signal[d.symbol]?.reasoning,
+            opened_at: d.opened_at ?? Date.now() / 1000,
           };
           set((s) => ({ positions: { ...s.positions, [p.symbol]: p } }));
           feed("open", `Открыл ${base(p.symbol)} ${p.side === "long" ? "LONG" : "SHORT"}`);

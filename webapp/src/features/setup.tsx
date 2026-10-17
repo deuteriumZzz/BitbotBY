@@ -6,7 +6,7 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import type { AiState, SecretItem, SetupInfo, SetupStep } from "../lib/types";
 import { actions, useStore } from "../store";
-import { Icon } from "../ui";
+import { Icon, Skel } from "../ui";
 import { AddCard } from "./ai";
 import { RiskCard, presetName, presetOf } from "./bots";
 import { KeyCard } from "./settings";
@@ -238,7 +238,7 @@ function StepBody({ step }: { step: SetupStep }) {
         </>
       );
     case "ai": {
-      if (!ai) return <p className="empty">Загружаю список провайдеров…</p>;
+      if (!ai) return <Skel label="Загружаю список провайдеров" />;
       // Первым — LLM7: работает без ключа, один клик. Ollama требует своего сервера —
       // это в Настройки → AI. Без хранилища ключей — только то, что не требует ключа.
       const free = ai.providers

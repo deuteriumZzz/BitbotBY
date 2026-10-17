@@ -198,6 +198,7 @@ def get_open_positions() -> List[dict]:
                 "strategy": p.get("strategy"),
                 "confidence": p.get("confidence"),
                 "reasoning": p.get("reasoning", ""),
+                "opened_at": p.get("opened_at"),
             }
         )
     return out

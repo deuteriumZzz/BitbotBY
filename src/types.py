@@ -56,3 +56,5 @@ class PositionRecord(TypedDict, total=False):
     strategy: str
     confidence: float
     reasoning: str
+    # Время открытия (unix, с) — приложение заливает график только с этого момента
+    opened_at: Optional[float]

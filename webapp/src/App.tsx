@@ -20,6 +20,14 @@ export function App() {
   const tab = useStore((s) => s.tab);
   const setup = useStore((s) => s.setup);
   const views = useRef<HTMLElement>(null);
+  // Новая вкладка въезжает с той стороны, где стоит в меню.
+  const prevTab = useRef(tab);
+  const dir = useRef<"fwd" | "back">("fwd");
+  if (prevTab.current !== tab) {
+    const at = (t: Tab) => TABS.findIndex(([id]) => id === t);
+    dir.current = at(tab) > at(prevTab.current) ? "fwd" : "back";
+    prevTab.current = tab;
+  }
   const [flash, setFlash] = useState(0);
 
   useEffect(() => {
@@ -36,7 +44,7 @@ export function App() {
     <div className={`app${flash ? " flash" : ""}`} onAnimationEnd={(e) => e.target === e.currentTarget && setFlash(0)}>
       <TopBar onPanic={() => setFlash(Date.now())} />
       <Banners />
-      <main className="views" ref={views} onScroll={hideTip}>
+      <main className="views" ref={views} onScroll={hideTip} data-dir={dir.current}>
         {setup ? (
           <Setup />
         ) : (
@@ -117,19 +125,33 @@ function TopBar({ onPanic }: { onPanic: () => void }) {
   );
 }
 
-/** PANIC: удерживать 1.1 с — закрыть всё по рынку и поставить бота на паузу. */
+/** PANIC под откидной крышкой: поднять крышку, затем удерживать 1.1 с —
+ *  закрыть всё по рынку и поставить бота на паузу. Крышка сама опускается через 5 с. */
 function PanicButton({ onFire, disabled }: { onFire: () => void; disabled: boolean }) {
   const [holding, setHolding] = useState(false);
+  const [open, setOpen] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout>>();
+  const cover = useRef<ReturnType<typeof setTimeout>>();
   const t0 = useRef(0);
   const say = useStore((s) => s.say);
+  useEffect(() => () => clearTimeout(cover.current), []);
+  const lift = () => {
+    setOpen(true);
+    platform.haptic("tap");
+    say("Крышка поднята — удерживайте PANIC 1 секунду");
+    clearTimeout(cover.current);
+    cover.current = setTimeout(() => setOpen(false), 5000);
+  };
   const start = () => {
     if (disabled) return;
+    if (!open) return lift();
+    clearTimeout(cover.current);
     t0.current = Date.now();
     setHolding(true);
     timer.current = setTimeout(() => {
       timer.current = undefined;
       setHolding(false);
+      setOpen(false);
       platform.haptic("warning");
       if (!platform.reducedMotion()) onFire();
       void actions.panic().then(() => useStore.getState().loadState().catch(() => undefined));
@@ -140,14 +162,20 @@ function PanicButton({ onFire, disabled }: { onFire: () => void; disabled: boole
     clearTimeout(timer.current);
     timer.current = undefined;
     setHolding(false);
+    cover.current = setTimeout(() => setOpen(false), 5000);
     if (Date.now() - t0.current < 600) say("Удерживайте PANIC 1 секунду, чтобы закрыть всё");
   };
   return (
     <button
-      className={`panic${holding ? " holding" : ""}`}
+      className={`panic${holding ? " holding" : ""}${open ? " open" : ""}`}
       type="button"
       disabled={disabled}
-      title="Удерживайте 1 секунду: закрыть все позиции по рынку и поставить бота на паузу"
+      aria-expanded={open}
+      title={
+        open
+          ? "Удерживайте 1 секунду: закрыть все позиции по рынку и поставить бота на паузу"
+          : "PANIC под крышкой: нажмите, чтобы поднять, затем удерживайте 1 секунду"
+      }
       onPointerDown={(e) => {
         e.preventDefault();
         start();
@@ -168,6 +196,7 @@ function PanicButton({ onFire, disabled }: { onFire: () => void; disabled: boole
       <span>
         PANIC<span className="long"> CLOSE</span>
       </span>
+      <span className="panic-cover" aria-hidden="true" />
     </button>
   );
 }
@@ -304,18 +333,17 @@ function SignalSheet() {
         </span>
         <span className="cd">
           <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
-            <circle cx="11" cy="11" r="9" fill="none" stroke="#2B3139" strokeWidth="3" />
+            <circle cx="11" cy="11" r="9" fill="none" style={{ stroke: "var(--line)" }} strokeWidth="3" />
             <circle
               cx="11"
               cy="11"
               r="9"
               fill="none"
-              stroke="#A47CFF"
+              style={{ stroke: "var(--brand)", transition: "stroke-dashoffset 1s linear" }}
               strokeWidth="3"
               strokeDasharray="56.5"
               strokeDashoffset={56.5 * (1 - left / total.current)}
               strokeLinecap="round"
-              style={{ transition: "stroke-dashoffset 1s linear" }}
             />
           </svg>
           {left} с

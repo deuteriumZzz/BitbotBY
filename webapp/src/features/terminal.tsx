@@ -10,7 +10,7 @@ import type { Candle, Position } from "../lib/types";
 import { actions, positionPnl, useStore, type Store } from "../store";
 import { profileName, stratName } from "./bots";
 import { ReadinessCard } from "./setup";
-import { Flash, Q, Seg, Tween, hideTip, showTip, useArm } from "../ui";
+import { Flash, Gauge, Q, Seg, Tween, hideTip, showTip, useArm } from "../ui";
 
 const EASE = "cubic-bezier(.2,.8,.2,1)";
 const PERIODS = [
@@ -128,6 +128,7 @@ function Equity() {
   const x = (i: number) => (i * (W - 8)) / (n - 1) + 4;
   const y = (v: number) => H - 8 - ((v - mn) / (mx - mn || 1)) * (H - 20);
   const line = pts.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.b).toFixed(1)}`).join("");
+  const area = `${line}L${x(n - 1).toFixed(1)},${H}L${x(0).toFixed(1)},${H}Z`;
   const onMove = (ev: React.PointerEvent) => {
     const r = ref.current!.getBoundingClientRect();
     const i = Math.max(0, Math.min(n - 1, Math.round(((ev.clientX - r.left) / r.width) * (n - 1))));
@@ -147,20 +148,19 @@ function Equity() {
   return (
     <div className="eq">
       <svg ref={ref} viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Баланс за 30 дней">
-        <defs>
-          <linearGradient id="eqg" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#7000FF" stopOpacity=".38" />
-            <stop offset="1" stopColor="#7000FF" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        <line x1="4" x2={W - 4} y1={y(bs[0])} y2={y(bs[0])} stroke="#2B3139" strokeDasharray="3 4" />
-        <path d={`${line}L${x(n - 1)},${H}L${x(0)},${H}Z`} fill="url(#eqg)" />
-        <path d={line} fill="none" stroke="#A47CFF" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-        <circle cx={x(n - 1)} cy={y(bs[n - 1])} r="4" fill="#A47CFF" stroke="#181A20" strokeWidth="2" />
+        {/* Шкала с делениями по дням — как у самописца. */}
+        {pts.map((_, i) => (
+          <line key={i} className="eq-tick" x1={x(i)} x2={x(i)} y1={H - (i % 7 ? 3 : 6)} y2={H} />
+        ))}
+        <line className="eq-base" x1="4" x2={W - 4} y1={y(bs[0])} y2={y(bs[0])} />
+        {/* style.d — чтобы кривая перетекала при обновлении (CSS-переход d; где не поддержан — просто сменится). */}
+        <path className="eq-area" d={area} style={{ d: `path("${area}")` } as React.CSSProperties} />
+        <path className="eq-line" d={line} pathLength={1} style={{ d: `path("${line}")` } as React.CSSProperties} />
+        <circle className="eq-now" cx={x(n - 1)} cy={y(bs[n - 1])} r="3.5" />
         {hover !== null && (
           <g>
-            <line x1={x(hover)} x2={x(hover)} y1="0" y2={H} stroke="#6C7480" />
-            <circle cx={x(hover)} cy={y(bs[hover])} r="4" fill="#EAECEF" stroke="#181A20" strokeWidth="2" />
+            <line className="eq-cross" x1={x(hover)} x2={x(hover)} y1="0" y2={H} />
+            <circle className="eq-hov" cx={x(hover)} cy={y(bs[hover])} r="4" />
           </g>
         )}
         <rect
@@ -323,6 +323,38 @@ export function cycleKind(s: Store): "off" | "paused" | "guard" | "monitor" | "s
   return s.cycle.state === "monitor" ? "monitor" : "scan";
 }
 
+// Угол луча монеты на экране радара — постоянный, чтобы засветка ехала к центру по прямой.
+const bearing = (s: string): number => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
+const RING = [44, 35, 26, 17, 7]; // скан → отбор → сигнал → проверки → позиции
+
+/** Экран радара: кольца — этапы конвейера, монеты — засветки, луч крутится, пока бот сканирует. */
+function Scope(props: { lanes: string[][]; side: (s: string) => string; rejected: Set<string>; open: Position[]; on: boolean }) {
+  const blips = [
+    ...props.lanes.flatMap((list, lane) => list.slice(0, 10).map((s) => ({ s, lane, cls: props.rejected.has(s) ? "rej" : props.side(s) }))),
+    ...props.open.map((p) => ({ s: p.symbol, lane: 4, cls: positionPnl(p).pnl >= 0 ? "win" : "loss" })),
+  ];
+  return (
+    <svg className={`scope${props.on ? " on" : ""}`} viewBox="-50 -50 100 100" aria-hidden="true">
+      {RING.slice(0, 4).map((r) => (
+        <circle key={r} className="sc-ring" r={r} />
+      ))}
+      <path className="sc-cross" d="M-47 0H47M0-47V47" />
+      {Array.from({ length: 36 }, (_, i) => (
+        <line key={i} className="sc-deg" x1="0" y1={i % 3 ? -46 : -43} x2="0" y2="-48" style={{ transform: `rotate(${i * 10}deg)` }} />
+      ))}
+      <g className="sc-beam">
+        <path className="sc-wedge" d="M0 0L0-46A46 46 0 0 0-26.4-37.7Z" />
+        <line className="sc-ray" x1="0" y1="0" x2="0" y2="-46" />
+      </g>
+      {blips.map((b) => (
+        <g key={b.s} className={`sc-blip ${b.cls} l${b.lane}`} style={{ transform: `rotate(${bearing(b.s)}deg) translateY(${-RING[b.lane]}px)` }}>
+          <circle r={b.lane >= 2 ? 2.4 : 1.7} />
+        </g>
+      ))}
+    </svg>
+  );
+}
+
 function Radar() {
   const radar = useStore((s) => s.radar);
   const positions = useStore((s) => s.positions);
@@ -397,6 +429,18 @@ function Radar() {
           {pillText}
         </span>
       </div>
+      <div className="radar-top">
+        <Scope
+          lanes={laneSyms}
+          side={(s) => radar.signal[s]?.side ?? ""}
+          rejected={new Set(Object.keys(radar.rejected).filter((s) => rej(s, radar.rejected[s].lane) === "rej"))}
+          open={open}
+          on={kind === "scan"}
+        />
+        <p className="radar-note" aria-live="polite">
+          {note}
+        </p>
+      </div>
       <div className="lanes" ref={host}>
         {laneSyms.map((list, lane) => (
           <div className="lane" key={lane}>
@@ -447,9 +491,6 @@ function Radar() {
           </div>
         </div>
       </div>
-      <p className="radar-note" aria-live="polite">
-        {note}
-      </p>
     </article>
   );
 }
@@ -519,8 +560,46 @@ function Positions() {
 const progOf = (p: Position, v: number) =>
   Math.max(0, Math.min(1, p.side === "long" ? (v - p.sl) / (p.tp - p.sl) : (p.sl - v) / (p.sl - p.tp)));
 
+const inView = (r: DOMRect): boolean => r.bottom > 0 && r.top < innerHeight && r.width > 0;
+
+/** Путь сделки: засветка вылетает из слота «Позиции» на радаре и садится в значок новой карточки. */
+function flyFromRadar(symbol: string, card: HTMLElement | null): void {
+  const from = document.querySelector(`.lane-pos [data-sym="${CSS.escape(symbol)}"]`);
+  const to = card?.querySelector<HTMLElement>(".coin");
+  if (!from || !to || reducedMotion()) return;
+  const a = from.getBoundingClientRect();
+  const b = to.getBoundingClientRect();
+  if (!inView(a) || !inView(b)) return;
+  const [x0, y0] = [a.left + a.width / 2, a.top + a.height / 2];
+  const [dx, dy] = [b.left + b.width / 2 - x0, b.top + b.height / 2 - y0];
+  const dot = document.createElement("i");
+  dot.className = "fly";
+  Object.assign(dot.style, { left: `${x0}px`, top: `${y0}px` });
+  document.body.appendChild(dot);
+  // Дуга: середина пути приподнята — так видно, откуда и куда.
+  const lift = -Math.min(80, Math.abs(dx) * 0.25 + 30);
+  dot
+    .animate(
+      [{ transform: "translate(0,0)" }, { transform: `translate(${dx / 2}px,${dy / 2 + lift}px)` }, { transform: `translate(${dx}px,${dy}px)` }],
+      { duration: 700, easing: "cubic-bezier(.3,.7,.1,1)" },
+    )
+    .finished.then(() => {
+      dot.remove();
+      to.classList.add("arrive");
+      setTimeout(() => to.classList.remove("arrive"), 700);
+    })
+    .catch(() => dot.remove());
+}
+
 function PositionCard({ p, enter }: { p: Position; enter: boolean }) {
   const online = useStore((s) => s.alive);
+  const self = useRef<HTMLElement>(null);
+  // Новая позиция: ждём, пока чип доедет до слота на радаре, потом засветка летит в карточку.
+  useEffect(() => {
+    if (!enter) return;
+    const t = setTimeout(() => flyFromRadar(p.symbol, self.current), 450);
+    return () => clearTimeout(t);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const { pnl, move } = positionPnl(p);
   const cur = p.price ?? p.entry;
   const e = progOf(p, p.entry) * 100;
@@ -571,7 +650,7 @@ function PositionCard({ p, enter }: { p: Position; enter: boolean }) {
   };
 
   return (
-    <article className={`pos ${pnl >= 0 ? "win" : "loss"} ${enter ? "enter" : ""}`}>
+    <article ref={self} className={`pos ${pnl >= 0 ? "win" : "loss"} ${enter ? "enter" : ""}`}>
       <div className="pos-h">
         <span className="coin">{base(p.symbol)}</span>
         <div className="pos-t">
@@ -583,6 +662,7 @@ function PositionCard({ p, enter }: { p: Position; enter: boolean }) {
             {p.strategy ? `${stratName(p.strategy)}${p.confidence ? ` · уверенность ${p.confidence.toFixed(2)}` : ""}` : `сделка #${p.trade_id ?? "—"}`}
           </small>
         </div>
+        {p.confidence ? <Gauge value={p.confidence} label="Уверенность сигнала" /> : null}
         <div className="pos-pnl">
           <b className={`num ${tone(pnl)}`}>{`${arrow(pnl)} ${usd(pnl)}`}</b>
           <small>{pct(move)}</small>
@@ -676,31 +756,87 @@ function PositionCard({ p, enter }: { p: Position; enter: boolean }) {
 const TZ = -new Date().getTimezoneOffset() * 60; // lightweight-charts рисует время в UTC
 const BAR = 900;
 
+/** Цвет токена темы: библиотеке графиков нужен готовый hex, а не var(). */
+const tok = (name: string): string => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+/** Уровень плавно доезжает до новой цены (трейлинг подтянул стоп) — без рывка. */
+function glide(line: IPriceLine, from: number, to: number, onStep: (v: number) => void): () => void {
+  if (from === to || reducedMotion()) {
+    line.applyOptions({ price: to });
+    onStep(to);
+    return () => undefined;
+  }
+  const t0 = performance.now();
+  let raf = 0;
+  const step = (t: number) => {
+    const k = Math.min(1, (t - t0) / 600);
+    const v = from + (to - from) * (1 - (1 - k) ** 3);
+    line.applyOptions({ price: v });
+    onStep(v);
+    if (k < 1) raf = requestAnimationFrame(step);
+  };
+  raf = requestAnimationFrame(step);
+  return () => cancelAnimationFrame(raf);
+}
+
 function Chart() {
   const positions = useStore((s) => s.positions);
   const syms = Object.keys(positions);
   const [sel, setSel] = useState<string>(syms[0] ?? "BTC/USDT");
   const sym = positions[sel] || !syms.length ? sel : syms[0];
   const box = useRef<HTMLDivElement>(null);
-  const chart = useRef<{ c: IChartApi; s: ISeriesApi<"Candlestick"> } | null>(null);
+  const chart = useRef<{ c: IChartApi; s: ISeriesApi<"Candlestick">; fill: ISeriesApi<"Baseline"> } | null>(null);
   const bars = useRef<Candle[]>([]);
-  const lines = useRef<IPriceLine[]>([]);
+  const lines = useRef<{ sl: IPriceLine; tp: IPriceLine; entry: IPriceLine } | null>(null);
+  const shown = useRef({ sl: 0, tp: 0 });
   const [empty, setEmpty] = useState(false);
   const pos = positions[sym];
+  const posRef = useRef(pos);
+  posRef.current = pos;
+
+  // Заливка между входом и ценой: своя сторона — бирюзой, против позиции — красным.
+  const paintFill = () => {
+    const ch = chart.current;
+    const p = posRef.current;
+    if (!ch) return;
+    if (!p) return ch.fill.setData([]);
+    const [good, bad] = [`${tok("--up")}30`, `${tok("--down")}30`];
+    const [top, bottom] = p.side === "long" ? [good, bad] : [bad, good];
+    ch.fill.applyOptions({
+      baseValue: { type: "price", price: p.entry },
+      topFillColor1: top,
+      topFillColor2: top,
+      bottomFillColor1: bottom,
+      bottomFillColor2: bottom,
+    });
+    // Только время жизни позиции: до открытия заливать нечего. Нет даты — нет заливки.
+    const from = p.opened_at ? Math.floor(p.opened_at / BAR) * BAR + TZ : Infinity;
+    ch.fill.setData(bars.current.filter((b) => b.time >= from).map((b) => ({ time: b.time as UTCTimestamp, value: b.close })));
+  };
 
   useEffect(() => {
     if (!box.current) return;
     const c = createChart(box.current, {
       autoSize: true,
-      layout: { background: { color: "#181A20" }, textColor: "#A1A9B5", fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontSize: 11 },
-      grid: { vertLines: { color: "rgba(43,49,57,.45)" }, horzLines: { color: "rgba(43,49,57,.45)" } },
-      rightPriceScale: { borderColor: "#2B3139" },
-      timeScale: { borderColor: "#2B3139", timeVisible: true, secondsVisible: false },
+      layout: { background: { color: tok("--panel") }, textColor: tok("--ink-2"), fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontSize: 11 },
+      grid: { vertLines: { color: tok("--line-soft") }, horzLines: { color: tok("--line-soft") } },
+      rightPriceScale: { borderColor: tok("--line") },
+      timeScale: { borderColor: tok("--line"), timeVisible: true, secondsVisible: false },
       crosshair: { mode: 0 },
       localization: { priceFormatter: price, locale: "ru-RU" },
     });
-    const s = c.addCandlestickSeries({ upColor: "#0ECB81", downColor: "#F6465D", borderVisible: false, wickUpColor: "#0ECB81", wickDownColor: "#F6465D" });
-    chart.current = { c, s };
+    // Заливка — первой, чтобы свечи рисовались поверх.
+    const fill = c.addBaselineSeries({
+      lineWidth: 1,
+      topLineColor: "transparent",
+      bottomLineColor: "transparent",
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+    });
+    const [up, down] = [tok("--up"), tok("--down")];
+    const s = c.addCandlestickSeries({ upColor: up, downColor: down, borderVisible: false, wickUpColor: up, wickDownColor: down });
+    chart.current = { c, s, fill };
     return () => {
       c.remove();
       chart.current = null;
@@ -716,6 +852,7 @@ function Chart() {
         if (stale || !chart.current) return;
         bars.current = data.map((b) => ({ ...b, time: b.time + TZ }));
         chart.current.s.setData(bars.current.map((b) => ({ ...b, time: b.time as UTCTimestamp })));
+        paintFill();
         chart.current.c.timeScale().fitContent();
         setEmpty(!data.length);
       })
@@ -738,21 +875,37 @@ function Chart() {
       all.push(last);
     } else Object.assign(last, { close: live, high: Math.max(last.high, live), low: Math.min(last.low, live) });
     ch.s.update({ ...last, time: last.time as UTCTimestamp });
+    if (posRef.current?.opened_at) ch.fill.update({ time: last.time as UTCTimestamp, value: live });
   }, [live]);
 
-  // Уровни позиции: SL, TP и вход.
+  // Уровни позиции: SL, TP и вход — заново при смене монеты или позиции.
+  const has = Boolean(pos);
   useEffect(() => {
     const ch = chart.current;
     if (!ch) return;
-    lines.current.forEach((l) => ch.s.removePriceLine(l));
-    lines.current = pos
-      ? [
-          ch.s.createPriceLine({ price: pos.sl, color: "#F6465D", lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: "SL" }),
-          ch.s.createPriceLine({ price: pos.tp, color: "#0ECB81", lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: "TP" }),
-          ch.s.createPriceLine({ price: pos.entry, color: "#6C7480", lineWidth: 1, lineStyle: 0, axisLabelVisible: false, title: "вход" }),
-        ]
-      : [];
-  }, [pos?.sl, pos?.tp, pos?.entry, sym]); // eslint-disable-line react-hooks/exhaustive-deps
+    const old = lines.current;
+    if (old) [old.sl, old.tp, old.entry].forEach((l) => ch.s.removePriceLine(l));
+    lines.current = null;
+    paintFill();
+    const p = posRef.current;
+    if (!p) return;
+    const line = (v: number, color: string, title: string, dashed: boolean) =>
+      ch.s.createPriceLine({ price: v, color, lineWidth: 1, lineStyle: dashed ? 2 : 0, axisLabelVisible: title !== "вход", title });
+    lines.current = { sl: line(p.sl, tok("--down"), "SL", true), tp: line(p.tp, tok("--up"), "TP", true), entry: line(p.entry, tok("--brand"), "вход", false) };
+    shown.current = { sl: p.sl, tp: p.tp };
+  }, [sym, has, pos?.entry, pos?.side]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Трейлинг или правка SL/TP: линии доезжают до нового уровня.
+  useEffect(() => {
+    const l = lines.current;
+    if (!l || !pos) return;
+    const stopSl = glide(l.sl, shown.current.sl, pos.sl, (v) => (shown.current.sl = v));
+    const stopTp = glide(l.tp, shown.current.tp, pos.tp, (v) => (shown.current.tp = v));
+    return () => {
+      stopSl();
+      stopTp();
+    };
+  }, [pos?.sl, pos?.tp]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const tabs = syms.length ? syms : ["BTC/USDT"];
   return (
@@ -770,7 +923,7 @@ function Chart() {
             TP
           </span>
           <span>
-            <i style={{ borderColor: "var(--ink-3)", borderTopStyle: "solid" }} />
+            <i style={{ borderColor: "var(--brand)", borderTopStyle: "solid" }} />
             вход
           </span>
         </div>
@@ -799,7 +952,8 @@ function Feed() {
       </div>
       <ul aria-live="polite">
         {feed.map((f) => (
-          <li key={f.id} className={`ev ev-${f.kind}`}>
+          // Реакция на исход — только у свежих записей, не при каждом открытии вкладки.
+          <li key={f.id} className={`ev ev-${f.kind}${Date.now() - f.at < 2000 ? " fresh" : ""}`}>
             <time>{hhmm(new Date(f.at))}</time>
             <span className="dot" />
             <p>{f.text}</p>
@@ -833,6 +987,7 @@ function Calendar() {
       return { d, row: byDate.get(isoDay(d)), future: d > today, today: +d === +today };
     });
   }, [daily]);
+  const peak = Math.max(1, ...days.map((x) => Math.abs(x.row?.net ?? 0)));
   const show = (el: HTMLElement, i: number) => {
     const { d, row, future } = days[i];
     if (future) return;
@@ -872,7 +1027,8 @@ function Calendar() {
         {days.map(({ d, row, future, today }, i) => {
           const net = row?.net ?? 0;
           const has = !future && Boolean(row?.trades);
-          const mix = Math.round(22 + Math.min(1, Math.abs(net) / 55) * 78);
+          // Яркость — от самого крупного дня в окне; потолок 60%, чтобы число в клетке читалось.
+          const mix = Math.round(16 + (Math.abs(net) / peak) * 44);
           return (
             <span
               key={i}

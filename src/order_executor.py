@@ -633,6 +633,7 @@ class OrderExecutor:
                 "strategy": strategy,
                 "confidence": float(top.get("confidence", 0.0) or 0.0),
                 "reasoning": str(top.get("reasoning") or "")[:500],
+                "opened_at": time.time(),
             }
             async with lock:
                 monitored[sym] = pos

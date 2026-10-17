@@ -1,8 +1,6 @@
 // Общие элементы интерфейса: переключатель, сегменты, подсказки, анимированные числа.
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
-
-import { reducedMotion } from "./lib/platform";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 // ── Подсказки «?» и всплывающие пояснения ─────────────────────────────────────
 
@@ -98,6 +96,7 @@ export function Toggle(props: {
   );
 }
 
+/** Сегменты с бегунком: подсветка выбранного едет к новому значению, как каретка шкалы. */
 export function Seg<T extends string | number>(props: {
   value: T | null | undefined;
   options: readonly (readonly [T, string])[];
@@ -106,8 +105,24 @@ export function Seg<T extends string | number>(props: {
   label?: string;
   disabled?: boolean;
 }) {
+  const host = useRef<HTMLDivElement>(null);
+  const [ind, setInd] = useState<CSSProperties | null>(null);
+  const labels = props.options.map(([, t]) => t).join("|");
+  useLayoutEffect(() => {
+    const el = host.current;
+    if (!el) return;
+    const move = () => {
+      const b = el.querySelector<HTMLElement>('button[aria-pressed="true"]');
+      setInd(b ? { width: b.offsetWidth, height: b.offsetHeight, transform: `translate(${b.offsetLeft}px,${b.offsetTop}px)` } : null);
+    };
+    move();
+    const ro = new ResizeObserver(move);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [props.value, labels]);
   return (
-    <div className={`seg ${props.className ?? ""}`} role="group" aria-label={props.label}>
+    <div ref={host} className={`seg ${ind ? "has-ind" : ""} ${props.className ?? ""}`} role="group" aria-label={props.label}>
+      {ind && <span className="seg-ind" style={ind} aria-hidden="true" />}
       {props.options.map(([v, text]) => (
         <button
           key={String(v)}
@@ -125,29 +140,59 @@ export function Seg<T extends string | number>(props: {
 
 // ── Анимированные числа ───────────────────────────────────────────────────────
 
-/** Число плавно «докручивается» до нового значения (ease-out cubic, 0.8 с). */
+const DIGITS = [..."0123456789"];
+
+/** Механический счётчик: каждая цифра — барабан, который проворачивается к новому значению.
+ *  Разряды считаются справа, чтобы при смене длины числа барабаны не перескакивали. */
 export function Tween({ value, fmt, className }: { value: number; fmt: (v: number) => string; className?: string }) {
-  const [shown, setShown] = useState(value);
-  const cur = useRef(value);
+  const text = fmt(value);
+  const chars = [...text];
+  return (
+    <span className={`odo ${className ?? ""}`}>
+      <span className="sr">{text}</span>
+      {chars.map((ch, i) => {
+        const k = chars.length - i;
+        return /\d/.test(ch) ? (
+          <span key={`d${k}`} className="odo-d" aria-hidden="true">
+            <span className="odo-s" style={{ transform: `translateY(${-Number(ch) * 10}%)` }}>
+              {DIGITS.map((d) => (
+                <i key={d}>{d}</i>
+              ))}
+            </span>
+          </span>
+        ) : (
+          <span key={`c${k}`} className="odo-c" aria-hidden="true">
+            {ch}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
+/** Стрелочный индикатор 0…1: шкала с делениями, стрелка доводится без отскока.
+ *  При появлении стрелка выходит из нуля — как прибор при включении. */
+export function Gauge({ value, label }: { value: number; label: string }) {
+  const v = Math.max(0, Math.min(1, value));
+  const [shown, setShown] = useState(0);
   useEffect(() => {
-    const start = cur.current;
-    if (reducedMotion() || Math.abs(start - value) < 1e-9) {
-      cur.current = value;
-      setShown(value);
-      return;
-    }
-    const t0 = performance.now();
-    let raf = 0;
-    const step = (t: number) => {
-      const k = Math.min(1, (t - t0) / 800);
-      cur.current = start + (value - start) * (1 - (1 - k) ** 3);
-      setShown(cur.current);
-      if (k < 1) raf = requestAnimationFrame(step);
-    };
-    raf = requestAnimationFrame(step);
+    const raf = requestAnimationFrame(() => setShown(v));
     return () => cancelAnimationFrame(raf);
-  }, [value]);
-  return <span className={className}>{fmt(shown)}</span>;
+  }, [v]);
+  const tick = (i: number) => {
+    const a = ((-180 + 18 * i) * Math.PI) / 180;
+    const r0 = i % 5 ? 13.5 : 11.5;
+    return (
+      <line key={i} x1={20 + r0 * Math.cos(a)} y1={21 + r0 * Math.sin(a)} x2={20 + 16 * Math.cos(a)} y2={21 + 16 * Math.sin(a)} className={i >= 7 ? "g-t hi" : "g-t"} />
+    );
+  };
+  return (
+    <svg className="gauge" viewBox="0 0 40 24" width="40" height="24" role="img" aria-label={`${label}: ${v.toFixed(2)}`}>
+      {Array.from({ length: 11 }, (_, i) => tick(i))}
+      <line className="g-n" x1="20" y1="21" x2="20" y2="7" style={{ transform: `rotate(${-90 + 180 * shown}deg)` }} />
+      <circle cx="20" cy="21" r="2" className="g-c" />
+    </svg>
+  );
 }
 
 /** Значение вспыхивает зелёным/красным при изменении: смена key перезапускает CSS-анимацию. */
@@ -163,6 +208,15 @@ export function Flash({ value, text, className = "" }: { value: number; text: st
     </b>
   );
 }
+
+/** Скелетон загрузки: прибор «прогревается» — строки-заготовки и бегущая строка развёртки. */
+export const Skel = ({ rows = 3, label }: { rows?: number; label: string }) => (
+  <div className="skel" role="status" aria-label={label}>
+    {Array.from({ length: rows }, (_, i) => (
+      <i key={i} />
+    ))}
+  </div>
+);
 
 // ── Кнопка с подтверждением вторым нажатием ───────────────────────────────────
 
@@ -195,8 +249,8 @@ const svg = (d: ReactNode, size = 18) => (
 export const Icon = {
   logo: (
     <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M12 1.5 21.5 7v10L12 22.5 2.5 17V7z" fill="#7000FF" />
-      <path d="M9 7h4.2a2.6 2.6 0 0 1 1.4 4.8A2.8 2.8 0 0 1 13.4 17H9zm2 2v2.8h2a1.4 1.4 0 0 0 0-2.8zm0 4.6V15h2.3a1.45 1.45 0 0 0 0-2.9H11z" fill="#fff" />
+      <path d="M12 1.5 21.5 7v10L12 22.5 2.5 17V7z" style={{ fill: "var(--brand)" }} />
+      <path d="M9 7h4.2a2.6 2.6 0 0 1 1.4 4.8A2.8 2.8 0 0 1 13.4 17H9zm2 2v2.8h2a1.4 1.4 0 0 0 0-2.8zm0 4.6V15h2.3a1.45 1.45 0 0 0 0-2.9H11z" style={{ fill: "var(--on-brand)" }} />
     </svg>
   ),
   terminal: svg(<polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />, 20),

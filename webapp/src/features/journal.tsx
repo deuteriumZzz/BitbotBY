@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { arrow, base, exitReason, fmtN, pct, price, tone, usd } from "../lib/format";
 import type { JournalTrade, Period, Side } from "../lib/types";
 import { useStore } from "../store";
-import { Seg } from "../ui";
+import { Seg, Skel } from "../ui";
 import { stratName } from "./bots";
 
 const PERIODS = [
@@ -104,7 +104,7 @@ export function Journal() {
             {failed ? (
               <p className="empty">Не удалось загрузить журнал — бот не на связи.</p>
             ) : !all ? (
-              <p className="empty">Загружаю…</p>
+              <Skel rows={6} label="Загружаю журнал" />
             ) : trades.length ? (
               <TradeList key={`${period}${strategy}${side}${result}`} trades={trades} />
             ) : (

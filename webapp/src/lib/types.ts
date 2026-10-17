@@ -21,6 +21,8 @@ export interface Position {
   strategy?: string;
   confidence?: number;
   reasoning?: string;
+  /** Когда открыта (unix, с); нет у позиций, открытых до обновления. */
+  opened_at?: number | null;
 }
 
 export interface BotState {

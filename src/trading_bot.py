@@ -72,6 +72,14 @@ _SECONDS_PER_HOUR: int = 3_600
 logger = logging.getLogger(__name__)
 
 
+def _opened_at(entry_time: Optional[str]) -> Optional[float]:
+    """entry_time из истории (ISO) → unix-время; без даты — None."""
+    try:
+        return datetime.fromisoformat(entry_time).timestamp() if entry_time else None
+    except ValueError:
+        return None
+
+
 class TradingBot:
     """
     Гибридный бот: история + новости + AI.
@@ -544,6 +552,7 @@ class TradingBot:
                     "strategy": latest.get("strategy") or "",
                     "confidence": float(latest.get("confidence") or 0.0),
                     "reasoning": latest.get("reasoning") or "",
+                    "opened_at": _opened_at(latest.get("entry_time")),
                 }
                 restored += 1
                 logger.warning(
@@ -706,6 +715,7 @@ class TradingBot:
                 "strategy": pos.get("strategy"),
                 "confidence": pos.get("confidence"),
                 "reasoning": pos.get("reasoning", ""),
+                "opened_at": pos.get("opened_at"),
             },
         )
 

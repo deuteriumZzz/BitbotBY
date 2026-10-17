@@ -156,7 +156,7 @@ const lists = { forced: ["SOL/USDT"], excluded: ["PUMP/USDT"] };
 const bot = { paused: false, paper: true, mode: "ai", profile: "altcoin" as string | null };
 let balance = 10_000;
 let tradeSeq = 1000;
-type Live = Position & { price: number; opened?: number };
+type Live = Position & { price: number };
 const positions: Record<string, Live> = {};
 const pending: Record<string, PendingSignal> = {};
 const results: Record<string, unknown> = {};
@@ -224,6 +224,7 @@ const publicPos = (p: Position) => ({
   sl: p.sl,
   tp: p.tp,
   trailing: p.trailing,
+  opened_at: p.opened_at,
 });
 
 function open(symbol: string, side: Side, why: Partial<Position> = {}): Live {
@@ -242,7 +243,7 @@ function open(symbol: string, side: Side, why: Partial<Position> = {}): Live {
     tp: price + dir * dist * 2,
     price,
     trailing: true,
-    opened: Date.now(),
+    opened_at: Date.now() / 1000,
     strategy: "ema_crossover",
     confidence: 0.68,
     reasoning: WHY[id % WHY.length],
@@ -253,9 +254,10 @@ function open(symbol: string, side: Side, why: Partial<Position> = {}): Live {
 }
 
 // Демо-позиции, чтобы терминал не был пустым при первом открытии.
-for (const [sym, side, move] of [["SOL/USDT", "long", 1.006], ["ETH/USDT", "short", 0.997]] as const) {
+for (const [sym, side, move, hours] of [["SOL/USDT", "long", 1.006, 7], ["ETH/USDT", "short", 0.997, 3]] as const) {
   const p = open(sym, side);
   p.price = PRICES[sym] = p.entry * move;
+  p.opened_at = Date.now() / 1000 - hours * 3600;
 }
 
 function closePos(symbol: string, fraction = 1, reason = "manual_app"): void {
@@ -266,7 +268,7 @@ function closePos(symbol: string, fraction = 1, reason = "manual_app"): void {
   const fees = p.price * qty * 0.0011;
   const net = (p.price - p.entry) * qty * dir - fees;
   balance += net;
-  closed.push(journalRow(p, p.price, qty, net, fees, Date.now(), p.opened ?? Date.now(), reason));
+  closed.push(journalRow(p, p.price, qty, net, fees, Date.now(), (p.opened_at ?? Date.now() / 1000) * 1000, reason));
   if (fraction >= 1) {
     delete positions[symbol];
     emit("position.closed", { symbol, reason, price: p.price });
@@ -456,6 +458,7 @@ function openAndEmit(sym: string, side: Side, why: Partial<Position> = {}): void
     strategy: p.strategy,
     confidence: p.confidence,
     reasoning: p.reasoning,
+    opened_at: p.opened_at,
   });
 }
 

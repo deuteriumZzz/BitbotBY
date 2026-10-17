@@ -161,7 +161,7 @@
 |---|---|---|
 | `state` | Полный снимок как `GET /api/state` — при подключении и после переподключения | дашборд |
 | `tick` | `{symbol, price}`, не чаще 1/с на монету: открытые позиции + выбранная на графике | `position_monitor` |
-| `position.opened` / `.updated` / `.closed` | позиция; у `opened` — `strategy, confidence, reasoning`; у `closed` — `{reason, price}`, reason: `tp\|sl\|trail\|manual_app\|telegram_closeall\|emergency\|hard_drawdown\|atr_spike` или текст динамического выхода (`signal_reversal …`) | `order_executor`, `position_monitor` |
+| `position.opened` / `.updated` / `.closed` | позиция; у `opened` — `strategy, confidence, reasoning, opened_at`; у `closed` — `{reason, price}`, reason: `tp\|sl\|trail\|manual_app\|telegram_closeall\|emergency\|hard_drawdown\|atr_spike` или текст динамического выхода (`signal_reversal …`) | `order_executor`, `position_monitor` |
 | `radar.stage` | `{symbol, stage: scan\|prescore\|signal\|context\|guards\|open\|rejected, reason?, strategy?, side?, confidence?}` | `cycle.py`, `order_executor` |
 | `cycle` | `{state: scan\|monitor\|paused\|hours\|guard\|offline, detail}` | `trading_bot` |
 | `guard` | `{kind: drawdown_halt\|atr_spike\|macro\|circuit_breaker\|daily_limit, active, detail}` | `trading_bot`, `risk_management` |

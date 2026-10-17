@@ -6,7 +6,7 @@ import { fmtN, plural } from "../lib/format";
 import { reducedMotion } from "../lib/platform";
 import type { AiMode, AiModel, AiProvider, AiState, SecretItem } from "../lib/types";
 import { actions, useStore } from "../store";
-import { Icon, Q, Seg, Toggle } from "../ui";
+import { Icon, Q, Seg, Skel, Toggle } from "../ui";
 
 const EASE = "cubic-bezier(.2,.8,.2,1)";
 
@@ -73,7 +73,7 @@ export function AiPane() {
   const ai = useStore((s) => s.ai);
   const secrets = useStore((s) => s.secrets);
   const [needRestart, setNeedRestart] = useState(false);
-  if (!ai) return <p className="empty">Загружаю список провайдеров…</p>;
+  if (!ai) return <Skel rows={4} label="Загружаю список провайдеров" />;
   const inChain = ai.providers.filter((p) => p.usable);
   const rest = ai.providers.filter((p) => !p.usable);
   const secretOf = (id: string) => secrets?.find((s) => s.service === id);
@@ -216,9 +216,23 @@ function useListFlip(ref: React.RefObject<HTMLElement>): void {
   });
 }
 
+/** Эстафета: метка «отвечает» переезжает к провайдеру, который ответил последним. */
+function useRelay(host: React.RefObject<HTMLElement>, last: string): React.CSSProperties | null {
+  const [at, setAt] = useState<[number, number] | null>(null);
+  // Строки меняют высоту (статус, модель) — сверяемся после каждой отрисовки,
+  // но состояние трогаем только при реальном сдвиге, иначе цикл рендеров.
+  useLayoutEffect(() => {
+    const row = last ? host.current?.querySelector<HTMLElement>(`[data-pid="${CSS.escape(last)}"]`) : null;
+    const next: [number, number] | null = row ? [row.offsetTop, row.offsetHeight] : null;
+    setAt((cur) => (cur?.[0] === next?.[0] && cur?.[1] === next?.[1] ? cur : next));
+  });
+  return at && { transform: `translateY(${at[0]}px)`, height: at[1] };
+}
+
 function ChainList({ ai, list }: { ai: AiState; list: AiProvider[] }) {
   const host = useRef<HTMLOListElement>(null);
   useListFlip(host);
+  const relay = useRelay(host, ai.last);
   const position = new Map(ai.chain.map((c, i) => [c.provider, i + 1]));
   const move = (p: AiProvider, dir: -1 | 1) => {
     const j = list.indexOf(p) + dir;
@@ -230,11 +244,14 @@ function ChainList({ ai, list }: { ai: AiState; list: AiProvider[] }) {
     void actions.putAiChain({ order: ids });
   };
   return (
-    <ol className="aichain" ref={host}>
-      {list.map((p, i) => (
-        <ProviderRow key={p.id} ai={ai} p={p} n={position.get(p.id)} first={i === 0} lastRow={i === list.length - 1} onMove={(d) => move(p, d)} />
-      ))}
-    </ol>
+    <div className="aichain-wrap">
+      {relay && <span className="relay" style={relay} title="Последним ответил этот провайдер" aria-hidden="true" />}
+      <ol className="aichain" ref={host}>
+        {list.map((p, i) => (
+          <ProviderRow key={p.id} ai={ai} p={p} n={position.get(p.id)} first={i === 0} lastRow={i === list.length - 1} onMove={(d) => move(p, d)} />
+        ))}
+      </ol>
+    </div>
   );
 }
 
@@ -251,13 +268,22 @@ function ProviderRow(props: { ai: AiState; p: AiProvider; n?: number; first: boo
   const { ai, p } = props;
   const [cls, text] = STATUS[p.status] ?? ["warn", p.status];
   const paused = p.cooldown_until && p.cooldown_until * 1000 > Date.now();
+  const left = paused ? Math.round(p.cooldown_until! - Date.now() / 1000) : 0;
   const skip = why(ai, p);
   const disabledIds = ai.providers.filter((x) => x.disabled).map((x) => x.id);
   const keyless = ai.providers.filter((x) => x.keyless_on).map((x) => x.id);
   return (
     <li className={`aip${props.n ? "" : " off"}`} data-pid={p.id}>
       <div className="aip-h">
-        <span className="n">{props.n ?? "—"}</span>
+        <span className="n">
+          {props.n ?? "—"}
+          {/* Пауза после лимита: кольцо убывает до конца паузы. */}
+          {paused && (
+            <svg key={p.cooldown_until} className="pause-ring" viewBox="0 0 20 20" style={{ animationDuration: `${left}s` }} aria-hidden="true">
+              <circle cx="10" cy="10" r="8.5" pathLength={1} style={{ animationDuration: `${left}s` }} />
+            </svg>
+          )}
+        </span>
         <b>{p.name}</b>
         <span className={`tag ${p.free ? "hot" : "rst"}`}>{p.free ? "бесплатно" : "платно"}</span>
         {!p.strong && <span className="tag rst" title="Мелкая модель чаще ломает формат ответа и хуже решает">слабая</span>}
