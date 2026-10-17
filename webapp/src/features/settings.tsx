@@ -550,6 +550,20 @@ function Keys() {
   );
 }
 
+/** Тестовая сеть Bybit — отдельные ключи testnet, ордера без реальных денег. */
+function TestnetRow() {
+  const on = useStore((s) => cfg<boolean>(s.config, "TESTNET", false));
+  return (
+    <div className="row-tgl">
+      <span>
+        Тестовая сеть Bybit (testnet){" "}
+        <Q tip="Ордера идут на testnet.bybit.com — нужны отдельные ключи testnet. Заработает после перезапуска бота." />
+      </span>
+      <Toggle on={on} label="Тестовая сеть Bybit" onChange={(v) => void actions.patchConfig({ TESTNET: v })} />
+    </div>
+  );
+}
+
 /** Проверка формата до отправки: ловит очевидные опечатки, сам ключ проверяет сервер. */
 function checkField(env: string, label: string, secret: boolean, v: string): string {
   if (/CHAT_ID|API_ID$/.test(env)) return /^-?\d+$/.test(v) ? "" : `${label} — это число, без букв и пробелов.`;
@@ -655,6 +669,7 @@ function KeyCard({ item }: { item: SecretItem }) {
           <input className="inp" id={`k-${item.model.env}`} spellCheck={false} placeholder="по умолчанию" value={model} onChange={(e) => setModel(e.target.value)} />
         </div>
       )}
+      {item.service === "bybit" && <TestnetRow />}
       <div className="kc-a">
         <button className="btn primary" type="button" disabled={busy} onClick={() => void save()}>
           {busy ? (

@@ -829,8 +829,12 @@ async def put_secret(service_id: str, request: Request) -> JSONResponse:
         stored = secrets_store.load_values()
         values = {f.env: stored[f.env] for f in service.fields if f.env in stored}
         values.update({k: v.strip() for k, v in fields.items()})
+        # Тестовая сеть Bybit: значение из приложения важнее .env.
+        testnet = registry.load_overrides(data.get_redis()).get(
+            "TESTNET", os.getenv("TESTNET", "").lower() == "true"
+        )
         status, message = await secrets_store.validate(
-            service, values, testnet=os.getenv("TESTNET", "").lower() == "true"
+            service, values, testnet=bool(testnet)
         )
         if status == "bad":
             return _err(422, "key_rejected", message)

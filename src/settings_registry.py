@@ -173,6 +173,15 @@ SETTINGS: Tuple[Setting, ...] = (
         **_rc("set_market_type", "get_market_type"),
     ),
     Setting(
+        "TESTNET",
+        _G_TRADE,
+        "Тестовая сеть Bybit (testnet)",
+        "bool",
+        False,
+        hint="Ордера идут на testnet.bybit.com — нужны отдельные ключи testnet. "
+        "Для проверки Live без реальных денег.",
+    ),
+    Setting(
         "TIMEFRAME",
         _G_TRADE,
         "Таймфрейм свечей",
@@ -960,6 +969,20 @@ SETTINGS: Tuple[Setting, ...] = (
         8080,
         readonly=True,
         hint="Меняется только в .env и docker-compose.",
+    ),
+    Setting(
+        "WEBAPP_URL",
+        _G_SERVER,
+        "Адрес приложения для Telegram",
+        "str",
+        "",
+        hint="Кнопка «Открыть терминал» в боте: https://<домен>/app/. "
+        "Только https — так требует Telegram.",
+        check=lambda v: (
+            None
+            if not v or str(v).startswith("https://")
+            else "Только https-адрес (требование Telegram)."
+        ),
     ),
     Setting(
         "DASHBOARD_USER",

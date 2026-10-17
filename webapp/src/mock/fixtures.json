@@ -26,6 +26,22 @@
    "basic": true
   },
   {
+   "key": "TESTNET",
+   "group": "Торговля",
+   "label": "Тестовая сеть Bybit (testnet)",
+   "type": "bool",
+   "default": false,
+   "min": null,
+   "max": null,
+   "step": null,
+   "unit": "",
+   "options": [],
+   "hint": "Ордера идут на testnet.bybit.com — нужны отдельные ключи testnet. Для проверки Live без реальных денег.",
+   "readonly": false,
+   "hot": false,
+   "basic": false
+  },
+  {
    "key": "TIMEFRAME",
    "group": "Торговля",
    "label": "Таймфрейм свечей",
@@ -1511,6 +1527,22 @@
    "basic": false
   },
   {
+   "key": "WEBAPP_URL",
+   "group": "Сервер",
+   "label": "Адрес приложения для Telegram",
+   "type": "str",
+   "default": "",
+   "min": null,
+   "max": null,
+   "step": null,
+   "unit": "",
+   "options": [],
+   "hint": "Кнопка «Открыть терминал» в боте: https://<домен>/app/. Только https — так требует Telegram.",
+   "readonly": false,
+   "hot": false,
+   "basic": false
+  },
+  {
    "key": "DASHBOARD_USER",
    "group": "Сервер",
    "label": "Логин дашборда",
@@ -1530,6 +1562,10 @@
  "config": {
   "MARKET_TYPE": {
    "value": "linear",
+   "source": "default"
+  },
+  "TESTNET": {
+   "value": false,
    "source": "default"
   },
   "TIMEFRAME": {
@@ -1846,6 +1882,10 @@
   },
   "HEALTH_PORT": {
    "value": 8081,
+   "source": "default"
+  },
+  "WEBAPP_URL": {
+   "value": "",
    "source": "default"
   },
   "DASHBOARD_USER": {
