@@ -635,6 +635,10 @@ function route(method: string, path: string, body: unknown): unknown {
       return config;
     case "GET /api/secrets":
       return secrets;
+    case "GET /api/setup": {
+      const has = (id: string) => Boolean(secrets.find((s) => s.service === id)?.fields.every((f) => f.set || f.optional));
+      return { keys_in_app: true, bybit: has("bybit"), telegram: has("telegram") };
+    }
     case "GET /api/signals/pending":
       return Object.values(pending);
     case "GET /api/symbols":

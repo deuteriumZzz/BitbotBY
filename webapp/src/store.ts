@@ -19,6 +19,8 @@ import type {
   Position,
   SecretItem,
   SettingDef,
+  SetupInfo,
+  SetupStep,
   Side,
   Strategy,
   Symbols,
@@ -93,11 +95,15 @@ export interface Store {
   secretsNote: string;
   ai: AiState | null;
   journal: Journal | null;
+  setupInfo: SetupInfo | null;
+  /** Открытый шаг мастера первого запуска; null — мастер закрыт. */
+  setup: SetupStep | null;
   tab: Tab;
   toast: { id: number; text: string } | null;
 
   boot(): Promise<void>;
   setTab(tab: Tab): void;
+  openSetup(step: SetupStep | null): void;
   setPeriod(p: Period): void;
   say(text: string): void;
   apply(e: BotEvent): void;
@@ -114,6 +120,7 @@ export interface Store {
   loadSecrets(): Promise<void>;
   loadAi(): Promise<void>;
   loadJournal(p: Period): Promise<void>;
+  loadSetup(): Promise<void>;
 
   requestCode(): Promise<boolean>;
   verifyCode(code: string): Promise<boolean>;
@@ -192,6 +199,8 @@ export const useStore = create<Store>((set, get) => {
     secretsNote: "",
     ai: null,
     journal: null,
+    setupInfo: null,
+    setup: null,
     tab: "terminal",
     toast: null,
 
@@ -233,6 +242,7 @@ export const useStore = create<Store>((set, get) => {
         get().loadSymbols(),
         get().loadSecrets(),
         get().loadAi(),
+        get().loadSetup(),
         api<PendingSignal[]>("GET", "/api/signals/pending").then((pending) => set({ pending })),
       ]);
       unsubscribe?.();
@@ -246,7 +256,8 @@ export const useStore = create<Store>((set, get) => {
       );
     },
 
-    setTab: (tab) => set({ tab }),
+    setTab: (tab) => set({ tab, setup: null }),
+    openSetup: (setup) => set({ setup }),
     setPeriod(period) {
       set({ period });
       if (!get().metrics[period]) void get().loadMetrics(period).catch(() => undefined);
@@ -413,6 +424,7 @@ export const useStore = create<Store>((set, get) => {
         case "secret.changed":
           void get().loadSecrets();
           void get().loadAi().catch(() => undefined);
+          void get().loadSetup().catch(() => undefined);
           break;
         default:
           break;
@@ -426,6 +438,9 @@ export const useStore = create<Store>((set, get) => {
       const period = p ?? get().period;
       const m = await api<Metrics>("GET", `/api/metrics?period=${period}`);
       set((s) => ({ metrics: { ...s.metrics, [period]: m } }));
+    },
+    async loadSetup() {
+      set({ setupInfo: await api<SetupInfo>("GET", "/api/setup") });
     },
     async loadJournal(period) {
       set({ journal: await api<Journal>("GET", `/api/journal?period=${period}`) });

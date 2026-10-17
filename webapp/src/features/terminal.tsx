@@ -9,6 +9,7 @@ import { reducedMotion } from "../lib/platform";
 import type { Candle, Position } from "../lib/types";
 import { actions, positionPnl, useStore, type Store } from "../store";
 import { profileName, stratName } from "./bots";
+import { ReadinessCard } from "./setup";
 import { Flash, Q, Seg, Tween, hideTip, showTip, useArm } from "../ui";
 
 const EASE = "cubic-bezier(.2,.8,.2,1)";
@@ -22,6 +23,7 @@ const PERIODS = [
 export function Terminal() {
   return (
     <section className="view term enter" aria-label="Терминал">
+      <ReadinessCard />
       <Hero />
       <MetricsCard />
       <Radar />

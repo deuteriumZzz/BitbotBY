@@ -116,14 +116,23 @@ export function Bots() {
 
 // ── Режим риска ───────────────────────────────────────────────────────────────
 
-function RiskCard() {
-  const c = useStore((s) => s.config);
-  const balance = useStore((s) => s.balance);
+/** Ключ пресета риска, совпадающего с настройками; undefined — свои настройки. */
+export function presetOf(c: ConfigValues): string | undefined {
   const slots = cfg(c, "MAX_POSITIONS", 3);
   const risk = cfg(c, "RISK_PER_TRADE", 0.02);
   const dd = cfg(c, "DRAWDOWN_SCALE_ENABLED", true);
   const lev = cfg<LevMode>(c, "LEVERAGE_MODE", "volatility");
-  const active = Object.entries(PRESETS).find(([, p]) => p.slots === slots && Math.abs(p.risk - risk) < 1e-9 && p.dd === dd && p.lev === lev)?.[0];
+  return Object.entries(PRESETS).find(([, p]) => p.slots === slots && Math.abs(p.risk - risk) < 1e-9 && p.dd === dd && p.lev === lev)?.[0];
+}
+
+export const presetName = (k: string | undefined): string => (k ? PRESETS[k].name : "свои настройки");
+
+export function RiskCard() {
+  const c = useStore((s) => s.config);
+  const balance = useStore((s) => s.balance);
+  const slots = cfg(c, "MAX_POSITIONS", 3);
+  const risk = cfg(c, "RISK_PER_TRADE", 0.02);
+  const active = presetOf(c);
   const one = balance * risk;
   const apply = async (k: string) => {
     const p = PRESETS[k];

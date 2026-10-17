@@ -713,6 +713,27 @@ def _ai_view(rc: Any) -> Dict[str, Any]:
     }
 
 
+@router.get("/api/setup")
+async def get_setup() -> JSONResponse:
+    """Для мастера первого запуска: что уже подключено.
+
+    Ключ считается заданным, если он есть в приложении или в .env; значения
+    не отдаются.
+    """
+
+    def has(service_id: str) -> bool:
+        service = secrets_store.BY_ID[service_id]
+        return all(_secret(f.env) for f in service.fields if not f.optional)
+
+    return JSONResponse(
+        {
+            "keys_in_app": secrets_store.enabled(),
+            "bybit": has("bybit"),
+            "telegram": has("telegram"),
+        }
+    )
+
+
 @router.get("/api/ai")
 async def get_ai() -> JSONResponse:
     r = data.get_redis()

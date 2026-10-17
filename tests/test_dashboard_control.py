@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 from datetime import datetime, timedelta
 from unittest.mock import patch
@@ -146,6 +147,19 @@ async def test_journal_reads_trades_with_reasons(tmp_path, monkeypatch, client):
     assert row["pnl"] == pytest.approx(9.8) and row["fees"] == pytest.approx(0.2)
     assert resp.status_code == 200 and resp.json()["trades"] == [row]
     assert bad.status_code == 400
+
+
+def test_setup_sees_keys_from_env(client, monkeypatch):
+    from src import secrets_store
+
+    monkeypatch.setattr(secrets_store, "enabled", lambda: False)
+    monkeypatch.setattr(secrets_store, "get_value", lambda env: os.getenv(env))
+    monkeypatch.setenv("BYBIT_API_KEY", "k" * 18)
+    monkeypatch.setenv("BYBIT_API_SECRET", "s" * 36)
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "42")
+    resp = client.get("/api/setup")
+    assert resp.json() == {"keys_in_app": False, "bybit": True, "telegram": False}
 
 
 def test_portfolio_key_follows_mode():

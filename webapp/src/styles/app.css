@@ -533,3 +533,30 @@ li:last-child>.jr-strat{border-bottom:0}
 .jr-more-btn{margin-top:10px;width:100%}
 @keyframes jr-in{from{opacity:0;transform:translateY(-4px)}}
 @container dev (min-width:900px){.jr.cols{grid-template-columns:minmax(0,2fr) minmax(0,3fr)}.jr .col:first-child{position:sticky;top:0}}
+
+/* ---------- first run ---------- */
+.term>.ready{grid-column:1/-1}
+.ready-list{list-style:none;margin:0 0 12px;padding:0;display:grid;gap:6px;grid-template-columns:minmax(0,1fr)}
+.ready-row{all:unset;box-sizing:border-box;cursor:pointer;width:100%;display:grid;grid-template-columns:22px minmax(0,1fr);gap:1px 10px;align-items:center;padding:8px 10px;border-radius:9px;background:var(--bg);border:1px solid var(--line-soft);transition:border-color .2s}
+.ready-row:hover{border-color:var(--ink-3)}
+.ready-row b{font:500 13px/1.3 var(--f-ui)}
+.ready-row small{grid-column:2;font-size:11px;color:var(--ink-3);line-height:1.3}
+.ready-ic{grid-row:span 2;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;border:1.5px dashed var(--ink-3);font:700 12px/1 var(--f-ui);color:var(--ink-3)}
+.ready-ic svg{width:12px;height:12px}
+.ready-row.ok .ready-ic{border:0;background:color-mix(in oklab,var(--up) 18%,transparent);color:var(--up)}
+.ready-row.need .ready-ic{border:0;background:color-mix(in oklab,var(--warn) 20%,transparent);color:var(--warn)}
+.setup{max-width:720px;width:100%;margin:0 auto}
+.setup-h{display:flex;align-items:center;gap:8px}
+.setup-h .sp{margin-left:auto}
+.setup-dots{list-style:none;margin:0;padding:0;display:flex;gap:6px}
+.setup-dots li{flex:1}
+.setup-dots button{all:unset;box-sizing:border-box;cursor:pointer;display:block;width:100%;height:6px;border-radius:3px;background:var(--line);transition:background .3s}
+.setup-dots button.ok{background:color-mix(in oklab,var(--up) 55%,var(--line))}
+.setup-dots button[aria-current="step"]{background:var(--brand-ink)}
+.setup-t{display:flex;align-items:center;flex-wrap:wrap;gap:8px;font:600 20px/1.25 var(--f-ui);margin:4px 0 0}
+.setup-p{margin:0;font-size:14px;line-height:1.55;color:var(--ink-2)}
+.setup-p code{font:12px var(--f-num);background:var(--panel-2);padding:1px 5px;border-radius:4px}
+.setup>.btn{align-self:flex-start}
+.setup-f{display:flex;align-items:center;gap:8px;padding-top:4px}
+.setup-f .sp{flex:1}
+@container dev (min-width:900px){.ready-list{grid-template-columns:repeat(5,minmax(0,1fr))}.term>.ready .btn-row{justify-self:start}}

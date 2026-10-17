@@ -111,6 +111,7 @@
 | `GET /api/metrics?period=24h\|7d\|30d\|all` | `{realized, fees, net, n, win_rate, profit_factor, avg_win, avg_loss, rr, max_drawdown, sharpe\|null}`; `sharpe = null` при n < 50 |
 | `GET /api/metrics/execution` | `{latency_ms_avg, slippage_plan, slippage_fact, fees_30d}` |
 | `GET /api/pnl/daily?days=35` | `[{date, net, gross, fees, trades}]` |
+| `GET /api/setup` | `{keys_in_app, bybit, telegram}` — для мастера первого запуска: ключ есть в приложении или в `.env` (без значений) |
 | `GET /api/journal?period=24h\|7d\|30d\|all` | `{period, limit, trades: [{id, symbol, side, strategy, confidence, entry, exit, qty, pnl, pnl_pct, fees, opened, closed, reason, reasoning}]}` — свежие сверху, не больше `limit` |
 | `GET /api/candles?symbol&tf&limit` | Свечи из кэша `DataLoader` |
 | `GET /api/strategies` | `[{name, enabled, kill_switch, backtest:{win_rate, trades, sharpe}, live:{win_rate, ev, trades}}]` |

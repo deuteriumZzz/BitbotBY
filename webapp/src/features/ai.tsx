@@ -380,7 +380,7 @@ function AddProviders(props: { ai: AiState; list: AiProvider[]; secretOf: (id: s
   );
 }
 
-function AddCard({ ai, p, secret, onSaved }: { ai: AiState; p: AiProvider; secret?: SecretItem; onSaved: () => void }) {
+export function AddCard({ ai, p, secret, onSaved }: { ai: AiState; p: AiProvider; secret?: SecretItem; onSaved: () => void }) {
   const [vals, setVals] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const say = useStore((s) => s.say);

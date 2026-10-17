@@ -121,6 +121,16 @@ export interface SecretItem {
   checked_at: number | null;
 }
 
+/** Что уже подключено (`GET /api/setup`): ключи из приложения или .env. */
+export interface SetupInfo {
+  /** Можно ли сохранять ключи из приложения (задан BITBOT_SECRETS_KEY). */
+  keys_in_app: boolean;
+  bybit: boolean;
+  telegram: boolean;
+}
+
+export type SetupStep = "bybit" | "telegram" | "ai" | "risk" | "mode";
+
 /** Закрытая сделка из журнала (`GET /api/journal`). */
 export interface JournalTrade {
   id: number;

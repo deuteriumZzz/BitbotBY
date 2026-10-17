@@ -9,6 +9,7 @@ import type { Tab } from "./lib/types";
 import { Bots, profileName, stratName } from "./features/bots";
 import { Journal } from "./features/journal";
 import { Settings } from "./features/settings";
+import { Setup } from "./features/setup";
 import { Terminal, cycleKind } from "./features/terminal";
 import { GUARD_TEXT, actions, useStore } from "./store";
 import { Icon, TipLayer, Toggle, hideTip } from "./ui";
@@ -17,6 +18,7 @@ export function App() {
   const ready = useStore((s) => s.ready);
   const needLogin = useStore((s) => s.needLogin);
   const tab = useStore((s) => s.tab);
+  const setup = useStore((s) => s.setup);
   const views = useRef<HTMLElement>(null);
   const [flash, setFlash] = useState(0);
 
@@ -26,7 +28,7 @@ export function App() {
   useEffect(() => {
     views.current?.scrollTo(0, 0);
     hideTip();
-  }, [tab]);
+  }, [tab, setup]);
 
   if (!ready) return <div className="boot">Подключаюсь к боту…</div>;
   if (needLogin) return <Login />;
@@ -35,10 +37,16 @@ export function App() {
       <TopBar onPanic={() => setFlash(Date.now())} />
       <Banners />
       <main className="views" ref={views} onScroll={hideTip}>
-        {tab === "terminal" && <Terminal />}
-        {tab === "bots" && <Bots />}
-        {tab === "journal" && <Journal />}
-        {tab === "settings" && <Settings />}
+        {setup ? (
+          <Setup />
+        ) : (
+          <>
+            {tab === "terminal" && <Terminal />}
+            {tab === "bots" && <Bots />}
+            {tab === "journal" && <Journal />}
+            {tab === "settings" && <Settings />}
+          </>
+        )}
       </main>
       <Nav />
       <SignalSheet />

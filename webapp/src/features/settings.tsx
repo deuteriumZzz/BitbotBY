@@ -573,7 +573,7 @@ function checkField(env: string, label: string, secret: boolean, v: string): str
   return "";
 }
 
-function KeyCard({ item }: { item: SecretItem }) {
+export function KeyCard({ item }: { item: SecretItem }) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [model, setModel] = useState(item.model?.value ?? "");
   const [shown, setShown] = useState<Record<string, boolean>>({});
