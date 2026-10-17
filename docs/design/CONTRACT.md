@@ -29,43 +29,43 @@
 ### Торговля и риск
 | Telegram | Что делает | UI | API | Прототип |
 |---|---|---|---|---|
-| `/mode`, `mode_menu`, `mode:*` | Local / AI / SAC / Hybrid | Боты → «Кто принимает решение» | `PATCH /api/config {MODE}` | ✓ |
-| `toggle_chronos`, `chronos_on/off` | Модификатор Chronos | Боты → переключатель Chronos | `PATCH /api/config {CHRONOS}` | ✓ |
+| `/mode`, `mode_menu`, `mode:*` | Local / AI / SAC / Hybrid | Бот → «Кто принимает решение» | `PATCH /api/config {MODE}` | ✓ |
+| `toggle_chronos`, `chronos_on/off` | Модификатор Chronos | Бот → переключатель Chronos | `PATCH /api/config {CHRONOS}` | ✓ |
 | `/scan`, `scan_menu`, `scan:N` | Сколько монет сканировать | Все параметры → `SCAN_TOP_N` | `PATCH /api/config` | ✓ |
-| `market_profile_menu`, `market_profile:*` | Bluechip / Altcoin / Meme (пакет настроек) | Боты → «Профиль рынка» | `POST /api/profile {name}` → `apply_market_profile` | ✓ |
-| `toggle_season_mode` | Сезон: спросить / переключить сам | Боты → «Менять профиль по сезону» | `PATCH /api/config {SEASON_SWITCH_MODE}` | ✓ |
+| `market_profile_menu`, `market_profile:*` | Bluechip / Altcoin / Meme (пакет настроек) | Бот → «Профиль рынка» | `POST /api/profile {name}` → `apply_market_profile` | ✓ |
+| `toggle_season_mode` | Сезон: спросить / переключить сам | Бот → «Менять профиль по сезону» | `PATCH /api/config {SEASON_SWITCH_MODE}` | ✓ |
 | `season_dismiss` (+ уведомление о смене сезона) | Оставить профиль | Баннер «Сменился сезон: переключить / оставить» | WS `season.changed`, `POST /api/profile` / `POST /api/season/dismiss` | ✓ |
-| `market_type_menu`, `market_type:*` | Спот / фьючерсы | Боты → «Рынок» | `PATCH /api/config {MARKET_TYPE}` | ✓ |
-| `toggle_auto_exec` | Автоисполнение | Боты → «Без моего подтверждения» | `PATCH /api/config {AUTO_EXECUTE}` | ✓ |
-| `timeout_menu`, `timeout:*` | Таймаут подтверждения | Боты → «Сколько ждать ответа» | `PATCH /api/config {TELEGRAM_CONFIRM_TIMEOUT}` | ✓ |
+| `market_type_menu`, `market_type:*` | Спот / фьючерсы | Бот → «Рынок» | `PATCH /api/config {MARKET_TYPE}` | ✓ |
+| `toggle_auto_exec` | Автоисполнение | Бот → «Без моего подтверждения» | `PATCH /api/config {AUTO_EXECUTE}` | ✓ |
+| `timeout_menu`, `timeout:*` | Таймаут подтверждения | Бот → «Сколько ждать ответа» | `PATCH /api/config {TELEGRAM_CONFIRM_TIMEOUT}` | ✓ |
 | notifier `confirm` / `reject` | Подтвердить сделку | Окно подтверждения с таймером | WS `signal.pending`, `POST /api/signals/{id}/confirm`, `/reject` | ✓ |
-| `/risk`, `risk_menu`, `risk:*` | Пресеты риска | Боты → карточки режимов | `POST /api/presets/risk {name}` | ✓ |
-| `pos_more`, `pos_less`, `pos_paper_max` | Слоты (в т.ч. максимум для Paper) | Боты → «Сделок одновременно» | `PATCH /api/config {MAX_POSITIONS}` | ✓ |
-| `toggle_drawdown` | Масштабирование при просадке | Боты → «Защита при просадке» | `PATCH /api/config {DRAWDOWN_SCALE_ENABLED}` | ✓ |
+| `/risk`, `risk_menu`, `risk:*` | Пресеты риска | Бот → карточки режимов | `POST /api/presets/risk {name}` | ✓ |
+| `pos_more`, `pos_less`, `pos_paper_max` | Слоты (в т.ч. максимум для Paper) | Бот → «Сделок одновременно» | `PATCH /api/config {MAX_POSITIONS}` | ✓ |
+| `toggle_drawdown` | Масштабирование при просадке | Бот → «Защита при просадке» | `PATCH /api/config {DRAWDOWN_SCALE_ENABLED}` | ✓ |
 | `dd_confirm_more/less` | Подтверждений до остановки | Все параметры → `DRAWDOWN_CONFIRM_CYCLES` | `PATCH /api/config` | ✓ |
 | `conf_paper_up/down`, `conf_live_*` | Порог уверенности ±0.05 | Все параметры → `MIN_SIGNAL_CONFIDENCE*` | `PATCH /api/config` | ✓ |
-| `/lev`, `lev_menu`, `lev:mode:*` | Режим плеча | Боты → «Плечо» | `PATCH /api/config {LEVERAGE_MODE}` | ✓ |
+| `/lev`, `lev_menu`, `lev:mode:*` | Режим плеча | Бот → «Плечо» | `PATCH /api/config {LEVERAGE_MODE}` | ✓ |
 | `/lev target N`, `lev:target:*` | Риск на ATR | Все параметры → `LEVERAGE_TARGET_RISK` | `PATCH /api/config` | ✓ |
 | `/lev drawdown N`, `lev:drawdown:*`, `lev:manual` | Порог просадки для плеча | Все параметры → `LEVERAGE_DD_THRESHOLD` (после ветки `claude/sharp-noyce-ce1646`) | `PATCH /api/config` | ✓ |
 | `/hours`, `hours_info`, `hours:*` | Торговые часы UTC | Настройки → «Часы торговли» | `PATCH /api/config {TRADING_HOURS}` | ✓ |
 | `/add SYM` | Всегда включать в скан | Настройки → «Всегда сканировать» | `PUT /api/symbols {forced}` | ✓ |
 | `/remove SYM` | Исключить из скана | Настройки → «Исключить» | `PUT /api/symbols {excluded}` | ✓ |
 | `/symbols` | Показать оба списка | Те же два списка | `GET /api/symbols` | ✓ |
-| `/strategies`, `strategies`, `strat:NAME`, `strat_reset` | Вкл/выкл стратегий | Боты → «Стратегии»: переключатель у каждой + «Включить все» | `PATCH /api/strategies/{name} {enabled}`, `POST /api/strategies/reset` | ✓ |
+| `/strategies`, `strategies`, `strat:NAME`, `strat_reset` | Вкл/выкл стратегий | Бот → «Стратегии»: переключатель у каждой + «Включить все» | `PATCH /api/strategies/{name} {enabled}`, `POST /api/strategies/reset` | ✓ |
 
 ### AI, обучение, проверки
 | Telegram | Что делает | UI | API | Прототип |
 |---|---|---|---|---|
 | `/provider`, `provider_menu`, `provider:*` | Выбор AI-провайдера | Настройки → порядок провайдеров + Все параметры → `AI_PROVIDER` | `PATCH /api/config`, `PUT /api/ai-providers/order` | ✓ порядок цепочки — новое (сейчас зашит в `config.py`) |
 | `/trainn N` | Монет для обучения SAC | Все параметры → `TRAIN_TOP_N` | `PATCH /api/config` | ✓ |
-| `train_sac_now/skip` | Обучить SAC (~60 мин) | Боты → «Дообучить» | `POST /api/jobs {type:"train"}` | ✓ |
-| `tune_sac_menu/now/skip` | Тюнинг (~3 ч) | Боты → «Тюнинг» | `POST /api/jobs {type:"tune"}` | ✓ |
+| `train_sac_now/skip` | Обучить SAC (~60 мин) | Бот → «Дообучить» | `POST /api/jobs {type:"train"}` | ✓ |
+| `tune_sac_menu/now/skip` | Тюнинг (~3 ч) | Бот → «Тюнинг» | `POST /api/jobs {type:"tune"}` | ✓ |
 | `train_progress`, `backtest_progress` | Прогресс | Прогресс-бар в карточке + лента | `GET /api/jobs/{id}`, WS `job.progress` | ✓ |
-| `rollback_sac` | Откат модели | Боты → «Откатить модель» | `POST /api/models/sac/rollback` | ✓ |
-| `backtest_menu`, `backtest_now` | Бэктест стратегий | Боты → «Бэктест» | `POST /api/jobs {type:"backtest"}` | ✓ |
-| `alpha_report_now` | Значимость альфы | Боты → «Значимость альфы» | `POST /api/jobs {type:"alpha"}` | ✓ |
-| `live_divergence_now` | Live против бэктеста | Боты → «Live vs бэктест» | `POST /api/jobs {type:"divergence"}` | ✓ |
-| `ai_isolation_menu/now/skip` | Изолированный бэктест AI (~150 вызовов) | Боты → «Проверка AI» с предупреждением о расходе | `POST /api/jobs {type:"ai_isolation"}` | ✓ |
+| `rollback_sac` | Откат модели | Бот → «Откатить модель» | `POST /api/models/sac/rollback` | ✓ |
+| `backtest_menu`, `backtest_now` | Бэктест стратегий | Бот → «Бэктест» | `POST /api/jobs {type:"backtest"}` | ✓ |
+| `alpha_report_now` | Значимость альфы | Бот → «Значимость альфы» | `POST /api/jobs {type:"alpha"}` | ✓ |
+| `live_divergence_now` | Live против бэктеста | Бот → «Live vs бэктест» | `POST /api/jobs {type:"divergence"}` | ✓ |
+| `ai_isolation_menu/now/skip` | Изолированный бэктест AI (~150 вызовов) | Бот → «Проверка AI» с предупреждением о расходе | `POST /api/jobs {type:"ai_isolation"}` | ✓ |
 
 ### Уведомления, счёт, сброс
 | Telegram | Что делает | UI | API | Прототип |

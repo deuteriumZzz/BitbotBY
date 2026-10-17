@@ -1,4 +1,4 @@
-// Вкладка «Боты»: режим риска, тонкая настройка, подтверждение сделок, что торговать, стратегии.
+// Вкладка «Бот»: режим риска, тонкая настройка, подтверждение сделок, что торговать, стратегии.
 
 import { useEffect, useRef, useState } from "react";
 
@@ -105,7 +105,7 @@ const PROFILE_NOTE: Record<string, string> = {
 
 export function Bots() {
   return (
-    <section className="view enter" aria-label="Боты">
+    <section className="view enter" aria-label="Бот">
       <div className="cols">
         <div className="col">
           <RiskCard />

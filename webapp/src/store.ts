@@ -115,6 +115,8 @@ export interface Store {
   jobGroups: Record<string, string>;
   rollbackAvailable: boolean;
   setupInfo: SetupInfo | null;
+  /** Окно справки открыто. */
+  helpOpen: boolean;
   /** Открытый шаг мастера первого запуска; null — мастер закрыт. */
   setup: SetupStep | null;
   tab: Tab;
@@ -125,6 +127,7 @@ export interface Store {
   boot(): Promise<void>;
   setTab(tab: Tab): void;
   openSetup(step: SetupStep | null): void;
+  openHelp(open: boolean): void;
   /** Открыть «Настройки → Параметры» с фокусом в поиске. */
   searchParams(q?: string): void;
   clearParamSearch(): void;
@@ -230,6 +233,7 @@ export const useStore = create<Store>((set, get) => {
     rollbackAvailable: false,
     setupInfo: null,
     setup: null,
+    helpOpen: false,
     paramSearch: null,
     tab: "terminal",
     toast: null,
@@ -289,6 +293,7 @@ export const useStore = create<Store>((set, get) => {
 
     setTab: (tab) => set({ tab, setup: null }),
     openSetup: (setup) => set({ setup }),
+    openHelp: (helpOpen) => set({ helpOpen }),
     searchParams: (q = "") => set({ tab: "settings", setup: null, paramSearch: q }),
     clearParamSearch: () => set({ paramSearch: null }),
     setPeriod(period) {

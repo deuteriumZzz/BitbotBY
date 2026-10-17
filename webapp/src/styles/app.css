@@ -693,3 +693,16 @@ details.more>summary::-webkit-details-marker{display:none}
 details.more>summary::before{content:"▸ ";color:var(--ink-3)}
 details.more[open]>summary::before{content:"▾ "}
 .note-soon.role{margin-bottom:10px;color:var(--ink-2);font-size:13px;line-height:1.5}
+/* справка: кнопка в шапке и окно */
+.help-btn{all:unset;box-sizing:border-box;cursor:pointer;width:32px;height:32px;display:grid;place-items:center;border-radius:var(--r);border:1px solid var(--line-ui);color:var(--ink-2);font:600 14px var(--f-ui);flex:none;transition:border-color var(--t-fast),color var(--t-fast)}
+.help-btn:hover,.help-btn[aria-expanded="true"]{border-color:var(--brand);color:var(--brand-ink)}
+.help-back{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;animation:fade-in var(--t-fast) linear}
+.help-sheet{width:100%;max-height:82dvh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-bottom:0;border-radius:var(--r) var(--r) 0 0;padding:14px 14px max(16px,env(safe-area-inset-bottom,0px));animation:sheetin var(--t-norm) var(--ease-mech)}
+.help-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;position:sticky;top:-14px;background:var(--panel);padding:2px 0 6px}
+.help-h h2{font:600 15px var(--f-label);letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2)}
+@keyframes fade-in{from{opacity:0}}
+@container dev (min-width:900px){
+  .help-back{align-items:stretch;justify-content:flex-end}
+  .help-sheet{width:440px;max-height:none;height:100%;border:0;border-left:1px solid var(--line);border-radius:0;animation-name:help-in}
+}
+@keyframes help-in{from{transform:translateX(24px);opacity:0}}

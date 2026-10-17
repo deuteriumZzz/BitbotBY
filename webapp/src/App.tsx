@@ -8,6 +8,7 @@ import * as platform from "./lib/platform";
 import type { Tab } from "./lib/types";
 import { Bots, profileName, stratName } from "./features/bots";
 import { Learn } from "./features/jobs";
+import { HelpButton, HelpSheet } from "./features/help";
 import { Journal } from "./features/journal";
 import { Settings } from "./features/settings";
 import { Setup } from "./features/setup";
@@ -71,6 +72,7 @@ export function App() {
       </main>
       <Nav />
       <SignalSheet />
+      <HelpSheet />
       <Toast />
       <TipLayer />
     </div>
@@ -124,6 +126,7 @@ function TopBar({ onPanic }: { onPanic: () => void }) {
         <span className={`dot ${wsUp && alive ? "ok live" : wsUp ? "warn" : "bad"}`} />
         {wsUp ? (alive ? "онлайн" : "бот молчит") : "нет связи"}
       </span>
+      <HelpButton />
       <span className="break" />
       <Toggle className="master" on={!paused} onChange={(on) => void toggle(on)} label="Бот" disabled={busy || !alive}>
         <span>{paused ? "На паузе" : "Работает"}</span>
@@ -257,7 +260,7 @@ function Banners() {
 
 const TABS: [Tab, string, JSX.Element][] = [
   ["terminal", "Терминал", Icon.terminal],
-  ["bots", "Боты", Icon.bots],
+  ["bots", "Бот", Icon.bots],
   ["learn", "Обучение", Icon.learn],
   ["journal", "Журнал", Icon.journal],
   ["settings", "Настройки", Icon.settings],
