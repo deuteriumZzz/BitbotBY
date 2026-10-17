@@ -17,13 +17,14 @@ import base64
 import json
 import os
 import secrets
+import socket
 import subprocess
 import sys
 import time
 import urllib.request
 import webbrowser
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 ROOT = Path(__file__).resolve().parent.parent
 STATE_DIR = ROOT / ".launcher"
@@ -166,6 +167,45 @@ def wait_healthy(port: int, timeout: int = 600) -> bool:
     return False
 
 
+def port_free(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(("127.0.0.1", port)) != 0
+
+
+def own_dashboard_running() -> bool:
+    try:
+        out = run(
+            ["docker", "ps", "-q", "--filter", "name=bitbotby-dashboard-1"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return bool(out.stdout.strip())
+
+
+def pick_port(preferred: int, busy: Optional[Callable[[int], bool]] = None) -> int:
+    """Первый свободный порт начиная с желаемого (8080 часто занят)."""
+    is_busy = busy or (lambda p: not port_free(p))
+    for port in range(preferred, preferred + 30):
+        if not is_busy(port):
+            return port
+    return preferred
+
+
+def previous_port() -> Optional[int]:
+    try:
+        for line in (
+            (STATE_DIR / "compose.env").read_text(encoding="utf-8").splitlines()
+        ):
+            if line.startswith("BITBOT_PORT="):
+                return int(line.split("=", 1)[1])
+    except (OSError, ValueError):
+        pass
+    return None
+
+
 def prepare(port: int, data_dir: Optional[Path]) -> str:
     """Пишет compose.env с новым токеном входа; возвращает ссылку для браузера."""
     state = load_state()
@@ -180,6 +220,15 @@ def prepare(port: int, data_dir: Optional[Path]) -> str:
 def cmd_start(port: int, data_dir: Optional[Path], open_browser: bool = True) -> int:
     if not ensure_docker():
         return 1
+    # Если наш дашборд уже работает, остаёмся на его порту; иначе берём свободный.
+    previous = previous_port()
+    if previous is not None and own_dashboard_running():
+        port = previous
+    else:
+        chosen = pick_port(port)
+        if chosen != port:
+            say(f"Порт {port} занят другой программой, использую {chosen}.")
+        port = chosen
     url = prepare(port, data_dir)
     say("Запускаю BitbotBY (Paper: сделки виртуальные).")
     say(

@@ -64,3 +64,10 @@ def test_compose_is_paper_and_loopback_only():
     ).read_text()
     assert '"127.0.0.1:' in text and 'PAPER_TRADING: "true"' in text
     assert "0.0.0.0" not in text
+
+
+def test_pick_port_skips_busy_ones():
+    busy = {8080, 8081}
+    assert launch.pick_port(8080, lambda p: p in busy) == 8082
+    assert launch.pick_port(8080, lambda p: False) == 8080
+    assert launch.pick_port(8080, lambda p: True) == 8080  # всё занято: прежний порт
