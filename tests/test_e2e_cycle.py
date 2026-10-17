@@ -41,6 +41,8 @@ def _make_patches() -> dict:
 
 def _make_cfg(paper: bool = True, auto: bool = True, max_pos: int = 3):
     cfg = MagicMock()
+    # Kill-switch по живому EV проверяется своими тестами; здесь он выключен.
+    cfg.LIVE_ALPHA_KILL_ENABLED = False
     cfg.PAPER_TRADING = paper
     cfg.AUTO_EXECUTE = auto
     cfg.MAX_POSITIONS = max_pos

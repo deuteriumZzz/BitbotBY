@@ -45,6 +45,8 @@ def _make_cfg(
     auto_execute: bool = True,
 ) -> MagicMock:
     cfg = MagicMock()
+    # Kill-switch по живому EV проверяется своими тестами; здесь он выключен.
+    cfg.LIVE_ALPHA_KILL_ENABLED = False
     cfg.PAPER_TRADING = paper
     cfg.MAX_POSITIONS = max_pos
     cfg.SYMBOL = "BTC/USDT"

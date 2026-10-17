@@ -29,6 +29,8 @@ def _make_df(n: int = 50, price: float = 100.0) -> pd.DataFrame:
 
 def _make_cfg(paper: bool = True, max_pos: int = 5, max_corr: float = 0.0) -> MagicMock:
     cfg = MagicMock()
+    # Kill-switch по живому EV проверяется своими тестами; здесь он выключен.
+    cfg.LIVE_ALPHA_KILL_ENABLED = False
     cfg.PAPER_TRADING = paper
     cfg.MAX_POSITIONS = max_pos
     cfg.SYMBOL = "BTC/USDT"
@@ -267,3 +269,38 @@ class TestSizing:
             )
         # kelly_qty = 0 → откат к portfolio_qty = 10000 * 0.01 / 100 = 1.0
         assert qty == pytest.approx(1.0)
+
+
+class TestLiveAlphaKillSwitch:
+    """Стратегия с плохим живым EV не открывает новые сделки."""
+
+    @staticmethod
+    def _cfg(enabled: bool):
+        cfg = _make_cfg()
+        cfg.LIVE_ALPHA_KILL_ENABLED = enabled
+        cfg.LIVE_ALPHA_KILL_MIN_TRADES = 10
+        cfg.LIVE_ALPHA_KILL_EV_THRESHOLD = -0.5
+        return cfg
+
+    async def _run(self, enabled: bool, n: int, ev: float):
+        executor, _ = _make_executor()
+        executor._trade_history.get_trade_count = AsyncMock(return_value=n)
+        executor._trade_history.get_expected_value = AsyncMock(return_value=ev)
+        with patch("src.order_executor.Config", self._cfg(enabled)):
+            await executor.execute(_TOP_BUY, {}, 10_000.0)
+        return executor
+
+    @pytest.mark.asyncio
+    async def test_blocks_entry_when_ev_is_below_threshold(self):
+        executor = await self._run(enabled=True, n=15, ev=-0.8)
+        executor._trade_history.record_open.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_does_not_block_with_too_few_trades(self):
+        executor = await self._run(enabled=True, n=5, ev=-0.8)
+        executor._trade_history.record_open.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_can_be_switched_off(self):
+        executor = await self._run(enabled=False, n=15, ev=-0.8)
+        executor._trade_history.record_open.assert_called_once()
