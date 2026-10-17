@@ -35,10 +35,11 @@ def _env(name: str) -> str:
 
 
 def _retry_after(message: str) -> Optional[float]:
-    """Срок из текста ошибки 429: «retry in 1m30s» или «try again in 12.5s»."""
+    """Срок из текста ошибки 429: «retry in 1m30s», «try again in 12.5s»,
+    «Retry after 10 seconds» (LLM7)."""
     m = re.search(
         r"(?:try again|retry) in (\d+)m(\d+(?:\.\d+)?)?s?|"
-        r"(?:try again|retry) in (\d+(?:\.\d+)?)s",
+        r"(?:try again|retry) (?:in|after) (\d+(?:\.\d+)?) ?s",
         message,
         re.IGNORECASE,
     )
@@ -163,7 +164,8 @@ class AIAnalyzer:
                 from openai import AsyncOpenAI
 
                 self._clients[provider] = AsyncOpenAI(
-                    api_key=key or "not-needed",  # LLM7 и Ollama — без ключа
+                    api_key=key
+                    or "unused",  # LLM7 и Ollama без ключа — как в их документации
                     base_url=p.url(_env),
                     max_retries=0,  # без авто-ретраев — 429 сразу идёт в фолбэк
                     timeout=120.0 if provider == "ollama" else 30.0,

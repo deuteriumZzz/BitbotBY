@@ -385,12 +385,15 @@ class TestAnalyze:
 
     @pytest.mark.asyncio
     async def test_rate_limit_pauses_provider_for_seven_minutes(self):
-        ai = self._make_ai([("gemini", "m"), ("openrouter", "m"), ("nvidia", "m")])
+        ai = self._make_ai(
+            [("gemini", "m"), ("openrouter", "m"), ("llm7", "m"), ("nvidia", "m")]
+        )
         result = await self._run(
             ai,
             {
                 "gemini": _http_error(429, "Too Many Requests"),
                 "openrouter": _http_error(429, "Rate limit, retry in 30s"),
+                "llm7": _http_error(429, "Too many requests. Retry after 10 seconds."),
                 "nvidia": _REC,
             },
         )
@@ -398,6 +401,7 @@ class TestAnalyze:
         now = time.time()
         assert 400 < ai._provider_retry_after["gemini"] - now <= 420
         assert 30 < ai._provider_retry_after["openrouter"] - now <= 35
+        assert 10 < ai._provider_retry_after["llm7"] - now <= 15
 
     @pytest.mark.asyncio
     async def test_no_balance_bad_key_and_missing_model(self):
