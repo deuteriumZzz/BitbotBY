@@ -620,6 +620,36 @@ class TestRecommendStrategyLocal:
         self.ai._runtime_config.get_market_type.return_value = "linear"
         assert "short_only" in self.ai._build_strategy_list()
 
+    def test_prompt_shows_backtest_stats_only_with_enough_trades(self):
+        self.ai.strategies = [
+            {
+                "name": "a",
+                "description": "d",
+                "risk_level": "low",
+                "market_type": "any",
+                "markets": "both",
+            },
+            {
+                "name": "b",
+                "description": "d",
+                "risk_level": "low",
+                "market_type": "any",
+                "markets": "both",
+            },
+        ]
+        self.ai._runtime_config = MagicMock()
+        self.ai._runtime_config.get_disabled_strategies.return_value = set()
+        self.ai._runtime_config.get_market_type.return_value = "linear"
+        stats = {
+            "a": {"ev": -0.0012, "total_trades": 2931},
+            "b": {"ev": 0.01, "total_trades": 20},  # мало сделок — не показываем
+        }
+        with patch("src.trade_history.get_backtest_stats", side_effect=stats.get):
+            text = self.ai._build_strategy_list()
+        a_line, b_line = text.splitlines()
+        assert "backtest EV -0.12%/trade over 2931 trades" in a_line
+        assert "backtest" not in b_line
+
     def test_no_runtime_config_still_works(self):
         # _runtime_config=None (дефолт) — не должно падать при отсутствии RC.
         registry = self._fake_registry({"a": {"action": "buy", "confidence": 0.70}})

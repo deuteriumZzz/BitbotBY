@@ -191,16 +191,27 @@ class AIAnalyzer:
         """
         _rc = getattr(self, "_runtime_config", None)
         disabled = _rc.get_disabled_strategies() if _rc is not None else set()
+        from src.trade_history import get_backtest_stats  # noqa: PLC0415
+
         kind = self._market_kind()
         lines = []
         for s in self.strategies:
             if s["name"] in disabled or s.get("markets", "both") not in ("both", kind):
                 continue
             desc = s["description"][:60]
+            bt = get_backtest_stats(s["name"])
+            # Модель видит, как стратегия показала себя на истории: название —
+            # лишь ярлык типа сетапа, а не гарантия, что код стратегии подтвердил вход.
+            stats = (
+                f", backtest EV {bt['ev'] * 100:+.2f}%/trade over "
+                f"{bt['total_trades']} trades"
+                if bt["total_trades"] >= 100
+                else ""
+            )
             lines.append(
                 f"  {s['name']}: {desc}... "
                 f"[risk={s['risk_level']}, "
-                f"market={s['market_type']}]"
+                f"market={s['market_type']}{stats}]"
             )
         return "\n".join(lines)
 
@@ -258,6 +269,9 @@ class AIAnalyzer:
             f"- Only include symbols with confidence >= {min_conf}\n"
             f"- news_sentiment > 0.3 boosts buy; < -0.3 boosts sell\n"
             f"- Match strategy to market_type\n"
+            f"- The strategy name is a label for the setup type; backtest EV "
+            f"shows how each performed historically (no strategy has a proven "
+            f"edge) — do not inflate confidence, omit symbols you doubt\n"
             f"- stop_loss: 2-8% from entry; take_profit: 2x risk min\n"
             f"- Omit symbols with no clear signal\n"
             f"- Reasoning in Russian, 1-2 sentences max\n\n"
