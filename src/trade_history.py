@@ -106,13 +106,17 @@ class TradeHistory:
         self._lock = asyncio.Lock()
         with self._conn:
             self._conn.execute(_DDL)
-            try:
-                self._conn.execute(
-                    "ALTER TABLE trades ADD COLUMN context_flags "
-                    "TEXT NOT NULL DEFAULT ''"
-                )
-            except sqlite3.OperationalError:
-                pass  # column already exists (pre-existing DB)
+            # Колонки, добавленные после первых версий: в старых БД их нет.
+            # reasoning — почему открыта (текст AI или стратегии),
+            # exit_reason — как закрыта (tp, sl, trail, manual_app, …).
+            for column in ("context_flags", "reasoning", "exit_reason"):
+                try:
+                    self._conn.execute(
+                        f"ALTER TABLE trades ADD COLUMN {column} "
+                        "TEXT NOT NULL DEFAULT ''"
+                    )
+                except sqlite3.OperationalError:
+                    pass  # column already exists
 
     # ── Executor helper ───────────────────────────────────────────────────────
 
@@ -136,6 +140,7 @@ class TradeHistory:
         confidence: float,
         commission: float = 0.0,
         context_flags: str = "",
+        reasoning: str = "",
     ) -> int:
         """
         Записывает открытие сделки в БД.
@@ -161,8 +166,8 @@ class TradeHistory:
                     INSERT INTO trades
                       (symbol, strategy, action, entry_price,
                        quantity, confidence, commission,
-                       entry_time, context_flags)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                       entry_time, context_flags, reasoning)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         symbol,
@@ -174,6 +179,7 @@ class TradeHistory:
                         commission,
                         now_iso,
                         context_flags,
+                        reasoning[:1000],
                     ),
                 )
                 self._conn.commit()
@@ -187,7 +193,8 @@ class TradeHistory:
         exit_price: float,
         commission: float = 0.0,
         leverage: int = 1,
-    ) -> None:
+        reason: str = "",
+    ) -> Optional[float]:
         """
         Закрывает сделку и рассчитывает PnL из данных входа.
 
@@ -198,6 +205,8 @@ class TradeHistory:
         :param exit_price: Цена выхода.
         :param commission: Комиссия при закрытии.
         :param leverage: Плечо позиции (1 = без плеча).
+        :param reason: Как закрыта: tp, sl, trail, manual_app, …
+        :return: PnL за вычетом комиссий или None, если сделки нет.
         """
         now_iso = datetime.now().isoformat()
 
@@ -213,7 +222,7 @@ class TradeHistory:
             row = await self._run_db(_read)
             if row is None:
                 logger.warning("trade_id=%s not found", trade_id)
-                return
+                return None
             action, entry_price, qty, entry_comm = row
             total_comm = entry_comm + commission
             if action == "buy":
@@ -232,7 +241,7 @@ class TradeHistory:
                     UPDATE trades
                     SET exit_price=?, commission=commission+?,
                         pnl=?, pnl_pct=?, exit_time=?,
-                        status='closed'
+                        status='closed', exit_reason=?
                     WHERE id=?
                     """,
                     (
@@ -241,12 +250,14 @@ class TradeHistory:
                         pnl,
                         pnl_pct,
                         now_iso,
+                        reason,
                         trade_id,
                     ),
                 )
                 self._conn.commit()
 
             await self._run_db(_write)
+            return pnl
 
     async def get_open_trades(self) -> list[Dict]:
         """
@@ -254,14 +265,15 @@ class TradeHistory:
         _monitored с БД после рестарта бота в paper-режиме.
 
         :return: Список словарей с id, symbol, action, entry_price,
-            quantity, confidence, entry_time.
+            quantity, confidence, entry_time, strategy, reasoning.
         """
         async with self._lock:
 
             def _read():
                 cur = self._conn.execute(
                     "SELECT id, symbol, action, entry_price, quantity, "
-                    "confidence, entry_time FROM trades WHERE status='open' "
+                    "confidence, entry_time, strategy, reasoning "
+                    "FROM trades WHERE status='open' "
                     "ORDER BY entry_time ASC"
                 )
                 cols = [d[0] for d in cur.description]

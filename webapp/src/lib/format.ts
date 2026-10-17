@@ -35,3 +35,26 @@ export function plural(n: number, forms: [string, string, string]): string {
 export const hhmm = (d: Date = new Date()): string => d.toTimeString().slice(0, 5);
 
 export const base = (symbol: string): string => symbol.split("/")[0];
+
+// Причины выхода из сделки (коды бота → по-русски). Динамический выход приходит
+// текстом вида «signal_reversal SELL conf=0.72» — узнаём по первому слову.
+const EXIT_REASON: Record<string, string> = {
+  tp: "по тейк-профиту",
+  sl: "по стоп-лоссу",
+  trail: "по трейлинг-стопу",
+  manual_app: "вручную",
+  telegram_closeall: "командой «закрыть всё»",
+  emergency: "аварийно",
+  hard_drawdown: "защита от просадки",
+  atr_spike: "всплеск волатильности",
+  dynamic_exit: "по сигналу на выход",
+  signal_reversal: "сигнал развернулся",
+  regime_flip: "рынок развернулся против позиции",
+  funding: "перегрев по фандингу",
+  fear_greed: "крайний страх или жадность на рынке",
+  long_liquidation: "каскад ликвидаций",
+  short_squeeze: "каскад ликвидаций",
+};
+
+export const exitReason = (code?: string | null): string =>
+  code ? (EXIT_REASON[code] ?? EXIT_REASON[code.split(/[\s=]/)[0]] ?? code) : "";

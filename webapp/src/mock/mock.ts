@@ -53,6 +53,14 @@ const PRICES: Record<string, number> = {
   "ARB/USDT": 0.7421,
 };
 const SYMBOLS = Object.keys(PRICES);
+// Объяснения в том виде, как их пишет бот (AI + SAC в signal_combiner).
+const WHY = [
+  "RSI перепродан (28), цена у нижней полосы Боллинджера. [SAC 71%, regime=sideways]",
+  "EMA 9 пересекла EMA 21 снизу, объём выше среднего в 1.8 раза. [SAC 64%, regime=trending_up]",
+  "Пробой локального максимума на растущем объёме, фандинг нейтральный.",
+  "AI+SAC agree, SAC 77%, regime=trending_down",
+];
+
 const REJECTS = [
   "сильная корреляция с открытой позицией",
   "мало ликвидности или широкий спред",
@@ -183,7 +191,7 @@ const publicPos = (p: Position) => ({
   trailing: p.trailing,
 });
 
-function open(symbol: string, side: Side): Live {
+function open(symbol: string, side: Side, why: Partial<Position> = {}): Live {
   const price = PRICES[symbol];
   const dist = price * (0.012 + Math.random() * 0.01);
   const dir = side === "long" ? 1 : -1;
@@ -199,6 +207,10 @@ function open(symbol: string, side: Side): Live {
     tp: price + dir * dist * 2,
     price,
     trailing: true,
+    strategy: "ema_crossover",
+    confidence: 0.68,
+    reasoning: WHY[id % WHY.length],
+    ...why,
   };
   positions[symbol] = p;
   return p;
@@ -210,7 +222,7 @@ for (const [sym, side, move] of [["SOL/USDT", "long", 1.006], ["ETH/USDT", "shor
   p.price = PRICES[sym] = p.entry * move;
 }
 
-function closePos(symbol: string, fraction = 1): void {
+function closePos(symbol: string, fraction = 1, reason = "manual_app"): void {
   const p = positions[symbol];
   if (!p) return;
   const dir = p.side === "long" ? 1 : -1;
@@ -221,7 +233,7 @@ function closePos(symbol: string, fraction = 1): void {
   closed.push({ exit: Date.now(), net, fees });
   if (fraction >= 1) {
     delete positions[symbol];
-    emit("position.closed", { symbol });
+    emit("position.closed", { symbol, reason, price: p.price });
   } else {
     p.qty = +(p.qty - qty).toPrecision(4);
     emit("position.updated", publicPos(p));
@@ -235,7 +247,15 @@ function state() {
     bot: { alive: true, ...bot, ai: ai.last || null },
     balance: +balance.toFixed(2),
     slots: { used: Object.keys(positions).length, max: maxPositions() },
-    positions: Object.values(positions).map((p) => ({ ...publicPos(p), id: p.id, pnl_pct: null, partial_tp_done: false })),
+    positions: Object.values(positions).map((p) => ({
+      ...publicPos(p),
+      id: p.id,
+      pnl_pct: null,
+      partial_tp_done: false,
+      strategy: p.strategy,
+      confidence: p.confidence,
+      reasoning: p.reasoning,
+    })),
     timestamp: new Date().toISOString(),
   };
 }
@@ -334,7 +354,8 @@ function tick(): void {
     const next = p.price - dir * dist;
     if (p.trailing && (p.price - p.entry) * dir > dist && (next - p.sl) * dir > 0) p.sl = next;
     emit("tick", { ...publicPos(p), price: p.price });
-    if ((p.price - p.sl) * dir <= 0 || (p.price - p.tp) * dir >= 0) closePos(p.symbol);
+    if ((p.price - p.tp) * dir >= 0) closePos(p.symbol, 1, "tp");
+    else if ((p.price - p.sl) * dir <= 0) closePos(p.symbol, 1, (p.sl - p.entry) * dir > 0 ? "trail" : "sl");
   }
 }
 
@@ -361,15 +382,15 @@ async function cycle(): Promise<void> {
   const enabled = strategies.filter((s) => s.enabled).map((s) => s.name);
   const picks = pre.filter(() => Math.random() < 0.5).slice(0, 3);
   const sides: Record<string, Side> = {};
+  const whys: Record<string, Partial<Position>> = {};
   for (const sym of picks) {
     sides[sym] = config.MARKET_TYPE?.value === "spot" || Math.random() < 0.6 ? "long" : "short";
-    emit("radar.stage", {
-      stage: "signal",
-      symbol: sym,
-      side: sides[sym],
+    whys[sym] = {
       confidence: +(0.55 + Math.random() * 0.3).toFixed(2),
       strategy: enabled.length ? pick(enabled) : "ema_crossover",
-    });
+      reasoning: pick(WHY),
+    };
+    emit("radar.stage", { stage: "signal", symbol: sym, side: sides[sym], ...whys[sym] });
     await sleep(500);
   }
   for (const sym of picks) {
@@ -380,13 +401,13 @@ async function cycle(): Promise<void> {
     else if (positions[sym]) reject("по монете уже есть позиция");
     else if (Math.random() < 0.55) reject(pick(REJECTS));
     // Как у бота: спрашивает только в Live без авто-сделок, в Paper — сразу сделка.
-    else if (!config.AUTO_EXECUTE?.value && !bot.paper) ask(sym, sides[sym]);
-    else openAndEmit(sym, sides[sym]);
+    else if (!config.AUTO_EXECUTE?.value && !bot.paper) ask(sym, sides[sym], whys[sym]);
+    else openAndEmit(sym, sides[sym], whys[sym]);
   }
 }
 
-function openAndEmit(sym: string, side: Side): void {
-  const p = open(sym, side);
+function openAndEmit(sym: string, side: Side, why: Partial<Position> = {}): void {
+  const p = open(sym, side, why);
   emit("radar.stage", { stage: "open", symbol: sym });
   emit("position.opened", {
     symbol: sym,
@@ -396,12 +417,15 @@ function openAndEmit(sym: string, side: Side): void {
     qty: p.qty,
     stop_loss: p.sl,
     take_profit: p.tp,
+    strategy: p.strategy,
+    confidence: p.confidence,
+    reasoning: p.reasoning,
   });
 }
 
 const decisionSec = (): number => Number(config.TELEGRAM_CONFIRM_TIMEOUT?.value ?? 60);
 
-function ask(sym: string, side: Side): void {
+function ask(sym: string, side: Side, why: Partial<Position> = {}): void {
   const price = PRICES[sym];
   const dir = side === "long" ? 1 : -1;
   const id = `sig${++tradeSeq}`;
@@ -409,8 +433,9 @@ function ask(sym: string, side: Side): void {
     id,
     symbol: sym,
     side,
-    confidence: +(0.6 + Math.random() * 0.25).toFixed(2),
-    strategy: "ema_crossover",
+    confidence: why.confidence ?? 0.68,
+    strategy: why.strategy ?? "ema_crossover",
+    reasoning: why.reasoning ?? pick(WHY),
     entry: price,
     stop_loss: price * (1 - dir * 0.015),
     take_profit: price * (1 + dir * 0.03),
@@ -437,7 +462,10 @@ function resolve(id: string, confirmed: boolean, by: string): boolean {
         ? "все слоты заняты"
         : "";
   if (reason) emit("radar.stage", { stage: "rejected", symbol: sig.symbol, reason });
-  else openAndEmit(sig.symbol, sig.side);
+  else {
+    const { strategy, confidence, reasoning } = sig;
+    openAndEmit(sig.symbol, sig.side, { strategy, confidence, reasoning });
+  }
   return true;
 }
 
@@ -585,7 +613,7 @@ function route(method: string, path: string, body: unknown): unknown {
       return done(b, { ok: true, paused: bot.paused });
     case "POST /api/bot/panic": {
       const syms = Object.keys(positions);
-      syms.forEach((s) => closePos(s));
+      syms.forEach((s) => closePos(s, 1, "telegram_closeall"));
       bot.paused = true;
       emit("cycle", { state: "paused" });
       return done(b, { ok: true, closed: syms.length, paused: true });

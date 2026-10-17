@@ -316,6 +316,12 @@ function SignalSheet() {
       <dl>
         <dt>Стратегия</dt>
         <dd>{sig.strategy ? stratName(sig.strategy) : "—"}</dd>
+        {sig.reasoning && (
+          <>
+            <dt>Почему</dt>
+            <dd>{sig.reasoning}</dd>
+          </>
+        )}
         <dt>В live</dt>
         <dd>{stat(sig.live)}</dd>
         <dt>Бэктест</dt>

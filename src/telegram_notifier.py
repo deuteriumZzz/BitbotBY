@@ -234,6 +234,7 @@ class TelegramNotifier:
                     "side": "long" if action == "BUY" else "short",
                     "confidence": confidence,
                     "strategy": strategy,
+                    "reasoning": str(rec.get("reasoning") or "")[:500],
                     "entry": entry,
                     "stop_loss": sl,
                     "take_profit": tp,

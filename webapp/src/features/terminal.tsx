@@ -406,7 +406,7 @@ function Radar() {
               {list.slice(0, LANE_CAP).map((s) => {
                 const sig = lane >= 2 ? radar.signal[s] : undefined;
                 return (
-                  <div key={s} data-sym={s} className={`chip ${sig ? sig.side : ""} ${rej(s, lane)}`} title={radar.rejected[s]?.reason}>
+                  <div key={s} data-sym={s} className={`chip ${sig ? sig.side : ""} ${rej(s, lane)}`} title={radar.rejected[s]?.reason ?? sig?.reasoning}>
                     <span>{base(s)}</span>
                     <i>{sig ? `${sig.side === "long" ? "L" : "S"} ${sig.confidence?.toFixed(2).slice(1) ?? ""}` : ""}</i>
                   </div>
@@ -525,6 +525,7 @@ function PositionCard({ p, enter }: { p: Position; enter: boolean }) {
   const mk = progOf(p, cur) * 100;
   const [closeArmed, armClose] = useArm();
   const [editing, setEditing] = useState(false);
+  const [whyOpen, setWhyOpen] = useState(false);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [burst, setBurst] = useState<{ k: number; pnl: number } | null>(null);
@@ -590,6 +591,11 @@ function PositionCard({ p, enter }: { p: Position; enter: boolean }) {
           )}
         </div>
       </div>
+      {p.reasoning && (
+        <p className={`pos-why ${whyOpen ? "open" : ""}`} title={p.reasoning} onClick={() => setWhyOpen(!whyOpen)}>
+          <em>Почему открыта:</em> {p.reasoning}
+        </p>
+      )}
       <div className="range">
         <span>
           SL <Flash value={p.sl} text={price(p.sl)} />

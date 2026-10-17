@@ -195,6 +195,9 @@ def get_open_positions() -> List[dict]:
                 "tp": p.get("take_profit"),
                 "pnl_pct": p.get("pnl_pct"),
                 "partial_tp_done": bool(p.get("partial_tp_triggered")),
+                "strategy": p.get("strategy"),
+                "confidence": p.get("confidence"),
+                "reasoning": p.get("reasoning", ""),
             }
         )
     return out

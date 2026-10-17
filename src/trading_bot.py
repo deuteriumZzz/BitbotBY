@@ -541,6 +541,9 @@ class TradingBot:
                     "peak_price": entry,
                     "exchange_sl_id": None,
                     "exchange_tp_id": None,
+                    "strategy": latest.get("strategy") or "",
+                    "confidence": float(latest.get("confidence") or 0.0),
+                    "reasoning": latest.get("reasoning") or "",
                 }
                 restored += 1
                 logger.warning(
@@ -668,6 +671,7 @@ class TradingBot:
                     "side": "long" if r.get("action") == "buy" else "short",
                     "confidence": r.get("confidence"),
                     "strategy": r.get("strategy"),
+                    "reasoning": str(r.get("reasoning") or "")[:500],
                 },
             )
             if id(r) not in kept:
@@ -680,9 +684,12 @@ class TradingBot:
                     },
                 )
 
-    def _on_position_closed(self, sym: str) -> None:
+    def _on_position_closed(
+        self, sym: str, info: "Optional[Dict[str, Any]]" = None
+    ) -> None:
         self._symbol_cooldown[sym] = time.time()
-        emit(self._bus, "position.closed", {"symbol": sym})
+        # info: reason (tp, sl, trail, manual_app, …) и цена выхода.
+        emit(self._bus, "position.closed", {"symbol": sym, **(info or {})})
 
     def _on_position_opened(self, sym: str, pos: PositionRecord) -> None:
         emit(
@@ -696,6 +703,9 @@ class TradingBot:
                 "qty": pos.get("qty"),
                 "stop_loss": pos.get("stop_loss"),
                 "take_profit": pos.get("take_profit"),
+                "strategy": pos.get("strategy"),
+                "confidence": pos.get("confidence"),
+                "reasoning": pos.get("reasoning", ""),
             },
         )
 

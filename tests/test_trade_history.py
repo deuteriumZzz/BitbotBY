@@ -87,3 +87,24 @@ async def test_get_trade_count(db):
         await db.record_close(tid, exit_price=61000.0)
     assert await db.get_trade_count("macd_crossover") == 3
     assert await db.get_trade_count("ema_crossover") == 0
+
+
+async def test_reasoning_and_exit_reason_are_kept(db):
+    tid = await db.record_open(
+        "BTC/USDT",
+        "ema_crossover",
+        "buy",
+        60000.0,
+        0.01,
+        0.8,
+        0.6,
+        reasoning="EMA 9 пересекла EMA 21 снизу",
+    )
+    (opened,) = await db.get_open_trades()
+    assert opened["reasoning"] == "EMA 9 пересекла EMA 21 снизу"
+    pnl = await db.record_close(tid, exit_price=62000.0, commission=0.62, reason="tp")
+    assert pnl is not None and pnl > 0
+    row = db._conn.execute("SELECT exit_reason FROM trades WHERE id=?", (tid,))
+    assert row.fetchone()[0] == "tp"
+    # Повторное закрытие несуществующей сделки — None, без исключения.
+    assert await db.record_close(9999, exit_price=1.0) is None

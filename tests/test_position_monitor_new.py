@@ -1276,3 +1276,65 @@ class TestRunErrorHandling:
 
         # Position still present (error was transient, price inside range)
         assert "BTC/USDT" in monitored
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "price, sl, reason",
+    [
+        (52500.0, 49000.0, "tp"),
+        (48500.0, 49000.0, "sl"),
+        # Стоп подтянут трейлингом выше входа — выход «по трейлингу».
+        (50400.0, 50500.0, "trail"),
+    ],
+)
+async def test_close_reason_reaches_history_and_callback(price, sl, reason):
+    cfg = _make_cfg()
+    monitor = _make_monitor(cfg=cfg)
+    seen = []
+    monitor._on_position_closed = lambda sym, info: seen.append((sym, info))
+    pos = _open_pos(side="buy", entry=50000.0, sl=sl, tp=52000.0)
+    with patch("src.position_monitor.Config", cfg):
+        closed = await monitor._check_and_close(
+            "BTC/USDT", pos, price, {"BTC/USDT": dict(pos)}, asyncio.Lock()
+        )
+    assert closed is True
+    assert monitor._trade_history.record_close.await_args.kwargs["reason"] == reason
+    assert seen == [("BTC/USDT", {"reason": reason, "price": price})]
+
+
+@pytest.mark.asyncio
+async def test_close_all_books_exit_in_history_and_balance():
+    """PANIC/ATR spike: сделка закрывается в истории, баланс Paper возвращается."""
+    cfg = _make_cfg()
+    monitor = _make_monitor(cfg=cfg)
+    seen = []
+    monitor._on_position_closed = lambda sym, info: seen.append((sym, info))
+    monitored = {"BTC/USDT": _open_pos(trade_id=7)}
+    with patch("src.position_monitor.Config", cfg):
+        await monitor.close_all_positions(
+            monitored, asyncio.Lock(), reason="telegram_closeall"
+        )
+    assert monitored == {}
+    monitor._portfolio_manager.update_portfolio.assert_awaited_once_with(
+        "BTC/USDT", "sell", 0.01, 50000.0
+    )
+    kw = monitor._trade_history.record_close.await_args.kwargs
+    assert (kw["trade_id"], kw["exit_price"], kw["reason"]) == (
+        7,
+        50000.0,
+        "telegram_closeall",
+    )
+    assert seen == [("BTC/USDT", {"reason": "telegram_closeall", "price": 50000.0})]
+
+
+@pytest.mark.asyncio
+async def test_close_all_without_price_leaves_history_alone():
+    cfg = _make_cfg()
+    monitor = _make_monitor(cfg=cfg)
+    monitor._api.get_current_price = AsyncMock(side_effect=RuntimeError("down"))
+    monitored = {"BTC/USDT": _open_pos()}
+    with patch("src.position_monitor.Config", cfg):
+        await monitor.close_all_positions(monitored, asyncio.Lock())
+    assert monitored == {}
+    monitor._trade_history.record_close.assert_not_awaited()

@@ -612,6 +612,7 @@ class OrderExecutor:
                 confidence=top.get("confidence", 0.0),
                 commission=commission,
                 context_flags=top.get("context_flags", ""),
+                reasoning=str(top.get("reasoning") or ""),
             )
 
             pos: PositionRecord = {
@@ -628,6 +629,10 @@ class OrderExecutor:
                 "exchange_sl_id": exchange_sl_id,
                 "exchange_tp_id": exchange_tp_id,
                 "partial_tp_triggered": False,
+                # Почему открыта — для карточки позиции в приложении.
+                "strategy": strategy,
+                "confidence": float(top.get("confidence", 0.0) or 0.0),
+                "reasoning": str(top.get("reasoning") or "")[:500],
             }
             async with lock:
                 monitored[sym] = pos

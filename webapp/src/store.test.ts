@@ -57,6 +57,27 @@ describe("события", () => {
     expect(s.feed[0].text).toContain("+$3.00");
   });
 
+  it("позиция помнит, почему открыта, а закрытие — по какой причине и цене", () => {
+    const { apply } = useStore.getState();
+    apply(
+      ev("position.opened", {
+        symbol: "SOL/USDT",
+        trade_id: 3,
+        side: "buy",
+        entry: 100,
+        qty: 1,
+        stop_loss: 95,
+        take_profit: 110,
+        strategy: "rsi_mean_reversion",
+        confidence: 0.71,
+        reasoning: "RSI перепродан (28).",
+      }),
+    );
+    expect(useStore.getState().positions["SOL/USDT"]).toMatchObject({ strategy: "rsi_mean_reversion", reasoning: "RSI перепродан (28)." });
+    apply(ev("position.closed", { symbol: "SOL/USDT", reason: "tp", price: 110 }));
+    expect(useStore.getState().feed[0].text).toBe("Закрыл SOL по тейк-профиту: ▲ +$10.00");
+  });
+
   it("пауза из Telegram видна по событию цикла", () => {
     useStore.getState().apply(ev("cycle", { state: "paused" }));
     expect(useStore.getState().bot?.paused).toBe(true);

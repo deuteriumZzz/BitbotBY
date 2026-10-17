@@ -17,9 +17,10 @@ export interface Position {
   partial_tp_done?: boolean;
   trailing?: boolean;
   price?: number;
-  /** Из сигнала радара, если приложение видело его до открытия. */
+  /** Почему бот открыл позицию: стратегия, уверенность, объяснение. */
   strategy?: string;
   confidence?: number;
+  reasoning?: string;
 }
 
 export interface BotState {
@@ -131,6 +132,7 @@ export interface PendingSignal {
   take_profit: number;
   expires_at: number;
   on_timeout_execute: boolean;
+  reasoning?: string;
   backtest: { win_rate: number; trades: number; ev: number };
   live: { win_rate: number; trades: number; ev: number };
 }

@@ -51,3 +51,8 @@ class PositionRecord(TypedDict, total=False):
 
     # УЛУЧШЕНИЕ 3: флаг частичного тейк-профита — True после первого закрытия 50%
     partial_tp_triggered: bool
+
+    # Почему открыта: стратегия, уверенность и объяснение AI/стратегии
+    strategy: str
+    confidence: float
+    reasoning: str

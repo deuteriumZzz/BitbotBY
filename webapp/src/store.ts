@@ -1,7 +1,7 @@
 import { create } from "zustand";
 
 import { ApiError, api, command, isMock, subscribe } from "./lib/api";
-import { arrow, base, plural, usd } from "./lib/format";
+import { arrow, base, exitReason, plural, usd } from "./lib/format";
 import * as platform from "./lib/platform";
 import type {
   AiChainChanges,
@@ -39,7 +39,7 @@ export interface Radar {
   cycle: number;
   scan: string[];
   prescore: string[];
-  signal: Record<string, { side: Side; confidence: number; strategy: string }>;
+  signal: Record<string, { side: Side; confidence: number; strategy: string; reasoning?: string }>;
   guards: string[];
   /** lane — на каком этапе отсеяна: 0 скан, 1 отбор, 2 сигнал, 3 проверки. */
   rejected: Record<string, { reason: string; at: number; lane: number }>;
@@ -305,8 +305,9 @@ export const useStore = create<Store>((set, get) => {
             tp: d.take_profit,
             price: d.entry,
             trailing: true,
-            strategy: get().radar.signal[d.symbol]?.strategy,
-            confidence: get().radar.signal[d.symbol]?.confidence,
+            strategy: d.strategy ?? get().radar.signal[d.symbol]?.strategy,
+            confidence: d.confidence ?? get().radar.signal[d.symbol]?.confidence,
+            reasoning: d.reasoning || get().radar.signal[d.symbol]?.reasoning,
           };
           set((s) => ({ positions: { ...s.positions, [p.symbol]: p } }));
           feed("open", `Открыл ${base(p.symbol)} ${p.side === "long" ? "LONG" : "SHORT"}`);
@@ -315,14 +316,16 @@ export const useStore = create<Store>((set, get) => {
           break;
         }
         case "position.closed": {
-          const p = get().positions[d.symbol];
+          const old = get().positions[d.symbol];
           const rest = { ...get().positions };
           delete rest[d.symbol];
           set({ positions: rest });
+          const why = d.reason ? ` ${exitReason(d.reason)}` : "";
+          const p = old && { ...old, price: d.price ?? old.price };
           if (p?.price !== undefined) {
             const { pnl } = positionPnl(p);
-            feed(pnl >= 0 ? "win" : "loss", `Закрыл ${base(d.symbol)}: ${arrow(pnl)} ${usd(pnl)}`);
-          } else feed("edit", `Закрыл ${base(d.symbol)}`);
+            feed(pnl >= 0 ? "win" : "loss", `Закрыл ${base(d.symbol)}${why}: ${arrow(pnl)} ${usd(pnl)}`);
+          } else feed("edit", `Закрыл ${base(d.symbol)}${why}`);
           refreshSoon();
           break;
         }
@@ -484,7 +487,10 @@ export function reduceRadar(r: Radar, d: Data): Radar {
     case "signal":
       return {
         ...r,
-        signal: { ...r.signal, [sym]: { side: d.side, confidence: d.confidence, strategy: d.strategy } },
+        signal: {
+          ...r.signal,
+          [sym]: { side: d.side, confidence: d.confidence, strategy: d.strategy, reasoning: d.reasoning },
+        },
         note: `Сигнал по ${base(sym)}: ${d.side === "long" ? "LONG" : "SHORT"}`,
       };
     case "guards":

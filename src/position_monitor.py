@@ -52,7 +52,8 @@ class PositionMonitor:
         set_running: Callable[[bool], None],
         redis: "Optional[RedisClient]" = None,
         online_learner: "Optional[OnlineLearner]" = None,
-        on_position_closed: "Optional[Callable[[str], None]]" = None,
+        # (символ, {"reason": tp|sl|trail|manual_app|…, "price": цена выхода})
+        on_position_closed: "Optional[Callable[[str, Dict[str, Any]], None]]" = None,
         emit: "Optional[Callable[[str, Dict[str, Any]], None]]" = None,
     ) -> None:
         self._api = api
@@ -363,7 +364,42 @@ class PositionMonitor:
                 )
             async with lock:
                 monitored.pop(sym, None)
+            try:
+                price = float(await self._api.get_current_price(sym) or 0.0)
+            except Exception as exc:
+                price = 0.0
+                logger.error("Emergency close %s: no price (%s)", sym, exc)
+            await self._book_close(sym, pos, price, reason)
             logger.info("Emergency closed %s [%s]", sym, reason)
+
+    async def _book_close(
+        self, sym: str, pos: PositionRecord, price: float, reason: str
+    ) -> None:
+        """Учёт аварийного закрытия: баланс Paper, история сделок, приложение.
+
+        Без цены выхода P&L не посчитать — сделку не трогаем, только лог.
+        """
+        if price <= 0:
+            logger.error("Close of %s not booked: unknown exit price", sym)
+            return
+        side = pos.get("side", "buy")
+        qty = pos.get("qty", 0.0)
+        close_side = "sell" if side == "buy" else "buy"
+        await self._portfolio_manager.update_portfolio(sym, close_side, qty, price)
+        if self._on_position_closed:
+            self._on_position_closed(sym, {"reason": reason, "price": price})
+        trade_id = pos.get("trade_id")
+        if not trade_id:
+            return
+        try:
+            await self._trade_history.record_close(
+                trade_id=trade_id,
+                exit_price=price,
+                commission=qty * price * Config.COMMISSION_RATE,
+                reason=reason,
+            )
+        except Exception as exc:
+            logger.error("record_close for trade %s failed: %s", trade_id, exc)
 
     async def close_losers_tighten_winners(
         self,
@@ -418,6 +454,7 @@ class PositionMonitor:
                     )
                 async with lock:
                     monitored.pop(sym, None)
+                await self._book_close(sym, pos, current, reason)
             else:
                 # Прибыльная позиция — переносим SL на breakeven
                 tp_price = float(pos.get("take_profit") or 0)
@@ -836,7 +873,7 @@ class PositionMonitor:
         async with lock:
             monitored.pop(sym, None)
         if self._on_position_closed:
-            self._on_position_closed(sym)
+            self._on_position_closed(sym, {"reason": reason, "price": price})
 
         entry = pos.get("entry", price)
         if entry:
@@ -859,6 +896,7 @@ class PositionMonitor:
                     trade_id=trade_id,
                     exit_price=price,
                     commission=exit_commission,
+                    reason=reason,
                 )
             except Exception as exc:
                 logger.error("record_close for trade %s failed: %s", trade_id, exc)
@@ -895,23 +933,32 @@ class PositionMonitor:
         qty = pos.get("qty", 0.0)
 
         triggered = False
+        exit_reason = "sl"
         if side == "buy":
             if sl and price <= sl:
                 logger.warning("SL hit %s: price=%.4f <= sl=%.4f", sym, price, sl)
                 triggered = True
             elif tp and price >= tp:
                 logger.info("TP hit %s: price=%.4f >= tp=%.4f", sym, price, tp)
-                triggered = True
+                triggered, exit_reason = True, "tp"
         else:
             if sl and price >= sl:
                 logger.warning("SL hit %s: price=%.4f >= sl=%.4f", sym, price, sl)
                 triggered = True
             elif tp and price <= tp:
                 logger.info("TP hit %s: price=%.4f <= tp=%.4f", sym, price, tp)
-                triggered = True
+                triggered, exit_reason = True, "tp"
 
         if not triggered:
             return False
+        # Стоп, подтянутый трейлингом за точку входа, — выход по трейлингу.
+        _entry = pos.get("entry", 0.0)
+        if (
+            exit_reason == "sl"
+            and _entry
+            and (sl > _entry if side == "buy" else sl < _entry)
+        ):
+            exit_reason = "trail"
 
         close_side = "sell" if side == "buy" else "buy"
         # Default exit commission — overridden with actual fee in live mode.
@@ -973,7 +1020,7 @@ class PositionMonitor:
         async with lock:
             monitored.pop(sym, None)
         if self._on_position_closed:
-            self._on_position_closed(sym)
+            self._on_position_closed(sym, {"reason": exit_reason, "price": price})
         logger.info("Position closed: %s at %.4f", sym, price)
 
         # Save experience for the next SAC retraining run
@@ -1021,6 +1068,7 @@ class PositionMonitor:
                     trade_id=trade_id,
                     exit_price=price,
                     commission=exit_commission,
+                    reason=exit_reason,
                 )
             except Exception as exc:
                 # Позиция уже удалена из монитора и закрыта на бирже.
