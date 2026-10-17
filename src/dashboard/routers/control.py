@@ -191,11 +191,12 @@ async def get_strategies() -> JSONResponse:
         s["pnl"] += float(t["pnl"])
 
     out = []
-    for name in STRATEGY_REGISTRY:
+    for name, cls in STRATEGY_REGISTRY.items():
         lv = live.get(name)
         out.append(
             {
                 "name": name,
+                "markets": cls.markets,
                 "enabled": name not in disabled,
                 "backtest": backtest.get(name),
                 "live": (

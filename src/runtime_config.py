@@ -840,6 +840,9 @@ class RuntimeConfig:
         или после очистки Redis). Возвращает действующий профиль."""
         current = self.get_market_profile()
         if current:
+            from src.strategies import set_active_profile  # noqa: PLC0415
+
+            set_active_profile(current)  # порог volume_spike после рестарта
             return current
         self.apply_market_profile(default)
         return default
@@ -895,23 +898,20 @@ class RuntimeConfig:
         _os.environ["EXPERIENCES_PATH"] = _exp
         _os.environ["SAC_PROFILE"] = name
 
-        # Переключаем профиль-специфичные стратегии
-        _VS_VARIANTS = {
-            "bluechip": "volume_spike_bluechip",
-            "altcoin": "volume_spike_altcoin",
-            "meme": "volume_spike_meme",
-        }
+        # Переключаем профиль-специфичные стратегии. volume_spike одна для всех
+        # профилей: порог берётся из SAC_PROFILE внутри стратегии. Старые
+        # профильные имена из списка отключённых убираем — их больше нет.
+        from src.strategies import set_active_profile  # noqa: PLC0415
+
+        set_active_profile(name)
         _MEME_ONLY = {"momentum_burst", "pump_exit", "sentiment"}
-        for profile_key, strat_name in _VS_VARIANTS.items():
-            if profile_key == name:
-                self.enable_strategy(strat_name)
-            else:
-                self.disable_strategy(strat_name)
-        # Базовый volume_spike (порог из Config, не из профиля) дублирует
-        # выбранный выше профильный вариант при любом активном профиле —
-        # держим его выключенным, чтобы в турнире recommend_strategy_local
-        # конкурировал ровно один volume_spike-вариант, а не два.
-        self.disable_strategy("volume_spike")
+        for legacy in (
+            "volume_spike_bluechip",
+            "volume_spike_altcoin",
+            "volume_spike_meme",
+        ):
+            self.enable_strategy(legacy)
+        self.enable_strategy("volume_spike")
         for strat_name in _MEME_ONLY:
             if name == "meme":
                 self.enable_strategy(strat_name)

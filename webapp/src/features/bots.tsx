@@ -19,15 +19,16 @@ export const STRATEGY_NAME: Record<string, string> = {
   cvd_divergence: "Дивергенция CVD",
   trend_following: "По тренду",
   support_resistance: "Поддержка и сопротивление",
-  volume_spike_meme: "Всплеск объёма · Meme",
+  // Профильные варианты слиты в одну стратегию; имена остаются в истории сделок.
+  volume_spike_meme: "Всплеск объёма",
   momentum_burst: "Импульс",
   inverse_fair_value_gap: "Обратный FVG",
   rsi_momentum: "RSI-моментум",
   ema_crossover: "Пересечение EMA",
   breakout: "Пробой",
   mean_reversion: "Возврат к среднему",
-  volume_spike_altcoin: "Всплеск объёма · Altcoin",
-  volume_spike_bluechip: "Всплеск объёма · Bluechip",
+  volume_spike_altcoin: "Всплеск объёма",
+  volume_spike_bluechip: "Всплеск объёма",
   volume_spike: "Всплеск объёма",
   macd_crossover: "Пересечение MACD",
   pump_exit: "Выход из пампа",
@@ -467,6 +468,7 @@ function WhatCard() {
 
 function StrategiesCard() {
   const strategies = useStore((s) => s.strategies);
+  const spot = useStore((s) => cfg<string>(s.config, "MARKET_TYPE", "linear") === "spot");
   const [all, setAll] = useState(false);
   const sorted = [...strategies].sort((a, b) => (b.backtest?.sharpe ?? -9) - (a.backtest?.sharpe ?? -9));
   const rows = all ? sorted : sorted.slice(0, 6);
@@ -494,13 +496,20 @@ function StrategiesCard() {
         {rows.map((s) => {
           const bt = s.backtest;
           const st = !bt || !bt.trades ? ["", "нет данных"] : bt.trades < 100 ? ["", "мало сделок"] : bt.sharpe > 0 ? ["ok", "есть плюс"] : ["warn", "нет edge"];
+          // На споте нет шортов: стратегия «только фьючерсы» там не участвует, сколько её ни включай.
+          const blocked = spot && s.markets === "futures";
           return (
-            <li key={s.name} className={`strat${s.enabled ? "" : " off"}`}>
+            <li key={s.name} className={`strat${s.enabled && !blocked ? "" : " off"}`}>
               <div className="nm">
                 <b>{stratName(s.name)}</b>
                 <code>{s.name}</code>
               </div>
               <div className="row-r">
+                {s.markets === "futures" && (
+                  <span className={`pill ${blocked ? "warn" : ""}`} title="Сигналы только на продажу: открыть можно лишь шорт">
+                    {blocked ? "не для спота" : "фьючерсы"}
+                  </span>
+                )}
                 <span className={`pill ${st[0]}`}>{st[1]}</span>
                 <Toggle on={s.enabled} label={`Стратегия «${stratName(s.name)}»`} onChange={(v) => void actions.setStrategy(s.name, v)} />
               </div>

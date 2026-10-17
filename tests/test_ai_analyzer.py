@@ -561,6 +561,65 @@ class TestRecommendStrategyLocal:
         assert strat == "b"
         assert conf == 0.50
 
+    def test_spot_ignores_sell_so_it_cannot_beat_a_working_buy(self):
+        # На споте шорта нет: sell с большей уверенностью не должен вытеснить buy.
+        registry = self._fake_registry(
+            {
+                "a": {"action": "buy", "confidence": 0.60},
+                "b": {"action": "sell", "confidence": 0.85},
+            }
+        )
+        self.ai._runtime_config = MagicMock()
+        self.ai._runtime_config.get_disabled_strategies.return_value = set()
+        self.ai._runtime_config.get_market_type.return_value = "spot"
+        p1, p2 = self._patch_registry(registry)
+        with p1, p2:
+            strat, conf, sig = self.ai.recommend_strategy_local(pd.DataFrame())
+        assert (strat, conf, sig["action"]) == ("a", 0.60, "buy")
+
+    def test_futures_only_strategy_is_skipped_on_spot(self):
+        registry = self._fake_registry(
+            {
+                "short_only": {"action": "buy", "confidence": 0.95},
+                "plain": {"action": "buy", "confidence": 0.60},
+            }
+        )
+        registry["short_only"].markets = "futures"
+        self.ai._runtime_config = MagicMock()
+        self.ai._runtime_config.get_disabled_strategies.return_value = set()
+        self.ai._runtime_config.get_market_type.return_value = "spot"
+        p1, p2 = self._patch_registry(registry)
+        with p1, p2:
+            spot, _, _ = self.ai.recommend_strategy_local(pd.DataFrame())
+        self.ai._runtime_config.get_market_type.return_value = "linear"
+        with p1, p2:
+            futures, _, _ = self.ai.recommend_strategy_local(pd.DataFrame())
+        assert (spot, futures) == ("plain", "short_only")
+
+    def test_prompt_strategy_list_hides_futures_only_on_spot(self):
+        self.ai.strategies = [
+            {
+                "name": "plain",
+                "description": "d",
+                "risk_level": "low",
+                "market_type": "any",
+                "markets": "both",
+            },
+            {
+                "name": "short_only",
+                "description": "d",
+                "risk_level": "low",
+                "market_type": "any",
+                "markets": "futures",
+            },
+        ]
+        self.ai._runtime_config = MagicMock()
+        self.ai._runtime_config.get_disabled_strategies.return_value = set()
+        self.ai._runtime_config.get_market_type.return_value = "spot"
+        assert "short_only" not in self.ai._build_strategy_list()
+        self.ai._runtime_config.get_market_type.return_value = "linear"
+        assert "short_only" in self.ai._build_strategy_list()
+
     def test_no_runtime_config_still_works(self):
         # _runtime_config=None (дефолт) — не должно падать при отсутствии RC.
         registry = self._fake_registry({"a": {"action": "buy", "confidence": 0.70}})

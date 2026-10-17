@@ -51,3 +51,38 @@ def test_strategy_handles_flat_market(name):
         assert signal["action"] in ("buy", "sell", "hold")
     except Exception as e:
         pytest.fail(f"{name} упала на флэтовом рынке: {e}")
+
+
+def test_volume_spike_is_one_strategy_with_profile_threshold():
+    from src.strategies import (
+        LEGACY_ALIASES,
+        VolumeSpikeStrategy,
+        create_strategy,
+        set_active_profile,
+    )
+
+    assert not [n for n in STRATEGY_REGISTRY if n.startswith("volume_spike_")]
+    # Старые имена из истории сделок и Redis по-прежнему создают рабочую стратегию.
+    for old in LEGACY_ALIASES:
+        assert create_strategy(old).name == "volume_spike"
+    try:
+        got = {}
+        for profile in ("bluechip", "altcoin", "meme"):
+            set_active_profile(profile)
+            got[profile] = VolumeSpikeStrategy.threshold()
+        assert got == {"bluechip": 2.0, "altcoin": 3.0, "meme": 5.0}
+        set_active_profile("")
+        from config import Config
+
+        assert VolumeSpikeStrategy.threshold() == Config.VOLUME_SPIKE_THRESHOLD
+    finally:
+        set_active_profile("")
+
+
+def test_only_pump_exit_is_futures_only():
+    assert [n for n, c in STRATEGY_REGISTRY.items() if c.markets == "futures"] == [
+        "pump_exit"
+    ]
+    assert all(
+        c.markets in ("spot", "futures", "both") for c in STRATEGY_REGISTRY.values()
+    )

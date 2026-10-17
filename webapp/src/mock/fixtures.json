@@ -2523,7 +2523,8 @@
     "trades": 2931,
     "sharpe": -0.1233
    },
-   "live": null
+   "live": null,
+   "markets": "both"
   },
   {
    "name": "rsi_momentum",
@@ -2533,7 +2534,8 @@
     "trades": 2808,
     "sharpe": -0.1005
    },
-   "live": null
+   "live": null,
+   "markets": "both"
   },
   {
    "name": "macd_crossover",
@@ -2543,7 +2545,8 @@
     "trades": 3937,
     "sharpe": -0.1397
    },
-   "live": null
+   "live": null,
+   "markets": "both"
   },
   {
    "name": "bollinger_bands",
@@ -2553,7 +2556,8 @@
     "trades": 4259,
     "sharpe": -0.0915
    },
-   "live": null
+   "live": null,
+   "markets": "both"
   },
   {
    "name": "scalping",
@@ -2563,7 +2567,8 @@
     "trades": 10,
     "sharpe": 0.045
    },
-   "live": null
+   "live": null,
+   "markets": "both"
   },
   {
    "name": "swing_trading",
@@ -2573,7 +2578,8 @@
     "trades": 5082,
     "sharpe": -0.0929
    },
-   "live": null
+   "live": null,
+   "markets": "both"
   },
   {
    "name": "breakout",
@@ -2583,7 +2589,8 @@
     "trades": 4526,
     "sharpe": -0.1229
    },
-   "live": null
+   "live": null,
+   "markets": "both"
   },
   {
    "name": "mean_reversion",
@@ -2593,7 +2600,8 @@
     "trades": 2257,
     "sharpe": -0.1096
    },
-   "live": null
+   "live": null,
+   "markets": "both"
   },
   {
    "name": "trend_following",
@@ -2603,7 +2611,8 @@
     "trades": 5017,
     "sharpe": -0.0904
    },
-   "live": null
+   "live": null,
+   "markets": "both"
   },
   {
    "name": "volume_spike",
@@ -2613,37 +2622,8 @@
     "trades": 3153,
     "sharpe": -0.1518
    },
-   "live": null
-  },
-  {
-   "name": "volume_spike_bluechip",
-   "enabled": true,
-   "backtest": {
-    "win_rate": 0.3234,
-    "trades": 4112,
-    "sharpe": -0.1462
-   },
-   "live": null
-  },
-  {
-   "name": "volume_spike_altcoin",
-   "enabled": true,
-   "backtest": {
-    "win_rate": 0.3285,
-    "trades": 2484,
-    "sharpe": -0.1361
-   },
-   "live": null
-  },
-  {
-   "name": "volume_spike_meme",
-   "enabled": true,
-   "backtest": {
-    "win_rate": 0.3416,
-    "trades": 1007,
-    "sharpe": -0.0933
-   },
-   "live": null
+   "live": null,
+   "markets": "both"
   },
   {
    "name": "momentum_burst",
@@ -2653,7 +2633,8 @@
     "trades": 150,
     "sharpe": -0.0403
    },
-   "live": null
+   "live": null,
+   "markets": "both"
   },
   {
    "name": "pump_exit",
@@ -2663,7 +2644,8 @@
     "trades": 572,
     "sharpe": -0.1364
    },
-   "live": null
+   "live": null,
+   "markets": "futures"
   },
   {
    "name": "sentiment",
@@ -2673,7 +2655,8 @@
     "trades": 0,
     "sharpe": 0.0
    },
-   "live": null
+   "live": null,
+   "markets": "both"
   },
   {
    "name": "support_resistance",
@@ -2683,7 +2666,8 @@
     "trades": 3006,
     "sharpe": -0.1284
    },
-   "live": null
+   "live": null,
+   "markets": "both"
   },
   {
    "name": "fibonacci_retracement",
@@ -2693,7 +2677,8 @@
     "trades": 1619,
     "sharpe": -0.0531
    },
-   "live": null
+   "live": null,
+   "markets": "both"
   },
   {
    "name": "cvd_divergence",
@@ -2703,7 +2688,8 @@
     "trades": 1158,
     "sharpe": -0.1006
    },
-   "live": null
+   "live": null,
+   "markets": "both"
   },
   {
    "name": "fair_value_gap",
@@ -2713,7 +2699,8 @@
     "trades": 3057,
     "sharpe": -0.0861
    },
-   "live": null
+   "live": null,
+   "markets": "both"
   },
   {
    "name": "inverse_fair_value_gap",
@@ -2723,7 +2710,8 @@
     "trades": 2415,
     "sharpe": -0.1131
    },
-   "live": null
+   "live": null,
+   "markets": "both"
   },
   {
    "name": "liquidity_sweep",
@@ -2733,7 +2721,8 @@
     "trades": 1771,
     "sharpe": -0.0516
    },
-   "live": null
+   "live": null,
+   "markets": "both"
   },
   {
    "name": "amd",
@@ -2743,7 +2732,8 @@
     "trades": 295,
     "sharpe": -0.001
    },
-   "live": null
+   "live": null,
+   "markets": "both"
   }
  ],
  "ai": {

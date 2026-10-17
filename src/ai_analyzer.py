@@ -172,6 +172,12 @@ class AIAnalyzer:
                 )
         return self._clients[provider]
 
+    def _market_kind(self) -> str:
+        """spot | futures — по текущему типу рынка (linear = перпетуалы)."""
+        _rc = getattr(self, "_runtime_config", None)
+        mt = _rc.get_market_type() if _rc is not None else Config.MARKET_TYPE
+        return "spot" if mt == "spot" else "futures"
+
     def _build_strategy_list(self) -> str:
         """
         Формирует текстовый список доступных стратегий для промпта.
@@ -185,9 +191,10 @@ class AIAnalyzer:
         """
         _rc = getattr(self, "_runtime_config", None)
         disabled = _rc.get_disabled_strategies() if _rc is not None else set()
+        kind = self._market_kind()
         lines = []
         for s in self.strategies:
-            if s["name"] in disabled:
+            if s["name"] in disabled or s.get("markets", "both") not in ("both", kind):
                 continue
             desc = s["description"][:60]
             lines.append(
@@ -590,8 +597,12 @@ class AIAnalyzer:
         best_name = "hold"
         best_conf = 0.0
         best_sig: Dict[str, Any] = {}
-        for name in STRATEGY_REGISTRY:
-            if name in disabled:
+        kind = self._market_kind()
+        for name, cls in STRATEGY_REGISTRY.items():
+            if name in disabled or getattr(cls, "markets", "both") not in (
+                "both",
+                kind,
+            ):
                 continue
             try:
                 sig = create_strategy(name).generate_signal(data)
@@ -607,6 +618,10 @@ class AIAnalyzer:
                 )
                 continue
             if sig.get("action") not in ("buy", "sell"):
+                continue
+            # На споте шорта нет: sell как вход бот всё равно отбросит, а в
+            # турнире он мог бы вытеснить рабочий buy с меньшей уверенностью.
+            if kind == "spot" and sig.get("action") == "sell":
                 continue
             conf = sig.get("confidence", 0.0)
             if conf > best_conf:

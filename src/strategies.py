@@ -32,6 +32,10 @@ class BaseStrategy(ABC):
     recommended_timeframes: List[str] = []
     risk_level: str = "medium"  # low / medium / high
     market_type: str = "any"  # trending / ranging / volatile / any
+    # Где стратегия вообще применима: spot (только лонг), futures (нужны шорты
+    # или перпетуалы) или both. На споте шорта нет — futures-стратегии там
+    # не участвуют ни в отборе, ни в промпте AI.
+    markets: str = "both"
 
     @abstractmethod
     def generate_signal(self, data: pd.DataFrame) -> Dict[str, Any]:
@@ -55,6 +59,7 @@ class BaseStrategy(ABC):
             "recommended_timeframes": self.recommended_timeframes,
             "risk_level": self.risk_level,
             "market_type": self.market_type,
+            "markets": self.markets,
         }
 
     def _last(self, data: pd.DataFrame, col: str, default: float = 0.0) -> float:
@@ -561,27 +566,57 @@ class TrendFollowingStrategy(BaseStrategy):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+# Порог всплеска по профилю монет: у блючипов даже 2x — нетипичная активность
+# (новость, институционал), у альтов больше случайного шума, у мемов фоновый
+# шум объёма велик и настоящий памп виден только при кратном превышении.
+_VOLUME_SPIKE_BY_PROFILE: Dict[str, float] = {
+    "bluechip": 2.0,
+    "altcoin": 3.0,
+    "meme": 5.0,
+}
+
+
+# Профиль монет, под который сейчас настроен бот. Ставит RuntimeConfig при смене
+# профиля и при старте (из Redis) — SAC_PROFILE при рестарте не восстанавливается.
+_active_profile: str = ""
+
+
+def set_active_profile(name: str) -> None:
+    """Запоминает профиль монет для порога volume_spike."""
+    global _active_profile
+    _active_profile = name or ""
+
+
 class VolumeSpikeStrategy(BaseStrategy):
     """
     Стратегия на аномальном всплеске объёма.
-
     Входит в сделку когда объём текущей свечи в N раз превышает
-    среднее за 20 свечей (N = VOLUME_SPIKE_THRESHOLD, по умолчанию 2.5).
-    Направление определяется по EMA и RSI.
+    среднее за 20 свечей. N зависит от профиля монет (SAC_PROFILE):
+    Bluechip 2.0, Altcoin 3.0, Meme 5.0; без профиля — VOLUME_SPIKE_THRESHOLD
+    (по умолчанию 2.5). Направление определяется по EMA и RSI.
     Эффективна на 5m–15m, особенно на альткоинах.
+
+    Раньше это были четыре стратегии (по одной на профиль) с одинаковой
+    логикой и разным порогом — теперь одна, а профиль задаёт только порог.
     """
 
     name = "volume_spike"
     description = (
-        "Вход при аномальном росте объёма (x2.5+ от среднего за 20 свечей). "
-        "Направление по EMA + RSI. Лучший таймфрейм: 5m–15m, альткоины."
+        "Вход при аномальном росте объёма: порог зависит от профиля монет "
+        "(Bluechip 2x, Altcoin 3x, Meme 5x), иначе x2.5. "
+        "Направление по EMA + RSI. Лучший таймфрейм: 5m–15m."
     )
     recommended_timeframes = ["5m", "15m"]
     risk_level = "high"
     market_type = "volatile"
 
-    # Переопределяется подклассами для профиль-специфичных порогов (0 = из Config)
-    _threshold: float = 0.0
+    @staticmethod
+    def threshold() -> float:
+        """Порог всплеска для текущего профиля монет."""
+        return (
+            _VOLUME_SPIKE_BY_PROFILE.get(_active_profile)
+            or Config.VOLUME_SPIKE_THRESHOLD
+        )
 
     def generate_signal(self, data: pd.DataFrame) -> Dict[str, Any]:
         if len(data) < 21:
@@ -591,7 +626,7 @@ class VolumeSpikeStrategy(BaseStrategy):
         ema_s = self._last(data, "ema_short", close)
         rsi = self._last(data, "rsi", 50)
 
-        threshold = self._threshold or Config.VOLUME_SPIKE_THRESHOLD
+        threshold = self.threshold()
         avg_vol = float(data["volume"].iloc[-21:-1].mean())
         cur_vol = float(data["volume"].iloc[-1])
 
@@ -616,84 +651,6 @@ class VolumeSpikeStrategy(BaseStrategy):
         if close < ema_s and rsi > 30:
             return {"action": "sell", "confidence": conf, "price": close}
         return {"action": "hold", "confidence": 0.45}
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 11. VOLUME SPIKE BLUECHIP
-# ─────────────────────────────────────────────────────────────────────────────
-
-
-class VolumeSpikeBlueChipStrategy(VolumeSpikeStrategy):
-    """
-    Volume spike для блючип-профиля.
-
-    Порог 2.0x — BTC/ETH торгуются миллиарды в сутки, даже 2x превышение
-    среднего уже означает нетипичную активность (новость, институционал).
-    Оптимальный таймфрейм: 15m–1h.
-    """
-
-    name = "volume_spike_bluechip"
-    description = (
-        "Вход при 2x+ всплеске объёма на блючипах. "
-        "Направление по EMA + RSI. Лучший таймфрейм: 15m–1h."
-    )
-    recommended_timeframes = ["15m", "1h"]
-    risk_level = "medium"
-    market_type = "volatile"
-
-    _threshold: float = 2.0
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 12. VOLUME SPIKE ALTCOIN
-# ─────────────────────────────────────────────────────────────────────────────
-
-
-class VolumeSpikeAltcoinStrategy(VolumeSpikeStrategy):
-    """
-    Volume spike для альткоин-профиля.
-
-    Порог 3.0x — у альткоинов больше случайного шума в объёме,
-    нужен более строгий фильтр чтобы не входить на ложных спайках.
-    Оптимальный таймфрейм: 5m–15m.
-    """
-
-    name = "volume_spike_altcoin"
-    description = (
-        "Вход при 3x+ всплеске объёма на альткоинах. "
-        "Направление по EMA + RSI. Лучший таймфрейм: 5m–15m."
-    )
-    recommended_timeframes = ["5m", "15m"]
-    risk_level = "high"
-    market_type = "volatile"
-
-    _threshold: float = 3.0
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 13. VOLUME SPIKE MEME
-# ─────────────────────────────────────────────────────────────────────────────
-
-
-class VolumeSpikeMemStrategy(VolumeSpikeStrategy):
-    """
-    Агрессивный volume spike для мемкоинов.
-
-    Порог 5x вместо 2.5x — мемы часто имеют фоновый «шум» объёма,
-    настоящий памп виден только при кратном превышении.
-    Оптимальный таймфрейм: 1m–3m.
-    """
-
-    name = "volume_spike_meme"
-    description = (
-        "Вход при 5x+ всплеске объёма. Порог вдвое агрессивнее стандартного. "
-        "Направление по EMA + RSI. Лучший таймфрейм: 1m–3m, мемкоины."
-    )
-    recommended_timeframes = ["1m", "3m"]
-    risk_level = "high"
-    market_type = "volatile"
-
-    _threshold: float = 5.0
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -778,6 +735,7 @@ class PumpExitStrategy(BaseStrategy):
     recommended_timeframes = ["1m", "3m", "5m"]
     risk_level = "high"
     market_type = "volatile"
+    markets = "futures"  # сигнал только sell: на споте это выход, а не вход
 
     def generate_signal(self, data: pd.DataFrame) -> Dict[str, Any]:
         if len(data) < 5:
@@ -1419,10 +1377,6 @@ STRATEGY_REGISTRY: Dict[str, Type[BaseStrategy]] = {
     "mean_reversion": MeanReversionStrategy,
     "trend_following": TrendFollowingStrategy,
     "volume_spike": VolumeSpikeStrategy,
-    # profile-specific volume spike variants
-    "volume_spike_bluechip": VolumeSpikeBlueChipStrategy,
-    "volume_spike_altcoin": VolumeSpikeAltcoinStrategy,
-    "volume_spike_meme": VolumeSpikeMemStrategy,
     # meme-profile strategies
     "momentum_burst": MomentumBurstStrategy,
     "pump_exit": PumpExitStrategy,
@@ -1435,6 +1389,15 @@ STRATEGY_REGISTRY: Dict[str, Type[BaseStrategy]] = {
     "inverse_fair_value_gap": InverseFairValueGapStrategy,
     "liquidity_sweep": LiquiditySweepStrategy,
     "amd": AMDStrategy,
+}
+
+
+# Профильные варианты volume_spike слиты в одну стратегию; старые имена остаются
+# в истории сделок и в Redis, поэтому create_strategy() их по-прежнему понимает.
+LEGACY_ALIASES: Dict[str, str] = {
+    "volume_spike_bluechip": "volume_spike",
+    "volume_spike_altcoin": "volume_spike",
+    "volume_spike_meme": "volume_spike",
 }
 
 
@@ -1451,6 +1414,7 @@ def create_strategy(name: str) -> BaseStrategy:
     :return: Экземпляр стратегии.
     :raises ValueError: Если стратегия с таким именем не найдена.
     """
+    name = LEGACY_ALIASES.get(name, name)
     if name not in STRATEGY_REGISTRY:
         available = list(STRATEGY_REGISTRY.keys())
         raise ValueError(f"Неизвестная стратегия '{name}'. Доступные: {available}")

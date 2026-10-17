@@ -65,6 +65,8 @@ export interface DailyRow {
 
 export interface Strategy {
   name: string;
+  /** Где применима: spot — только лонг, futures — нужны шорты, both — везде. */
+  markets: "spot" | "futures" | "both";
   enabled: boolean;
   backtest: { win_rate: number; trades: number; sharpe: number } | null;
   live: { win_rate: number; trades: number; ev: number } | null;
