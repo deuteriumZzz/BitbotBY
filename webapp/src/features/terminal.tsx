@@ -20,9 +20,48 @@ const PERIODS = [
   ["all", "Всё"],
 ] as const;
 
+/** Строка здоровья: бот, связь, кто решает и когда был последний цикл. */
+function HealthStrip() {
+  const alive = useStore((s) => s.alive);
+  const wsUp = useStore((s) => s.wsUp);
+  const mode = useStore((s) => s.bot?.mode);
+  const paused = useStore((s) => s.bot?.paused ?? false);
+  const cycleAt = useStore((s) => s.cycleAt);
+  const ai = useStore((s) => {
+    const id = s.ai?.last || s.bot?.ai;
+    return id ? (s.ai?.providers.find((p) => p.id === id)?.name ?? id) : "";
+  });
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 5000);
+    return () => clearInterval(t);
+  }, []);
+  const ago = cycleAt ? Math.max(0, Math.round((now - cycleAt) / 1000)) : null;
+  const agoText = ago === null ? "ещё не было" : ago < 60 ? `${ago} с назад` : `${Math.round(ago / 60)} мин назад`;
+  // Цикл идёт каждые несколько минут; тишина дольше 15 минут при работающем боте — повод насторожиться.
+  const stale = !paused && alive && ago !== null && ago > 900;
+  const items: [string, string, string][] = [
+    ["Бот", !wsUp ? "нет связи" : alive ? (paused ? "на паузе" : "работает") : "молчит", !wsUp || !alive ? "bad" : paused ? "warn" : "ok"],
+    ["Решает", mode === "local" ? "локальные стратегии" : ai && ai !== "local" ? `AI · ${ai}` : "AI, ждёт ответа", mode === "local" || ai ? "ok" : "warn"],
+    ["Цикл", agoText, stale ? "bad" : ago === null ? "warn" : "ok"],
+  ];
+  return (
+    <ul className="health" aria-label="Состояние системы">
+      {items.map(([k, v, c]) => (
+        <li key={k}>
+          <span className={`dot ${c}`} />
+          <small>{k}</small>
+          <b>{v}</b>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function Terminal() {
   return (
     <section className="view term enter" aria-label="Терминал">
+      <HealthStrip />
       <ReadinessCard />
       <Hero />
       <MetricsCard />

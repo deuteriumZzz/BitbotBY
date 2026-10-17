@@ -79,6 +79,8 @@ export interface Store {
   slots: { used: number; max: number };
   positions: Record<string, Position>;
   cycle: { state: string; used?: number; max?: number };
+  /** Когда пришло последнее событие цикла (мс): по нему видно, жив ли цикл бота. */
+  cycleAt: number | null;
   guards: Record<string, Guard>;
   radar: Radar;
   feed: FeedItem[];
@@ -188,6 +190,7 @@ export const useStore = create<Store>((set, get) => {
     slots: { used: 0, max: 0 },
     positions: {},
     cycle: { state: "scan" },
+    cycleAt: null,
     guards: {},
     radar: emptyRadar(),
     feed: [],
@@ -377,7 +380,7 @@ export const useStore = create<Store>((set, get) => {
         case "cycle": {
           // Пауза могла прийти из Telegram — цикл бота знает о ней раньше снимка.
           const bot = get().bot;
-          set({ cycle: d as Store["cycle"], bot: bot && { ...bot, paused: d.state === "paused" } });
+          set({ cycle: d as Store["cycle"], cycleAt: Date.now(), bot: bot && { ...bot, paused: d.state === "paused" } });
           break;
         }
         case "guard":

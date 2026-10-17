@@ -671,3 +671,9 @@ li:last-child>.jr-strat{border-bottom:0}
 .hist time{font:11px var(--f-num);color:var(--ink-3)}
 .hist p{margin:0 0 2px;color:var(--ink-2);overflow-wrap:anywhere}
 .hist b{color:var(--ink);font-weight:500}
+/* строка здоровья */
+.health{list-style:none;margin:0;padding:8px 12px;display:flex;flex-wrap:wrap;gap:6px 18px;background:var(--panel);border:1px solid var(--line-soft);border-radius:var(--r);font-size:12px}
+.health li{display:inline-flex;align-items:center;gap:7px;min-width:0}
+.health small{font:500 11px var(--f-label);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+.health b{font-weight:500;color:var(--ink)}
+.term>.health{grid-column:1/-1}
