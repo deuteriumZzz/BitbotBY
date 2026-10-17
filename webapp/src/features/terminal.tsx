@@ -361,6 +361,7 @@ function Radar() {
   const slots = useStore((s) => s.slots);
   const kind = useStore(cycleKind);
   const profile = useStore((s) => s.bot?.profile);
+  const mode = useStore((s) => s.bot?.mode);
   // Кто из AI-провайдеров ответил последним — подпись колонки «Сигнал».
   const aiName = useStore((s) => {
     const id = s.ai?.last || s.bot?.ai;
@@ -407,7 +408,7 @@ function Radar() {
   const heads: [string, string][] = [
     ["Скан", `${radar.scan.length} ${plural(radar.scan.length, ["монета", "монеты", "монет"])}`],
     ["Отбор", `${radar.prescore.length} в топе`],
-    ["Сигнал", aiName && aiName !== "local" ? `AI: ${aiName}` : "стратегии + AI"],
+    ["Сигнал", mode === "local" ? "локальные стратегии" : aiName && aiName !== "local" ? `AI: ${aiName}` : "стратегии + AI"],
     ["Проверки", "риски"],
   ];
   const note =

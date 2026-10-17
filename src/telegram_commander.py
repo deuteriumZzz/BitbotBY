@@ -1055,7 +1055,7 @@ class TelegramCommander:
 
     # ── Builders ──────────────────────────────────────────────────────────────
 
-    _MODE_DISPLAY = {"dqn": "SAC", "ai": "AI", "hybrid": "Hybrid", "local": "Local"}
+    _MODE_DISPLAY = {"dqn": "SAC", "ai": "AI", "hybrid": "Hybrid", "local": "Локальные"}
 
     def _build_status(self) -> tuple[str, Any]:
         s = self._get_state()

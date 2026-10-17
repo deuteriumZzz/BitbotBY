@@ -73,12 +73,25 @@ export function AiPane() {
   const ai = useStore((s) => s.ai);
   const secrets = useStore((s) => s.secrets);
   const [needRestart, setNeedRestart] = useState(false);
+  const local = useStore((s) => s.bot?.mode === "local");
   if (!ai) return <Skel rows={4} label="Загружаю список провайдеров" />;
   const inChain = ai.providers.filter((p) => p.usable);
   const rest = ai.providers.filter((p) => !p.usable);
   const secretOf = (id: string) => secrets?.find((s) => s.service === id);
   return (
     <div className="set-pane view enter">
+      {local && (
+        <div className="honest">
+          {Icon.warn}
+          <div>
+            <b>Сейчас AI не используется.</b> Включён режим «Локальные стратегии (без AI)» — провайдеры ниже подключены, но бот их не
+            спрашивает.{" "}
+            <button className="btn" type="button" onClick={() => void actions.patchConfig({ MODE: "ai" })}>
+              Вернуть AI
+            </button>
+          </div>
+        </div>
+      )}
       <ChainCard ai={ai} />
       <article className="card">
         <div className="card-h">

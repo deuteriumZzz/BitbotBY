@@ -395,7 +395,7 @@ export const useStore = create<Store>((set, get) => {
           const keys: string[] = d.keys ?? [];
           if (keys.includes("STRATEGIES")) void get().loadStrategies().catch(() => undefined);
           if (keys.includes("SYMBOLS")) void get().loadSymbols().catch(() => undefined);
-          if (keys.includes("MARKET_PROFILE")) void get().loadState().catch(() => undefined);
+          if (keys.includes("MARKET_PROFILE") || keys.includes("MODE")) void get().loadState().catch(() => undefined);
           if (keys.includes("AI_CHAIN") || keys.includes("AI_PROVIDER")) void get().loadAi().catch(() => undefined);
           break;
         }

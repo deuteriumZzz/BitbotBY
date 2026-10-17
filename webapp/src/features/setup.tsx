@@ -25,8 +25,9 @@ export interface Check {
 }
 
 /** Что уже настроено — по данным сервера. */
-export function readiness(info: SetupInfo | null, ai: AiState | null, preset: string, paper: boolean): Check[] {
+export function readiness(info: SetupInfo | null, ai: AiState | null, preset: string, paper: boolean, mode = "ai"): Check[] {
   const n = ai?.chain.length ?? 0;
+  const local = mode === "local";
   return [
     {
       step: "bybit",
@@ -45,9 +46,13 @@ export function readiness(info: SetupInfo | null, ai: AiState | null, preset: st
     {
       step: "ai",
       title: "AI-анализ",
-      ok: n > 0,
-      need: true,
-      text: n ? `подключено провайдеров: ${n}` : "не подключён — сигналы без проверки моделью",
+      ok: local || n > 0,
+      need: !local,
+      text: local
+        ? "не нужен: решают локальные стратегии"
+        : n
+          ? `подключено провайдеров: ${n}`
+          : "не подключён — сигналы без проверки моделью",
     },
     { step: "risk", title: "Риск", ok: true, need: false, text: preset },
     { step: "mode", title: "Счёт", ok: true, need: false, text: paper ? "Paper — виртуальные деньги" : "Live — реальные деньги" },
@@ -59,7 +64,8 @@ function useChecks(): Check[] {
   const ai = useStore((s) => s.ai);
   const config = useStore((s) => s.config);
   const paper = useStore((s) => s.bot?.paper ?? true);
-  return readiness(info, ai, presetName(presetOf(config)), paper);
+  const mode = useStore((s) => s.bot?.mode ?? "ai");
+  return readiness(info, ai, presetName(presetOf(config)), paper, mode);
 }
 
 // Флаги только для этого устройства: без хранилища считаем, что мастер уже видели,
@@ -205,6 +211,7 @@ function StepBody({ step }: { step: SetupStep }) {
   const secrets = useStore((s) => s.secrets);
   const ai = useStore((s) => s.ai);
   const paper = useStore((s) => s.bot?.paper ?? true);
+  const mode = useStore((s) => s.bot?.mode ?? "ai");
   const key = (service: string, envs: string): ReactNode => {
     const item = secrets?.find((s: SecretItem) => s.service === service);
     if (info?.keys_in_app && item) return <KeyCard item={item} />;
@@ -238,6 +245,18 @@ function StepBody({ step }: { step: SetupStep }) {
         </>
       );
     case "ai": {
+      if (mode === "local")
+        return (
+          <>
+            <p className="setup-p">
+              Сейчас бот работает <b>без AI</b>: сделки открывают только локальные стратегии по индикаторам. Это бесплатно и предсказуемо, но
+              ни одна из стратегий пока не показала доказанного преимущества — держите Paper.
+            </p>
+            <button className="btn" type="button" onClick={() => void actions.patchConfig({ MODE: "ai" })}>
+              Вернуть AI
+            </button>
+          </>
+        );
       if (!ai) return <Skel label="Загружаю список провайдеров" />;
       // Первым — LLM7: работает без ключа, один клик. Ollama требует своего сервера —
       // это в Настройки → AI. Без хранилища ключей — только то, что не требует ключа.
@@ -251,6 +270,9 @@ function StepBody({ step }: { step: SetupStep }) {
             Перед сделкой бот спрашивает языковую модель. Хватит одного бесплатного ключа; чем их больше, тем реже бот остаётся без AI из-за
             дневных лимитов. Порядок и режим — в Настройки → AI.
           </p>
+          <button className="btn" type="button" onClick={() => void actions.patchConfig({ MODE: "local" })}>
+            Работать без AI: только локальные стратегии
+          </button>
           <div className="addp">
             {free.map((p) => (
               <AddCard key={p.id} ai={ai} p={p} secret={secrets?.find((s) => s.service === p.id)} onSaved={() => undefined} />

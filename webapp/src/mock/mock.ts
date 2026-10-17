@@ -555,6 +555,7 @@ function patchConfig(changes: Body) {
     config[key] = { value: NUMERIC.includes(def.type) ? Number(value) : value, source: def.hot ? "live" : "ui" };
     (def.hot ? out.applied_hot : out.pending_restart).push(key);
   }
+  if (typeof changes.MODE === "string") bot.mode = changes.MODE;
   if (typeof changes.AI_PROVIDER === "string") {
     ai.pinned = changes.AI_PROVIDER;
     recomputeAi();

@@ -21,3 +21,11 @@ describe("готовность", () => {
     expect(c.ai).toMatchObject({ ok: true, text: "подключено провайдеров: 2" });
   });
 });
+
+describe("режим без AI", () => {
+  it("в локальном режиме AI не обязателен и не требует провайдеров", () => {
+    const c = byStep(readiness({ keys_in_app: true, bybit: true, telegram: true }, ai(0), "Умеренный", true, "local"));
+    expect(c.ai).toMatchObject({ ok: true, need: false });
+    expect(c.ai.text).toContain("локальные стратегии");
+  });
+});

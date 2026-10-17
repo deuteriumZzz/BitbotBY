@@ -666,7 +666,7 @@ SETTINGS: Tuple[Setting, ...] = (
         "choice",
         "ai",
         options=(
-            ("local", "Local"),
+            ("local", "Локальные стратегии (без AI)"),
             ("ai", "AI"),
             ("dqn", "SAC"),
             ("hybrid", "Hybrid"),

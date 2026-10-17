@@ -26,6 +26,7 @@ from src.constants import REDIS_TTL_MARKET_DATA, SILENT_DEATH_ALERT_COOLDOWN
 from src.correlation_filter import CorrelationFilter
 from src.cycle import CycleRunner
 from src.data_loader import DataLoader
+from src.experience_buffer import LOCAL_REASONING_PREFIX
 from src.funding_arb_detector import FundingArbDetector
 from src.health_server import cycles_counter
 from src.logger import _SecretFilter
@@ -64,6 +65,13 @@ from src.twitter_analyzer import TwitterAnalyzer
 from src.types import PositionRecord
 
 _SECONDS_PER_HOUR: int = 3_600
+
+_REGIME_RU = {
+    "trending_up": "рост",
+    "trending_down": "падение",
+    "ranging": "боковик",
+    "unknown": "не определён",
+}
 
 # Логирование настраивается точкой входа (supervisor.py) до импорта этого
 # модуля. Вызов setup_logging() здесь был побочным эффектом импорта: любой
@@ -1335,7 +1343,12 @@ class TradingBot:
                             "entry": _price,
                             "stop_loss": _sl,
                             "take_profit": _tp,
-                            "reasoning": "Local analysis",
+                            "reasoning": (
+                                f"{LOCAL_REASONING_PREFIX} «{strat}»: сигнал "
+                                f"{'на покупку' if action == 'buy' else 'на продажу'}"
+                                f" с уверенностью {conf:.2f}, режим рынка — "
+                                f"{_REGIME_RU.get(sym_regime, sym_regime)}."
+                            ),
                             "_regime": sym_regime,
                         }
                     )

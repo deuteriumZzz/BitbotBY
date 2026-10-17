@@ -841,7 +841,7 @@
    "options": [
     {
      "value": "local",
-     "label": "Local"
+     "label": "Локальные стратегии (без AI)"
     },
     {
      "value": "ai",
