@@ -51,7 +51,7 @@ class BotCommands:
 
     async def run_job(self, args: Dict[str, Any]) -> Dict[str, Any]:
         """Фоновая задача из меню Telegram: бэктест, обучение, тюнинг, отчёты."""
-        return self._jobs.start(str(args.get("job", "")))
+        return self._jobs.start(str(args.get("job", "")), str(args.get("profile", "")))
 
     async def rollback_model(self, args: Dict[str, Any]) -> Dict[str, Any]:
         return self._jobs.rollback()

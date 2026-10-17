@@ -186,6 +186,19 @@ def test_state_without_redis(client):
     assert resp.status_code == 200
     body = resp.json()
     assert body["bot"]["alive"] is False and body["positions"] == []
+    assert body["market"] == {"season": None, "fear_greed": None}
+
+
+def test_state_exposes_season_and_fear_greed(client):
+    r = FakeRedis()
+    r.set("bot:fear_greed", json.dumps({"value": 38, "label": "Fear"}))
+    r.set("bot:season_index", json.dumps({"signal": "altcoin", "altcoin_index": 80}))
+    with patch.object(data, "get_redis", return_value=r), patch.object(
+        data, "check_healthcheck", return_value=True
+    ):
+        body = client.get("/api/state").json()
+    assert body["market"]["fear_greed"] == {"value": 38, "label": "Fear"}
+    assert body["market"]["season"]["signal"] == "altcoin"
 
 
 def test_metrics_rejects_unknown_period(client):

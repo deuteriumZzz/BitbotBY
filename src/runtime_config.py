@@ -53,6 +53,7 @@ _KEY_AWAITING_MODE_PIN = "bot:awaiting_mode_pin"
 _KEY_AWAITING_ALERT_COOLDOWN = "bot:awaiting_alert_cooldown"
 _KEY_PAPER_TRADING = "bot:paper_trading_override"
 _KEY_SAC_BACKUP = "bot:sac_model_backup"
+_KEY_SAC_BACKUP_PROFILE = "bot:sac_backup_profile"
 _KEY_TRAIN_PROGRESS = "bot:train_progress"
 _KEY_TUNE_PROGRESS = "bot:tune_progress"
 _KEY_BACKTEST_PROGRESS = "bot:backtest_progress"
@@ -954,6 +955,9 @@ class RuntimeConfig:
     def get_market_profiles_info(self) -> dict:
         return {k: v["label"] for k, v in _MARKET_PROFILES.items()}
 
+    def profile_ids(self) -> list:
+        return list(_MARKET_PROFILES)
+
     def get_market_profile_config(self, name: str) -> dict:
         """Возвращает полный конфиг профиля (train_top_n, timeframe и др.)."""
         return dict(_MARKET_PROFILES.get(name, {}))
@@ -1098,8 +1102,43 @@ class RuntimeConfig:
     def get_sac_backup_path(self) -> str:
         return self._get(_KEY_SAC_BACKUP) or ""
 
-    def set_sac_backup_path(self, path: str) -> None:
+    def set_sac_backup_path(self, path: str, profile: str = "") -> None:
         self._set(_KEY_SAC_BACKUP, path)
+        self._set(_KEY_SAC_BACKUP_PROFILE, profile)
+
+    def get_sac_backup_profile(self) -> str:
+        """Профиль, чью модель сохранила последняя резервная копия ('' — неизвестно)."""
+        return self._get(_KEY_SAC_BACKUP_PROFILE) or ""
+
+    def get_training_profiles(self) -> list:
+        """Профили рынка для вкладки «Обучение»: таймфрейм, монеты, файл модели."""
+        import datetime as _dt
+        import os as _os
+
+        active = self.get_market_profile()
+        rows = []
+        for pid, cfg in _MARKET_PROFILES.items():
+            path = str(cfg["model_path"])
+            exists = _os.path.exists(path)
+            rows.append(
+                {
+                    "id": pid,
+                    "label": str(cfg["label"]).split(" ", 1)[-1],
+                    "timeframe": cfg["timeframe"],
+                    "train_top_n": cfg["train_top_n"],
+                    "model_path": path,
+                    "model_exists": exists,
+                    "trained_at": (
+                        _dt.datetime.fromtimestamp(
+                            _os.path.getmtime(path), _dt.timezone.utc
+                        ).isoformat()
+                        if exists
+                        else None
+                    ),
+                    "active": pid == active,
+                }
+            )
+        return rows
 
     # ── Train progress ────────────────────────────────────────────────────────
 

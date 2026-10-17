@@ -61,6 +61,8 @@ def status(rc: Any) -> Dict[str, Any]:
     """Что идёт сейчас, прогресс и можно ли откатить модель (читает Redis)."""
     backup = rc.get_sac_backup_path()
     return {
+        "profiles": rc.get_training_profiles(),
+        "backup_profile": rc.get_sac_backup_profile() or None,
         "running": rc.running_jobs(GROUPS),
         "progress": {
             "backtest": rc.get_backtest_progress(),
@@ -86,22 +88,29 @@ class JobRunner:
 
     # ── Запуск ────────────────────────────────────────────────────────────────
 
-    def start(self, job: str) -> Dict[str, Any]:
+    def start(self, job: str, profile: str = "") -> Dict[str, Any]:
         spec = JOBS.get(job)
         if spec is None:
             return error("unknown_job", "Такой задачи нет.")
+        if profile and profile not in self._rc.profile_ids():
+            return error("unknown_profile", "Такого профиля нет.")
         task = self._tasks.get(spec.group)
         if (task and not task.done()) or not self._rc.try_start_job(
             spec.group, "app", spec.ttl
         ):
             return error("busy", f"«{spec.title}» уже выполняется — дождитесь конца.")
-        self._tasks[spec.group] = asyncio.create_task(self._run(spec))
+        self._tasks[spec.group] = asyncio.create_task(self._run(spec, profile))
         return {"started": True, "job": job}
 
     def rollback(self) -> Dict[str, Any]:
         """Возвращает предыдущую модель SAC из резервной копии."""
         backup = self._rc.get_sac_backup_path()
-        model = self._rc.get_sac_model_path()
+        profile = self._rc.get_sac_backup_profile()
+        model = (
+            self._rc.get_sac_model_path_for_profile(profile)
+            if profile
+            else self._rc.get_sac_model_path()
+        )
         if not backup or not os.path.exists(backup):
             return error("no_backup", "Резервная копия модели не найдена.")
         if self._rc.running_jobs(["sac"]):
@@ -112,15 +121,16 @@ class JobRunner:
 
     # ── Выполнение ────────────────────────────────────────────────────────────
 
-    async def _run(self, spec: JobSpec) -> None:
+    async def _run(self, spec: JobSpec, profile: str = "") -> None:
         emit(self._r, "job.progress", {"job": spec.id, "pct": 0})
         try:
             if spec.id == "backtest":
                 result = await self._backtest()
             elif spec.id == "train":
-                result = await self._train_stage(self._train_env())
+                profile = profile or self._rc.get_market_profile()
+                result = await self._train_stage(self._train_env(profile), profile)
             elif spec.id == "tune":
-                result = await self._tune()
+                result = await self._tune(profile or self._rc.get_market_profile())
             else:
                 result = await self._report(spec.id)
         except Exception as exc:
@@ -226,13 +236,12 @@ class JobRunner:
             },
         }
 
-    def _train_env(self) -> Dict[str, str]:
+    def _train_env(self, profile: str) -> Dict[str, str]:
         """Окружение обучения, как в Telegram: набор монет и таймфрейм из профиля."""
         rc = self._rc
-        profile = rc.get_market_profile()
         cfg = rc.get_market_profile_config(profile) if profile else {}
         return {
-            "SAC_MODEL_PATH": rc.get_sac_model_path(),
+            "SAC_MODEL_PATH": rc.get_sac_model_path_for_profile(profile),
             "TRAIN_TOP_N": str(cfg.get("train_top_n", 20)),
             "BT_TIMEFRAME": str(cfg.get("timeframe", "15m")),
             "SAC_PROFILE": profile or "",
@@ -241,7 +250,9 @@ class JobRunner:
             ),
         }
 
-    async def _train_stage(self, env: Dict[str, str]) -> Dict[str, Any]:
+    async def _train_stage(
+        self, env: Dict[str, str], profile: str = ""
+    ) -> Dict[str, Any]:
         # Импорт здесь: telegram_commander тянет библиотеку Telegram, нужна только тут.
         from src.telegram_commander import (  # noqa: PLC0415
             _is_worse,
@@ -262,7 +273,7 @@ class JobRunner:
             return {"ok": False, "error": err or "обучение не завершилось"}
         res = _parse_train_result(out)
         if res and res.get("backup"):
-            self._rc.set_sac_backup_path(res["backup"])
+            self._rc.set_sac_backup_path(res["backup"], profile)
         return {
             "ok": True,
             "sac_pct": res and res.get("sac_pct"),
@@ -270,22 +281,25 @@ class JobRunner:
             "worse": _is_worse(res),
         }
 
-    async def _tune(self) -> Dict[str, Any]:
+    async def _tune(self, profile: str = "") -> Dict[str, Any]:
         """Тюнинг (Optuna), затем обучение с найденными параметрами."""
-        env = {"SAC_MODEL_PATH": self._rc.get_sac_model_path()}
+        env = {"SAC_MODEL_PATH": self._rc.get_sac_model_path_for_profile(profile)}
 
         def progress(info: Dict[str, Any]) -> None:
             self._rc.set_tune_progress(info)
             emit(self._r, "job.progress", {"job": "tune", **info})
 
         code, _, err = await self._exec(
-            "reinforcement_learning/tune_sac.py", env, "TUNE_PROGRESS:", progress
+            "reinforcement_learning/tune_sac.py",
+            {**env, "SAC_PROFILE": profile},
+            "TUNE_PROGRESS:",
+            progress,
         )
         if code != 0:
             return {"ok": False, "error": err or "тюнинг не завершился"}
         emit(self._r, "job.progress", {"job": "tune", "stage": "train", "pct": 100})
         # Как в Telegram: второй этап идёт с окружением тюнинга, без профиля монет.
-        return await self._train_stage(env)
+        return await self._train_stage(env, profile)
 
     async def _report(self, job: str) -> Dict[str, Any]:
         code, out, err = await self._exec(_REPORT_SCRIPTS[job], {})

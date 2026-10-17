@@ -21,6 +21,7 @@ import type {
   PendingSignal,
   Period,
   Position,
+  ProfileInfo,
   SecretItem,
   SettingDef,
   SetupInfo,
@@ -91,6 +92,7 @@ export interface Store {
   balance: number;
   slots: { used: number; max: number };
   positions: Record<string, Position>;
+  market: BotState["market"] | null;
   cycle: { state: string; used?: number; max?: number };
   /** Когда пришло последнее событие цикла (мс): по нему видно, жив ли цикл бота. */
   cycleAt: number | null;
@@ -114,6 +116,8 @@ export interface Store {
   /** Занятые группы задач: {sac: "telegram"} — запущено не из приложения, но тоже идёт. */
   jobGroups: Record<string, string>;
   rollbackAvailable: boolean;
+  profiles: ProfileInfo[];
+  backupProfile: string | null;
   setupInfo: SetupInfo | null;
   /** Окно справки открыто. */
   helpOpen: boolean;
@@ -199,6 +203,7 @@ export const useStore = create<Store>((set, get) => {
       balance: st.balance,
       slots: st.slots,
       positions: positionsFrom(st.positions),
+      market: st.market ?? null,
     });
 
   return {
@@ -231,6 +236,9 @@ export const useStore = create<Store>((set, get) => {
     jobs: {},
     jobGroups: {},
     rollbackAvailable: false,
+    profiles: [],
+    backupProfile: null,
+    market: null,
     setupInfo: null,
     setup: null,
     helpOpen: false,
@@ -503,7 +511,13 @@ export const useStore = create<Store>((set, get) => {
           const info = st.progress[id];
           if (info) jobs[id] = { running: true, info, done: undefined };
         }
-        return { jobs, jobGroups: st.running, rollbackAvailable: st.rollback_available };
+        return {
+          jobs,
+          jobGroups: st.running,
+          rollbackAvailable: st.rollback_available,
+          profiles: st.profiles ?? [],
+          backupProfile: st.backup_profile ?? null,
+        };
       });
     },
     async loadSetup() {
@@ -637,9 +651,9 @@ export const actions = {
       st().say(`Закрыто ${c} ${plural(c, ["позиция", "позиции", "позиций"])}. Бот на паузе.`);
     }),
   restart: () => st().act(() => command("POST", "/api/bot/restart"), "Бот перезапускается…"),
-  runJob: (id: JobId) =>
+  runJob: (id: JobId, profile?: string) =>
     st().act(async () => {
-      await command("POST", `/api/jobs/${id}`);
+      await command("POST", `/api/jobs/${id}`, profile ? { profile } : undefined);
       useStore.setState((s) => ({ jobs: { ...s.jobs, [id]: { running: true, info: { pct: 0 } } } }));
     }),
   resetConfig: () => st().act(() => api("POST", "/api/config/reset"), "Настройки сброшены к значениям из .env"),

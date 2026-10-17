@@ -285,6 +285,10 @@ function state() {
     bot: { alive: true, ...bot, ai: ai.last || null },
     balance: +balance.toFixed(2),
     slots: { used: Object.keys(positions).length, max: maxPositions() },
+    market: {
+      season: { signal: null, altcoin_index: 41, btc_dominance: 58.3, btc_30d: 4.2, checked_at: Date.now() / 1000 },
+      fear_greed: { value: 38, label: "Fear" },
+    },
     positions: Object.values(positions).map((p) => ({
       ...publicPos(p),
       id: p.id,
@@ -542,10 +546,18 @@ const configHistory: { ts: number; by: string; changes: { key: string; label: st
 const jobGroup: Record<string, string> = { backtest: "backtest", train: "sac", tune: "sac", alpha_report: "alpha_report", live_divergence: "live_divergence", ai_isolation: "ai_isolation" };
 const busyGroups = new Set<string>();
 let modelBackup = false;
+let backupProfile: string | null = null;
+const trainedAt: Record<string, string | null> = { bluechip: "2026-09-12T10:00:00Z", altcoin: "2026-10-02T08:30:00Z", meme: null };
+const PROFILE_INFO = [
+  { id: "bluechip", label: "Блючипы", timeframe: "15m", train_top_n: 20 },
+  { id: "altcoin", label: "Альткоины", timeframe: "5m", train_top_n: 100 },
+  { id: "meme", label: "Мемкоины", timeframe: "3m", train_top_n: 50 },
+];
 
 /** Имитация фоновых задач бота: прогресс событиями, как job.progress/job.done. */
 function startJob(job: string, b: Body) {
   const group = jobGroup[job];
+  const profile = String(b.profile || bot.profile || "bluechip");
   if (!group) return fail(404, "unknown_job", "Такой задачи нет.");
   if (busyGroups.has(group)) return done(b, err("busy", "Эта задача уже выполняется — дождитесь конца."));
   busyGroups.add(group);
@@ -568,7 +580,11 @@ function startJob(job: string, b: Body) {
     }
     clearInterval(tick);
     busyGroups.delete(group);
-    if (job === "train" || job === "tune") modelBackup = true;
+    if (job === "train" || job === "tune") {
+      modelBackup = true;
+      backupProfile = profile;
+      trainedAt[profile] = new Date().toISOString();
+    }
     const result: Record<string, unknown> =
       job === "backtest"
         ? { n: strategies.length, months: 12, timeframe: "15m", best: { strategy: "liquidity_sweep", sharpe: -0.05, trades: 1771 } }
@@ -732,7 +748,17 @@ function route(method: string, path: string, body: unknown): unknown {
       emit("config.changed", { keys: ["STRATEGIES", "SYMBOLS", "MARKET_PROFILE", "MODE"] });
       return { ok: true };
     case "GET /api/jobs":
-      return { running: Object.fromEntries([...busyGroups].map((g) => [g, "app"])), progress: {}, rollback_available: modelBackup };
+      return { running: Object.fromEntries([...busyGroups].map((g) => [g, "app"])), progress: {},
+        rollback_available: modelBackup,
+        backup_profile: backupProfile,
+        profiles: PROFILE_INFO.map((p) => ({
+          ...p,
+          model_path: `models/sac_model_${p.id}.zip`,
+          model_exists: trainedAt[p.id] !== null,
+          trained_at: trainedAt[p.id],
+          active: p.id === bot.profile,
+        })),
+      };
     case "POST /api/model/rollback":
       if (!modelBackup) return done(b, err("no_backup", "Резервная копия модели не найдена."));
       modelBackup = false;

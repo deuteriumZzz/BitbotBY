@@ -32,5 +32,4 @@ export const OWN_HOME: Record<string, Home> = {
   TRADING_HOURS: { tab: "settings", pane: "main", where: "Настройки → Основное → Часы торговли" },
   TESTNET: { tab: "settings", pane: "conn", where: "Настройки → Подключения → Bybit" },
   AI_PROVIDER: { tab: "settings", pane: "ai", where: "Настройки → AI" },
-  TRAIN_TOP_N: { tab: "learn", where: "Обучение → Нейросеть SAC" },
 };

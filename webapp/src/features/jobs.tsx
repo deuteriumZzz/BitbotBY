@@ -4,7 +4,7 @@
 import { useState } from "react";
 
 import { base, fmtN, pct } from "../lib/format";
-import type { JobDone, JobId, JobState } from "../lib/types";
+import type { JobDone, JobId, JobState, ProfileInfo } from "../lib/types";
 import { actions, useStore } from "../store";
 import { Q } from "../ui";
 import { stratName } from "./bots";
@@ -71,7 +71,8 @@ const JOBS: JobDef[] = [
   },
 ];
 
-const num = (v: unknown): number | undefined => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
+const num = (v: unknown): number | undefined =>
+  typeof v === "number" && Number.isFinite(v) ? v : undefined;
 
 /** Одна строка про ход: «34% · осталось ~12 мин · BTC · Свинг». */
 function progressText(id: JobId, info: Record<string, unknown>): string {
@@ -79,12 +80,21 @@ function progressText(id: JobId, info: Record<string, unknown>): string {
   const parts = [pct !== undefined ? `${Math.round(pct)}%` : "запускаю…"];
   const eta = num(info.eta_min);
   if (eta !== undefined) parts.push(`осталось ~${Math.round(eta)} мин`);
-  if (id === "backtest" && typeof info.strategy === "string") parts.push(`${base(String(info.symbol ?? ""))} · ${stratName(info.strategy)}`);
-  if (id === "tune" && info.stage === "train") parts.push("этап 2 из 2: обучение");
-  else if (id === "tune" && num(info.trial) !== undefined) parts.push(`попытка ${info.trial}/${info.total ?? "?"}`);
-  if (id === "train" && num(info.step) !== undefined) parts.push(`шаг ${fmtN(Number(info.step), 0)}/${fmtN(Number(info.total ?? 0), 0)}`);
+  if (id === "backtest" && typeof info.strategy === "string")
+    parts.push(
+      `${base(String(info.symbol ?? ""))} · ${stratName(info.strategy)}`,
+    );
+  if (id === "tune" && info.stage === "train")
+    parts.push("этап 2 из 2: обучение");
+  else if (id === "tune" && num(info.trial) !== undefined)
+    parts.push(`попытка ${info.trial}/${info.total ?? "?"}`);
+  if (id === "train" && num(info.step) !== undefined)
+    parts.push(
+      `шаг ${fmtN(Number(info.step), 0)}/${fmtN(Number(info.total ?? 0), 0)}`,
+    );
   const pnl = num(info.best_pnl);
-  if (id === "tune" && pnl !== undefined) parts.push(`лучший PnL $${fmtN(pnl, 0)}`);
+  if (id === "tune" && pnl !== undefined)
+    parts.push(`лучший PnL $${fmtN(pnl, 0)}`);
   return parts.join(" · ");
 }
 
@@ -93,20 +103,25 @@ function resultText(id: JobId, d: JobDone): string {
   if (id === "backtest")
     return `Готово: ${d.n} стратегий${d.best ? `. Лучший Sharpe — ${stratName(d.best.strategy)} (${d.best.sharpe}, сделок ${d.best.trades})` : ""}. Sharpe ниже нуля значит, что стратегия не заработала на истории.`;
   if (id === "train" || id === "tune") {
-    const cmp = d.sac_pct != null && d.bh_pct != null ? ` На тестовой выборке SAC ${pct(d.sac_pct, 1)}, просто держать (Buy&Hold) ${pct(d.bh_pct, 1)}.` : "";
+    const cmp =
+      d.sac_pct != null && d.bh_pct != null
+        ? ` На тестовой выборке SAC ${pct(d.sac_pct, 1)}, просто держать (Buy&Hold) ${pct(d.bh_pct, 1)}.`
+        : "";
     return `Модель обучена.${cmp}${d.worse ? " Результат заметно хуже рынка — лучше откатить модель или проверить бэктестом." : ""}`;
   }
   return "Готово.";
 }
 
-function JobRow({ def }: { def: JobDef }) {
+function JobRow({ def, profile }: { def: JobDef; profile?: ProfileInfo }) {
   const job: JobState | undefined = useStore((s) => s.jobs[def.id]);
   const jobs = useStore((s) => s.jobs);
   const groupSource = useStore((s) => s.jobGroups[def.group]);
   const online = useStore((s) => s.alive);
   const [confirm, setConfirm] = useState(false);
   // Обучение и тюнинг делят один замок: пока идёт одно, второе недоступно.
-  const sibling = JOBS.some((j) => j.group === def.group && j.id !== def.id && jobs[j.id]?.running);
+  const sibling = JOBS.some(
+    (j) => j.group === def.group && j.id !== def.id && jobs[j.id]?.running,
+  );
   // Группа занята, а у этой задачи своего прогресса нет — её запустили из Telegram (или другого окна).
   const foreign = groupSource !== undefined && !job?.running && !sibling;
   const d = job?.done;
@@ -118,10 +133,20 @@ function JobRow({ def }: { def: JobDef }) {
       </div>
       {job?.running ? (
         <>
-          <div className="prog" role="progressbar" aria-valuenow={Math.round(num(job.info.pct) ?? 0)} aria-valuemin={0} aria-valuemax={100} aria-label={def.title}>
+          <div
+            className="prog"
+            role="progressbar"
+            aria-valuenow={Math.round(num(job.info.pct) ?? 0)}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label={def.title}
+          >
             <i style={{ width: `${num(job.info.pct) ?? 0}%` }} />
           </div>
-          <p className="note-soon">{progressText(def.id, job.info)}. Закрыть приложение можно — бот доработает сам.</p>
+          <p className="note-soon">
+            {progressText(def.id, job.info)}. Закрыть приложение можно — бот
+            доработает сам.
+          </p>
         </>
       ) : (
         <>
@@ -131,12 +156,25 @@ function JobRow({ def }: { def: JobDef }) {
               {d.ok && d.output && <pre className="job-out">{d.output}</pre>}
             </div>
           )}
-          {foreign && <p className="note-soon">Идёт, запущено {groupSource === "telegram" ? "из Telegram" : "в другом окне"} — дождитесь конца.</p>}
+          {foreign && (
+            <p className="note-soon">
+              Идёт, запущено{" "}
+              {groupSource === "telegram" ? "из Telegram" : "в другом окне"} —
+              дождитесь конца.
+            </p>
+          )}
           {confirm ? (
             <div className="confirm-box">
-              <span>{def.warn}</span>
+              <span>
+                {profile && <>Профиль «{profile.label}». </>}
+                {def.warn}
+              </span>
               <div className="btn-row">
-                <button className="btn" type="button" onClick={() => setConfirm(false)}>
+                <button
+                  className="btn"
+                  type="button"
+                  onClick={() => setConfirm(false)}
+                >
                   Отмена
                 </button>
                 <button
@@ -144,7 +182,7 @@ function JobRow({ def }: { def: JobDef }) {
                   type="button"
                   onClick={() => {
                     setConfirm(false);
-                    void actions.runJob(def.id);
+                    void actions.runJob(def.id, profile?.id);
                   }}
                 >
                   Запустить
@@ -152,7 +190,17 @@ function JobRow({ def }: { def: JobDef }) {
               </div>
             </div>
           ) : (
-            <button className="btn" type="button" disabled={!online || sibling || foreign} title={sibling || foreign ? "Идёт другая задача этой группы" : undefined} onClick={() => setConfirm(true)}>
+            <button
+              className="btn"
+              type="button"
+              disabled={!online || sibling || foreign}
+              title={
+                sibling || foreign
+                  ? "Идёт другая задача этой группы"
+                  : undefined
+              }
+              onClick={() => setConfirm(true)}
+            >
               {def.button}
             </button>
           )}
@@ -163,46 +211,91 @@ function JobRow({ def }: { def: JobDef }) {
 }
 
 const MODEL_JOBS: JobId[] = ["train", "tune"];
-const ALPHA_JOBS: JobId[] = ["backtest", "alpha_report", "live_divergence", "ai_isolation"];
+const ALPHA_JOBS: JobId[] = [
+  "backtest",
+  "alpha_report",
+  "live_divergence",
+  "ai_isolation",
+];
 
 /** Нейросеть SAC участвует в решениях только в режимах SAC и Hybrid. */
 function sacRole(mode: string): { used: boolean; text: string } {
-  if (mode === "dqn") return { used: true, text: "Сейчас сделки решает именно эта нейросеть — качество обучения напрямую влияет на торговлю." };
-  if (mode === "hybrid") return { used: true, text: "Сделка открывается, когда нейросеть и AI согласны, поэтому плохая модель режет и хорошие сигналы AI." };
-  return { used: false, text: "Сейчас режим не использует SAC, и обучение ни на что не повлияет, пока вы не включите режим SAC или Hybrid (Настройки → Параметры → «Кто принимает решение»)." };
+  if (mode === "dqn")
+    return {
+      used: true,
+      text: "Сейчас сделки решает именно эта нейросеть — качество обучения напрямую влияет на торговлю.",
+    };
+  if (mode === "hybrid")
+    return {
+      used: true,
+      text: "Сделка открывается, когда нейросеть и AI согласны, поэтому плохая модель режет и хорошие сигналы AI.",
+    };
+  return {
+    used: false,
+    text: "Сейчас режим не использует SAC, и обучение ни на что не повлияет, пока вы не включите режим SAC или Hybrid (Настройки → Параметры → «Кто принимает решение»).",
+  };
 }
 
-function TrainingStep() {
-  const n = useStore((s) => Number(s.config.TRAIN_TOP_N?.value ?? 20));
-  const [v, setV] = useState<number | null>(null);
-  const shown = v ?? n;
-  const set = (x: number) => {
-    const next = Math.max(1, Math.min(100, x));
-    setV(next);
-    void actions.patchConfig({ TRAIN_TOP_N: next }).then(() => setV(null));
-  };
+const when = (iso: string | null): string =>
+  iso
+    ? new Date(iso).toLocaleDateString("ru-RU", {
+        day: "numeric",
+        month: "long",
+      })
+    : "";
+
+/** Выбор профиля: у каждого своя модель, таймфрейм и число монет, обучаем ту, что выбрана. */
+function ProfilePicker({
+  profiles,
+  value,
+  onChange,
+}: {
+  profiles: ProfileInfo[];
+  value: string;
+  onChange: (id: string) => void;
+}) {
   return (
-    <div className="row-tgl">
-      <span>
-        Монет для обучения <Q tip="Сколько самых ликвидных монет попадёт в обучающую выборку. Больше — дольше обучение и шире охват. Применится при следующем запуске." />
-      </span>
-      <span className="stepper">
-        <button className="btn" type="button" aria-label="Меньше монет" onClick={() => set(shown - 5)}>
-          −
+    <div
+      className="prof-pick"
+      role="radiogroup"
+      aria-label="Профиль для обучения"
+    >
+      {profiles.map((p) => (
+        <button
+          key={p.id}
+          type="button"
+          role="radio"
+          aria-checked={p.id === value}
+          className={`prof ${p.id === value ? "on" : ""}`}
+          onClick={() => onChange(p.id)}
+        >
+          <b>{p.label}</b>
+          <span>
+            {p.timeframe} · {p.train_top_n} монет
+          </span>
+          <span className="prof-m">
+            {p.model_exists ? `модель от ${when(p.trained_at)}` : "не обучена"}
+          </span>
+          {p.active && <i className="pill ok">торгует сейчас</i>}
         </button>
-        <output>{shown}</output>
-        <button className="btn" type="button" aria-label="Больше монет" onClick={() => set(shown + 5)}>
-          +
-        </button>
-      </span>
+      ))}
     </div>
   );
 }
 
 function ModelCard() {
+  const profiles = useStore((s) => s.profiles);
+  const backupProfile = useStore((s) => s.backupProfile);
+  const activeId = profiles.find((p) => p.active)?.id ?? profiles[0]?.id ?? "";
+  const [picked, setPicked] = useState<string | null>(null);
+  const chosen = profiles.find((p) => p.id === (picked ?? activeId));
   const mode = useStore((s) => s.bot?.mode ?? "ai");
   const canRollback = useStore((s) => s.rollbackAvailable);
-  const sacBusy = useStore((s) => "sac" in s.jobGroups || Boolean(s.jobs.train?.running || s.jobs.tune?.running));
+  const sacBusy = useStore(
+    (s) =>
+      "sac" in s.jobGroups ||
+      Boolean(s.jobs.train?.running || s.jobs.tune?.running),
+  );
   const online = useStore((s) => s.alive);
   const [confirm, setConfirm] = useState(false);
   const role = sacRole(mode);
@@ -210,15 +303,37 @@ function ModelCard() {
     <article className="card">
       <div className="card-h">
         <h2>Нейросеть SAC</h2>
-        <span className={`pill sp ${role.used ? "ok" : ""}`}>{role.used ? "участвует в решениях" : "сейчас не используется"}</span>
+        <span className={`pill sp ${role.used ? "ok" : ""}`}>
+          {role.used ? "участвует в решениях" : "сейчас не используется"}
+        </span>
       </div>
       <p className="note-soon role">{role.text}</p>
       <ul className="jobs">
-        <li className="job">
-          <TrainingStep />
-        </li>
+        {chosen && (
+          <li className="job">
+            <div className="job-h">
+              <b>Какой профиль обучать</b>
+              <Q tip="У каждого профиля рынка своя модель, свой таймфрейм и своё число монет в обучении. Обучение и тюнинг ниже работают с выбранным профилем; торговать продолжает активный." />
+            </div>
+            <ProfilePicker
+              profiles={profiles}
+              value={chosen.id}
+              onChange={setPicked}
+            />
+            {!chosen.active && (
+              <p className="note-soon">
+                Этот профиль сейчас не торгует: новая модель начнёт работать,
+                когда вы переключитесь на него (вкладка «Бот»).
+              </p>
+            )}
+          </li>
+        )}
         {MODEL_JOBS.map((id) => (
-          <JobRow key={id} def={JOBS.find((j) => j.id === id)!} />
+          <JobRow
+            key={id}
+            def={JOBS.find((j) => j.id === id)!}
+            profile={chosen}
+          />
         ))}
         <li className="job">
           <div className="job-h">
@@ -226,12 +341,24 @@ function ModelCard() {
             <Q tip="Возвращает модель, которая была до последнего обучения. Бот подхватит её в следующем цикле." />
           </div>
           {!canRollback ? (
-            <p className="note-soon">Резервной копии пока нет: она появляется после первого переобучения.</p>
+            <p className="note-soon">
+              Резервной копии пока нет: она появляется после первого
+              переобучения.
+            </p>
           ) : confirm ? (
             <div className="confirm-box">
-              <span>Текущая модель будет заменена той, что была до последнего обучения.</span>
+              <span>
+                Модель профиля «
+                {profiles.find((p) => p.id === backupProfile)?.label ??
+                  "активного"}
+                » будет заменена той, что была до последнего обучения.
+              </span>
               <div className="btn-row">
-                <button className="btn" type="button" onClick={() => setConfirm(false)}>
+                <button
+                  className="btn"
+                  type="button"
+                  onClick={() => setConfirm(false)}
+                >
                   Отмена
                 </button>
                 <button
@@ -247,7 +374,13 @@ function ModelCard() {
               </div>
             </div>
           ) : (
-            <button className="btn" type="button" disabled={!online || sacBusy} title={sacBusy ? "Идёт обучение" : undefined} onClick={() => setConfirm(true)}>
+            <button
+              className="btn"
+              type="button"
+              disabled={!online || sacBusy}
+              title={sacBusy ? "Идёт обучение" : undefined}
+              onClick={() => setConfirm(true)}
+            >
               Откатить модель
             </button>
           )}
@@ -265,8 +398,10 @@ function AlphaCard() {
         <Q tip="Альфа — это то, что стратегия зарабатывает сверх случайности. Эти проверки отвечают на вопрос: есть ли у ваших стратегий и у AI настоящее преимущество, или пока везение." />
       </div>
       <p className="note-soon role">
-        Бэктест прогоняет стратегии по истории; значимость альфы проверяет ваши закрытые Paper-сделки статистикой; остальные две сравнивают реальное
-        исполнение с моделью и отделяют вклад AI от индикаторов. Всё в фоне, бот продолжает торговать.
+        Бэктест прогоняет стратегии по истории; значимость альфы проверяет ваши
+        закрытые Paper-сделки статистикой; остальные две сравнивают реальное
+        исполнение с моделью и отделяют вклад AI от индикаторов. Всё в фоне, бот
+        продолжает торговать.
       </p>
       <ul className="jobs">
         {ALPHA_JOBS.map((id) => (

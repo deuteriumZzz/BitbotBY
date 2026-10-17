@@ -1,14 +1,39 @@
 // Вкладка «Терминал»: баланс, метрики, радар монет, живые позиции, график, лента, календарь.
 
-import { createChart, type IChartApi, type IPriceLine, type ISeriesApi, type UTCTimestamp } from "lightweight-charts";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import {
+  createChart,
+  type IChartApi,
+  type IPriceLine,
+  type ISeriesApi,
+  type UTCTimestamp,
+} from "lightweight-charts";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 
 import { api } from "../lib/api";
-import { arrow, base, fmtN, hhmm, pct, plural, price, priceDecimals, tone, usd } from "../lib/format";
+import {
+  arrow,
+  base,
+  fmtN,
+  hhmm,
+  pct,
+  plural,
+  price,
+  priceDecimals,
+  tone,
+  usd,
+} from "../lib/format";
 import { reducedMotion } from "../lib/platform";
 import type { Candle, Position } from "../lib/types";
 import { actions, positionPnl, useStore, type Store } from "../store";
 import { profileName, stratName } from "./bots";
+import { MarketPulse } from "./market";
 import { ReadinessCard } from "./setup";
 import { Flash, Gauge, Q, Seg, Tween, hideTip, showTip, useArm } from "../ui";
 
@@ -37,14 +62,35 @@ function HealthStrip() {
     return () => clearInterval(t);
   }, []);
   const ago = cycleAt ? Math.max(0, Math.round((now - cycleAt) / 1000)) : null;
-  const agoText = ago === null ? "ещё не было" : ago < 60 ? `${ago} с назад` : `${Math.round(ago / 60)} мин назад`;
+  const agoText =
+    ago === null
+      ? "ещё не было"
+      : ago < 60
+        ? `${ago} с назад`
+        : `${Math.round(ago / 60)} мин назад`;
   // Цикл идёт каждые несколько минут; тишина дольше 15 минут при работающем боте — повод насторожиться.
   const stale = !paused && alive && ago !== null && ago > 900;
   // «Бот работает» уже видно в шапке (переключатель и «онлайн»): здесь — только когда не так.
   const down = !wsUp || !alive;
   const items: [string, string, string][] = [
-    ...(down ? [["Бот", !wsUp ? "нет связи" : "молчит", "bad"] as [string, string, string]] : []),
-    ["Решает", mode === "local" ? "локальные стратегии" : ai && ai !== "local" ? `AI · ${ai}` : "AI, ждёт ответа", mode === "local" || ai ? "ok" : "warn"],
+    ...(down
+      ? [
+          ["Бот", !wsUp ? "нет связи" : "молчит", "bad"] as [
+            string,
+            string,
+            string,
+          ],
+        ]
+      : []),
+    [
+      "Решает",
+      mode === "local"
+        ? "локальные стратегии"
+        : ai && ai !== "local"
+          ? `AI · ${ai}`
+          : "AI, ждёт ответа",
+      mode === "local" || ai ? "ok" : "warn",
+    ],
     ["Цикл", agoText, stale ? "bad" : ago === null ? "warn" : "ok"],
   ];
   return (
@@ -67,6 +113,7 @@ export function Terminal() {
       <ReadinessCard />
       <Hero />
       <MetricsCard />
+      <MarketPulse />
       <Radar />
       <Positions />
       <Chart />
@@ -91,7 +138,13 @@ function Hero() {
     <article className="card hero">
       <div className="card-h">
         <span className="label">Баланс · {paper ? "Paper" : "Live"}</span>
-        <Seg className="sm sp" value={period} options={PERIODS} onChange={setPeriod} label="Период" />
+        <Seg
+          className="sm sp"
+          value={period}
+          options={PERIODS}
+          onChange={setPeriod}
+          label="Период"
+        />
       </div>
       <div className="bal">
         <Tween value={balance} fmt={(v) => `$${fmtN(v)}`} />
@@ -99,25 +152,45 @@ function Hero() {
       <div className="hero-stats">
         <div>
           <span className="label">
-            Закрытые <Q tip="Прибыль и убыток по уже закрытым сделкам за выбранный период, до вычета комиссий." />
+            Закрытые{" "}
+            <Q tip="Прибыль и убыток по уже закрытым сделкам за выбранный период, до вычета комиссий." />
           </span>
-          <b className={m ? tone(m.realized) : ""}>{m ? <Tween value={m.realized} fmt={(v) => `${arrow(v)} ${usd(v)}`} /> : "—"}</b>
-          <small>{m ? `${m.n} ${plural(m.n, ["сделка", "сделки", "сделок"])}` : "—"}</small>
-        </div>
-        <div>
-          <span className="label">
-            Открытые <Q tip="Сколько вы получили бы, если закрыть открытые позиции прямо сейчас. Меняется вместе с ценой." />
-          </span>
-          <b className={tone(unreal)}>{list.length ? `${arrow(unreal)} ${usd(unreal)}` : "$0.00"}</b>
+          <b className={m ? tone(m.realized) : ""}>
+            {m ? (
+              <Tween value={m.realized} fmt={(v) => `${arrow(v)} ${usd(v)}`} />
+            ) : (
+              "—"
+            )}
+          </b>
           <small>
-            {list.length} {plural(list.length, ["позиция", "позиции", "позиций"])}
+            {m ? `${m.n} ${plural(m.n, ["сделка", "сделки", "сделок"])}` : "—"}
           </small>
         </div>
         <div>
           <span className="label">
-            Чистыми <Q tip="Закрытые сделки минус комиссии биржи. Это то, что реально осталось на счёте." />
+            Открытые{" "}
+            <Q tip="Сколько вы получили бы, если закрыть открытые позиции прямо сейчас. Меняется вместе с ценой." />
           </span>
-          <b className={m ? tone(m.net) : ""}>{m ? <Tween value={m.net} fmt={(v) => `${arrow(v)} ${usd(v)}`} /> : "—"}</b>
+          <b className={tone(unreal)}>
+            {list.length ? `${arrow(unreal)} ${usd(unreal)}` : "$0.00"}
+          </b>
+          <small>
+            {list.length}{" "}
+            {plural(list.length, ["позиция", "позиции", "позиций"])}
+          </small>
+        </div>
+        <div>
+          <span className="label">
+            Чистыми{" "}
+            <Q tip="Закрытые сделки минус комиссии биржи. Это то, что реально осталось на счёте." />
+          </span>
+          <b className={m ? tone(m.net) : ""}>
+            {m ? (
+              <Tween value={m.net} fmt={(v) => `${arrow(v)} ${usd(v)}`} />
+            ) : (
+              "—"
+            )}
+          </b>
           <small>{m ? `комиссии −$${fmtN(m.fees)}` : "—"}</small>
         </div>
       </div>
@@ -168,39 +241,87 @@ function Equity() {
   const mx = Math.max(...bs);
   const x = (i: number) => (i * (W - 8)) / (n - 1) + 4;
   const y = (v: number) => H - 8 - ((v - mn) / (mx - mn || 1)) * (H - 20);
-  const line = pts.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.b).toFixed(1)}`).join("");
+  const line = pts
+    .map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.b).toFixed(1)}`)
+    .join("");
   const area = `${line}L${x(n - 1).toFixed(1)},${H}L${x(0).toFixed(1)},${H}Z`;
   const onMove = (ev: React.PointerEvent) => {
     const r = ref.current!.getBoundingClientRect();
-    const i = Math.max(0, Math.min(n - 1, Math.round(((ev.clientX - r.left) / r.width) * (n - 1))));
+    const i = Math.max(
+      0,
+      Math.min(n - 1, Math.round(((ev.clientX - r.left) / r.width) * (n - 1))),
+    );
     const p = pts[i];
     const chg = i ? p.b - pts[i - 1].b : 0;
     setHover(i);
     showTip(
       <>
-        {p.d.toLocaleDateString("ru-RU", { weekday: "short", day: "numeric", month: "long" })}
+        {p.d.toLocaleDateString("ru-RU", {
+          weekday: "short",
+          day: "numeric",
+          month: "long",
+        })}
         <br />
-        <b>${fmtN(p.b)}</b> <b className={tone(chg)}>{`${arrow(chg)} ${usd(chg)}`}</b>
+        <b>${fmtN(p.b)}</b>{" "}
+        <b className={tone(chg)}>{`${arrow(chg)} ${usd(chg)}`}</b>
       </>,
-      { left: r.left + (x(i) / W) * r.width - 1, width: 2, top: r.top, bottom: r.top + (y(p.b) / H) * r.height },
+      {
+        left: r.left + (x(i) / W) * r.width - 1,
+        width: 2,
+        top: r.top,
+        bottom: r.top + (y(p.b) / H) * r.height,
+      },
       ref.current,
     );
   };
   return (
     <div className="eq">
-      <svg ref={ref} viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Баланс за 30 дней">
+      <svg
+        ref={ref}
+        viewBox={`0 0 ${W} ${H}`}
+        role="img"
+        aria-label="Баланс за 30 дней"
+      >
         {/* Шкала с делениями по дням — как у самописца. */}
         {pts.map((_, i) => (
-          <line key={i} className="eq-tick" x1={x(i)} x2={x(i)} y1={H - (i % 7 ? 3 : 6)} y2={H} />
+          <line
+            key={i}
+            className="eq-tick"
+            x1={x(i)}
+            x2={x(i)}
+            y1={H - (i % 7 ? 3 : 6)}
+            y2={H}
+          />
         ))}
-        <line className="eq-base" x1="4" x2={W - 4} y1={y(bs[0])} y2={y(bs[0])} />
+        <line
+          className="eq-base"
+          x1="4"
+          x2={W - 4}
+          y1={y(bs[0])}
+          y2={y(bs[0])}
+        />
         {/* style.d — чтобы кривая перетекала при обновлении (CSS-переход d; где не поддержан — просто сменится). */}
-        <path className="eq-area" d={area} style={{ d: `path("${area}")` } as React.CSSProperties} />
-        <path className="eq-line" d={line} pathLength={1} style={{ d: `path("${line}")` } as React.CSSProperties} />
+        <path
+          className="eq-area"
+          d={area}
+          style={{ d: `path("${area}")` } as React.CSSProperties}
+        />
+        <path
+          className="eq-line"
+          d={line}
+          pathLength={1}
+          style={{ d: `path("${line}")` } as React.CSSProperties}
+        />
         <circle className="eq-now" cx={x(n - 1)} cy={y(bs[n - 1])} r="3.5" />
         {hover !== null && (
           <g>
-            <line className="eq-cross" x1={x(hover)} x2={x(hover)} y1="0" y2={H} />
+            <line
+              className="eq-cross"
+              x1={x(hover)}
+              x2={x(hover)}
+              y1="0"
+              y2={H}
+            />
             <circle className="eq-hov" cx={x(hover)} cy={y(bs[hover])} r="4" />
           </g>
         )}
@@ -216,7 +337,12 @@ function Equity() {
         />
       </svg>
       <div className="eq-cap">
-        <span>{pts[0].d.toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}</span>
+        <span>
+          {pts[0].d.toLocaleDateString("ru-RU", {
+            day: "numeric",
+            month: "short",
+          })}
+        </span>
         <span>баланс за 30 дней</span>
         <span>сегодня</span>
       </div>
@@ -240,12 +366,19 @@ function MetricsCard() {
           <span>Доля прибыльных</span>
           <Q tip="Win rate — сколько сделок закрылись в плюс. 40% — нормально, если прибыльные сделки крупнее убыточных." />
         </div>
-        <div className="v">{m.win_rate === null ? "—" : <Tween value={wr * 100} fmt={(v) => `${fmtN(v, 1)}%`} />}</div>
+        <div className="v">
+          {m.win_rate === null ? (
+            "—"
+          ) : (
+            <Tween value={wr * 100} fmt={(v) => `${fmtN(v, 1)}%`} />
+          )}
+        </div>
         <div className="bar">
           <i style={{ background: "var(--up)", width: `${wr * 100}%` }} />
         </div>
         <small>
-          {Math.round(wr * m.n)} из {m.n} {plural(m.n, ["сделки", "сделок", "сделок"])}
+          {Math.round(wr * m.n)} из {m.n}{" "}
+          {plural(m.n, ["сделки", "сделок", "сделок"])}
         </small>
       </div>
       <div className="tile">
@@ -253,11 +386,21 @@ function MetricsCard() {
           <span>Profit factor</span>
           <Q tip="Сумма всех прибылей, делённая на сумму всех убытков. Больше 1 — в плюсе, меньше 1 — в минусе." />
         </div>
-        <div className={`v ${m.profit_factor === null ? "" : m.profit_factor >= 1 ? "up" : "down"}`}>
-          {m.profit_factor === null ? "—" : <Tween value={m.profit_factor} fmt={(v) => fmtN(v, 2)} />}
+        <div
+          className={`v ${m.profit_factor === null ? "" : m.profit_factor >= 1 ? "up" : "down"}`}
+        >
+          {m.profit_factor === null ? (
+            "—"
+          ) : (
+            <Tween value={m.profit_factor} fmt={(v) => fmtN(v, 2)} />
+          )}
         </div>
         <small>
-          {m.profit_factor === null ? "нет убыточных сделок" : m.profit_factor >= 1 ? "прибыли больше убытков" : "убытки больше прибылей"}
+          {m.profit_factor === null
+            ? "нет убыточных сделок"
+            : m.profit_factor >= 1
+              ? "прибыли больше убытков"
+              : "убытки больше прибылей"}
         </small>
       </div>
       <div className="tile">
@@ -266,12 +409,21 @@ function MetricsCard() {
           <Q tip="Средний размер прибыльной и убыточной сделки. Полоски показывают их соотношение." />
         </div>
         <div className="v small">
-          <span className="up">{m.avg_win === null ? "—" : `+$${fmtN(aw, 1)}`}</span> /{" "}
-          <span className="down">{m.avg_loss === null ? "—" : `−$${fmtN(al, 1)}`}</span>
+          <span className="up">
+            {m.avg_win === null ? "—" : `+$${fmtN(aw, 1)}`}
+          </span>{" "}
+          /{" "}
+          <span className="down">
+            {m.avg_loss === null ? "—" : `−$${fmtN(al, 1)}`}
+          </span>
         </div>
         <div className="bar">
-          <i style={{ background: "var(--up)", width: `${(aw / tot) * 100}%` }} />
-          <i style={{ background: "var(--down)", width: `${(al / tot) * 100}%` }} />
+          <i
+            style={{ background: "var(--up)", width: `${(aw / tot) * 100}%` }}
+          />
+          <i
+            style={{ background: "var(--down)", width: `${(al / tot) * 100}%` }}
+          />
         </div>
       </div>
       <div className="tile">
@@ -279,7 +431,13 @@ function MetricsCard() {
           <span>Риск : прибыль</span>
           <Q tip="R:R — во сколько раз средняя прибыльная сделка больше средней убыточной." />
         </div>
-        <div className="v">{m.rr === null ? "—" : <Tween value={m.rr} fmt={(v) => `1 : ${fmtN(v, 2)}`} />}</div>
+        <div className="v">
+          {m.rr === null ? (
+            "—"
+          ) : (
+            <Tween value={m.rr} fmt={(v) => `1 : ${fmtN(v, 2)}`} />
+          )}
+        </div>
         <small>прибыль на 1 $ риска</small>
       </div>
       <div className="tile">
@@ -332,7 +490,11 @@ function useFlip(ref: React.RefObject<HTMLElement>): void {
       // offsetLeft/Top не учитывают transform — замер не сбивается идущей анимацией.
       let x = 0;
       let y = 0;
-      for (let el: HTMLElement | null = c; el && el !== host; el = el.offsetParent as HTMLElement | null) {
+      for (
+        let el: HTMLElement | null = c;
+        el && el !== host;
+        el = el.offsetParent as HTMLElement | null
+      ) {
         x += el.offsetLeft;
         y += el.offsetTop;
       }
@@ -340,9 +502,22 @@ function useFlip(ref: React.RefObject<HTMLElement>): void {
       next.set(k, { x, y });
       if (rm) return;
       const a = last.current.get(k);
-      if (!a) c.animate([{ opacity: 0, transform: "scale(.6)" }, { opacity: 1, transform: "none" }], { duration: 420, easing: EASE });
+      if (!a)
+        c.animate(
+          [
+            { opacity: 0, transform: "scale(.6)" },
+            { opacity: 1, transform: "none" },
+          ],
+          { duration: 420, easing: EASE },
+        );
       else if (Math.abs(a.x - x) + Math.abs(a.y - y) > 0.5)
-        c.animate([{ transform: `translate(${a.x - x}px,${a.y - y}px)` }, { transform: "none" }], { duration: 640, easing: EASE });
+        c.animate(
+          [
+            { transform: `translate(${a.x - x}px,${a.y - y}px)` },
+            { transform: "none" },
+          ],
+          { duration: 640, easing: EASE },
+        );
     });
     last.current = next;
   });
@@ -357,7 +532,9 @@ const CYCLE_PILL: Record<string, [string, string]> = {
 };
 
 /** Что сейчас делает бот — одно слово для радара и верхней панели. */
-export function cycleKind(s: Store): "off" | "paused" | "guard" | "monitor" | "scan" {
+export function cycleKind(
+  s: Store,
+): "off" | "paused" | "guard" | "monitor" | "scan" {
   if (!s.alive || s.cycle.state === "offline") return "off";
   if (s.bot?.paused || s.cycle.state === "paused") return "paused";
   if (Object.values(s.guards).some((g) => g.active)) return "guard";
@@ -365,30 +542,67 @@ export function cycleKind(s: Store): "off" | "paused" | "guard" | "monitor" | "s
 }
 
 // Угол луча монеты на экране радара — постоянный, чтобы засветка ехала к центру по прямой.
-const bearing = (s: string): number => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
+const bearing = (s: string): number =>
+  [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
 const RING = [44, 35, 26, 17, 7]; // скан → отбор → сигнал → проверки → позиции
 
 /** Экран радара: кольца — этапы конвейера, монеты — засветки, луч крутится, пока бот сканирует. */
-function Scope(props: { lanes: string[][]; side: (s: string) => string; rejected: Set<string>; open: Position[]; on: boolean }) {
+function Scope(props: {
+  lanes: string[][];
+  side: (s: string) => string;
+  rejected: Set<string>;
+  open: Position[];
+  on: boolean;
+}) {
   const blips = [
-    ...props.lanes.flatMap((list, lane) => list.slice(0, 10).map((s) => ({ s, lane, cls: props.rejected.has(s) ? "rej" : props.side(s) }))),
-    ...props.open.map((p) => ({ s: p.symbol, lane: 4, cls: positionPnl(p).pnl >= 0 ? "win" : "loss" })),
+    ...props.lanes.flatMap((list, lane) =>
+      list
+        .slice(0, 10)
+        .map((s) => ({
+          s,
+          lane,
+          cls: props.rejected.has(s) ? "rej" : props.side(s),
+        })),
+    ),
+    ...props.open.map((p) => ({
+      s: p.symbol,
+      lane: 4,
+      cls: positionPnl(p).pnl >= 0 ? "win" : "loss",
+    })),
   ];
   return (
-    <svg className={`scope${props.on ? " on" : ""}`} viewBox="-50 -50 100 100" aria-hidden="true">
+    <svg
+      className={`scope${props.on ? " on" : ""}`}
+      viewBox="-50 -50 100 100"
+      aria-hidden="true"
+    >
       {RING.slice(0, 4).map((r) => (
         <circle key={r} className="sc-ring" r={r} />
       ))}
       <path className="sc-cross" d="M-47 0H47M0-47V47" />
       {Array.from({ length: 36 }, (_, i) => (
-        <line key={i} className="sc-deg" x1="0" y1={i % 3 ? -46 : -43} x2="0" y2="-48" style={{ transform: `rotate(${i * 10}deg)` }} />
+        <line
+          key={i}
+          className="sc-deg"
+          x1="0"
+          y1={i % 3 ? -46 : -43}
+          x2="0"
+          y2="-48"
+          style={{ transform: `rotate(${i * 10}deg)` }}
+        />
       ))}
       <g className="sc-beam">
         <path className="sc-wedge" d="M0 0L0-46A46 46 0 0 0-26.4-37.7Z" />
         <line className="sc-ray" x1="0" y1="0" x2="0" y2="-46" />
       </g>
       {blips.map((b) => (
-        <g key={b.s} className={`sc-blip ${b.cls} l${b.lane}`} style={{ transform: `rotate(${bearing(b.s)}deg) translateY(${-RING[b.lane]}px)` }}>
+        <g
+          key={b.s}
+          className={`sc-blip ${b.cls} l${b.lane}`}
+          style={{
+            transform: `rotate(${bearing(b.s)}deg) translateY(${-RING[b.lane]}px)`,
+          }}
+        >
           <circle r={b.lane >= 2 ? 2.4 : 1.7} />
         </g>
       ))}
@@ -412,7 +626,9 @@ function Radar() {
   const [, setNow] = useState(0);
 
   // Пока есть «свежие» отказы — перерисовываем, чтобы они исчезли вовремя.
-  const fresh = Object.values(radar.rejected).some((r) => Date.now() - r.at < REJECT_SHOW_MS + 600);
+  const fresh = Object.values(radar.rejected).some(
+    (r) => Date.now() - r.at < REJECT_SHOW_MS + 600,
+  );
   useEffect(() => {
     if (!fresh) return;
     const t = setInterval(() => setNow(Date.now()), 400);
@@ -424,7 +640,11 @@ function Radar() {
   // "" — обычный чип, "rej" — только что отсеян, "gone" — уже не показываем.
   const rej = (s: string, lane: number) => {
     const r = radar.rejected[s];
-    return r ? (r.lane === lane && Date.now() - r.at < REJECT_SHOW_MS ? "rej" : "gone") : "";
+    return r
+      ? r.lane === lane && Date.now() - r.at < REJECT_SHOW_MS
+        ? "rej"
+        : "gone"
+      : "";
   };
   // Монета уже ушла дальше по конвейеру — в этой колонке её не рисуем.
   const later = (s: string, from: number) =>
@@ -438,18 +658,31 @@ function Radar() {
     radar.scan.filter((s) => !later(s, 0)),
     radar.prescore.filter((s) => !later(s, 1)),
     Object.keys(radar.signal).filter((s) => !later(s, 2)),
-    [...radar.guards, ...Object.keys(radar.rejected).filter((s) => radar.rejected[s].lane === 3 && !radar.guards.includes(s))].filter(
-      (s) => !openSyms.has(s),
-    ),
+    [
+      ...radar.guards,
+      ...Object.keys(radar.rejected).filter(
+        (s) => radar.rejected[s].lane === 3 && !radar.guards.includes(s),
+      ),
+    ].filter((s) => !openSyms.has(s)),
   ].map((list, lane) => list.filter((s) => rej(s, lane) !== "gone"));
 
   useFlip(host);
   const nSlots = Math.max(Math.min(slots.max, 6), open.length);
   const [pillText, pillDot] = CYCLE_PILL[kind];
   const heads: [string, string][] = [
-    ["Скан", `${radar.scan.length} ${plural(radar.scan.length, ["монета", "монеты", "монет"])}`],
+    [
+      "Скан",
+      `${radar.scan.length} ${plural(radar.scan.length, ["монета", "монеты", "монет"])}`,
+    ],
     ["Отбор", `${radar.prescore.length} в топе`],
-    ["Сигнал", mode === "local" ? "локальные стратегии" : aiName && aiName !== "local" ? `AI: ${aiName}` : "стратегии + AI"],
+    [
+      "Сигнал",
+      mode === "local"
+        ? "локальные стратегии"
+        : aiName && aiName !== "local"
+          ? `AI: ${aiName}`
+          : "стратегии + AI",
+    ],
     ["Проверки", "риски"],
   ];
   const note =
@@ -459,7 +692,8 @@ function Radar() {
         ? "Бот на паузе: новые сделки не открываются. Стоп-лоссы и тейк-профиты открытых позиций работают на бирже."
         : kind === "monitor"
           ? `Все ${slots.max} ${plural(slots.max, ["слот", "слота", "слотов"])} заняты. Бот не ищет новые сделки и следит за открытыми.`
-          : radar.note || `Бот ищет сделки${profile ? ` среди монет профиля ${profileName(profile)}` : ""}.`;
+          : radar.note ||
+            `Бот ищет сделки${profile ? ` среди монет профиля ${profileName(profile)}` : ""}.`;
 
   return (
     <article className={`card radar ${kind === "scan" ? "scan" : "halt"}`}>
@@ -475,7 +709,13 @@ function Radar() {
         <Scope
           lanes={laneSyms}
           side={(s) => radar.signal[s]?.side ?? ""}
-          rejected={new Set(Object.keys(radar.rejected).filter((s) => rej(s, radar.rejected[s].lane) === "rej"))}
+          rejected={
+            new Set(
+              Object.keys(radar.rejected).filter(
+                (s) => rej(s, radar.rejected[s].lane) === "rej",
+              ),
+            )
+          }
           open={open}
           on={kind === "scan"}
         />
@@ -494,13 +734,24 @@ function Radar() {
               {list.slice(0, LANE_CAP).map((s) => {
                 const sig = lane >= 2 ? radar.signal[s] : undefined;
                 return (
-                  <div key={s} data-sym={s} className={`chip ${sig ? sig.side : ""} ${rej(s, lane)}`} title={radar.rejected[s]?.reason ?? sig?.reasoning}>
+                  <div
+                    key={s}
+                    data-sym={s}
+                    className={`chip ${sig ? sig.side : ""} ${rej(s, lane)}`}
+                    title={radar.rejected[s]?.reason ?? sig?.reasoning}
+                  >
                     <span>{base(s)}</span>
-                    <i>{sig ? `${sig.side === "long" ? "L" : "S"} ${sig.confidence?.toFixed(2).slice(1) ?? ""}` : ""}</i>
+                    <i>
+                      {sig
+                        ? `${sig.side === "long" ? "L" : "S"} ${sig.confidence?.toFixed(2).slice(1) ?? ""}`
+                        : ""}
+                    </i>
                   </div>
                 );
               })}
-              {list.length > LANE_CAP && <span className="more">+{list.length - LANE_CAP}</span>}
+              {list.length > LANE_CAP && (
+                <span className="more">+{list.length - LANE_CAP}</span>
+              )}
             </div>
           </div>
         ))}
@@ -523,7 +774,10 @@ function Radar() {
               const { pnl } = positionPnl(p);
               return (
                 <div className="slot full" key={p.symbol}>
-                  <div data-sym={p.symbol} className={`chip ${pnl >= 0 ? "win" : "loss"}`}>
+                  <div
+                    data-sym={p.symbol}
+                    className={`chip ${pnl >= 0 ? "win" : "loss"}`}
+                  >
                     <span>{base(p.symbol)}</span>
                     <i>{arrow(pnl)}</i>
                   </div>
@@ -553,17 +807,24 @@ function Positions() {
 
   // Закрытая позиция ещё 1.15 с «уходит» с подсветкой результата.
   useEffect(() => {
-    const gone = Object.values(prev.current).filter((p) => !positions[p.symbol]);
+    const gone = Object.values(prev.current).filter(
+      (p) => !positions[p.symbol],
+    );
     prev.current = positions;
     if (!gone.length) return;
     const items = gone.map((p) => ({ p, pnl: positionPnl(p).pnl }));
     setLeaving((l) => [...l, ...items]);
-    setTimeout(() => setLeaving((l) => l.filter((x) => !items.includes(x))), reducedMotion() ? 0 : 1150);
+    setTimeout(
+      () => setLeaving((l) => l.filter((x) => !items.includes(x))),
+      reducedMotion() ? 0 : 1150,
+    );
   }, [positions]);
 
   // Карточки при первом показе появляются без анимации, новые — со вспышкой.
   if (seen.current === null) seen.current = new Set(list.map((p) => p.symbol));
-  const fresh = new Set(list.map((p) => p.symbol).filter((s) => !seen.current!.has(s)));
+  const fresh = new Set(
+    list.map((p) => p.symbol).filter((s) => !seen.current!.has(s)),
+  );
   useEffect(() => {
     seen.current = new Set(Object.keys(positions));
   }, [positions]);
@@ -579,7 +840,11 @@ function Positions() {
           <PositionCard key={p.symbol} p={p} enter={fresh.has(p.symbol)} />
         ))}
         {leaving.map(({ p, pnl }) => (
-          <article key={`out-${p.symbol}-${p.trade_id}`} className={`pos leaving ${pnl >= 0 ? "win" : "loss"}`} aria-hidden="true">
+          <article
+            key={`out-${p.symbol}-${p.trade_id}`}
+            className={`pos leaving ${pnl >= 0 ? "win" : "loss"}`}
+            aria-hidden="true"
+          >
             <div className="pos-h">
               <span className="coin">{base(p.symbol)}</span>
               <div className="pos-t">
@@ -588,25 +853,42 @@ function Positions() {
               </div>
               <div className="pos-pnl">
                 <b className={tone(pnl)}>{`${arrow(pnl)} ${usd(pnl)}`}</b>
-                <span className={`burst ${tone(pnl)}`}>{`${arrow(pnl)} ${usd(pnl)}`}</span>
+                <span
+                  className={`burst ${tone(pnl)}`}
+                >{`${arrow(pnl)} ${usd(pnl)}`}</span>
               </div>
             </div>
           </article>
         ))}
-        {!list.length && !leaving.length && <p className="empty">Открытых позиций нет. Бот ищет сделки — следите за радаром.</p>}
+        {!list.length && !leaving.length && (
+          <p className="empty">
+            Открытых позиций нет. Бот ищет сделки — следите за радаром.
+          </p>
+        )}
       </div>
     </article>
   );
 }
 
 const progOf = (p: Position, v: number) =>
-  Math.max(0, Math.min(1, p.side === "long" ? (v - p.sl) / (p.tp - p.sl) : (p.sl - v) / (p.sl - p.tp)));
+  Math.max(
+    0,
+    Math.min(
+      1,
+      p.side === "long"
+        ? (v - p.sl) / (p.tp - p.sl)
+        : (p.sl - v) / (p.sl - p.tp),
+    ),
+  );
 
-const inView = (r: DOMRect): boolean => r.bottom > 0 && r.top < innerHeight && r.width > 0;
+const inView = (r: DOMRect): boolean =>
+  r.bottom > 0 && r.top < innerHeight && r.width > 0;
 
 /** Путь сделки: засветка вылетает из слота «Позиции» на радаре и садится в значок новой карточки. */
 function flyFromRadar(symbol: string, card: HTMLElement | null): void {
-  const from = document.querySelector(`.lane-pos [data-sym="${CSS.escape(symbol)}"]`);
+  const from = document.querySelector(
+    `.lane-pos [data-sym="${CSS.escape(symbol)}"]`,
+  );
   const to = card?.querySelector<HTMLElement>(".coin");
   if (!from || !to || reducedMotion()) return;
   const a = from.getBoundingClientRect();
@@ -622,7 +904,11 @@ function flyFromRadar(symbol: string, card: HTMLElement | null): void {
   const lift = -Math.min(80, Math.abs(dx) * 0.25 + 30);
   dot
     .animate(
-      [{ transform: "translate(0,0)" }, { transform: `translate(${dx / 2}px,${dy / 2 + lift}px)` }, { transform: `translate(${dx}px,${dy}px)` }],
+      [
+        { transform: "translate(0,0)" },
+        { transform: `translate(${dx / 2}px,${dy / 2 + lift}px)` },
+        { transform: `translate(${dx}px,${dy}px)` },
+      ],
       { duration: 700, easing: "cubic-bezier(.3,.7,.1,1)" },
     )
     .finished.then(() => {
@@ -657,7 +943,10 @@ function PositionCard({ p, enter }: { p: Position; enter: boolean }) {
   // Частичное закрытие: всплывает зафиксированная часть P&L.
   useEffect(() => {
     if (p.qty < prevQty.current) {
-      const part = (cur - p.entry) * (prevQty.current - p.qty) * (p.side === "long" ? 1 : -1);
+      const part =
+        (cur - p.entry) *
+        (prevQty.current - p.qty) *
+        (p.side === "long" ? 1 : -1);
       setBurst({ k: Date.now(), pnl: part });
     }
     prevQty.current = p.qty;
@@ -692,31 +981,48 @@ function PositionCard({ p, enter }: { p: Position; enter: boolean }) {
   };
 
   return (
-    <article ref={self} className={`pos ${pnl >= 0 ? "win" : "loss"} ${enter ? "enter" : ""}`}>
+    <article
+      ref={self}
+      className={`pos ${pnl >= 0 ? "win" : "loss"} ${enter ? "enter" : ""}`}
+    >
       <div className="pos-h">
         <span className="coin">{base(p.symbol)}</span>
         <div className="pos-t">
           <b>
             {p.symbol}
-            <span className={`side ${p.side}`}>{p.side === "long" ? "LONG" : "SHORT"}</span>
+            <span className={`side ${p.side}`}>
+              {p.side === "long" ? "LONG" : "SHORT"}
+            </span>
           </b>
           <small>
-            {p.strategy ? `${stratName(p.strategy)}${p.confidence ? ` · уверенность ${p.confidence.toFixed(2)}` : ""}` : `сделка #${p.trade_id ?? "—"}`}
+            {p.strategy
+              ? `${stratName(p.strategy)}${p.confidence ? ` · уверенность ${p.confidence.toFixed(2)}` : ""}`
+              : `сделка #${p.trade_id ?? "—"}`}
           </small>
         </div>
-        {p.confidence ? <Gauge value={p.confidence} label="Уверенность сигнала" /> : null}
+        {p.confidence ? (
+          <Gauge value={p.confidence} label="Уверенность сигнала" />
+        ) : null}
         <div className="pos-pnl">
           <b className={`num ${tone(pnl)}`}>{`${arrow(pnl)} ${usd(pnl)}`}</b>
           <small>{pct(move)}</small>
           {burst && (
-            <span key={burst.k} className={`burst ${tone(burst.pnl)}`} onAnimationEnd={() => setBurst(null)}>
+            <span
+              key={burst.k}
+              className={`burst ${tone(burst.pnl)}`}
+              onAnimationEnd={() => setBurst(null)}
+            >
               {`${arrow(burst.pnl)} ${usd(burst.pnl)}`}
             </span>
           )}
         </div>
       </div>
       {p.reasoning && (
-        <p className={`pos-why ${whyOpen ? "open" : ""}`} title={p.reasoning} onClick={() => setWhyOpen(!whyOpen)}>
+        <p
+          className={`pos-why ${whyOpen ? "open" : ""}`}
+          title={p.reasoning}
+          onClick={() => setWhyOpen(!whyOpen)}
+        >
           <em>Почему открыта:</em> {p.reasoning}
         </p>
       )}
@@ -727,7 +1033,11 @@ function PositionCard({ p, enter }: { p: Position; enter: boolean }) {
         <div className="track">
           <i
             className="fill"
-            style={{ left: `${Math.min(e, mk)}%`, width: `${Math.abs(mk - e)}%`, background: pnl >= 0 ? "var(--up)" : "var(--down)" }}
+            style={{
+              left: `${Math.min(e, mk)}%`,
+              width: `${Math.abs(mk - e)}%`,
+              background: pnl >= 0 ? "var(--up)" : "var(--down)",
+            }}
           />
           <i className="entry" style={{ left: `${e}%` }} />
           <i className="mark" style={{ left: `${mk}%` }} />
@@ -756,7 +1066,13 @@ function PositionCard({ p, enter }: { p: Position; enter: boolean }) {
         >
           {closeArmed ? "Точно?" : "Закрыть"}
         </button>
-        <button className="btn" type="button" aria-pressed={editing} disabled={!can} onClick={() => setEditing(!editing)}>
+        <button
+          className="btn"
+          type="button"
+          aria-pressed={editing}
+          disabled={!can}
+          onClick={() => setEditing(!editing)}
+        >
           SL / TP
         </button>
         <button
@@ -765,11 +1081,20 @@ function PositionCard({ p, enter }: { p: Position; enter: boolean }) {
           aria-pressed={p.trailing !== false}
           disabled={!can}
           title="Стоп-лосс подтягивается за ценой. Выключите, чтобы стоп стоял на месте."
-          onClick={() => void run(() => actions.updatePosition(p, { trailing: p.trailing === false }))}
+          onClick={() =>
+            void run(() =>
+              actions.updatePosition(p, { trailing: p.trailing === false }),
+            )
+          }
         >
           Трейлинг
         </button>
-        <button className="btn" type="button" disabled={!can} onClick={() => void run(() => actions.closePosition(p, 0.5))}>
+        <button
+          className="btn"
+          type="button"
+          disabled={!can}
+          onClick={() => void run(() => actions.closePosition(p, 0.5))}
+        >
           Закрыть 50%
         </button>
       </div>
@@ -777,11 +1102,22 @@ function PositionCard({ p, enter }: { p: Position; enter: boolean }) {
         <form className="edit" noValidate onSubmit={onSave}>
           <label>
             Стоп-лосс
-            <input className="inp" name="sl" inputMode="decimal" defaultValue={p.sl.toFixed(priceDecimals(p.sl))} autoFocus />
+            <input
+              className="inp"
+              name="sl"
+              inputMode="decimal"
+              defaultValue={p.sl.toFixed(priceDecimals(p.sl))}
+              autoFocus
+            />
           </label>
           <label>
             Тейк-профит
-            <input className="inp" name="tp" inputMode="decimal" defaultValue={p.tp.toFixed(priceDecimals(p.tp))} />
+            <input
+              className="inp"
+              name="tp"
+              inputMode="decimal"
+              defaultValue={p.tp.toFixed(priceDecimals(p.tp))}
+            />
           </label>
           <button className="btn primary" type="submit" disabled={busy}>
             Сохранить
@@ -799,10 +1135,16 @@ const TZ = -new Date().getTimezoneOffset() * 60; // lightweight-charts рису�
 const BAR = 900;
 
 /** Цвет токена темы: библиотеке графиков нужен готовый hex, а не var(). */
-const tok = (name: string): string => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const tok = (name: string): string =>
+  getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
 /** Уровень плавно доезжает до новой цены (трейлинг подтянул стоп) — без рывка. */
-function glide(line: IPriceLine, from: number, to: number, onStep: (v: number) => void): () => void {
+function glide(
+  line: IPriceLine,
+  from: number,
+  to: number,
+  onStep: (v: number) => void,
+): () => void {
   if (from === to || reducedMotion()) {
     line.applyOptions({ price: to });
     onStep(to);
@@ -827,9 +1169,17 @@ function Chart() {
   const [sel, setSel] = useState<string>(syms[0] ?? "BTC/USDT");
   const sym = positions[sel] || !syms.length ? sel : syms[0];
   const box = useRef<HTMLDivElement>(null);
-  const chart = useRef<{ c: IChartApi; s: ISeriesApi<"Candlestick">; fill: ISeriesApi<"Baseline"> } | null>(null);
+  const chart = useRef<{
+    c: IChartApi;
+    s: ISeriesApi<"Candlestick">;
+    fill: ISeriesApi<"Baseline">;
+  } | null>(null);
   const bars = useRef<Candle[]>([]);
-  const lines = useRef<{ sl: IPriceLine; tp: IPriceLine; entry: IPriceLine } | null>(null);
+  const lines = useRef<{
+    sl: IPriceLine;
+    tp: IPriceLine;
+    entry: IPriceLine;
+  } | null>(null);
   const shown = useRef({ sl: 0, tp: 0 });
   const [empty, setEmpty] = useState(false);
   const pos = positions[sym];
@@ -852,18 +1202,36 @@ function Chart() {
       bottomFillColor2: bottom,
     });
     // Только время жизни позиции: до открытия заливать нечего. Нет даты — нет заливки.
-    const from = p.opened_at ? Math.floor(p.opened_at / BAR) * BAR + TZ : Infinity;
-    ch.fill.setData(bars.current.filter((b) => b.time >= from).map((b) => ({ time: b.time as UTCTimestamp, value: b.close })));
+    const from = p.opened_at
+      ? Math.floor(p.opened_at / BAR) * BAR + TZ
+      : Infinity;
+    ch.fill.setData(
+      bars.current
+        .filter((b) => b.time >= from)
+        .map((b) => ({ time: b.time as UTCTimestamp, value: b.close })),
+    );
   };
 
   useEffect(() => {
     if (!box.current) return;
     const c = createChart(box.current, {
       autoSize: true,
-      layout: { background: { color: tok("--panel") }, textColor: tok("--ink-2"), fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontSize: 11 },
-      grid: { vertLines: { color: tok("--line-soft") }, horzLines: { color: tok("--line-soft") } },
+      layout: {
+        background: { color: tok("--panel") },
+        textColor: tok("--ink-2"),
+        fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+        fontSize: 11,
+      },
+      grid: {
+        vertLines: { color: tok("--line-soft") },
+        horzLines: { color: tok("--line-soft") },
+      },
       rightPriceScale: { borderColor: tok("--line") },
-      timeScale: { borderColor: tok("--line"), timeVisible: true, secondsVisible: false },
+      timeScale: {
+        borderColor: tok("--line"),
+        timeVisible: true,
+        secondsVisible: false,
+      },
       crosshair: { mode: 0 },
       localization: { priceFormatter: price, locale: "ru-RU" },
     });
@@ -877,7 +1245,13 @@ function Chart() {
       crosshairMarkerVisible: false,
     });
     const [up, down] = [tok("--up"), tok("--down")];
-    const s = c.addCandlestickSeries({ upColor: up, downColor: down, borderVisible: false, wickUpColor: up, wickDownColor: down });
+    const s = c.addCandlestickSeries({
+      upColor: up,
+      downColor: down,
+      borderVisible: false,
+      wickUpColor: up,
+      wickDownColor: down,
+    });
     chart.current = { c, s, fill };
     return () => {
       c.remove();
@@ -889,11 +1263,16 @@ function Chart() {
   useEffect(() => {
     let stale = false;
     bars.current = [];
-    void api<Candle[]>("GET", `/api/candles?symbol=${encodeURIComponent(sym)}&tf=15m&limit=200`)
+    void api<Candle[]>(
+      "GET",
+      `/api/candles?symbol=${encodeURIComponent(sym)}&tf=15m&limit=200`,
+    )
       .then((data) => {
         if (stale || !chart.current) return;
         bars.current = data.map((b) => ({ ...b, time: b.time + TZ }));
-        chart.current.s.setData(bars.current.map((b) => ({ ...b, time: b.time as UTCTimestamp })));
+        chart.current.s.setData(
+          bars.current.map((b) => ({ ...b, time: b.time as UTCTimestamp })),
+        );
         paintFill();
         chart.current.c.timeScale().fitContent();
         setEmpty(!data.length);
@@ -915,9 +1294,15 @@ function Chart() {
     if (t > last.time) {
       last = { time: t, open: last.close, high: live, low: live, close: live };
       all.push(last);
-    } else Object.assign(last, { close: live, high: Math.max(last.high, live), low: Math.min(last.low, live) });
+    } else
+      Object.assign(last, {
+        close: live,
+        high: Math.max(last.high, live),
+        low: Math.min(last.low, live),
+      });
     ch.s.update({ ...last, time: last.time as UTCTimestamp });
-    if (posRef.current?.opened_at) ch.fill.update({ time: last.time as UTCTimestamp, value: live });
+    if (posRef.current?.opened_at)
+      ch.fill.update({ time: last.time as UTCTimestamp, value: live });
   }, [live]);
 
   // Уровни позиции: SL, TP и вход — заново при смене монеты или позиции.
@@ -926,14 +1311,26 @@ function Chart() {
     const ch = chart.current;
     if (!ch) return;
     const old = lines.current;
-    if (old) [old.sl, old.tp, old.entry].forEach((l) => ch.s.removePriceLine(l));
+    if (old)
+      [old.sl, old.tp, old.entry].forEach((l) => ch.s.removePriceLine(l));
     lines.current = null;
     paintFill();
     const p = posRef.current;
     if (!p) return;
     const line = (v: number, color: string, title: string, dashed: boolean) =>
-      ch.s.createPriceLine({ price: v, color, lineWidth: 1, lineStyle: dashed ? 2 : 0, axisLabelVisible: title !== "вход", title });
-    lines.current = { sl: line(p.sl, tok("--down"), "SL", true), tp: line(p.tp, tok("--up"), "TP", true), entry: line(p.entry, tok("--brand"), "вход", false) };
+      ch.s.createPriceLine({
+        price: v,
+        color,
+        lineWidth: 1,
+        lineStyle: dashed ? 2 : 0,
+        axisLabelVisible: title !== "вход",
+        title,
+      });
+    lines.current = {
+      sl: line(p.sl, tok("--down"), "SL", true),
+      tp: line(p.tp, tok("--up"), "TP", true),
+      entry: line(p.entry, tok("--brand"), "вход", false),
+    };
     shown.current = { sl: p.sl, tp: p.tp };
   }, [sym, has, pos?.entry, pos?.side]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -941,8 +1338,18 @@ function Chart() {
   useEffect(() => {
     const l = lines.current;
     if (!l || !pos) return;
-    const stopSl = glide(l.sl, shown.current.sl, pos.sl, (v) => (shown.current.sl = v));
-    const stopTp = glide(l.tp, shown.current.tp, pos.tp, (v) => (shown.current.tp = v));
+    const stopSl = glide(
+      l.sl,
+      shown.current.sl,
+      pos.sl,
+      (v) => (shown.current.sl = v),
+    );
+    const stopTp = glide(
+      l.tp,
+      shown.current.tp,
+      pos.tp,
+      (v) => (shown.current.tp = v),
+    );
     return () => {
       stopSl();
       stopTp();
@@ -954,7 +1361,13 @@ function Chart() {
     <article className="card chart">
       <div className="card-h">
         <h2>График</h2>
-        <Seg className="sm" value={sym} options={tabs.map((s) => [s, base(s)] as const)} onChange={setSel} label="Монета" />
+        <Seg
+          className="sm"
+          value={sym}
+          options={tabs.map((s) => [s, base(s)] as const)}
+          onChange={setSel}
+          label="Монета"
+        />
         <div className="legend sp">
           <span>
             <i style={{ borderColor: "var(--down)" }} />
@@ -965,14 +1378,21 @@ function Chart() {
             TP
           </span>
           <span>
-            <i style={{ borderColor: "var(--brand)", borderTopStyle: "solid" }} />
+            <i
+              style={{ borderColor: "var(--brand)", borderTopStyle: "solid" }}
+            />
             вход
           </span>
         </div>
       </div>
       <div className="chart-wrap">
         <div ref={box} style={{ position: "absolute", inset: 0 }} />
-        {empty && <div className="fallback">Нет сохранённых свечей {base(sym)} — бот ещё не загружал историю по этой монете.</div>}
+        {empty && (
+          <div className="fallback">
+            Нет сохранённых свечей {base(sym)} — бот ещё не загружал историю по
+            этой монете.
+          </div>
+        )}
       </div>
     </article>
   );
@@ -995,7 +1415,10 @@ function Feed() {
       <ul aria-live="polite">
         {feed.map((f) => (
           // Реакция на исход — только у свежих записей, не при каждом открытии вкладки.
-          <li key={f.id} className={`ev ev-${f.kind}${Date.now() - f.at < 2000 ? " fresh" : ""}`}>
+          <li
+            key={f.id}
+            className={`ev ev-${f.kind}${Date.now() - f.at < 2000 ? " fresh" : ""}`}
+          >
             <time>{hhmm(new Date(f.at))}</time>
             <span className="dot" />
             <p>{f.text}</p>
@@ -1026,7 +1449,12 @@ function Calendar() {
     return Array.from({ length: 35 }, (_, i) => {
       const d = new Date(start);
       d.setDate(start.getDate() + i);
-      return { d, row: byDate.get(isoDay(d)), future: d > today, today: +d === +today };
+      return {
+        d,
+        row: byDate.get(isoDay(d)),
+        future: d > today,
+        today: +d === +today,
+      };
     });
   }, [daily]);
   const peak = Math.max(1, ...days.map((x) => Math.abs(x.row?.net ?? 0)));
@@ -1035,11 +1463,18 @@ function Calendar() {
     if (future) return;
     showTip(
       <>
-        {d.toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" })}
+        {d.toLocaleDateString("ru-RU", {
+          weekday: "long",
+          day: "numeric",
+          month: "long",
+        })}
         <br />
         {row?.trades ? (
           <>
-            <b className={tone(row.net)}>{`${arrow(row.net)} ${usd(row.net)}`}</b> чистыми · {row.trades}{" "}
+            <b
+              className={tone(row.net)}
+            >{`${arrow(row.net)} ${usd(row.net)}`}</b>{" "}
+            чистыми · {row.trades}{" "}
             {plural(row.trades, ["сделка", "сделки", "сделок"])}
           </>
         ) : (
@@ -1050,7 +1485,8 @@ function Calendar() {
       el,
     );
   };
-  const fmtD = (d: Date) => d.toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
+  const fmtD = (d: Date) =>
+    d.toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
   return (
     <article className="card cal">
       <div className="card-h">
@@ -1077,8 +1513,20 @@ function Calendar() {
               role="img"
               tabIndex={future ? -1 : 0}
               className={`cell${future ? " future" : ""}${today ? " today" : ""}${has && net < 0 ? " loss" : ""}`}
-              style={has ? { backgroundColor: `color-mix(in oklab, var(${net >= 0 ? "--up" : "--down"}) ${mix}%, var(--cell0))` } : undefined}
-              aria-label={future ? `${d.getDate()}: впереди` : has ? `${d.getDate()}: ${usd(net)}` : `${d.getDate()}: сделок не было`}
+              style={
+                has
+                  ? {
+                      backgroundColor: `color-mix(in oklab, var(${net >= 0 ? "--up" : "--down"}) ${mix}%, var(--cell0))`,
+                    }
+                  : undefined
+              }
+              aria-label={
+                future
+                  ? `${d.getDate()}: впереди`
+                  : has
+                    ? `${d.getDate()}: ${usd(net)}`
+                    : `${d.getDate()}: сделок не было`
+              }
               onPointerOver={(e) => show(e.currentTarget, i)}
               onFocus={(e) => show(e.currentTarget, i)}
             >

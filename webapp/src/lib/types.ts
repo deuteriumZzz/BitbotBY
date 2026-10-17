@@ -38,7 +38,35 @@ export interface BotState {
   balance: number;
   slots: { used: number; max: number };
   positions: Position[];
+  /** Сезон рынка и индекс Страха/Жадности; null, пока бот их не загрузил. */
+  market?: { season: Season | null; fear_greed: FearGreed | null };
   timestamp: string;
+}
+
+export interface Season {
+  /** altcoin — альтсезон, bluechip — сезон BTC, null — нейтрально. */
+  signal: "altcoin" | "bluechip" | null;
+  altcoin_index: number | null;
+  btc_dominance: number | null;
+  btc_30d: number | null;
+  checked_at: number;
+}
+
+export interface FearGreed {
+  value: number;
+  label: string;
+}
+
+/** Профиль рынка во вкладке «Обучение»: у каждого своя модель, таймфрейм и число монет. */
+export interface ProfileInfo {
+  id: string;
+  label: string;
+  timeframe: string;
+  train_top_n: number;
+  model_path: string;
+  model_exists: boolean;
+  trained_at: string | null;
+  active: boolean;
 }
 
 export interface Metrics {
@@ -125,6 +153,9 @@ export interface JobsStatus {
   running: Record<string, string>;
   progress: Partial<Record<"backtest" | "train" | "tune", Record<string, unknown> | null>>;
   rollback_available: boolean;
+  profiles: ProfileInfo[];
+  /** Чью модель вернёт откат (последнее обучение). */
+  backup_profile: string | null;
 }
 
 /** Запись журнала изменений настроек (`GET /api/config/history`). */

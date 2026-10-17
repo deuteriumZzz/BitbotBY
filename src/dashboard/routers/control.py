@@ -83,6 +83,14 @@ def _redis_str(r: Any, key: str) -> Optional[str]:
         return None
 
 
+def _redis_json(r: Any, key: str) -> Optional[Dict[str, Any]]:
+    try:
+        val = json.loads(_redis_str(r, key) or "null")
+    except ValueError:
+        return None
+    return val if isinstance(val, dict) else None
+
+
 def build_state() -> Dict[str, Any]:
     portfolio = data.redis_get(data.portfolio_key()) or {}
     r = data.get_redis()
@@ -99,6 +107,10 @@ def build_state() -> Dict[str, Any]:
             "mode": _redis_str(r, "bot:mode") or Config.MODE,
             "profile": _redis_str(r, "bot:market_profile"),
             "ai": _redis_str(r, "bot:last_ai_provider"),
+        },
+        "market": {
+            "season": _redis_json(r, "bot:season_index"),
+            "fear_greed": _redis_json(r, "bot:fear_greed"),
         },
         "balance": portfolio.get("balance", Config.INITIAL_BALANCE),
         "slots": {"used": len(positions), "max": max_pos},
@@ -311,7 +323,10 @@ async def cmd_job(job: str, request: Request) -> JSONResponse:
     """Фоновая задача из меню Telegram (список — background_jobs.JOBS)."""
     if job not in background_jobs.JOBS:
         return _err(404, "unknown_job", "Такой задачи нет.")
-    return await _command(request, "run_job", {"job": job})
+    body = await _body(request)
+    return await _command(
+        request, "run_job", {"job": job, "profile": str(body.get("profile", ""))}
+    )
 
 
 @router.get("/api/jobs")

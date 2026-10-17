@@ -31,6 +31,8 @@ class FakeRC:
         self.locks, self.calls = {}, []
         self.backup = ""
         self.model = "models/sac.zip"
+        self.models = {}
+        self.backup_profile = ""
 
     def try_start_job(self, group, source, ttl):
         if group in self.locks:
@@ -52,11 +54,23 @@ class FakeRC:
     def get_sac_backup_path(self):
         return self.backup
 
-    def set_sac_backup_path(self, p):
-        self.backup = p
+    def set_sac_backup_path(self, p, profile=""):
+        self.backup, self.backup_profile = p, profile
+
+    def get_sac_backup_profile(self):
+        return self.backup_profile
 
     def get_sac_model_path(self):
         return self.model
+
+    def get_sac_model_path_for_profile(self, profile):
+        return self.models.get(profile, self.model)
+
+    def profile_ids(self):
+        return ["bluechip", "altcoin", "meme"]
+
+    def get_training_profiles(self):
+        return [{"id": "altcoin"}]
 
     def get_market_profile(self):
         return "altcoin"
@@ -202,6 +216,29 @@ async def test_rollback(monkeypatch, tmp_path):
     assert await cmds.rollback_model({}) == {"rolled_back": True}
     assert model.read_text() == "old"
     assert "model.rolled_back" in _types(r)
+
+
+async def test_train_other_profile_and_rollback_restores_that_model(
+    monkeypatch, tmp_path
+):
+    monkeypatch.chdir(tmp_path)
+    meme = tmp_path / "meme.zip"
+    meme.write_text("new")
+    old = tmp_path / "old.zip"
+    old.write_text("old")
+    result = {"sac_pct": 30.0, "bh_pct": 10.0, "backup": str(old)}
+    proc = FakeProc(["TRAIN_RESULT:" + json.dumps(result)])
+    cmds, bot, r, rc, seen = _setup(monkeypatch, [proc])
+    rc.models = {"meme": str(meme)}
+    bad = await cmds.run_job({"job": "train", "profile": "nope"})
+    assert bad["error"]["code"] == "unknown_profile"
+    await cmds.run_job({"job": "train", "profile": "meme"})
+    await cmds._jobs._tasks["sac"]
+    env = seen[0][1]["env"]
+    assert env["SAC_PROFILE"] == "meme" and env["SAC_MODEL_PATH"] == str(meme)
+    assert rc.backup_profile == "meme"
+    assert await cmds.rollback_model({}) == {"rolled_back": True}
+    assert meme.read_text() == "old"  # а не модель активного профиля
 
 
 def test_status_reports_rollback_and_running(tmp_path):
