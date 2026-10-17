@@ -126,6 +126,28 @@ def test_get_closed_trades_reads_paper_db(tmp_path, monkeypatch):
     assert [r["symbol"] for r in rows] == ["SOL/USDT"]
 
 
+async def test_journal_reads_trades_with_reasons(tmp_path, monkeypatch, client):
+    from src.trade_history import TradeHistory
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data").mkdir()
+    th = TradeHistory(db_path=str(tmp_path / "data" / "trades_paper.db"))
+    tid = await th.record_open(
+        "SOL/USDT", "breakout", "sell", 100.0, 1.0, 0.7, 0.1, reasoning="Пробой вниз"
+    )
+    await th.record_close(tid, exit_price=90.0, commission=0.1, reason="tp")
+    await th.record_open("ETH/USDT", "breakout", "buy", 10.0, 1.0, 0.6, 0.0)
+    with patch.object(data, "paper_mode", return_value=True):
+        (row,) = data.get_journal()
+        resp = client.get("/api/journal?period=all")
+        bad = client.get("/api/journal?period=year")
+    assert row["symbol"] == "SOL/USDT" and row["side"] == "short"
+    assert (row["reason"], row["reasoning"]) == ("tp", "Пробой вниз")
+    assert row["pnl"] == pytest.approx(9.8) and row["fees"] == pytest.approx(0.2)
+    assert resp.status_code == 200 and resp.json()["trades"] == [row]
+    assert bad.status_code == 400
+
+
 def test_portfolio_key_follows_mode():
     with patch.object(data, "paper_mode", return_value=True):
         assert data.portfolio_key() == "portfolio_state_paper"

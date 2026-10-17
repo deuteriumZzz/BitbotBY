@@ -230,6 +230,52 @@ def get_closed_trades(since: Optional[datetime] = None) -> List[dict]:
         return []
 
 
+def get_journal(since: Optional[datetime] = None, limit: int = 1000) -> List[dict]:
+    """Журнал закрытых сделок — свежие сверху.
+
+    `SELECT *`: база могла ещё не получить колонки reasoning/exit_reason
+    (их добавляет бот при старте) — тогда поля просто пустые.
+    """
+    path = db_path()
+    if not os.path.exists(path):
+        return []
+    sql = "SELECT * FROM trades WHERE status='closed' AND pnl IS NOT NULL"
+    params: list = []
+    if since is not None:
+        sql += " AND exit_time >= ?"
+        params.append(since.isoformat())
+    params.append(limit)
+    try:
+        conn = sqlite3.connect(path)
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(sql + " ORDER BY exit_time DESC LIMIT ?", params)
+        out = [dict(r) for r in rows.fetchall()]
+        conn.close()
+    except Exception as e:
+        logger.error("Journal query error: %s", e)
+        return []
+    return [
+        {
+            "id": r["id"],
+            "symbol": r["symbol"],
+            "side": "long" if r["action"] == "buy" else "short",
+            "strategy": r["strategy"],
+            "confidence": r["confidence"],
+            "entry": r["entry_price"],
+            "exit": r["exit_price"],
+            "qty": r["quantity"],
+            "pnl": r["pnl"],  # уже за вычетом комиссий
+            "pnl_pct": r["pnl_pct"],  # от маржи
+            "fees": r["commission"],
+            "opened": r["entry_time"],
+            "closed": r["exit_time"],
+            "reason": r.get("exit_reason") or "",
+            "reasoning": r.get("reasoning") or "",
+        }
+        for r in out
+    ]
+
+
 SHARPE_MIN_TRADES = 50
 
 

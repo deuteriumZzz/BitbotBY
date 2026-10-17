@@ -9,6 +9,7 @@ import type {
   Candle,
   ConfigValues,
   DailyRow,
+  JournalTrade,
   Metrics,
   PendingSignal,
   Position,
@@ -155,7 +156,7 @@ const lists = { forced: ["SOL/USDT"], excluded: ["PUMP/USDT"] };
 const bot = { paused: false, paper: true, mode: "ai", profile: "altcoin" as string | null };
 let balance = 10_000;
 let tradeSeq = 1000;
-type Live = Position & { price: number };
+type Live = Position & { price: number; opened?: number };
 const positions: Record<string, Live> = {};
 const pending: Record<string, PendingSignal> = {};
 const results: Record<string, unknown> = {};
@@ -164,17 +165,51 @@ interface Closed {
   exit: number; // мс
   net: number;
   fees: number;
+  j: JournalTrade;
 }
 const closed: Closed[] = [];
+
+function journalRow(p: Position, exitPrice: number, qty: number, net: number, fees: number, exit: number, opened: number, reason: string): Closed {
+  const j: JournalTrade = {
+    id: Number(p.trade_id),
+    symbol: p.symbol,
+    side: p.side,
+    strategy: p.strategy ?? "ema_crossover",
+    confidence: p.confidence ?? 0.6,
+    entry: p.entry,
+    exit: exitPrice,
+    qty,
+    pnl: net,
+    pnl_pct: net / (p.entry * qty),
+    fees,
+    opened: new Date(opened).toISOString(),
+    closed: new Date(exit).toISOString(),
+    reason,
+    reasoning: p.reasoning ?? "",
+  };
+  return { exit, net, fees, j };
+}
+
 // 35 дней истории: 1–5 сделок в день, слабый плюс — как у честного paper-бота.
 {
   const now = Date.now();
+  const at = <T,>(a: readonly T[]): T => a[Math.floor(seeded() * a.length)];
   for (let day = 35; day >= 1; day--) {
     const n = 1 + Math.floor(seeded() * 5);
     for (let i = 0; i < n; i++) {
       const size = 20 + seeded() * 120;
-      const net = seeded() < 0.47 ? size * 1.6 : -size;
-      closed.push({ exit: now - day * 86_400_000 + i * 3_600_000, net, fees: 1 + seeded() * 3 });
+      const win = seeded() < 0.47;
+      const net = win ? size * 1.6 : -size;
+      const fees = 1 + seeded() * 3;
+      const symbol = at(SYMBOLS);
+      const side: Side = seeded() < 0.6 ? "long" : "short";
+      const entry = PRICES[symbol] * (0.95 + seeded() * 0.1);
+      const qty = (400 + seeded() * 1600) / entry;
+      const exitPrice = entry + ((side === "long" ? 1 : -1) * (net + fees)) / qty;
+      const exit = now - day * 86_400_000 + i * 3_600_000;
+      const p = { trade_id: -closed.length - 1, symbol, side, entry, strategy: at(strategies.slice(0, 6)).name, reasoning: at(WHY) };
+      const reason = win ? at(["tp", "tp", "trail"]) : at(["sl", "sl", "signal_reversal SELL conf=0.71", "hard_drawdown"]);
+      closed.push(journalRow(p as Position, exitPrice, qty, net, fees, exit, exit - (20 + seeded() * 600) * 60_000, reason));
       balance += net;
     }
   }
@@ -207,6 +242,7 @@ function open(symbol: string, side: Side, why: Partial<Position> = {}): Live {
     tp: price + dir * dist * 2,
     price,
     trailing: true,
+    opened: Date.now(),
     strategy: "ema_crossover",
     confidence: 0.68,
     reasoning: WHY[id % WHY.length],
@@ -230,7 +266,7 @@ function closePos(symbol: string, fraction = 1, reason = "manual_app"): void {
   const fees = p.price * qty * 0.0011;
   const net = (p.price - p.entry) * qty * dir - fees;
   balance += net;
-  closed.push({ exit: Date.now(), net, fees });
+  closed.push(journalRow(p, p.price, qty, net, fees, Date.now(), p.opened ?? Date.now(), reason));
   if (fraction >= 1) {
     delete positions[symbol];
     emit("position.closed", { symbol, reason, price: p.price });
@@ -583,6 +619,12 @@ function route(method: string, path: string, body: unknown): unknown {
       return state().positions;
     case "GET /api/metrics":
       return metrics(q.get("period") ?? "30d");
+    case "GET /api/journal": {
+      const period = q.get("period") ?? "30d";
+      const since = PERIOD_MS[period] ? Date.now() - PERIOD_MS[period] : 0;
+      const trades = closed.filter((c) => c.exit >= since).map((c) => c.j);
+      return { period, limit: 1000, trades: trades.reverse().slice(0, 1000) };
+    }
     case "GET /api/pnl/daily":
       return daily(Number(q.get("days") ?? 35));
     case "GET /api/strategies":

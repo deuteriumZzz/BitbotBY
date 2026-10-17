@@ -111,6 +111,7 @@
 | `GET /api/metrics?period=24h\|7d\|30d\|all` | `{realized, fees, net, n, win_rate, profit_factor, avg_win, avg_loss, rr, max_drawdown, sharpe\|null}`; `sharpe = null` при n < 50 |
 | `GET /api/metrics/execution` | `{latency_ms_avg, slippage_plan, slippage_fact, fees_30d}` |
 | `GET /api/pnl/daily?days=35` | `[{date, net, gross, fees, trades}]` |
+| `GET /api/journal?period=24h\|7d\|30d\|all` | `{period, limit, trades: [{id, symbol, side, strategy, confidence, entry, exit, qty, pnl, pnl_pct, fees, opened, closed, reason, reasoning}]}` — свежие сверху, не больше `limit` |
 | `GET /api/candles?symbol&tf&limit` | Свечи из кэша `DataLoader` |
 | `GET /api/strategies` | `[{name, enabled, kill_switch, backtest:{win_rate, trades, sharpe}, live:{win_rate, ev, trades}}]` |
 | `GET /api/jobs/{id}` | `{type, status, pct, text, result?}` |
@@ -159,7 +160,7 @@
 |---|---|---|
 | `state` | Полный снимок как `GET /api/state` — при подключении и после переподключения | дашборд |
 | `tick` | `{symbol, price}`, не чаще 1/с на монету: открытые позиции + выбранная на графике | `position_monitor` |
-| `position.opened` / `.updated` / `.closed` | позиция; у `closed` — `{reason: tp\|sl\|trail\|manual\|panic\|guard, pnl, fee}` | `order_executor`, `position_monitor` |
+| `position.opened` / `.updated` / `.closed` | позиция; у `opened` — `strategy, confidence, reasoning`; у `closed` — `{reason, price}`, reason: `tp\|sl\|trail\|manual_app\|telegram_closeall\|emergency\|hard_drawdown\|atr_spike` или текст динамического выхода (`signal_reversal …`) | `order_executor`, `position_monitor` |
 | `radar.stage` | `{symbol, stage: scan\|prescore\|signal\|context\|guards\|open\|rejected, reason?, strategy?, side?, confidence?}` | `cycle.py`, `order_executor` |
 | `cycle` | `{state: scan\|monitor\|paused\|hours\|guard\|offline, detail}` | `trading_bot` |
 | `guard` | `{kind: drawdown_halt\|atr_spike\|macro\|circuit_breaker\|daily_limit, active, detail}` | `trading_bot`, `risk_management` |

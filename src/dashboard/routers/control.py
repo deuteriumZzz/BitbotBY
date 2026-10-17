@@ -136,6 +136,18 @@ async def get_metrics(period: str = "30d") -> JSONResponse:
     return JSONResponse({"period": period, **data.compute_metrics(trades, start)})
 
 
+JOURNAL_LIMIT = 1000
+
+
+@router.get("/api/journal")
+async def get_journal(period: str = "30d") -> JSONResponse:
+    if period not in PERIODS:
+        return _err(400, "bad_period", "Период — один из: 24h, 7d, 30d, all.")
+    delta = PERIODS[period]
+    trades = data.get_journal(datetime.now() - delta if delta else None, JOURNAL_LIMIT)
+    return JSONResponse({"period": period, "limit": JOURNAL_LIMIT, "trades": trades})
+
+
 @router.get("/api/pnl/daily")
 async def get_pnl_daily(days: int = 35) -> JSONResponse:
     days = max(1, min(days, 366))

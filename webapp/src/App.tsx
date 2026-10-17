@@ -7,6 +7,7 @@ import { base, fmtN, plural, price, usd } from "./lib/format";
 import * as platform from "./lib/platform";
 import type { Tab } from "./lib/types";
 import { Bots, profileName, stratName } from "./features/bots";
+import { Journal } from "./features/journal";
 import { Settings } from "./features/settings";
 import { Terminal, cycleKind } from "./features/terminal";
 import { GUARD_TEXT, actions, useStore } from "./store";
@@ -36,6 +37,7 @@ export function App() {
       <main className="views" ref={views} onScroll={hideTip}>
         {tab === "terminal" && <Terminal />}
         {tab === "bots" && <Bots />}
+        {tab === "journal" && <Journal />}
         {tab === "settings" && <Settings />}
       </main>
       <Nav />
@@ -204,6 +206,7 @@ function Banners() {
 const TABS: [Tab, string, JSX.Element][] = [
   ["terminal", "Терминал", Icon.terminal],
   ["bots", "Боты", Icon.bots],
+  ["journal", "Журнал", Icon.journal],
   ["settings", "Настройки", Icon.settings],
 ];
 

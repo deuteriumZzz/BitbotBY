@@ -2,7 +2,7 @@
 
 export type Side = "long" | "short";
 export type Period = "24h" | "7d" | "30d" | "all";
-export type Tab = "terminal" | "bots" | "settings";
+export type Tab = "terminal" | "bots" | "journal" | "settings";
 
 export interface Position {
   id: string;
@@ -119,6 +119,34 @@ export interface SecretItem {
   status: "ok" | "warn" | "bad" | "unset" | "unchecked";
   message: string;
   checked_at: number | null;
+}
+
+/** Закрытая сделка из журнала (`GET /api/journal`). */
+export interface JournalTrade {
+  id: number;
+  symbol: string;
+  side: Side;
+  strategy: string;
+  confidence: number;
+  entry: number;
+  exit: number;
+  qty: number;
+  /** Чистый результат — уже за вычетом комиссий. */
+  pnl: number;
+  /** Доля от маржи. */
+  pnl_pct: number;
+  fees: number;
+  opened: string;
+  closed: string;
+  /** Код причины выхода: tp, sl, trail, manual_app, … */
+  reason: string;
+  reasoning: string;
+}
+
+export interface Journal {
+  period: Period;
+  limit: number;
+  trades: JournalTrade[];
 }
 
 export interface PendingSignal {

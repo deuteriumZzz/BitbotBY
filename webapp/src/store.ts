@@ -12,9 +12,10 @@ import type {
   ConfigValues,
   DailyRow,
   Guard,
+  Journal,
   Metrics,
-  Period,
   PendingSignal,
+  Period,
   Position,
   SecretItem,
   SettingDef,
@@ -91,6 +92,7 @@ export interface Store {
   secrets: SecretItem[] | null;
   secretsNote: string;
   ai: AiState | null;
+  journal: Journal | null;
   tab: Tab;
   toast: { id: number; text: string } | null;
 
@@ -111,6 +113,7 @@ export interface Store {
   loadSymbols(): Promise<void>;
   loadSecrets(): Promise<void>;
   loadAi(): Promise<void>;
+  loadJournal(p: Period): Promise<void>;
 
   requestCode(): Promise<boolean>;
   verifyCode(code: string): Promise<boolean>;
@@ -138,6 +141,8 @@ export const useStore = create<Store>((set, get) => {
       void get().loadState().catch(() => undefined);
       void get().loadMetrics().catch(() => undefined);
       void get().loadDaily().catch(() => undefined);
+      const j = get().journal;
+      if (j) void get().loadJournal(j.period).catch(() => undefined);
     }, 800);
   };
 
@@ -186,6 +191,7 @@ export const useStore = create<Store>((set, get) => {
     secrets: null,
     secretsNote: "",
     ai: null,
+    journal: null,
     tab: "terminal",
     toast: null,
 
@@ -420,6 +426,9 @@ export const useStore = create<Store>((set, get) => {
       const period = p ?? get().period;
       const m = await api<Metrics>("GET", `/api/metrics?period=${period}`);
       set((s) => ({ metrics: { ...s.metrics, [period]: m } }));
+    },
+    async loadJournal(period) {
+      set({ journal: await api<Journal>("GET", `/api/journal?period=${period}`) });
     },
     async loadDaily() {
       set({ daily: await api<DailyRow[]>("GET", "/api/pnl/daily?days=35") });
