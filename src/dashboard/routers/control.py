@@ -416,9 +416,8 @@ async def patch_config(request: Request) -> JSONResponse:
     if r is None:
         return _err(503, "bot_unreachable", "Нет связи с ботом: Redis недоступен.")
     rc = _runtime_config(r)
-    values, errors = registry.validate_patch(
-        Config, body, registry.current_values(Config, rc, r)
-    )
+    before = registry.current_values(Config, rc, r)
+    values, errors = registry.validate_patch(Config, body, before)
     if errors:
         return JSONResponse(
             {
@@ -431,8 +430,21 @@ async def patch_config(request: Request) -> JSONResponse:
             status_code=422,
         )
     result = registry.apply_patch(rc, r, values)
+    registry.record_history(r, before, values)
     bot_bus.emit(r, "config.changed", {"keys": sorted(values)})
     return JSONResponse(result)
+
+
+@router.get("/api/config/history")
+async def config_history(request: Request, limit: int = 50) -> JSONResponse:
+    """Что и когда меняли из приложения (свежие сверху)."""
+    denied = _control_denied(request)
+    if denied is not None:
+        return denied
+    r = data.get_redis()
+    if r is None:
+        return _err(503, "bot_unreachable", "Нет связи с ботом: Redis недоступен.")
+    return JSONResponse(registry.load_history(r, max(1, min(limit, 200))))
 
 
 # ── Быстрые настройки бота (RuntimeConfig в Redis, бот читает каждый цикл) ────

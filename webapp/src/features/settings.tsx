@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
+import { api } from "../lib/api";
 import { fmtN, plural } from "../lib/format";
-import type { SecretItem, SettingDef } from "../lib/types";
+import type { ConfigHistoryItem, ConfigValues, SecretItem, SettingDef } from "../lib/types";
 import { actions, useStore, type PatchResult } from "../store";
 import { Icon, Q, Seg, Toggle, useArm } from "../ui";
 import { AiPane } from "./ai";
@@ -13,6 +14,11 @@ type Pane = "main" | "ai" | "conn" | "all";
 
 export function Settings() {
   const [pane, setPane] = useState<Pane>("main");
+  const jump = useStore((s) => s.paramSearch);
+  // Cmd/Ctrl+K: сразу в «Параметры» с курсором в поиске.
+  useEffect(() => {
+    if (jump !== null) setPane("all");
+  }, [jump]);
   return (
     <section className="view enter" aria-label="Настройки">
       <Seg
@@ -723,7 +729,14 @@ const SOURCE: Record<string, string> = {
 function AllParams() {
   const schema = useStore((s) => s.schema);
   const config = useStore((s) => s.config);
-  const [q, setQ] = useState("");
+  const jump = useStore((s) => s.paramSearch);
+  const [q, setQ] = useState(jump ?? "");
+  useEffect(() => {
+    if (jump === null) return;
+    setQ(jump);
+    useStore.getState().clearParamSearch();
+    setTimeout(() => document.getElementById("param-search")?.focus(), 60);
+  }, [jump]);
   const [pending, setPending] = useState<Record<string, unknown>>({});
   const [bad, setBad] = useState<Record<string, string>>({});
   const [restartKeys, setRestartKeys] = useState<string[]>([]);
@@ -794,7 +807,7 @@ function AllParams() {
   return (
     <div className="set-pane view enter">
       <div className="cfg-top">
-        <input className="inp" type="search" placeholder="Поиск: плечо, стоп, RISK_PER_TRADE…" aria-label="Поиск параметра" autoComplete="off" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input id="param-search" className="inp" type="search" placeholder="Поиск: плечо, стоп, RISK_PER_TRADE…  (Ctrl/⌘ K)" aria-label="Поиск параметра" autoComplete="off" value={q} onChange={(e) => setQ(e.target.value)} />
         <span className="label">{needle ? `найдено ${found}` : `${found} из ${schema.length}`}</span>
       </div>
       <div className="row-tgl">
@@ -831,12 +844,16 @@ function AllParams() {
                 {changed > 0 && <span className="chgb">изменено {changed}</span>}
               </summary>
               {rows.map((d) => (
-                <ParamRow key={d.key} d={d} value={d.key in pending ? pending[d.key] : config[d.key]?.value} source={config[d.key]?.source ?? "default"} changed={d.key in pending} err={bad[d.key]} onChange={(v) => change(d, v)} />
+                <ParamRow key={d.key} d={d} value={d.key in pending ? pending[d.key] : config[d.key]?.value} source={config[d.key]?.source ?? "default"} changed={d.key in pending} err={bad[d.key]} onChange={(v) => change(d, v)} onReset={() => change(d, rawOf(d, d.default))} />
               ))}
             </details>
           );
         })}
       </div>
+      <SettingsTools schema={schema} config={config} onImport={(v) => Object.entries(v).forEach(([k, x]) => {
+        const d = schema.find((s) => s.key === k);
+        if (d && !d.readonly) change(d, rawOf(d, x));
+      })} />
       {(nPending > 0 || nBad > 0) && (
         <div className="applybar">
           <span>
@@ -881,7 +898,13 @@ function AllParams() {
   );
 }
 
-function ParamRow(props: { d: SettingDef; value: unknown; source: string; changed: boolean; err?: string; onChange: (v: unknown) => void }) {
+/** Значение в том виде, в каком поле его показывает (проценты — в %, а не долей). */
+const rawOf = (d: SettingDef, v: unknown): unknown => (d.type === "pct" && typeof v === "number" ? +(v * 100).toFixed(6) : v);
+
+const sameVal = (a: unknown, b: unknown): boolean =>
+  typeof a === "number" && typeof b === "number" ? Math.abs(a - b) < 1e-9 : a === b;
+
+function ParamRow(props: { d: SettingDef; value: unknown; source: string; changed: boolean; err?: string; onChange: (v: unknown) => void; onReset: () => void }) {
   const { d, value } = props;
   const id = `c-${d.key}`;
   let control: JSX.Element;
@@ -916,6 +939,11 @@ function ParamRow(props: { d: SettingDef; value: unknown; source: string; change
       <div className="prm-c">
         {d.readonly ? <span className="tag rst">только .env</span> : <span className={`tag ${d.hot ? "hot" : "rst"}`}>{d.hot ? "сразу" : "перезапуск"}</span>}
         {control}
+        {!d.readonly && !sameVal(value, d.default) && (
+          <button className="btn reset" type="button" title={`Вернуть по умолчанию: ${fmtVal(d, d.default)}`} aria-label={`${d.label}: вернуть по умолчанию`} onClick={props.onReset}>
+            ↺
+          </button>
+        )}
       </div>
       {props.err && <p className="err">{props.err}</p>}
     </div>
@@ -945,5 +973,94 @@ function NumField({ id, d, value, disabled, onChange }: { id: string; d: Setting
       />
       <span className="u">{unitOf(d)}</span>
     </div>
+  );
+}
+
+// ── Журнал изменений, копирование и вставка набора настроек ─────────────────────
+
+const when = (ts: number): string =>
+  new Date(ts * 1000).toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+
+function SettingsTools({ schema, config, onImport }: { schema: SettingDef[]; config: ConfigValues; onImport: (v: Record<string, unknown>) => void }) {
+  const say = useStore((s) => s.say);
+  const [hist, setHist] = useState<ConfigHistoryItem[] | null>(null);
+  const [paste, setPaste] = useState<string | null>(null);
+  const [err, setErr] = useState("");
+  const val = (d: SettingDef, v: unknown): string => (v === null || v === undefined ? "—" : fmtVal(d, v));
+
+  const loadHistory = () => void api<ConfigHistoryItem[]>("GET", "/api/config/history").then(setHist).catch(() => setHist([]));
+  // Набор — только то, что вы поменяли: значения по умолчанию и «только .env» не копируются.
+  const mine = () =>
+    Object.fromEntries(schema.filter((d) => !d.readonly && config[d.key] && !sameVal(config[d.key].value, d.default)).map((d) => [d.key, config[d.key].value]));
+  const copy = async () => {
+    const text = JSON.stringify(mine(), null, 2);
+    try {
+      await navigator.clipboard.writeText(text);
+      say(`Скопировано настроек: ${Object.keys(mine()).length}`);
+    } catch {
+      setPaste(text);
+      say("Не удалось скопировать — набор показан ниже, скопируйте вручную.");
+    }
+  };
+  const doImport = () => {
+    try {
+      const v = JSON.parse(paste ?? "");
+      if (!v || typeof v !== "object" || Array.isArray(v)) throw new Error();
+      const known = Object.keys(v).filter((k) => schema.some((d) => d.key === k && !d.readonly));
+      onImport(Object.fromEntries(known.map((k) => [k, v[k]])));
+      setErr("");
+      setPaste(null);
+      say(`Загружено в форму: ${known.length}. Проверьте и нажмите «Применить».`);
+    } catch {
+      setErr("Это не набор настроек: вставьте JSON, скопированный из приложения.");
+    }
+  };
+
+  return (
+    <article className="card">
+      <div className="card-h">
+        <h2>Набор настроек и журнал</h2>
+      </div>
+      <div className="btn-row">
+        <button className="btn" type="button" onClick={() => void copy()}>
+          Скопировать мои настройки
+        </button>
+        <button className="btn" type="button" onClick={() => setPaste(paste === null ? "" : null)}>
+          Вставить набор…
+        </button>
+        <button className="btn" type="button" aria-expanded={hist !== null} onClick={() => (hist ? setHist(null) : loadHistory())}>
+          {hist ? "Скрыть журнал" : "Что менялось"}
+        </button>
+      </div>
+      {paste !== null && (
+        <div className="paste">
+          <textarea className="inp" rows={6} spellCheck={false} aria-label="Набор настроек (JSON)" value={paste} onChange={(e) => setPaste(e.target.value)} />
+          {err && <p className="err">{err}</p>}
+          <button className="btn primary" type="button" disabled={!paste.trim()} onClick={doImport}>
+            Загрузить в форму
+          </button>
+        </div>
+      )}
+      {hist && (
+        <ul className="hist">
+          {hist.length === 0 && <li className="empty">Из приложения пока ничего не меняли.</li>}
+          {hist.map((h) => (
+            <li key={h.ts}>
+              <time>{when(h.ts)}</time>
+              <div>
+                {h.changes.map((c) => {
+                  const d = schema.find((s) => s.key === c.key);
+                  return (
+                    <p key={c.key}>
+                      <b>{c.label}</b>: {d ? val(d, c.old) : String(c.old)} → {d ? val(d, c.new) : String(c.new)}
+                    </p>
+                  );
+                })}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </article>
   );
 }

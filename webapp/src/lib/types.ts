@@ -94,6 +94,13 @@ export interface SettingDef {
 
 export type ConfigValues = Record<string, { value: unknown; source: string }>;
 
+/** Запись журнала изменений настроек (`GET /api/config/history`). */
+export interface ConfigHistoryItem {
+  ts: number;
+  by: string;
+  changes: { key: string; label: string; old: unknown; new: unknown }[];
+}
+
 export interface Alert {
   kind: string;
   label: string;

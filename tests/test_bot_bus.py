@@ -52,6 +52,14 @@ class FakeRedis:
     def lpush(self, key, value):
         self.lists.setdefault(key, []).insert(0, value)
 
+    def ltrim(self, key, start, stop):
+        items = self.lists.get(key) or []
+        self.lists[key] = items[start : stop + 1]
+
+    def lrange(self, key, start, stop):
+        items = self.lists.get(key) or []
+        return items[start : (None if stop == -1 else stop + 1)]
+
     def brpop(self, key, timeout=0):
         items = self.lists.get(key) or []
         return (key, items.pop()) if items else None

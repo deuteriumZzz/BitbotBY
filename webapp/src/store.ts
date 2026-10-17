@@ -99,11 +99,16 @@ export interface Store {
   /** Открытый шаг мастера первого запуска; null — мастер закрыт. */
   setup: SetupStep | null;
   tab: Tab;
+  /** Поиск параметра по Cmd/Ctrl+K: null — не запрошен, строка — что подставить. */
+  paramSearch: string | null;
   toast: { id: number; text: string } | null;
 
   boot(): Promise<void>;
   setTab(tab: Tab): void;
   openSetup(step: SetupStep | null): void;
+  /** Открыть «Настройки → Параметры» с фокусом в поиске. */
+  searchParams(q?: string): void;
+  clearParamSearch(): void;
   setPeriod(p: Period): void;
   say(text: string): void;
   apply(e: BotEvent): void;
@@ -201,6 +206,7 @@ export const useStore = create<Store>((set, get) => {
     journal: null,
     setupInfo: null,
     setup: null,
+    paramSearch: null,
     tab: "terminal",
     toast: null,
 
@@ -258,6 +264,8 @@ export const useStore = create<Store>((set, get) => {
 
     setTab: (tab) => set({ tab, setup: null }),
     openSetup: (setup) => set({ setup }),
+    searchParams: (q = "") => set({ tab: "settings", setup: null, paramSearch: q }),
+    clearParamSearch: () => set({ paramSearch: null }),
     setPeriod(period) {
       set({ period });
       if (!get().metrics[period]) void get().loadMetrics(period).catch(() => undefined);

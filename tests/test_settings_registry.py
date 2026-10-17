@@ -159,3 +159,16 @@ def test_patch_config_rejects_invalid(keyed):
         resp = keyed.patch("/api/config", json={"MAX_POSITIONS": 99}, headers=H)
     assert resp.status_code == 422
     assert "MAX_POSITIONS" in resp.json()["error"]["fields"]
+
+
+def test_changes_are_logged_with_old_and_new_value(keyed):
+    r = FakeRedis()
+    with patch.object(data, "get_redis", return_value=r):
+        keyed.patch("/api/config", json={"ATR_SPIKE_MULT": 4.0}, headers=H)
+        keyed.patch("/api/config", json={"ATR_SPIKE_MULT": 4.0}, headers=H)  # то же
+        hist = keyed.get("/api/config/history", headers=H).json()
+    assert len(hist) == 1  # повтор того же значения в журнал не попадает
+    (change,) = hist[0]["changes"]
+    assert change["key"] == "ATR_SPIKE_MULT" and change["new"] == 4.0
+    assert change["old"] != 4.0 and hist[0]["by"] == "app"
+    assert change["label"]

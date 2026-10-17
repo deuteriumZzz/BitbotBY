@@ -20,6 +20,7 @@ import dataclasses
 import json
 import logging
 import os
+import time
 from dataclasses import asdict, dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -1211,6 +1212,50 @@ def validate_patch(
     except ValueError as e:
         errors["_config"] = str(e)
     return values, errors
+
+
+HISTORY_KEY = "bot:config_history"
+HISTORY_MAX = 200
+
+
+def record_history(
+    r: Any, before: Dict[str, Dict[str, Any]], values: Dict[str, Any], by: str = "app"
+) -> None:
+    """Пишет в журнал, что и на что изменили из приложения.
+
+    Значения настроек — не секреты (ключи API лежат отдельно и сюда не попадают).
+    """
+    changes = [
+        {
+            "key": k,
+            "label": BY_KEY[k].label,
+            "old": before.get(k, {}).get("value"),
+            "new": v,
+        }
+        for k, v in values.items()
+        if k in BY_KEY and before.get(k, {}).get("value") != v
+    ]
+    if not changes:
+        return
+    try:
+        r.lpush(
+            HISTORY_KEY,
+            json.dumps({"ts": time.time(), "by": by, "changes": changes}),
+        )
+        r.ltrim(HISTORY_KEY, 0, HISTORY_MAX - 1)
+    except Exception:
+        logger.warning("config history not recorded", exc_info=True)
+
+
+def load_history(r: Any, limit: int = 50) -> List[Dict[str, Any]]:
+    """Последние изменения настроек, свежие сверху."""
+    out: List[Dict[str, Any]] = []
+    for raw in r.lrange(HISTORY_KEY, 0, max(0, limit - 1)) or []:
+        try:
+            out.append(json.loads(raw))
+        except ValueError:
+            continue
+    return out
 
 
 def apply_patch(rc: Any, r: Any, values: Dict[str, Any]) -> Dict[str, List[str]]:

@@ -537,6 +537,8 @@ const err = (code: string, message: string) => ({ ok: false, error: { code, mess
 const findPos = (tradeId: string) => Object.values(positions).find((p) => String(p.trade_id) === tradeId);
 const NUMERIC = ["int", "float", "pct"];
 
+const configHistory: { ts: number; by: string; changes: { key: string; label: string; old: unknown; new: unknown }[] }[] = [];
+
 function patchConfig(changes: Body) {
   const fields: Record<string, string> = {};
   for (const [key, raw] of Object.entries(changes)) {
@@ -550,11 +552,15 @@ function patchConfig(changes: Body) {
   }
   if (Object.keys(fields).length) fail(400, "invalid", "Проверьте значения.", fields);
   const out = { applied_hot: [] as string[], pending_restart: [] as string[], failed: {} };
+  const did: { key: string; label: string; old: unknown; new: unknown }[] = [];
   for (const [key, value] of Object.entries(changes)) {
     const def = schema.find((s) => s.key === key)!;
+    const next = NUMERIC.includes(def.type) ? Number(value) : value;
+    if (config[key]?.value !== next) did.push({ key, label: def.label, old: config[key]?.value, new: next });
     config[key] = { value: NUMERIC.includes(def.type) ? Number(value) : value, source: def.hot ? "live" : "ui" };
     (def.hot ? out.applied_hot : out.pending_restart).push(key);
   }
+  if (did.length) configHistory.unshift({ ts: Date.now() / 1000, by: "app", changes: did });
   if (typeof changes.MODE === "string") bot.mode = changes.MODE;
   if (typeof changes.AI_PROVIDER === "string") {
     ai.pinned = changes.AI_PROVIDER;
@@ -637,6 +643,8 @@ function route(method: string, path: string, body: unknown): unknown {
       return schema;
     case "GET /api/config":
       return config;
+    case "GET /api/config/history":
+      return configHistory;
     case "GET /api/secrets":
       return secrets;
     case "GET /api/setup": {
