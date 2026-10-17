@@ -23,7 +23,15 @@ export interface Position {
 }
 
 export interface BotState {
-  bot: { alive: boolean; paused: boolean; paper: boolean; mode: string; profile: string | null };
+  bot: {
+    alive: boolean;
+    paused: boolean;
+    paper: boolean;
+    mode: string;
+    profile: string | null;
+    /** Провайдер AI, который ответил последним. */
+    ai?: string | null;
+  };
   balance: number;
   slots: { used: number; max: number };
   positions: Position[];
@@ -73,6 +81,8 @@ export interface SettingDef {
   hint: string;
   readonly: boolean;
   hot: boolean;
+  /** Видно в «Все параметры» без «Показать расширенные». */
+  basic: boolean;
 }
 
 export type ConfigValues = Record<string, { value: unknown; source: string }>;
@@ -150,4 +160,56 @@ export interface CommandResult {
   ok: boolean;
   error?: { code: string; message: string };
   [k: string]: unknown;
+}
+
+// ── AI-провайдеры (GET /api/ai) ───────────────────────────────────────────────
+
+export type AiMode = "free" | "auto" | "paid";
+
+export interface AiModel {
+  id: string;
+  free: boolean;
+  strong: boolean;
+  recommended: boolean;
+}
+
+export interface AiProvider {
+  id: string;
+  name: string;
+  note: string;
+  signup: string;
+  free_tier: boolean;
+  key_optional: boolean;
+  url_label: string;
+  key_set: boolean;
+  url_ok: boolean;
+  usable: boolean;
+  keyless_on: boolean;
+  disabled: boolean;
+  model: string;
+  model_source: "app" | "env" | "catalog";
+  free: boolean;
+  strong: boolean;
+  models: AiModel[];
+  verified: string;
+  status: string;
+  cooldown_until: number | null;
+  calls_today: number;
+  tokens_today: number;
+}
+
+export interface AiState {
+  mode: AiMode;
+  pinned: string;
+  last: string;
+  providers: AiProvider[];
+  chain: { provider: string; model: string }[];
+}
+
+export interface AiChainChanges {
+  mode?: AiMode;
+  order?: string[];
+  disabled?: string[];
+  keyless?: string[];
+  models?: Record<string, string>;
 }

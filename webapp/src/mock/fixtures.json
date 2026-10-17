@@ -22,7 +22,8 @@
    ],
    "hint": "Спот — только покупки. Фьючерсы — лонг и шорт с плечом.",
    "readonly": false,
-   "hot": true
+   "hot": true,
+   "basic": true
   },
   {
    "key": "TIMEFRAME",
@@ -66,7 +67,8 @@
    ],
    "hint": "Профиль рынка при переключении ставит своё значение.",
    "readonly": false,
-   "hot": true
+   "hot": true,
+   "basic": true
   },
   {
    "key": "TRADING_INTERVAL",
@@ -81,7 +83,8 @@
    "options": [],
    "hint": "Пауза между циклами. Меньше — быстрее реакция, но больше AI-запросов.",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "SCAN_TOP_N",
@@ -96,7 +99,8 @@
    "options": [],
    "hint": "Топ монет по объёму за 24 часа.",
    "readonly": false,
-   "hot": true
+   "hot": true,
+   "basic": true
   },
   {
    "key": "TRADING_SYMBOL",
@@ -111,7 +115,8 @@
    "options": [],
    "hint": "Используется, когда сканер не нашёл кандидатов.",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "TRADING_HOURS",
@@ -126,7 +131,8 @@
    "options": [],
    "hint": "Например 8-22. Пусто — круглосуточно.",
    "readonly": false,
-   "hot": true
+   "hot": true,
+   "basic": true
   },
   {
    "key": "AUTO_EXECUTE",
@@ -141,7 +147,8 @@
    "options": [],
    "hint": "",
    "readonly": false,
-   "hot": true
+   "hot": true,
+   "basic": true
   },
   {
    "key": "TELEGRAM_CONFIRM_TIMEOUT",
@@ -156,7 +163,8 @@
    "options": [],
    "hint": "0 — ждать ответа без ограничения.",
    "readonly": false,
-   "hot": true
+   "hot": true,
+   "basic": true
   },
   {
    "key": "INITIAL_BALANCE",
@@ -171,7 +179,8 @@
    "options": [],
    "hint": "",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": true
   },
   {
    "key": "COMMISSION_RATE",
@@ -186,7 +195,8 @@
    "options": [],
    "hint": "Для бэктеста и paper-торговли.",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "RISK_PER_TRADE",
@@ -201,7 +211,8 @@
    "options": [],
    "hint": "Сколько баланса бот готов потерять, если сработает стоп.",
    "readonly": false,
-   "hot": true
+   "hot": true,
+   "basic": true
   },
   {
    "key": "MAX_POSITIONS",
@@ -216,7 +227,8 @@
    "options": [],
    "hint": "В Paper можно до 15 — статистика копится быстрее.",
    "readonly": false,
-   "hot": true
+   "hot": true,
+   "basic": true
   },
   {
    "key": "MAX_POSITION_SIZE",
@@ -231,7 +243,8 @@
    "options": [],
    "hint": "Доля баланса в одной позиции.",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "STOP_LOSS_PERCENT",
@@ -246,7 +259,8 @@
    "options": [],
    "hint": "Профиль рынка может задать свой.",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": true
   },
   {
    "key": "MAX_PORTFOLIO_EXPOSURE",
@@ -261,7 +275,8 @@
    "options": [],
    "hint": "0 — без ограничения.",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "DAILY_LOSS_LIMIT",
@@ -276,7 +291,8 @@
    "options": [],
    "hint": "При превышении бот закрывает всё и ждёт новых суток UTC.",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": true
   },
   {
    "key": "CIRCUIT_BREAKER_LOSSES",
@@ -291,7 +307,8 @@
    "options": [],
    "hint": "0 — выключено.",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "SYMBOL_COOLDOWN_HOURS",
@@ -306,7 +323,8 @@
    "options": [],
    "hint": "",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "MAX_DRAWDOWN_PERCENT",
@@ -321,7 +339,8 @@
    "options": [],
    "hint": "От пика баланса. Бот закрывает всё и встаёт на паузу.",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": true
   },
   {
    "key": "DRAWDOWN_HALT_HOURS",
@@ -336,7 +355,8 @@
    "options": [],
    "hint": "",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "DRAWDOWN_CONFIRM_CYCLES",
@@ -351,7 +371,8 @@
    "options": [],
    "hint": "Защита от ложного срабатывания на резком проколе цены.",
    "readonly": false,
-   "hot": true
+   "hot": true,
+   "basic": false
   },
   {
    "key": "ATR_SPIKE_MULT",
@@ -366,7 +387,8 @@
    "options": [],
    "hint": "Если волатильность выросла во столько раз — закрыть всё и пауза 1 ч.",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "ATR_SPIKE_LOOKBACK",
@@ -381,7 +403,8 @@
    "options": [],
    "hint": "",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "DRAWDOWN_SCALE_ENABLED",
@@ -396,7 +419,8 @@
    "options": [],
    "hint": "",
    "readonly": false,
-   "hot": true
+   "hot": true,
+   "basic": true
   },
   {
    "key": "DRAWDOWN_SCALE_THRESHOLD",
@@ -411,7 +435,8 @@
    "options": [],
    "hint": "",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "DRAWDOWN_SCALE_FACTOR",
@@ -426,7 +451,8 @@
    "options": [],
    "hint": "0.5 — сделки вдвое меньше обычных.",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "MACRO_BLACKOUT_ENABLED",
@@ -441,7 +467,8 @@
    "options": [],
    "hint": "Не входить за 30 мин до и после FOMC, CPI, NFP. Нужен ключ Finnhub.",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": true
   },
   {
    "key": "LEVERAGE_MODE",
@@ -469,7 +496,8 @@
    ],
    "hint": "",
    "readonly": false,
-   "hot": true
+   "hot": true,
+   "basic": true
   },
   {
    "key": "LEVERAGE",
@@ -484,7 +512,8 @@
    "options": [],
    "hint": "",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "LEVERAGE_MIN",
@@ -499,7 +528,8 @@
    "options": [],
    "hint": "",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "LEVERAGE_MAX",
@@ -514,7 +544,8 @@
    "options": [],
    "hint": "",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": true
   },
   {
    "key": "LEVERAGE_TARGET_RISK",
@@ -529,7 +560,8 @@
    "options": [],
    "hint": "По нему подбирается плечо в режимах «По волатильности» и «Макс».",
    "readonly": false,
-   "hot": true
+   "hot": true,
+   "basic": false
   },
   {
    "key": "LEVERAGE_DD_THRESHOLD",
@@ -544,7 +576,8 @@
    "options": [],
    "hint": "В режиме «Макс» плечо падает до 30% от расчётного. Отдельно от предельной просадки.",
    "readonly": false,
-   "hot": true
+   "hot": true,
+   "basic": false
   },
   {
    "key": "TRAILING_STOP_ATR_MULT",
@@ -559,7 +592,8 @@
    "options": [],
    "hint": "",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": true
   },
   {
    "key": "PARTIAL_TP_ENABLED",
@@ -574,7 +608,8 @@
    "options": [],
    "hint": "",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": true
   },
   {
    "key": "PARTIAL_TP_TRIGGER",
@@ -589,7 +624,8 @@
    "options": [],
    "hint": "Какую часть пути до тейк-профита должна пройти цена.",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "PARTIAL_TP_FRACTION",
@@ -604,7 +640,8 @@
    "options": [],
    "hint": "",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "MIN_SIGNAL_CONFIDENCE",
@@ -619,7 +656,8 @@
    "options": [],
    "hint": "",
    "readonly": false,
-   "hot": true
+   "hot": true,
+   "basic": true
   },
   {
    "key": "MIN_SIGNAL_CONFIDENCE_PAPER",
@@ -634,7 +672,8 @@
    "options": [],
    "hint": "Ниже, чем в Live, чтобы быстрее копить сделки для обучения.",
    "readonly": false,
-   "hot": true
+   "hot": true,
+   "basic": true
   },
   {
    "key": "MAX_CORRELATION",
@@ -649,7 +688,8 @@
    "options": [],
    "hint": "0 — фильтр выключен.",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "MAX_CORRELATION_PAPER",
@@ -664,7 +704,8 @@
    "options": [],
    "hint": "",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "CORRELATION_WINDOW",
@@ -679,7 +720,8 @@
    "options": [],
    "hint": "",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "MIN_VOLUME_USDT",
@@ -694,7 +736,8 @@
    "options": [],
    "hint": "",
    "readonly": false,
-   "hot": true
+   "hot": true,
+   "basic": false
   },
   {
    "key": "MAX_VOLUME_USDT",
@@ -709,7 +752,8 @@
    "options": [],
    "hint": "0 — без ограничения. Для Altcoin отсекает BTC и ETH.",
    "readonly": false,
-   "hot": true
+   "hot": true,
+   "basic": false
   },
   {
    "key": "MAX_SPREAD_PCT",
@@ -724,7 +768,8 @@
    "options": [],
    "hint": "",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "VOLUME_SPIKE_THRESHOLD",
@@ -739,7 +784,8 @@
    "options": [],
    "hint": "",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "MODE",
@@ -771,7 +817,8 @@
    ],
    "hint": "",
    "readonly": false,
-   "hot": true
+   "hot": true,
+   "basic": true
   },
   {
    "key": "AI_PROVIDER",
@@ -786,7 +833,7 @@
    "options": [
     {
      "value": "auto",
-     "label": "Авто — по списку"
+     "label": "Авто — по цепочке"
     },
     {
      "value": "groq",
@@ -797,8 +844,48 @@
      "label": "Gemini"
     },
     {
-     "value": "anthropic",
-     "label": "Claude"
+     "value": "cerebras",
+     "label": "Cerebras"
+    },
+    {
+     "value": "openrouter",
+     "label": "OpenRouter"
+    },
+    {
+     "value": "nvidia",
+     "label": "NVIDIA NIM"
+    },
+    {
+     "value": "mistral",
+     "label": "Mistral"
+    },
+    {
+     "value": "github",
+     "label": "GitHub Models"
+    },
+    {
+     "value": "cloudflare",
+     "label": "Cloudflare Workers AI"
+    },
+    {
+     "value": "huggingface",
+     "label": "Hugging Face"
+    },
+    {
+     "value": "ollama_cloud",
+     "label": "Ollama Cloud"
+    },
+    {
+     "value": "cohere",
+     "label": "Cohere"
+    },
+    {
+     "value": "llm7",
+     "label": "LLM7"
+    },
+    {
+     "value": "ollama",
+     "label": "Ollama на компьютере"
     },
     {
      "value": "deepseek",
@@ -809,17 +896,14 @@
      "label": "OpenAI"
     },
     {
-     "value": "openrouter",
-     "label": "OpenRouter"
-    },
-    {
-     "value": "nvidia",
-     "label": "NVIDIA"
+     "value": "anthropic",
+     "label": "Claude"
     }
    ],
-   "hint": "",
+   "hint": "Выбранный провайдер идёт первым; остальная цепочка — в разделе AI.",
    "readonly": false,
-   "hot": true
+   "hot": true,
+   "basic": true
   },
   {
    "key": "CHRONOS_ENABLED",
@@ -834,7 +918,8 @@
    "options": [],
    "hint": "Модель Amazon Chronos чуть повышает или понижает уверенность сигнала.",
    "readonly": false,
-   "hot": true
+   "hot": true,
+   "basic": true
   },
   {
    "key": "AI_DAILY_BUDGET",
@@ -849,7 +934,8 @@
    "options": [],
    "hint": "Сверх лимита — простой анализ настроения без AI.",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "AI_MAX_SYMBOLS",
@@ -864,7 +950,8 @@
    "options": [],
    "hint": "",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "ACTIVE_STRATEGY",
@@ -920,7 +1007,8 @@
    ],
    "hint": "",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "LIVE_ALPHA_KILL_ENABLED",
@@ -935,7 +1023,8 @@
    "options": [],
    "hint": "В live стратегия выключается, если её результат хуже порога.",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": true
   },
   {
    "key": "LIVE_ALPHA_KILL_MIN_TRADES",
@@ -950,7 +1039,8 @@
    "options": [],
    "hint": "",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "LIVE_ALPHA_KILL_EV_THRESHOLD",
@@ -965,7 +1055,8 @@
    "options": [],
    "hint": "",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "NEWS_UPDATE_INTERVAL",
@@ -980,7 +1071,8 @@
    "options": [],
    "hint": "",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "TWITTER_MAX_RESULTS",
@@ -995,7 +1087,8 @@
    "options": [],
    "hint": "Меньше — экономнее тариф Basic.",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "TELEGRAM_SENTIMENT_CHANNELS",
@@ -1010,7 +1103,8 @@
    "options": [],
    "hint": "Через запятую, без @.",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "SENTIMENT_POLL_INTERVAL",
@@ -1025,7 +1119,8 @@
    "options": [],
    "hint": "",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "SENTIMENT_CACHE_TTL",
@@ -1040,7 +1135,8 @@
    "options": [],
    "hint": "",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "SENTIMENT_BUY_THRESHOLD",
@@ -1055,7 +1151,8 @@
    "options": [],
    "hint": "",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "SENTIMENT_SELL_THRESHOLD",
@@ -1070,7 +1167,8 @@
    "options": [],
    "hint": "",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "SEASON_SWITCH_MODE",
@@ -1094,7 +1192,8 @@
    ],
    "hint": "",
    "readonly": false,
-   "hot": true
+   "hot": true,
+   "basic": true
   },
   {
    "key": "SEASON_CHECK_INTERVAL_H",
@@ -1109,7 +1208,8 @@
    "options": [],
    "hint": "",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "ONLINE_LEARNING_MODE",
@@ -1141,7 +1241,8 @@
    ],
    "hint": "«После каждой сделки» — рискованно, только для экспериментов.",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "ONLINE_LEARNING_TRIGGER",
@@ -1156,7 +1257,8 @@
    "options": [],
    "hint": "",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "ONLINE_LEARNING_GRADIENT_STEPS",
@@ -1171,7 +1273,8 @@
    "options": [],
    "hint": "",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "TRAIN_TOP_N",
@@ -1186,7 +1289,8 @@
    "options": [],
    "hint": "",
    "readonly": false,
-   "hot": true
+   "hot": true,
+   "basic": false
   },
   {
    "key": "TRAIN_MIN_CANDLES",
@@ -1201,7 +1305,8 @@
    "options": [],
    "hint": "",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "TOTAL_TIMESTEPS",
@@ -1216,7 +1321,8 @@
    "options": [],
    "hint": "",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "EXPERIENCES_MAX",
@@ -1231,7 +1337,8 @@
    "options": [],
    "hint": "",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "BT_HOLDOUT_RATIO",
@@ -1246,7 +1353,8 @@
    "options": [],
    "hint": "Последняя часть истории, на которой проверяется стратегия.",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "SAC_MODEL_PATH",
@@ -1261,7 +1369,8 @@
    "options": [],
    "hint": "",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "SILENT_DEATH_HOURS",
@@ -1276,7 +1385,8 @@
    "options": [],
    "hint": "",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "REGIME_CACHE_TTL",
@@ -1291,7 +1401,8 @@
    "options": [],
    "hint": "",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "LOG_LEVEL",
@@ -1323,7 +1434,8 @@
    ],
    "hint": "",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "JSON_LOGS",
@@ -1338,7 +1450,8 @@
    "options": [],
    "hint": "",
    "readonly": false,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "REDIS_URL",
@@ -1353,7 +1466,8 @@
    "options": [],
    "hint": "Меняется только в .env: настройки сами хранятся в Redis.",
    "readonly": true,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "HEALTH_PORT",
@@ -1368,7 +1482,8 @@
    "options": [],
    "hint": "Меняется только в .env и docker-compose.",
    "readonly": true,
-   "hot": false
+   "hot": false,
+   "basic": false
   },
   {
    "key": "DASHBOARD_USER",
@@ -1383,7 +1498,8 @@
    "options": [],
    "hint": "Меняется в .env, затем make htpasswd.",
    "readonly": true,
-   "hot": false
+   "hot": false,
+   "basic": false
   }
  ],
  "config": {
@@ -1753,10 +1869,7 @@
      "value": null
     }
    ],
-   "model": {
-    "env": "GROQ_MODEL",
-    "value": null
-   },
+   "model": null,
    "status": "unset",
    "message": "",
    "checked_at": null
@@ -1776,21 +1889,18 @@
      "value": null
     }
    ],
-   "model": {
-    "env": "GEMINI_MODEL",
-    "value": null
-   },
+   "model": null,
    "status": "unset",
    "message": "",
    "checked_at": null
   },
   {
-   "service": "anthropic",
-   "name": "Claude",
+   "service": "cerebras",
+   "name": "Cerebras",
    "group": "AI-модели",
    "fields": [
     {
-     "env": "ANTHROPIC_API_KEY",
+     "env": "CEREBRAS_API_KEY",
      "label": "API Key",
      "secret": true,
      "optional": false,
@@ -1799,56 +1909,7 @@
      "value": null
     }
    ],
-   "model": {
-    "env": "AI_MODEL",
-    "value": null
-   },
-   "status": "unset",
-   "message": "",
-   "checked_at": null
-  },
-  {
-   "service": "deepseek",
-   "name": "DeepSeek",
-   "group": "AI-модели",
-   "fields": [
-    {
-     "env": "DEEPSEEK_API_KEY",
-     "label": "API Key",
-     "secret": true,
-     "optional": false,
-     "set": false,
-     "last4": null,
-     "value": null
-    }
-   ],
-   "model": {
-    "env": "DEEPSEEK_MODEL",
-    "value": null
-   },
-   "status": "unset",
-   "message": "",
-   "checked_at": null
-  },
-  {
-   "service": "openai",
-   "name": "OpenAI",
-   "group": "AI-модели",
-   "fields": [
-    {
-     "env": "OPENAI_API_KEY",
-     "label": "API Key",
-     "secret": true,
-     "optional": false,
-     "set": false,
-     "last4": null,
-     "value": null
-    }
-   ],
-   "model": {
-    "env": "OPENAI_MODEL",
-    "value": null
-   },
+   "model": null,
    "status": "unset",
    "message": "",
    "checked_at": null
@@ -1868,17 +1929,14 @@
      "value": null
     }
    ],
-   "model": {
-    "env": "OPENROUTER_MODEL",
-    "value": null
-   },
+   "model": null,
    "status": "unset",
    "message": "",
    "checked_at": null
   },
   {
    "service": "nvidia",
-   "name": "NVIDIA",
+   "name": "NVIDIA NIM",
    "group": "AI-модели",
    "fields": [
     {
@@ -1891,10 +1949,236 @@
      "value": null
     }
    ],
-   "model": {
-    "env": "NVIDIA_MODEL",
-    "value": null
-   },
+   "model": null,
+   "status": "unset",
+   "message": "",
+   "checked_at": null
+  },
+  {
+   "service": "mistral",
+   "name": "Mistral",
+   "group": "AI-модели",
+   "fields": [
+    {
+     "env": "MISTRAL_API_KEY",
+     "label": "API Key",
+     "secret": true,
+     "optional": false,
+     "set": false,
+     "last4": null,
+     "value": null
+    }
+   ],
+   "model": null,
+   "status": "unset",
+   "message": "",
+   "checked_at": null
+  },
+  {
+   "service": "github",
+   "name": "GitHub Models",
+   "group": "AI-модели",
+   "fields": [
+    {
+     "env": "GITHUB_MODELS_TOKEN",
+     "label": "API Key",
+     "secret": true,
+     "optional": false,
+     "set": false,
+     "last4": null,
+     "value": null
+    }
+   ],
+   "model": null,
+   "status": "unset",
+   "message": "",
+   "checked_at": null
+  },
+  {
+   "service": "cloudflare",
+   "name": "Cloudflare Workers AI",
+   "group": "AI-модели",
+   "fields": [
+    {
+     "env": "CLOUDFLARE_API_TOKEN",
+     "label": "API Key",
+     "secret": true,
+     "optional": false,
+     "set": false,
+     "last4": null,
+     "value": null
+    },
+    {
+     "env": "CLOUDFLARE_ACCOUNT_ID",
+     "label": "Account ID",
+     "secret": false,
+     "optional": false,
+     "set": false,
+     "last4": null,
+     "value": null
+    }
+   ],
+   "model": null,
+   "status": "unset",
+   "message": "",
+   "checked_at": null
+  },
+  {
+   "service": "huggingface",
+   "name": "Hugging Face",
+   "group": "AI-модели",
+   "fields": [
+    {
+     "env": "HF_TOKEN",
+     "label": "API Key",
+     "secret": true,
+     "optional": false,
+     "set": false,
+     "last4": null,
+     "value": null
+    }
+   ],
+   "model": null,
+   "status": "unset",
+   "message": "",
+   "checked_at": null
+  },
+  {
+   "service": "ollama_cloud",
+   "name": "Ollama Cloud",
+   "group": "AI-модели",
+   "fields": [
+    {
+     "env": "OLLAMA_API_KEY",
+     "label": "API Key",
+     "secret": true,
+     "optional": false,
+     "set": false,
+     "last4": null,
+     "value": null
+    }
+   ],
+   "model": null,
+   "status": "unset",
+   "message": "",
+   "checked_at": null
+  },
+  {
+   "service": "cohere",
+   "name": "Cohere",
+   "group": "AI-модели",
+   "fields": [
+    {
+     "env": "COHERE_API_KEY",
+     "label": "API Key",
+     "secret": true,
+     "optional": false,
+     "set": false,
+     "last4": null,
+     "value": null
+    }
+   ],
+   "model": null,
+   "status": "unset",
+   "message": "",
+   "checked_at": null
+  },
+  {
+   "service": "llm7",
+   "name": "LLM7",
+   "group": "AI-модели",
+   "fields": [
+    {
+     "env": "LLM7_API_KEY",
+     "label": "API Key",
+     "secret": true,
+     "optional": true,
+     "set": false,
+     "last4": null,
+     "value": null
+    }
+   ],
+   "model": null,
+   "status": "unset",
+   "message": "",
+   "checked_at": null
+  },
+  {
+   "service": "ollama",
+   "name": "Ollama на компьютере",
+   "group": "AI-модели",
+   "fields": [
+    {
+     "env": "OLLAMA_BASE_URL",
+     "label": "Адрес Ollama",
+     "secret": false,
+     "optional": true,
+     "set": false,
+     "last4": null,
+     "value": null
+    }
+   ],
+   "model": null,
+   "status": "unset",
+   "message": "",
+   "checked_at": null
+  },
+  {
+   "service": "deepseek",
+   "name": "DeepSeek",
+   "group": "AI-модели",
+   "fields": [
+    {
+     "env": "DEEPSEEK_API_KEY",
+     "label": "API Key",
+     "secret": true,
+     "optional": false,
+     "set": false,
+     "last4": null,
+     "value": null
+    }
+   ],
+   "model": null,
+   "status": "unset",
+   "message": "",
+   "checked_at": null
+  },
+  {
+   "service": "openai",
+   "name": "OpenAI",
+   "group": "AI-модели",
+   "fields": [
+    {
+     "env": "OPENAI_API_KEY",
+     "label": "API Key",
+     "secret": true,
+     "optional": false,
+     "set": false,
+     "last4": null,
+     "value": null
+    }
+   ],
+   "model": null,
+   "status": "unset",
+   "message": "",
+   "checked_at": null
+  },
+  {
+   "service": "anthropic",
+   "name": "Claude",
+   "group": "AI-модели",
+   "fields": [
+    {
+     "env": "ANTHROPIC_API_KEY",
+     "label": "API Key",
+     "secret": true,
+     "optional": false,
+     "set": false,
+     "last4": null,
+     "value": null
+    }
+   ],
+   "model": null,
    "status": "unset",
    "message": "",
    "checked_at": null
@@ -2392,5 +2676,740 @@
    },
    "live": null
   }
- ]
+ ],
+ "ai": {
+  "mode": "free",
+  "pinned": "auto",
+  "last": "",
+  "providers": [
+   {
+    "id": "groq",
+    "name": "Groq",
+    "note": "Бесплатно, самый быстрый ответ.",
+    "signup": "https://console.groq.com/keys",
+    "free_tier": true,
+    "key_optional": false,
+    "url_label": "",
+    "key_set": true,
+    "url_ok": true,
+    "usable": true,
+    "keyless_on": false,
+    "disabled": false,
+    "model": "openai/gpt-oss-120b",
+    "model_source": "catalog",
+    "free": true,
+    "strong": true,
+    "models": [
+     {
+      "id": "openai/gpt-oss-120b",
+      "free": true,
+      "strong": true,
+      "recommended": true
+     },
+     {
+      "id": "meta-llama/llama-4-maverick-17b-128e-instruct",
+      "free": true,
+      "strong": true,
+      "recommended": false
+     },
+     {
+      "id": "openai/gpt-oss-20b",
+      "free": true,
+      "strong": true,
+      "recommended": false
+     }
+    ],
+    "verified": "",
+    "status": "unknown",
+    "cooldown_until": null,
+    "calls_today": 0,
+    "tokens_today": 0
+   },
+   {
+    "id": "gemini",
+    "name": "Gemini",
+    "note": "Бесплатный дневной лимит Google AI Studio.",
+    "signup": "https://aistudio.google.com/apikey",
+    "free_tier": true,
+    "key_optional": false,
+    "url_label": "",
+    "key_set": true,
+    "url_ok": true,
+    "usable": true,
+    "keyless_on": false,
+    "disabled": false,
+    "model": "gemini-flash-latest",
+    "model_source": "catalog",
+    "free": true,
+    "strong": true,
+    "models": [
+     {
+      "id": "gemini-flash-latest",
+      "free": true,
+      "strong": true,
+      "recommended": true
+     },
+     {
+      "id": "gemini-3.6-flash",
+      "free": true,
+      "strong": true,
+      "recommended": false
+     },
+     {
+      "id": "gemini-3.5-flash-lite",
+      "free": true,
+      "strong": true,
+      "recommended": false
+     },
+     {
+      "id": "gemini-2.5-flash",
+      "free": true,
+      "strong": true,
+      "recommended": false
+     },
+     {
+      "id": "gemini-pro-latest",
+      "free": false,
+      "strong": true,
+      "recommended": false
+     }
+    ],
+    "verified": "2026-10-17",
+    "status": "unknown",
+    "cooldown_until": null,
+    "calls_today": 0,
+    "tokens_today": 0
+   },
+   {
+    "id": "cerebras",
+    "name": "Cerebras",
+    "note": "Бесплатно около миллиона токенов в день, очень быстро.",
+    "signup": "https://cloud.cerebras.ai",
+    "free_tier": true,
+    "key_optional": false,
+    "url_label": "",
+    "key_set": false,
+    "url_ok": true,
+    "usable": false,
+    "keyless_on": false,
+    "disabled": false,
+    "model": "gpt-oss-120b",
+    "model_source": "catalog",
+    "free": true,
+    "strong": true,
+    "models": [
+     {
+      "id": "gpt-oss-120b",
+      "free": true,
+      "strong": true,
+      "recommended": true
+     },
+     {
+      "id": "llama-3.3-70b",
+      "free": true,
+      "strong": true,
+      "recommended": false
+     },
+     {
+      "id": "qwen-3-235b-a22b-instruct-2507",
+      "free": true,
+      "strong": true,
+      "recommended": false
+     }
+    ],
+    "verified": "",
+    "status": "unknown",
+    "cooldown_until": null,
+    "calls_today": 0,
+    "tokens_today": 0
+   },
+   {
+    "id": "openrouter",
+    "name": "OpenRouter",
+    "note": "Бесплатные модели с суффиксом «:free», свой дневной лимит.",
+    "signup": "https://openrouter.ai/keys",
+    "free_tier": true,
+    "key_optional": false,
+    "url_label": "",
+    "key_set": false,
+    "url_ok": true,
+    "usable": false,
+    "keyless_on": false,
+    "disabled": false,
+    "model": "nvidia/nemotron-3-super-120b-a12b:free",
+    "model_source": "catalog",
+    "free": true,
+    "strong": true,
+    "models": [
+     {
+      "id": "nvidia/nemotron-3-super-120b-a12b:free",
+      "free": true,
+      "strong": true,
+      "recommended": true
+     },
+     {
+      "id": "google/gemma-4-31b-it:free",
+      "free": true,
+      "strong": true,
+      "recommended": false
+     },
+     {
+      "id": "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "free": true,
+      "strong": true,
+      "recommended": false
+     },
+     {
+      "id": "google/gemma-4-26b-a4b-it:free",
+      "free": true,
+      "strong": true,
+      "recommended": false
+     }
+    ],
+    "verified": "2026-10-17",
+    "status": "unknown",
+    "cooldown_until": null,
+    "calls_today": 0,
+    "tokens_today": 0
+   },
+   {
+    "id": "nvidia",
+    "name": "NVIDIA NIM",
+    "note": "Бесплатные кредиты build.nvidia.com, много открытых моделей.",
+    "signup": "https://build.nvidia.com",
+    "free_tier": true,
+    "key_optional": false,
+    "url_label": "",
+    "key_set": false,
+    "url_ok": true,
+    "usable": false,
+    "keyless_on": false,
+    "disabled": false,
+    "model": "deepseek-ai/deepseek-v4.1-flash",
+    "model_source": "catalog",
+    "free": true,
+    "strong": true,
+    "models": [
+     {
+      "id": "deepseek-ai/deepseek-v4.1-flash",
+      "free": true,
+      "strong": true,
+      "recommended": true
+     },
+     {
+      "id": "moonshotai/kimi-k2.6",
+      "free": true,
+      "strong": true,
+      "recommended": false
+     },
+     {
+      "id": "z-ai/glm-5.3",
+      "free": true,
+      "strong": true,
+      "recommended": false
+     },
+     {
+      "id": "nvidia/nemotron-3-super-120b-a12b",
+      "free": true,
+      "strong": true,
+      "recommended": false
+     },
+     {
+      "id": "mistralai/mistral-large",
+      "free": true,
+      "strong": true,
+      "recommended": false
+     }
+    ],
+    "verified": "2026-10-17",
+    "status": "unknown",
+    "cooldown_until": null,
+    "calls_today": 0,
+    "tokens_today": 0
+   },
+   {
+    "id": "mistral",
+    "name": "Mistral",
+    "note": "Бесплатный тариф Experiment с ограничением запросов в секунду.",
+    "signup": "https://console.mistral.ai/api-keys",
+    "free_tier": true,
+    "key_optional": false,
+    "url_label": "",
+    "key_set": false,
+    "url_ok": true,
+    "usable": false,
+    "keyless_on": false,
+    "disabled": false,
+    "model": "mistral-small-latest",
+    "model_source": "catalog",
+    "free": true,
+    "strong": true,
+    "models": [
+     {
+      "id": "mistral-small-latest",
+      "free": true,
+      "strong": true,
+      "recommended": true
+     },
+     {
+      "id": "ministral-8b-latest",
+      "free": true,
+      "strong": false,
+      "recommended": false
+     }
+    ],
+    "verified": "",
+    "status": "unknown",
+    "cooldown_until": null,
+    "calls_today": 0,
+    "tokens_today": 0
+   },
+   {
+    "id": "github",
+    "name": "GitHub Models",
+    "note": "Бесплатно с токеном GitHub (право models:read), дневной лимит.",
+    "signup": "https://github.com/settings/personal-access-tokens",
+    "free_tier": true,
+    "key_optional": false,
+    "url_label": "",
+    "key_set": false,
+    "url_ok": true,
+    "usable": false,
+    "keyless_on": false,
+    "disabled": false,
+    "model": "openai/gpt-4.1-mini",
+    "model_source": "catalog",
+    "free": true,
+    "strong": true,
+    "models": [
+     {
+      "id": "openai/gpt-4.1-mini",
+      "free": true,
+      "strong": true,
+      "recommended": true
+     },
+     {
+      "id": "openai/gpt-4.1",
+      "free": true,
+      "strong": true,
+      "recommended": false
+     },
+     {
+      "id": "meta/Llama-4-Maverick-17B-128E-Instruct-FP8",
+      "free": true,
+      "strong": true,
+      "recommended": false
+     },
+     {
+      "id": "deepseek/DeepSeek-V3-0324",
+      "free": true,
+      "strong": true,
+      "recommended": false
+     }
+    ],
+    "verified": "",
+    "status": "unknown",
+    "cooldown_until": null,
+    "calls_today": 0,
+    "tokens_today": 0
+   },
+   {
+    "id": "cloudflare",
+    "name": "Cloudflare Workers AI",
+    "note": "10 000 бесплатных «нейронов» в день. Нужны токен и Account ID.",
+    "signup": "https://dash.cloudflare.com/profile/api-tokens",
+    "free_tier": true,
+    "key_optional": false,
+    "url_label": "Account ID",
+    "key_set": false,
+    "url_ok": false,
+    "usable": false,
+    "keyless_on": false,
+    "disabled": false,
+    "model": "@cf/openai/gpt-oss-120b",
+    "model_source": "catalog",
+    "free": true,
+    "strong": true,
+    "models": [
+     {
+      "id": "@cf/openai/gpt-oss-120b",
+      "free": true,
+      "strong": true,
+      "recommended": true
+     },
+     {
+      "id": "@cf/google/gemma-4-26b-a4b-it",
+      "free": true,
+      "strong": true,
+      "recommended": false
+     },
+     {
+      "id": "@cf/meta/llama-3.1-8b-instruct-fp8",
+      "free": true,
+      "strong": false,
+      "recommended": false
+     }
+    ],
+    "verified": "",
+    "status": "unknown",
+    "cooldown_until": null,
+    "calls_today": 0,
+    "tokens_today": 0
+   },
+   {
+    "id": "huggingface",
+    "name": "Hugging Face",
+    "note": "Небольшие бесплатные кредиты каждый месяц.",
+    "signup": "https://huggingface.co/settings/tokens",
+    "free_tier": true,
+    "key_optional": false,
+    "url_label": "",
+    "key_set": false,
+    "url_ok": true,
+    "usable": false,
+    "keyless_on": false,
+    "disabled": false,
+    "model": "openai/gpt-oss-120b",
+    "model_source": "catalog",
+    "free": true,
+    "strong": true,
+    "models": [
+     {
+      "id": "openai/gpt-oss-120b",
+      "free": true,
+      "strong": true,
+      "recommended": true
+     },
+     {
+      "id": "deepseek-ai/DeepSeek-V4.1-Flash",
+      "free": true,
+      "strong": true,
+      "recommended": false
+     },
+     {
+      "id": "zai-org/GLM-5.3-Flash",
+      "free": true,
+      "strong": true,
+      "recommended": false
+     },
+     {
+      "id": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+      "free": true,
+      "strong": true,
+      "recommended": false
+     }
+    ],
+    "verified": "2026-10-17",
+    "status": "unknown",
+    "cooldown_until": null,
+    "calls_today": 0,
+    "tokens_today": 0
+   },
+   {
+    "id": "ollama_cloud",
+    "name": "Ollama Cloud",
+    "note": "Модели на серверах Ollama, бесплатный лимит с аккаунтом.",
+    "signup": "https://ollama.com/settings/keys",
+    "free_tier": true,
+    "key_optional": false,
+    "url_label": "",
+    "key_set": false,
+    "url_ok": true,
+    "usable": false,
+    "keyless_on": false,
+    "disabled": false,
+    "model": "gpt-oss:120b",
+    "model_source": "catalog",
+    "free": true,
+    "strong": true,
+    "models": [
+     {
+      "id": "gpt-oss:120b",
+      "free": true,
+      "strong": true,
+      "recommended": true
+     },
+     {
+      "id": "deepseek-v4-flash",
+      "free": true,
+      "strong": true,
+      "recommended": false
+     },
+     {
+      "id": "gpt-oss:20b",
+      "free": true,
+      "strong": true,
+      "recommended": false
+     }
+    ],
+    "verified": "",
+    "status": "unknown",
+    "cooldown_until": null,
+    "calls_today": 0,
+    "tokens_today": 0
+   },
+   {
+    "id": "cohere",
+    "name": "Cohere",
+    "note": "Пробный ключ: 1000 запросов в месяц.",
+    "signup": "https://dashboard.cohere.com/api-keys",
+    "free_tier": true,
+    "key_optional": false,
+    "url_label": "",
+    "key_set": false,
+    "url_ok": true,
+    "usable": false,
+    "keyless_on": false,
+    "disabled": false,
+    "model": "command-a-03-2025",
+    "model_source": "catalog",
+    "free": true,
+    "strong": true,
+    "models": [
+     {
+      "id": "command-a-03-2025",
+      "free": true,
+      "strong": true,
+      "recommended": true
+     },
+     {
+      "id": "command-r7b-12-2024",
+      "free": true,
+      "strong": false,
+      "recommended": false
+     }
+    ],
+    "verified": "",
+    "status": "unknown",
+    "cooldown_until": null,
+    "calls_today": 0,
+    "tokens_today": 0
+   },
+   {
+    "id": "llm7",
+    "name": "LLM7",
+    "note": "Работает без ключа (GLM-5.3-Flash, gpt-oss:20b); бесплатный токен открывает остальные модели.",
+    "signup": "https://token.llm7.io",
+    "free_tier": true,
+    "key_optional": true,
+    "url_label": "",
+    "key_set": false,
+    "url_ok": true,
+    "usable": false,
+    "keyless_on": false,
+    "disabled": false,
+    "model": "GLM-5.3-Flash",
+    "model_source": "catalog",
+    "free": true,
+    "strong": true,
+    "models": [
+     {
+      "id": "GLM-5.3-Flash",
+      "free": true,
+      "strong": true,
+      "recommended": true
+     },
+     {
+      "id": "gpt-oss:20b",
+      "free": true,
+      "strong": true,
+      "recommended": false
+     },
+     {
+      "id": "DeepSeek-V4.1-Flash",
+      "free": true,
+      "strong": true,
+      "recommended": false
+     },
+     {
+      "id": "gemma4:31b",
+      "free": true,
+      "strong": true,
+      "recommended": false
+     }
+    ],
+    "verified": "2026-10-17",
+    "status": "unknown",
+    "cooldown_until": null,
+    "calls_today": 0,
+    "tokens_today": 0
+   },
+   {
+    "id": "ollama",
+    "name": "Ollama на компьютере",
+    "note": "Модели на вашем компьютере: без лимитов, но нужна мощная машина. Модель сначала скачайте: ollama pull gpt-oss:20b.",
+    "signup": "https://ollama.com/download",
+    "free_tier": true,
+    "key_optional": true,
+    "url_label": "",
+    "key_set": false,
+    "url_ok": true,
+    "usable": false,
+    "keyless_on": false,
+    "disabled": false,
+    "model": "gpt-oss:20b",
+    "model_source": "catalog",
+    "free": true,
+    "strong": true,
+    "models": [
+     {
+      "id": "gpt-oss:20b",
+      "free": true,
+      "strong": true,
+      "recommended": true
+     },
+     {
+      "id": "qwen3:8b",
+      "free": true,
+      "strong": false,
+      "recommended": false
+     },
+     {
+      "id": "llama3.1",
+      "free": true,
+      "strong": false,
+      "recommended": false
+     }
+    ],
+    "verified": "",
+    "status": "unknown",
+    "cooldown_until": null,
+    "calls_today": 0,
+    "tokens_today": 0
+   },
+   {
+    "id": "deepseek",
+    "name": "DeepSeek",
+    "note": "Самый дешёвый из платных.",
+    "signup": "https://platform.deepseek.com/api_keys",
+    "free_tier": false,
+    "key_optional": false,
+    "url_label": "",
+    "key_set": false,
+    "url_ok": true,
+    "usable": false,
+    "keyless_on": false,
+    "disabled": false,
+    "model": "deepseek-flash",
+    "model_source": "catalog",
+    "free": false,
+    "strong": true,
+    "models": [
+     {
+      "id": "deepseek-flash",
+      "free": false,
+      "strong": true,
+      "recommended": true
+     },
+     {
+      "id": "deepseek-v4-pro",
+      "free": false,
+      "strong": true,
+      "recommended": false
+     }
+    ],
+    "verified": "2026-10-17",
+    "status": "unknown",
+    "cooldown_until": null,
+    "calls_today": 0,
+    "tokens_today": 0
+   },
+   {
+    "id": "openai",
+    "name": "OpenAI",
+    "note": "Модели ChatGPT, платно.",
+    "signup": "https://platform.openai.com/api-keys",
+    "free_tier": false,
+    "key_optional": false,
+    "url_label": "",
+    "key_set": false,
+    "url_ok": true,
+    "usable": false,
+    "keyless_on": false,
+    "disabled": false,
+    "model": "gpt-5-mini",
+    "model_source": "catalog",
+    "free": false,
+    "strong": true,
+    "models": [
+     {
+      "id": "gpt-5-mini",
+      "free": false,
+      "strong": true,
+      "recommended": true
+     },
+     {
+      "id": "gpt-5",
+      "free": false,
+      "strong": true,
+      "recommended": false
+     },
+     {
+      "id": "gpt-4o-mini",
+      "free": false,
+      "strong": true,
+      "recommended": false
+     }
+    ],
+    "verified": "",
+    "status": "unknown",
+    "cooldown_until": null,
+    "calls_today": 0,
+    "tokens_today": 0
+   },
+   {
+    "id": "anthropic",
+    "name": "Claude",
+    "note": "Лучшее качество анализа, платно.",
+    "signup": "https://console.anthropic.com/settings/keys",
+    "free_tier": false,
+    "key_optional": false,
+    "url_label": "",
+    "key_set": false,
+    "url_ok": true,
+    "usable": false,
+    "keyless_on": false,
+    "disabled": false,
+    "model": "claude-haiku-5-5",
+    "model_source": "catalog",
+    "free": false,
+    "strong": true,
+    "models": [
+     {
+      "id": "claude-haiku-5-5",
+      "free": false,
+      "strong": true,
+      "recommended": true
+     },
+     {
+      "id": "claude-sonnet-5-5",
+      "free": false,
+      "strong": true,
+      "recommended": false
+     },
+     {
+      "id": "claude-opus-5-5",
+      "free": false,
+      "strong": true,
+      "recommended": false
+     }
+    ],
+    "verified": "",
+    "status": "unknown",
+    "cooldown_until": null,
+    "calls_today": 0,
+    "tokens_today": 0
+   }
+  ],
+  "chain": [
+   {
+    "provider": "groq",
+    "model": "openai/gpt-oss-120b"
+   },
+   {
+    "provider": "gemini",
+    "model": "gemini-flash-latest"
+   }
+  ]
+ }
 }

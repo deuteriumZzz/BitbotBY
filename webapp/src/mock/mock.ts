@@ -3,6 +3,7 @@
 
 import { ApiError } from "../lib/api";
 import type {
+  AiState,
   Alert,
   BotEvent,
   Candle,
@@ -65,11 +66,71 @@ const config = structuredClone(fixtures.config) as ConfigValues;
 const strategies = structuredClone(fixtures.strategies) as Strategy[];
 const secrets = structuredClone(fixtures.secrets) as SecretItem[];
 for (const s of secrets) {
-  if (!["bybit", "groq", "telegram"].includes(s.service)) continue;
+  if (!["bybit", "groq", "gemini", "telegram"].includes(s.service)) continue;
   Object.assign(s, { status: "ok", message: "Ключ проверен.", checked_at: Date.now() / 1000 - 3600 });
   for (const f of s.fields)
     if (!f.optional) Object.assign(f, { set: true, last4: f.secret ? "a9F2" : null, value: f.secret ? null : "1200450" });
 }
+// ── AI: цепочка провайдеров (как GET /api/ai) ─────────────────────────────────
+const ai = structuredClone(fixtures.ai) as AiState;
+
+/** Те же правила, что ai_providers.chain на сервере. */
+function recomputeAi(): void {
+  const ok = (p: AiState["providers"][number]) =>
+    p.id === ai.pinned || (ai.mode === "free" ? p.free : ai.mode === "paid" ? !p.free : true);
+  let chain = ai.providers.filter((p) => p.usable && (!p.disabled || p.id === ai.pinned) && ok(p));
+  if (ai.mode === "auto") chain = [...chain.filter((p) => p.free), ...chain.filter((p) => !p.free)];
+  chain = [...chain.filter((p) => p.id === ai.pinned), ...chain.filter((p) => p.id !== ai.pinned)];
+  ai.chain = chain.map((p) => ({ provider: p.id, model: p.model }));
+}
+
+function applyAi(b: Body): AiState {
+  if (b.mode !== undefined && !["free", "auto", "paid"].includes(b.mode)) fail(400, "bad_request", "Режим — free, auto или paid.");
+  if (b.mode) ai.mode = b.mode;
+  if (Array.isArray(b.order)) {
+    const rank = (id: string) => (b.order.includes(id) ? b.order.indexOf(id) : 1e3);
+    ai.providers.sort((x, y) => rank(x.id) - rank(y.id));
+  }
+  if (Array.isArray(b.disabled)) ai.providers.forEach((p) => (p.disabled = b.disabled.includes(p.id)));
+  if (Array.isArray(b.keyless))
+    ai.providers.forEach((p) => {
+      if (!p.key_optional) return;
+      p.keyless_on = b.keyless.includes(p.id);
+      p.usable = p.key_set || p.keyless_on;
+    });
+  if (b.models && typeof b.models === "object")
+    ai.providers.forEach((p) => {
+      const m = b.models[p.id];
+      if (!m) return;
+      const known = p.models.find((x) => x.id === m);
+      Object.assign(p, { model: m, model_source: "app", free: known ? known.free : p.free_tier, strong: known ? known.strong : true });
+    });
+  recomputeAi();
+  emit("config.changed", { keys: ["AI_CHAIN"] });
+  return ai;
+}
+
+/** Цикл зовёт AI: иногда первый провайдер упирается в лимит и уходит на паузу. */
+function simulateAi(): void {
+  const live = ai.chain.filter(({ provider }) => {
+    const p = ai.providers.find((x) => x.id === provider)!;
+    return !(p.cooldown_until && p.cooldown_until * 1000 > Date.now());
+  });
+  for (const [i, { provider, model }] of live.entries()) {
+    const p = ai.providers.find((x) => x.id === provider)!;
+    p.calls_today += 1;
+    if (i < live.length - 1 && Math.random() < 0.2) {
+      Object.assign(p, { status: "rate_limit", cooldown_until: Date.now() / 1000 + 420 });
+      emit("ai.status", { provider, model, status: "rate_limit", until: p.cooldown_until });
+      continue;
+    }
+    Object.assign(p, { status: "ok", cooldown_until: null, tokens_today: p.tokens_today + 3200 });
+    ai.last = provider;
+    emit("ai.status", { provider, model, status: "ok", until: null });
+    return;
+  }
+}
+
 const alerts: Alert[] = [
   ["atr_spike", "Всплеск волатильности"],
   ["drawdown", "Просадка"],
@@ -169,7 +230,7 @@ const maxPositions = (): number => Number(config.MAX_POSITIONS?.value ?? 3);
 
 function state() {
   return {
-    bot: { alive: true, ...bot },
+    bot: { alive: true, ...bot, ai: ai.last || null },
     balance: +balance.toFixed(2),
     slots: { used: Object.keys(positions).length, max: maxPositions() },
     positions: Object.values(positions).map((p) => ({ ...publicPos(p), id: p.id, pnl_pct: null, partial_tp_done: false })),
@@ -293,6 +354,7 @@ async function cycle(): Promise<void> {
   emit("cycle", { state: "scan", used, max });
   const pre = scan.filter(() => Math.random() < 0.45).slice(0, 6);
   emit("radar.stage", { stage: "prescore", symbols: pre });
+  simulateAi();
   await sleep(1100);
   const enabled = strategies.filter((s) => s.enabled).map((s) => s.name);
   const picks = pre.filter(() => Math.random() < 0.5).slice(0, 3);
@@ -421,6 +483,10 @@ function patchConfig(changes: Body) {
     config[key] = { value: NUMERIC.includes(def.type) ? Number(value) : value, source: def.hot ? "live" : "ui" };
     (def.hot ? out.applied_hot : out.pending_restart).push(key);
   }
+  if (typeof changes.AI_PROVIDER === "string") {
+    ai.pinned = changes.AI_PROVIDER;
+    recomputeAi();
+  }
   emit("config.changed", { keys: Object.keys(changes).sort() });
   return out;
 }
@@ -453,6 +519,12 @@ function secret(method: string, id: string, b: Body) {
     }
     if (s.model && b.model) s.model.value = b.model;
     Object.assign(s, { status: "ok", message: "Демо: ключ принят без проверки.", checked_at: Date.now() / 1000 });
+  }
+  const aiProvider = ai.providers.find((p) => p.id === s.service);
+  if (aiProvider) {
+    aiProvider.key_set = s.fields.some((f) => f.set);
+    aiProvider.usable = aiProvider.key_set || aiProvider.keyless_on;
+    recomputeAi();
   }
   emit("secret.changed", { service: s.service, status: s.status });
   return { ...s, restart_required: true };
@@ -492,6 +564,10 @@ function route(method: string, path: string, body: unknown): unknown {
       return Object.values(pending);
     case "GET /api/symbols":
       return lists;
+    case "GET /api/ai":
+      return ai;
+    case "PUT /api/ai/chain":
+      return applyAi(b);
     case "GET /api/alerts":
       return alerts;
     case "GET /api/candles":
@@ -534,6 +610,11 @@ function route(method: string, path: string, body: unknown): unknown {
   }
 
   let m: RegExpMatchArray | null;
+  if (method === "GET" && (m = p.match(/^\/api\/ai\/providers\/(.+)\/models$/))) {
+    const prov = ai.providers.find((x) => x.id === m![1]) ?? fail(404, "unknown_provider", "Нет такого провайдера.");
+    if (!prov.key_set && !prov.key_optional) fail(400, "no_key", "Сначала добавьте ключ.");
+    return { provider: prov.id, models: [...prov.models.map((x) => x.id), `${prov.id}-preview-2026`].sort() };
+  }
   if ((m = p.match(/^\/api\/commands\/(.+)$/))) return results[m[1]] ?? { request_id: m[1], status: "pending" };
   if (method === "POST" && (m = p.match(/^\/api\/positions\/(.+)\/close$/))) {
     const pos = findPos(m[1]);

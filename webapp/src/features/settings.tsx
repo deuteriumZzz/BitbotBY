@@ -1,4 +1,4 @@
-// Вкладка «Настройки»: основное (часы, монеты, уведомления, счёт), ключи API, все параметры.
+// Вкладка «Настройки»: основное, AI-провайдеры, подключения (ключи), все параметры.
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
@@ -6,9 +6,10 @@ import { fmtN, plural } from "../lib/format";
 import type { SecretItem, SettingDef } from "../lib/types";
 import { actions, useStore, type PatchResult } from "../store";
 import { Icon, Q, Seg, Toggle, useArm } from "../ui";
+import { AiPane } from "./ai";
 import { cfg } from "./bots";
 
-type Pane = "main" | "keys" | "all";
+type Pane = "main" | "ai" | "conn" | "all";
 
 export function Settings() {
   const [pane, setPane] = useState<Pane>("main");
@@ -19,14 +20,16 @@ export function Settings() {
         value={pane}
         options={[
           ["main", "Основное"],
-          ["keys", "Ключи API"],
-          ["all", "Все параметры"],
+          ["ai", "AI"],
+          ["conn", "Подключения"],
+          ["all", "Параметры"],
         ]}
         onChange={setPane}
         label="Раздел настроек"
       />
-      {pane === "main" && <Main toKeys={() => setPane("keys")} />}
-      {pane === "keys" && <Keys />}
+      {pane === "main" && <Main go={setPane} />}
+      {pane === "ai" && <AiPane />}
+      {pane === "conn" && <Keys />}
       {pane === "all" && <AllParams />}
     </section>
   );
@@ -34,19 +37,18 @@ export function Settings() {
 
 // ══ Основное ═════════════════════════════════════════════════════════════════
 
-function Main({ toKeys }: { toKeys: () => void }) {
+function Main({ go }: { go: (pane: Pane) => void }) {
   return (
     <div className="set-pane view enter">
       <div className="cols">
         <div className="col">
           <HoursCard />
-          <ProviderCard />
           <SymbolsCard />
+          <AlertsCard />
         </div>
         <div className="col">
-          <AlertsCard />
-          <ConnCard toKeys={toKeys} />
-          <AccountCard toKeys={toKeys} />
+          <ConnCard go={go} />
+          <AccountCard toKeys={() => go("conn")} />
           <HelpCard />
         </div>
       </div>
@@ -106,7 +108,6 @@ function HoursCard() {
   );
 }
 
-const AI_SERVICES = ["groq", "gemini", "anthropic", "deepseek", "openai", "openrouter", "nvidia"];
 const STATUS: Record<SecretItem["status"], [string, string]> = {
   ok: ["ok", "работает"],
   warn: ["warn", "есть проблема"],
@@ -114,45 +115,6 @@ const STATUS: Record<SecretItem["status"], [string, string]> = {
   unset: ["", "не настроен"],
   unchecked: ["", "не проверен"],
 };
-
-function ProviderCard() {
-  const schema = useStore((s) => s.schema);
-  const provider = useStore((s) => cfg<string>(s.config, "AI_PROVIDER", "auto"));
-  const secrets = useStore((s) => s.secrets);
-  const options = schema.find((d) => d.key === "AI_PROVIDER")?.options ?? [];
-  const ai = (secrets ?? []).filter((s) => AI_SERVICES.includes(s.service));
-  return (
-    <article className="card">
-      <div className="card-h">
-        <h2>AI-провайдер</h2>
-        <Q tip="«Авто» — бот идёт по цепочке провайдеров и берёт первого, кто ответил. Можно закрепить одного." />
-      </div>
-      <select className="sel" style={{ width: "100%" }} value={provider} aria-label="AI-провайдер" onChange={(e) => void actions.patchConfig({ AI_PROVIDER: e.target.value })}>
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.value === "auto" ? "Авто — по цепочке" : o.label}
-          </option>
-        ))}
-      </select>
-      {ai.length > 0 && (
-        <div className="btn-row" style={{ marginTop: 10 }}>
-          {ai.map((s) => {
-            const [c, t] = STATUS[s.status];
-            return (
-              <span key={s.service} className={`pill ${c}`} title={t}>
-                <span className={`dot ${c}`} />
-                {s.name}
-              </span>
-            );
-          })}
-        </div>
-      )}
-      <p className="note-soon" style={{ marginTop: 8 }}>
-        Порядок цепочки пока задан в коде бота; менять его из приложения можно будет после доработки сервера.
-      </p>
-    </article>
-  );
-}
 
 const LIST_NAME = { forced: "Всегда сканировать", excluded: "Исключить из скана" } as const;
 
@@ -273,8 +235,10 @@ function AlertsCard() {
   );
 }
 
-function ConnCard({ toKeys }: { toKeys: () => void }) {
+function ConnCard({ go }: { go: (pane: Pane) => void }) {
   const secrets = useStore((s) => s.secrets);
+  const ai = useStore((s) => s.ai);
+  const lastAi = ai?.providers.find((p) => p.id === ai.last);
   const note = useStore((s) => s.secretsNote);
   const wsUp = useStore((s) => s.wsUp);
   const alive = useStore((s) => s.alive);
@@ -297,7 +261,6 @@ function ConnCard({ toKeys }: { toKeys: () => void }) {
       </div>
     );
   };
-  const [aiOk, aiN] = okIn("AI-модели");
   const [dOk, dN] = okIn("Данные и соцсети");
   return (
     <article className="card">
@@ -315,10 +278,11 @@ function ConnCard({ toKeys }: { toKeys: () => void }) {
             {row("Bybit API", by("bybit"))}
             {row("Telegram-бот", by("telegram"))}
             <div>
-              <span className={`dot ${aiOk ? "ok" : "bad"}`} />
-              AI-модели
+              <span className={`dot ${ai?.chain.length ? "ok" : "bad"}`} />
+              AI-провайдеры
               <small>
-                работают {aiOk} из {aiN}
+                в цепочке {ai?.chain.length ?? 0}
+                {lastAi ? ` · отвечает ${lastAi.name}` : ""}
               </small>
             </div>
             <div>
@@ -333,9 +297,14 @@ function ConnCard({ toKeys }: { toKeys: () => void }) {
           <p className="note-soon">{note || "Статус ключей недоступен."}</p>
         )}
       </div>
-      <button className="btn" type="button" style={{ width: "100%", marginTop: 12 }} onClick={toKeys}>
-        Управлять ключами
-      </button>
+      <div className="btn-row" style={{ marginTop: 12 }}>
+        <button className="btn" type="button" onClick={() => go("ai")}>
+          AI-провайдеры
+        </button>
+        <button className="btn" type="button" onClick={() => go("conn")}>
+          Ключи и доступ
+        </button>
+      </div>
     </article>
   );
 }
@@ -471,7 +440,7 @@ const HELP: [string, string[]][] = [
   [
     "Настройки",
     [
-      "Частые настройки — во вкладке «Боты», всё остальное — в «Настройки → Все параметры». Метка «сразу» значит, что бот применит изменение без остановки, «перезапуск» — после перезапуска.",
+      "Частые настройки — во вкладке «Боты». В «Настройках» четыре раздела: «Основное» — часы, монеты, уведомления и счёт; «AI» — какие модели решают и в каком порядке; «Подключения» — ключи биржи, Telegram и данных; «Параметры» — все остальные настройки бота. Метка «сразу» значит, что бот применит изменение без остановки, «перезапуск» — после перезапуска.",
       "Значения из приложения важнее значений в файле .env.",
     ],
   ],
@@ -552,7 +521,8 @@ const KEY_INFO: Record<string, [string, string?]> = {
 function Keys() {
   const secrets = useStore((s) => s.secrets);
   const note = useStore((s) => s.secretsNote);
-  const groups = useMemo(() => [...new Set((secrets ?? []).map((s) => s.group))], [secrets]);
+  // Ключи AI-провайдеров — в разделе «AI», здесь биржа, Telegram, данные и доступ.
+  const groups = useMemo(() => [...new Set((secrets ?? []).map((s) => s.group))].filter((g) => g !== "AI-модели"), [secrets]);
   return (
     <div className="set-pane view enter">
       <div className="secnote">
@@ -743,6 +713,7 @@ function AllParams() {
   const [bad, setBad] = useState<Record<string, string>>({});
   const [restartKeys, setRestartKeys] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [advanced, setAdvanced] = useState(false);
   const [open, setOpen] = useState<Set<string>>(() => new Set(schema.slice(0, 1).map((d) => d.group)));
 
   const groups = useMemo(() => {
@@ -755,7 +726,9 @@ function AllParams() {
     return out;
   }, [schema]);
   const needle = q.trim().toLowerCase();
-  const hit = (d: SettingDef) => !needle || `${d.label} ${d.key} ${d.hint}`.toLowerCase().includes(needle);
+  // Поиск ищет по всем параметрам; без поиска — основные или все.
+  const hit = (d: SettingDef) =>
+    needle ? `${d.label} ${d.key} ${d.hint}`.toLowerCase().includes(needle) : advanced || d.basic || d.key in pending;
   const found = schema.filter(hit).length;
 
   const change = (d: SettingDef, raw: unknown) => {
@@ -807,11 +780,17 @@ function AllParams() {
     <div className="set-pane view enter">
       <div className="cfg-top">
         <input className="inp" type="search" placeholder="Поиск: плечо, стоп, RISK_PER_TRADE…" aria-label="Поиск параметра" autoComplete="off" value={q} onChange={(e) => setQ(e.target.value)} />
-        <span className="label">{needle ? `найдено ${found}` : `${schema.length} параметров`}</span>
+        <span className="label">{needle ? `найдено ${found}` : `${found} из ${schema.length}`}</span>
+      </div>
+      <div className="row-tgl">
+        <span>
+          Показать расширенные <Q tip="По умолчанию видны основные параметры. Расширенные — тонкая настройка фильтров, выхода, обучения и сервера." />
+        </span>
+        <Toggle on={advanced} label="Показать расширенные параметры" onChange={setAdvanced} />
       </div>
       <p className="cfg-legend">
         <span className="tag hot">сразу</span> применяется без перезапуска · <span className="tag rst">перезапуск</span> вступит в силу после
-        перезапуска бота. Ключи — во вкладке «Ключи API», Paper/Live — в «Основное».
+        перезапуска бота. Ключи — в «Подключения» и «AI», Paper/Live — в «Основное».
       </p>
       <div className="cfg">
         {groups.map(([g, defs]) => {

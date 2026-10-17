@@ -68,7 +68,40 @@ class Setting:
             d.pop(k, None)
         d["options"] = [{"value": v, "label": lbl} for v, lbl in self.options]
         d["hot"] = self.hot
+        d["basic"] = self.key in BASIC
         return d
+
+
+# Что видно в «Все параметры» сразу; остальное — по «Показать расширенные».
+BASIC = frozenset(
+    {
+        "MARKET_TYPE",
+        "TIMEFRAME",
+        "SCAN_TOP_N",
+        "TRADING_HOURS",
+        "AUTO_EXECUTE",
+        "TELEGRAM_CONFIRM_TIMEOUT",
+        "INITIAL_BALANCE",
+        "RISK_PER_TRADE",
+        "MAX_POSITIONS",
+        "STOP_LOSS_PERCENT",
+        "DAILY_LOSS_LIMIT",
+        "MAX_DRAWDOWN_PERCENT",
+        "DRAWDOWN_SCALE_ENABLED",
+        "MACRO_BLACKOUT_ENABLED",
+        "LEVERAGE_MODE",
+        "LEVERAGE_MAX",
+        "TRAILING_STOP_ATR_MULT",
+        "PARTIAL_TP_ENABLED",
+        "MIN_SIGNAL_CONFIDENCE",
+        "MIN_SIGNAL_CONFIDENCE_PAPER",
+        "MODE",
+        "AI_PROVIDER",
+        "CHRONOS_ENABLED",
+        "SEASON_SWITCH_MODE",
+        "LIVE_ALPHA_KILL_ENABLED",
+    }
+)
 
 
 def _rc(setter: str, getter: str) -> Dict[str, Any]:

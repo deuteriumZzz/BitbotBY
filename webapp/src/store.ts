@@ -4,6 +4,8 @@ import { ApiError, api, command, isMock, subscribe } from "./lib/api";
 import { arrow, base, plural, usd } from "./lib/format";
 import * as platform from "./lib/platform";
 import type {
+  AiChainChanges,
+  AiState,
   Alert,
   BotEvent,
   BotState,
@@ -88,6 +90,7 @@ export interface Store {
   symbols: Symbols;
   secrets: SecretItem[] | null;
   secretsNote: string;
+  ai: AiState | null;
   tab: Tab;
   toast: { id: number; text: string } | null;
 
@@ -107,6 +110,7 @@ export interface Store {
   loadAlerts(): Promise<void>;
   loadSymbols(): Promise<void>;
   loadSecrets(): Promise<void>;
+  loadAi(): Promise<void>;
 
   requestCode(): Promise<boolean>;
   verifyCode(code: string): Promise<boolean>;
@@ -181,6 +185,7 @@ export const useStore = create<Store>((set, get) => {
     symbols: { forced: [], excluded: [] },
     secrets: null,
     secretsNote: "",
+    ai: null,
     tab: "terminal",
     toast: null,
 
@@ -221,6 +226,7 @@ export const useStore = create<Store>((set, get) => {
         get().loadAlerts(),
         get().loadSymbols(),
         get().loadSecrets(),
+        get().loadAi(),
         api<PendingSignal[]>("GET", "/api/signals/pending").then((pending) => set({ pending })),
       ]);
       unsubscribe?.();
@@ -369,6 +375,26 @@ export const useStore = create<Store>((set, get) => {
           if (keys.includes("STRATEGIES")) void get().loadStrategies().catch(() => undefined);
           if (keys.includes("SYMBOLS")) void get().loadSymbols().catch(() => undefined);
           if (keys.includes("MARKET_PROFILE")) void get().loadState().catch(() => undefined);
+          if (keys.includes("AI_CHAIN") || keys.includes("AI_PROVIDER")) void get().loadAi().catch(() => undefined);
+          break;
+        }
+        case "ai.status": {
+          // Живой статус провайдера: ответил, лимит, нет денег, пауза до…
+          const ai = get().ai;
+          const ok = d.status === "ok";
+          if (ok) set((st) => ({ bot: st.bot && { ...st.bot, ai: d.provider } }));
+          if (!ai) break;
+          set({
+            ai: {
+              ...ai,
+              last: ok ? d.provider : ai.last,
+              providers: ai.providers.map((p) =>
+                p.id === d.provider
+                  ? { ...p, status: d.status, cooldown_until: d.until ?? null, calls_today: p.calls_today + 1 }
+                  : p,
+              ),
+            },
+          });
           break;
         }
         case "account.mode":
@@ -377,6 +403,7 @@ export const useStore = create<Store>((set, get) => {
           break;
         case "secret.changed":
           void get().loadSecrets();
+          void get().loadAi().catch(() => undefined);
           break;
         default:
           break;
@@ -416,6 +443,10 @@ export const useStore = create<Store>((set, get) => {
       } catch (e) {
         set({ secrets: null, secretsNote: e instanceof ApiError ? e.message : "Ключи недоступны." });
       }
+    },
+
+    async loadAi() {
+      set({ ai: await api<AiState>("GET", "/api/ai") });
     },
 
     requestCode() {
@@ -553,6 +584,17 @@ export const actions = {
       () => api("PUT", `/api/secrets/${service}`, { fields, ...(model ? { model } : {}) }).then(() => st().loadSecrets()),
       "Ключ сохранён. Заработает после перезапуска бота.",
     ),
+  putAiChain: (changes: AiChainChanges, ok?: string) =>
+    st().act(() => api<AiState>("PUT", "/api/ai/chain", changes).then((ai) => useStore.setState({ ai })), ok),
+  /** Живой список моделей провайдера по сохранённому ключу. */
+  aiModels: async (provider: string): Promise<string[]> => {
+    try {
+      return (await api<{ models: string[] }>("GET", `/api/ai/providers/${provider}/models`)).models;
+    } catch (e) {
+      st().say(e instanceof ApiError ? e.message : "Не удалось загрузить список моделей.");
+      return [];
+    }
+  },
   deleteSecret: (service: string) =>
     st().act(() => api("DELETE", `/api/secrets/${service}`).then(() => st().loadSecrets()), "Ключ удалён"),
 };

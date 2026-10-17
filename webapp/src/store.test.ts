@@ -64,6 +64,20 @@ describe("события", () => {
     expect(useStore.getState().bot?.paused).toBe(false);
   });
 
+  it("статус AI-провайдера обновляется живым событием", () => {
+    const provider = (id: string) => ({ id, name: id.toUpperCase(), status: "unknown", cooldown_until: null, calls_today: 0 });
+    useStore.setState({
+      ai: { mode: "free", pinned: "auto", last: "", chain: [], providers: [provider("groq"), provider("gemini")] } as never,
+    });
+    const { apply } = useStore.getState();
+    apply(ev("ai.status", { provider: "groq", model: "m", status: "rate_limit", until: 1_900_000_000 }));
+    apply(ev("ai.status", { provider: "gemini", model: "m", status: "ok", until: null }));
+    const s = useStore.getState();
+    expect(s.ai?.providers[0]).toMatchObject({ status: "rate_limit", cooldown_until: 1_900_000_000, calls_today: 1 });
+    expect(s.ai?.last).toBe("gemini");
+    expect(s.bot?.ai).toBe("gemini");
+  });
+
   it("предложение сделки появляется и исчезает после ответа", () => {
     const { apply } = useStore.getState();
     apply(ev("signal.pending", { id: "sig5", symbol: "SOL/USDT", side: "long" }));
