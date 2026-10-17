@@ -245,8 +245,11 @@ class Config:
     TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
     # Chat ID (личный или группа): @userinfobot → узнать id
     TELEGRAM_CHAT_ID: str = os.getenv("TELEGRAM_CHAT_ID", "")
-    # Секунд ждать подтверждения (потом → авто-исполнение)
+    # Секунд на решение по сделке в Live без авто-сделок: 10–120 (дольше —
+    # цена уходит и сигнал устаревает)
     TELEGRAM_CONFIRM_TIMEOUT: int = int(os.getenv("TELEGRAM_CONFIRM_TIMEOUT", "60"))
+    # Если не ответили: execute — открыть сделку, skip — пропустить
+    CONFIRM_ON_TIMEOUT: str = os.getenv("CONFIRM_ON_TIMEOUT", "execute")
 
     # ── Risk Management ────────────────────────────────────────────────────
     # Максимальный дневной убыток: доля баланса (0.05 = 5%)

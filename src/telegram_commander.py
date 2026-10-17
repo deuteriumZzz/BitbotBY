@@ -329,20 +329,29 @@ def _kb_help_back() -> "InlineKeyboardMarkup":
     )
 
 
-def _kb_timeout_menu(current: int, auto_exec: bool = False) -> "InlineKeyboardMarkup":
+def _kb_timeout_menu(
+    current: int, auto_exec: bool = False, on_timeout: str = "execute"
+) -> "InlineKeyboardMarkup":
+    """Как открывать сделки: авто или с подтверждением (10–120 с), что без ответа."""
+
     def _btn(sec: int) -> "InlineKeyboardButton":
         selected = not auto_exec and sec == current
         label = f"{'✅ ' if selected else ''}{sec}с"
         return InlineKeyboardButton(label, callback_data=f"timeout:{sec}")
 
-    manual_label = f"{'✅ ' if (not auto_exec and current == 0) else ''}🖐 Вручную"
-    auto_label = f"{'✅ ' if auto_exec else ''}🤖 Авто (без диалога)"
+    def _on(value: str, label: str) -> "InlineKeyboardButton":
+        tick = "✅ " if not auto_exec and on_timeout == value else ""
+        return InlineKeyboardButton(tick + label, callback_data=f"on_timeout:{value}")
+
+    auto_label = f"{'✅ ' if auto_exec else ''}🤖 Авто (без подтверждения)"
     return InlineKeyboardMarkup(
         [
             [InlineKeyboardButton(auto_label, callback_data="timeout:auto")],
-            [_btn(15), _btn(30), _btn(60)],
-            [_btn(120), _btn(180), _btn(300)],
-            [InlineKeyboardButton(manual_label, callback_data="timeout:0")],
+            [_btn(15), _btn(30), _btn(60), _btn(120)],
+            [
+                _on("execute", "▶️ Без ответа — открыть"),
+                _on("skip", "⏭ Без ответа — пропустить"),
+            ],
             [InlineKeyboardButton("« Настройки", callback_data="settings")],
         ]
     )
@@ -742,7 +751,7 @@ _HELP_ABOUT = (
     "2️⃣ Загружает OHLCV + технические индикаторы\n"
     "3️⃣ Анализирует через AI (Claude / DeepSeek / Groq / Gemini)\n"
     "4️⃣ Комбинирует AI-сигнал с локальными стратегиями\n"
-    "5️⃣ При `AUTO_EXECUTE` — спрашивает подтверждение в Telegram\n"
+    "5️⃣ Без авто-сделок — спрашивает подтверждение в Telegram (10–120 с)\n"
     "6️⃣ Управляет позицией: SL/TP, трейлинг-стоп, circuit breaker\n\n"
     "*Paper trading:* виртуальные сделки, реальные данные биржи\n"
     "*Live trading:* реальные ордера через Bybit API"
@@ -3176,60 +3185,63 @@ class TelegramCommander:
         elif data == "timeout_menu":
             cur = self._rc.get_confirm_timeout()
             auto_exec = self._rc.get_auto_execute()
+            on_timeout = self._rc.get_confirm_on_timeout()
             if auto_exec:
-                cur_hint = "сделки исполняются немедленно, без диалога"
                 cur_label = "🤖 Авто"
-            elif cur == 0:
-                cur_label = "🖐 Вручную"
-                cur_hint = "сделка ждёт Trade бессрочно, без ответа — не открывается"
+                cur_hint = "нашёл сигнал — сразу открывает сделку"
             else:
                 cur_label = f"{cur}с"
-                cur_hint = f"авто-исполнение через {cur}с если нет ответа"
+                _what = "открыть" if on_timeout == "execute" else "пропустить"
+                cur_hint = f"{cur}с на решение, без ответа — {_what}"
             await self._edit(
                 query,
-                f"⏱ *Таймаут подтверждения сделки*\n\n"
+                f"⏱ *Подтверждение сделок*\n\n"
                 f"Сейчас: *{cur_label}* — {cur_hint}\n\n"
-                f"🤖 *Авто* — сделки без диалога Trade/Skip\n"
-                f"🖐 *Вручную* — сделка открывается только по кнопке Trade\n"
-                f"*15–300с* — авто через N секунд, можно отменить\n\n"
-                f"Выбери режим:",
-                _kb_timeout_menu(cur, auto_exec),
+                f"🤖 *Авто* — без подтверждения: нашёл сигнал → сделка\n"
+                f"*15–120с* — время на решение (дольше нельзя: цена уходит)\n"
+                f"*Без ответа* — открыть сделку или пропустить\n\n"
+                f"_В Paper бот не спрашивает — сделки виртуальные._",
+                _kb_timeout_menu(cur, auto_exec, on_timeout),
             )
 
         elif data.startswith("timeout:"):
             raw = data.split(":", 1)[1]
+            on_timeout = self._rc.get_confirm_on_timeout()
             if raw == "auto":
                 self._rc.set_auto_execute(True)
                 await self._edit(
                     query,
-                    "✅ *Авто-режим* — сделки исполняются немедленно.\n"
+                    "✅ *Авто-режим* — нашёл сигнал, сразу открывает сделку.\n"
                     "Кнопки Trade/Skip не показываются.\n\n"
                     "_Применится к следующей сделке._",
-                    _kb_timeout_menu(self._rc.get_confirm_timeout(), True),
+                    _kb_timeout_menu(self._rc.get_confirm_timeout(), True, on_timeout),
                 )
                 return
             try:
                 sec = int(raw)
             except (ValueError, IndexError):
                 return
-            ok = self._rc.set_confirm_timeout(sec)
-            if ok:
+            if self._rc.set_confirm_timeout(sec):
                 self._rc.set_auto_execute(False)
-                if sec == 0:
-                    msg = (
-                        "✅ *Ручной режим* — сделка ждёт нажатия Trade.\n"
-                        "Без подтверждения сделка не откроется.\n\n"
-                        "_Применится к следующей сделке._"
-                    )
-                else:
-                    msg = (
-                        f"✅ Таймаут: *{sec}с* → авто-исполнение\n\n"
-                        f"_Применится к следующей сделке._"
-                    )
+                _what = "открою" if on_timeout == "execute" else "пропущу"
                 await self._edit(
                     query,
-                    msg,
-                    _kb_timeout_menu(sec, False),
+                    f"✅ *{sec}с* на решение. Без ответа — {_what} сделку.\n\n"
+                    f"_Применится к следующей сделке._",
+                    _kb_timeout_menu(sec, False, on_timeout),
+                )
+
+        elif data.startswith("on_timeout:"):
+            value = data.split(":", 1)[1]
+            if self._rc.set_confirm_on_timeout(value):
+                self._rc.set_auto_execute(False)
+                cur = self._rc.get_confirm_timeout()
+                _what = "открою сделку" if value == "execute" else "пропущу сделку"
+                await self._edit(
+                    query,
+                    f"✅ Без ответа за {cur}с — {_what}.\n\n"
+                    f"_Применится к следующей сделке._",
+                    _kb_timeout_menu(cur, False, value),
                 )
 
         # ── Тюнинг SAC ───────────────────────────────────────────────────────

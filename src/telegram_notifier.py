@@ -194,7 +194,7 @@ class TelegramNotifier:
             f"{bt_line}\n"
             f"{live_line}\n\n"
             + (
-                "🖐 Ручной режим — нажми Trade чтобы войти, иначе сделка не откроется"
+                f"⏱ {timeout}с на решение — нажми Trade, иначе сделка будет пропущена"
                 if not auto_execute
                 else f"⚡ Авто-исполнение через {timeout}с — нажми Skip чтобы пропустить"
             )

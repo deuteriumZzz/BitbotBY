@@ -37,6 +37,7 @@ _KEY_MAX_DRAWDOWN = "bot:max_drawdown_percent"
 _KEY_DRAWDOWN_CONFIRM = "bot:drawdown_confirm_cycles"
 _KEY_SAC_PROMPTED = "bot:sac_prompted"
 _KEY_CONFIRM_TIMEOUT = "bot:confirm_timeout"
+_KEY_CONFIRM_ON_TIMEOUT = "bot:confirm_on_timeout"
 _KEY_FIRST_START_DATE = "bot:first_start_date"
 _KEY_TUNE_REMINDED = "bot:tune_reminded"
 _KEY_CHRONOS = "bot:chronos_filter"
@@ -62,6 +63,29 @@ _KEY_CONFIDENCE_PAPER = "bot:signal_confidence_paper"
 
 _AI_PROVIDERS = frozenset({"auto", *ai_providers.BY_ID})
 _LEVERAGE_MODES = frozenset({"fixed", "volatility", "full"})
+
+# Время на решение по сделке. Дольше 2 минут ждать нельзя: цена уходит,
+# и сигнал устаревает.
+CONFIRM_TIMEOUT_MIN = 10
+CONFIRM_TIMEOUT_MAX = 120
+
+
+def confirm_policy(timeout: Any, on_timeout: Any) -> "tuple[int, str]":
+    """(секунд на решение, что без ответа: execute | skip).
+
+    Старое «0» (ручной режим: ждать ответа до часа) читается как потолок
+    и пропуск без ответа.
+    """
+    try:
+        sec = int(timeout) if isinstance(timeout, (int, str)) else 60
+    except ValueError:
+        sec = 60
+    if sec == 0:
+        return CONFIRM_TIMEOUT_MAX, "skip"
+    sec = max(CONFIRM_TIMEOUT_MIN, min(sec, CONFIRM_TIMEOUT_MAX))
+    return sec, on_timeout if on_timeout in ("execute", "skip") else "execute"
+
+
 _MARKET_TYPES = frozenset({"spot", "linear"})
 
 _RISK_PRESETS = {
@@ -706,23 +730,35 @@ class RuntimeConfig:
 
     # ── SAC prompt ────────────────────────────────────────────────────────────
 
+    def _confirm(self) -> "tuple[int, str]":
+        return confirm_policy(
+            self._get(_KEY_CONFIRM_TIMEOUT) or Config.TELEGRAM_CONFIRM_TIMEOUT,
+            self._get(_KEY_CONFIRM_ON_TIMEOUT)
+            or getattr(Config, "CONFIRM_ON_TIMEOUT", "execute"),
+        )
+
     def get_confirm_timeout(self) -> int:
-        """Таймаут подтверждения сделки в секундах.
-        0 = ручной режим (авто-исполнения нет, сделка ждёт Trade).
-        10–300 = авто-исполнение через N секунд. Default 60."""
-        val = self._get(_KEY_CONFIRM_TIMEOUT)
-        try:
-            parsed = int(val) if val else 60
-            return 0 if parsed == 0 else max(10, min(parsed, 300))
-        except (ValueError, TypeError):
-            return 60
+        """Секунд на решение по сделке: от 10 до 120."""
+        return self._confirm()[0]
 
     def set_confirm_timeout(self, seconds: int) -> bool:
-        if seconds != 0 and not (10 <= seconds <= 300):
+        if not CONFIRM_TIMEOUT_MIN <= seconds <= CONFIRM_TIMEOUT_MAX:
             return False
         self._set(_KEY_CONFIRM_TIMEOUT, str(seconds))
-        label = "ручной" if seconds == 0 else f"{seconds}с"
-        logger.info("Runtime: confirm_timeout → %s", label)
+        logger.info("Runtime: confirm_timeout → %dс", seconds)
+        return True
+
+    def get_confirm_on_timeout(self) -> str:
+        """Если не ответили вовремя: execute — открыть сделку, skip — пропустить."""
+        return self._confirm()[1]
+
+    def set_confirm_on_timeout(self, value: str) -> bool:
+        if value not in ("execute", "skip"):
+            return False
+        if self._get(_KEY_CONFIRM_TIMEOUT) == "0":  # старый ручной режим
+            self._set(_KEY_CONFIRM_TIMEOUT, str(CONFIRM_TIMEOUT_MAX))
+        self._set(_KEY_CONFIRM_ON_TIMEOUT, value)
+        logger.info("Runtime: confirm_on_timeout → %s", value)
         return True
 
     def is_sac_prompted(self, profile: str = "") -> bool:

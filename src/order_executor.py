@@ -30,6 +30,7 @@ import pandas as pd
 from config import Config
 from src.constants import KELLY_MIN_TRADES, TRADE_HISTORY_LOOKBACK
 from src.market_impact import estimate_from_df as _ac_impact
+from src.runtime_config import confirm_policy
 from src.types import PositionRecord
 
 if TYPE_CHECKING:
@@ -345,12 +346,15 @@ class OrderExecutor:
                 # Paper режим и AUTO_EXECUTE=true → без диалога, исполняем сразу
                 confirmed = True
             else:
-                _timeout = (
-                    _rc.get_confirm_timeout()
+                # Время на решение (10–120 с) и что делать без ответа.
+                _timeout, _on_timeout = (
+                    (_rc.get_confirm_timeout(), _rc.get_confirm_on_timeout())
                     if _rc is not None
-                    else Config.TELEGRAM_CONFIRM_TIMEOUT
+                    else confirm_policy(
+                        Config.TELEGRAM_CONFIRM_TIMEOUT,
+                        getattr(Config, "CONFIRM_ON_TIMEOUT", "execute"),
+                    )
                 )
-                _manual = _timeout == 0
                 confirmed = await self._telegram.ask_confirm(
                     top,
                     live_win_rate=live_wr,
@@ -359,8 +363,8 @@ class OrderExecutor:
                     bt_win_rate=bt["win_rate"],
                     bt_trades=bt["total_trades"],
                     bt_ev=bt["ev"],
-                    timeout=3600 if _manual else _timeout,
-                    auto_execute=not _manual,
+                    timeout=_timeout,
+                    auto_execute=_on_timeout == "execute",
                 )
             if not confirmed:
                 logger.info("Trade rejected via Telegram: %s", sym)

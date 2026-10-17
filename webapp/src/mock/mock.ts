@@ -72,7 +72,7 @@ for (const s of secrets) {
     if (!f.optional) Object.assign(f, { set: true, last4: f.secret ? "a9F2" : null, value: f.secret ? null : "1200450" });
 }
 // ── AI: цепочка провайдеров (как GET /api/ai) ─────────────────────────────────
-const ai = { single: false, ...structuredClone(fixtures.ai) } as AiState;
+const ai = structuredClone(fixtures.ai) as AiState;
 
 /** Те же правила, что ai_providers.chain на сервере. */
 function recomputeAi(): void {
@@ -379,7 +379,8 @@ async function cycle(): Promise<void> {
     if (Object.keys(positions).length >= maxPositions()) reject("все слоты заняты");
     else if (positions[sym]) reject("по монете уже есть позиция");
     else if (Math.random() < 0.55) reject(pick(REJECTS));
-    else if (cycleNo % 3 === 0) ask(sym, sides[sym]);
+    // Как у бота: спрашивает только в Live без авто-сделок, в Paper — сразу сделка.
+    else if (!config.AUTO_EXECUTE?.value && !bot.paper) ask(sym, sides[sym]);
     else openAndEmit(sym, sides[sym]);
   }
 }
@@ -398,6 +399,8 @@ function openAndEmit(sym: string, side: Side): void {
   });
 }
 
+const decisionSec = (): number => Number(config.TELEGRAM_CONFIRM_TIMEOUT?.value ?? 60);
+
 function ask(sym: string, side: Side): void {
   const price = PRICES[sym];
   const dir = side === "long" ? 1 : -1;
@@ -411,14 +414,14 @@ function ask(sym: string, side: Side): void {
     entry: price,
     stop_loss: price * (1 - dir * 0.015),
     take_profit: price * (1 + dir * 0.03),
-    expires_at: Date.now() / 1000 + 60,
-    on_timeout_execute: true,
+    expires_at: Date.now() / 1000 + decisionSec(),
+    on_timeout_execute: config.CONFIRM_ON_TIMEOUT?.value !== "skip",
     backtest: { win_rate: 0.34, trades: 2931, ev: -0.12 },
     live: { win_rate: 0.41, trades: 17, ev: 0.08 },
   };
   pending[id] = sig;
   emit("signal.pending", { ...sig });
-  setTimeout(() => resolve(id, sig.on_timeout_execute, "timeout"), 60_000);
+  setTimeout(() => resolve(id, sig.on_timeout_execute, "timeout"), decisionSec() * 1000);
 }
 
 function resolve(id: string, confirmed: boolean, by: string): boolean {

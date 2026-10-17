@@ -24,6 +24,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from src import ai_providers
+from src.runtime_config import CONFIRM_TIMEOUT_MAX, CONFIRM_TIMEOUT_MIN
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +82,7 @@ BASIC = frozenset(
         "TRADING_HOURS",
         "AUTO_EXECUTE",
         "TELEGRAM_CONFIRM_TIMEOUT",
+        "CONFIRM_ON_TIMEOUT",
         "INITIAL_BALANCE",
         "RISK_PER_TRADE",
         "MAX_POSITIONS",
@@ -226,9 +228,11 @@ SETTINGS: Tuple[Setting, ...] = (
     Setting(
         "AUTO_EXECUTE",
         _G_TRADE,
-        "Открывать сделки без подтверждения",
+        "Открывать сделки автоматически (без подтверждения)",
         "bool",
         False,
+        hint="В Paper бот не спрашивает всегда. В Live выключено — каждая сделка "
+        "приходит на подтверждение.",
         **_rc("set_auto_execute", "get_auto_execute"),
     ),
     Setting(
@@ -237,14 +241,21 @@ SETTINGS: Tuple[Setting, ...] = (
         "Сколько ждать подтверждения",
         "int",
         60,
-        min=0,
-        max=300,
+        min=CONFIRM_TIMEOUT_MIN,
+        max=CONFIRM_TIMEOUT_MAX,
         unit="с",
-        hint="0 — ждать ответа без ограничения.",
-        check=lambda v: (
-            None if v == 0 or 10 <= v <= 300 else "0 или от 10 до 300 секунд."
-        ),
+        hint="Время на решение по сделке. Не больше 2 минут: цена уходит, "
+        "и сигнал устаревает.",
         **_rc("set_confirm_timeout", "get_confirm_timeout"),
+    ),
+    Setting(
+        "CONFIRM_ON_TIMEOUT",
+        _G_TRADE,
+        "Если не ответил вовремя",
+        "choice",
+        "execute",
+        options=(("execute", "Открыть сделку"), ("skip", "Пропустить")),
+        **_rc("set_confirm_on_timeout", "get_confirm_on_timeout"),
     ),
     Setting(
         "INITIAL_BALANCE",

@@ -271,48 +271,112 @@ function TuneCard() {
 
 // ── Подтверждение сделок ──────────────────────────────────────────────────────
 
+const DECISION_MIN = 10;
+const DECISION_MAX = 120; // дольше ждать нельзя: цена уходит, сигнал устаревает
+const DECISION_QUICK = [
+  [15, "15 с"],
+  [30, "30 с"],
+  [60, "1 мин"],
+  [120, "2 мин"],
+] as const;
+
 function ConfirmCard() {
   const c = useStore((s) => s.config);
   const paper = useStore((s) => s.bot?.paper ?? true);
+  const say = useStore((s) => s.say);
   const auto = cfg(c, "AUTO_EXECUTE", false);
   const timeout = cfg<number>(c, "TELEGRAM_CONFIRM_TIMEOUT", 60);
+  const onTimeout = cfg<string>(c, "CONFIRM_ON_TIMEOUT", "execute");
+  const setTimeoutSec = (raw: string) => {
+    const v = Math.round(Number(raw));
+    if (!Number.isFinite(v)) return;
+    const clamped = Math.max(DECISION_MIN, Math.min(DECISION_MAX, v));
+    if (clamped !== v) say(`Время на решение — от ${DECISION_MIN} до ${DECISION_MAX} секунд.`);
+    if (clamped !== timeout) void actions.patchConfig({ TELEGRAM_CONFIRM_TIMEOUT: clamped });
+  };
   return (
     <article className="card">
       <div className="card-h">
-        <h2>Подтверждение сделок</h2>
-      </div>
-      {paper && <p className="note-soon" style={{ marginBottom: 10 }}>В Paper бот не спрашивает подтверждения — сделки виртуальные и открываются сразу. Настройка ниже работает в Live.</p>}
-      <div className="field">
-        <div className="row-tgl">
-          <span>
-            Открывать сделки без моего подтверждения{" "}
-            <Q tip="Выключено — бот присылает каждую сделку вам на подтверждение в Telegram и в приложение." />
-          </span>
-          <Toggle brand on={auto} label="Автоисполнение" onChange={(on) => void actions.patchConfig({ AUTO_EXECUTE: on })} />
-        </div>
+        <h2>Открытие сделок</h2>
       </div>
       <div className="field">
         <div className="field-h">
-          <span>Если я не ответил</span>
+          <span>
+            Как открывать <Q tip="Автоматически — бот нашёл сигнал и сразу открыл сделку. С подтверждением — каждая сделка приходит вам в Telegram и сюда." />
+          </span>
         </div>
         <Seg
           className="full"
-          value={timeout}
-          disabled={auto}
+          value={auto ? "auto" : "confirm"}
           options={[
-            [30, "30 с"],
-            [60, "1 мин"],
-            [120, "2 мин"],
-            [0, "Ждать меня"],
+            ["auto", "Автоматически"],
+            ["confirm", "С подтверждением"],
           ]}
-          onChange={(v) => void actions.patchConfig({ TELEGRAM_CONFIRM_TIMEOUT: v })}
+          label="Как открывать сделки"
+          onChange={(v) => void actions.patchConfig({ AUTO_EXECUTE: v === "auto" })}
         />
         <p>
-          {timeout === 0
-            ? "Бот ждёт вашего ответа до часа и без него сделку не открывает."
-            : `Не ответили за ${timeout} с — бот откроет сделку сам.`}
+          {auto
+            ? "Нашёл сигнал — сразу открывает сделку, без ожидания: в торговле важна скорость."
+            : "Бот присылает каждую сделку в Telegram и в приложение и ждёт вашего решения."}
         </p>
+        {paper && <p className="note-soon">Сейчас Paper: бот не спрашивает ни в каком режиме — сделки виртуальные. Подтверждение работает в Live.</p>}
       </div>
+      {!auto && (
+        <>
+          <div className="field">
+            <div className="field-h">
+              <span>
+                Время на решение <Q tip="Не больше 2 минут: цена уходит, и сигнал устаревает." />
+              </span>
+              <output className="num">{timeout} с</output>
+            </div>
+            <div className="quick">
+              {DECISION_QUICK.map(([v, label]) => (
+                <button key={v} className="btn" type="button" aria-pressed={timeout === v} onClick={() => void actions.patchConfig({ TELEGRAM_CONFIRM_TIMEOUT: v })}>
+                  {label}
+                </button>
+              ))}
+              <span className="numf" style={{ flex: "none", width: 104 }}>
+                <input
+                  key={timeout}
+                  type="number"
+                  min={DECISION_MIN}
+                  max={DECISION_MAX}
+                  step="1"
+                  inputMode="numeric"
+                  defaultValue={timeout}
+                  aria-label="Своё время на решение, секунд"
+                  onBlur={(e) => setTimeoutSec(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+                />
+                <span className="u">с</span>
+              </span>
+            </div>
+            <p>
+              От {DECISION_MIN} до {DECISION_MAX} секунд. Дольше ждать нельзя — цена уходит, и сигнал устаревает.
+            </p>
+          </div>
+          <div className="field">
+            <div className="field-h">
+              <span>Если не ответил</span>
+            </div>
+            <Seg
+              className="full"
+              value={onTimeout}
+              options={[
+                ["execute", "Открыть сделку"],
+                ["skip", "Пропустить"],
+              ]}
+              label="Если не ответил вовремя"
+              onChange={(v) => void actions.patchConfig({ CONFIRM_ON_TIMEOUT: v })}
+            />
+            <p>
+              Не ответили за {timeout} с — {onTimeout === "execute" ? "бот откроет сделку сам." : "сделка будет пропущена."}
+            </p>
+          </div>
+        </>
+      )}
     </article>
   );
 }

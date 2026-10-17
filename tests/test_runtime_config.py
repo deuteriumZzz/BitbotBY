@@ -463,9 +463,29 @@ class TestRuntimeConfigConfirmTimeout:
         rc, _, _ = rc_bundle
         assert rc.set_confirm_timeout(30) is True
 
-    def test_set_confirm_timeout_zero(self, rc_bundle):
+    def test_set_confirm_timeout_zero_rejected(self, rc_bundle):
+        # Ждать ответа бесконечно больше нельзя — сигнал устаревает.
         rc, _, _ = rc_bundle
-        assert rc.set_confirm_timeout(0) is True
+        assert rc.set_confirm_timeout(0) is False
+
+    def test_set_confirm_timeout_capped_at_two_minutes(self, rc_bundle):
+        rc, _, _ = rc_bundle
+        assert rc.set_confirm_timeout(120) is True
+        assert rc.set_confirm_timeout(121) is False
+
+    def test_legacy_manual_mode_reads_as_two_minutes_then_skip(self, rc_bundle):
+        rc, redis_mock, _ = rc_bundle
+        redis_mock.redis_client.get.side_effect = lambda k: (
+            "0" if k == "bot:confirm_timeout" else None
+        )
+        assert rc.get_confirm_timeout() == 120
+        assert rc.get_confirm_on_timeout() == "skip"
+
+    def test_confirm_on_timeout_default_and_set(self, rc_bundle):
+        rc, _, _ = rc_bundle
+        assert rc.get_confirm_on_timeout() == "execute"
+        assert rc.set_confirm_on_timeout("skip") is True
+        assert rc.set_confirm_on_timeout("wait") is False
 
     def test_set_confirm_timeout_too_small(self, rc_bundle):
         rc, _, _ = rc_bundle

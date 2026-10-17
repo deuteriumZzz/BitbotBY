@@ -34,8 +34,11 @@ def test_coerce_checks_type_and_range():
         reg.coerce(reg.BY_KEY["AUTO_EXECUTE"], "maybe")
     with pytest.raises(ValueError, match="Нет такого"):
         reg.coerce(reg.BY_KEY["MODE"], "yolo")
-    with pytest.raises(ValueError, match="0 или от 10"):
+    with pytest.raises(ValueError, match="Не меньше 10"):
         reg.coerce(reg.BY_KEY["TELEGRAM_CONFIRM_TIMEOUT"], 5)
+    # Дольше 2 минут на решение — сигнал устаревает.
+    with pytest.raises(ValueError, match="Не больше 120"):
+        reg.coerce(reg.BY_KEY["TELEGRAM_CONFIRM_TIMEOUT"], 300)
 
 
 def _current():
