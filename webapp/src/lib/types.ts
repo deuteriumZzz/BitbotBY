@@ -67,6 +67,8 @@ export interface Strategy {
   name: string;
   /** Где применима: spot — только лонг, futures — нужны шорты, both — везде. */
   markets: "spot" | "futures" | "both";
+  /** Добавлена без доказанного преимущества; выключена по умолчанию. */
+  experimental?: boolean;
   enabled: boolean;
   backtest: { win_rate: number; trades: number; sharpe: number } | null;
   live: { win_rate: number; trades: number; ev: number } | null;

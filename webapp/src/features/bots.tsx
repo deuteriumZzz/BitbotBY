@@ -32,6 +32,13 @@ export const STRATEGY_NAME: Record<string, string> = {
   volume_spike: "Всплеск объёма",
   macd_crossover: "Пересечение MACD",
   pump_exit: "Выход из пампа",
+  supertrend: "SuperTrend",
+  dual_thrust: "Dual Thrust",
+  ttm_squeeze: "TTM Squeeze",
+  adx_trend_birth: "Рождение тренда (ADX)",
+  vwap_reversion: "Возврат к VWAP",
+  crash_bounce: "Отскок после обвала",
+  bear_hedge: "Медвежий шорт",
 };
 export const stratName = (k: string): string => STRATEGY_NAME[k] ?? k;
 
@@ -505,6 +512,11 @@ function StrategiesCard() {
                 <code>{s.name}</code>
               </div>
               <div className="row-r">
+                {s.experimental && (
+                  <span className="pill" title="Добавлена из Argent-Systems без доказанного преимущества. Включайте осознанно.">
+                    эксперимент
+                  </span>
+                )}
                 {s.markets === "futures" && (
                   <span className={`pill ${blocked ? "warn" : ""}`} title="Сигналы только на продажу: открыть можно лишь шорт">
                     {blocked ? "не для спота" : "фьючерсы"}

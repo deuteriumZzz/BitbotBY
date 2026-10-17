@@ -644,3 +644,24 @@ class TestRuntimeConfigDeepseekBalance:
         rc, redis_mock, _ = rc_bundle
         redis_mock.redis_client.get.return_value = b"not-json"
         assert rc.get_deepseek_balance() is None
+
+
+class TestExperimentalStrategies:
+    def test_new_ones_are_disabled_once(self, rc_bundle):
+        rc, redis_mock, _ = rc_bundle
+        client = redis_mock.redis_client
+        client.smembers.return_value = set()  # ещё не видели
+        assert rc.ensure_experimental_disabled(["supertrend", "dual_thrust"]) == [
+            "supertrend",
+            "dual_thrust",
+        ]
+        disabled = [c.args for c in client.sadd.call_args_list]
+        assert ("bot:disabled_strategies", "supertrend") in disabled
+        assert ("bot:experimental_strategies_seen", "dual_thrust") in disabled
+
+    def test_already_seen_are_left_to_the_user(self, rc_bundle):
+        rc, redis_mock, _ = rc_bundle
+        client = redis_mock.redis_client
+        client.smembers.return_value = {"supertrend"}  # включена пользователем
+        assert rc.ensure_experimental_disabled(["supertrend"]) == []
+        client.sadd.assert_not_called()

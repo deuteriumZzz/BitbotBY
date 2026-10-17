@@ -79,9 +79,13 @@ def test_volume_spike_is_one_strategy_with_profile_threshold():
         set_active_profile("")
 
 
-def test_only_pump_exit_is_futures_only():
-    assert [n for n, c in STRATEGY_REGISTRY.items() if c.markets == "futures"] == [
-        "pump_exit"
+def test_only_sell_only_strategies_are_futures_only():
+    # Стратегии, которые умеют только продавать, на споте входов не дают.
+    assert sorted(
+        n for n, c in STRATEGY_REGISTRY.items() if c.markets == "futures"
+    ) == [
+        "bear_hedge",
+        "pump_exit",
     ]
     assert all(
         c.markets in ("spot", "futures", "both") for c in STRATEGY_REGISTRY.values()

@@ -682,6 +682,14 @@ _STRAT_SHORT = {
     "inverse_fair_value_gap": "IFVG🔴",
     "liquidity_sweep": "Sweep🔴",
     "amd": "AMD🔴",
+    # из Argent-Systems (экспериментальные)
+    "supertrend": "SupTr",
+    "dual_thrust": "DualT",
+    "ttm_squeeze": "Squeeze",
+    "adx_trend_birth": "ADXb",
+    "vwap_reversion": "VWAP↩",
+    "crash_bounce": "Bounce🔴",
+    "bear_hedge": "Bear🔴",
 }
 
 

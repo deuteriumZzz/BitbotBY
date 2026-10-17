@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Any, List, Optional, Set
+from typing import Any, Iterable, List, Optional, Set
 
 from config import Config
 from src import ai_providers
@@ -24,6 +24,7 @@ _KEY_AUTO_EXECUTE = "bot:auto_execute"
 _KEY_FORCED = "bot:forced_symbols"
 _KEY_EXCLUDED = "bot:excluded_symbols"
 _KEY_DISABLED_STRATS = "bot:disabled_strategies"
+_KEY_EXPERIMENTAL_SEEN = "bot:experimental_strategies_seen"
 _KEY_TRADING_HOURS = "bot:trading_hours"
 _KEY_MAX_POSITIONS = "bot:max_positions"
 _KEY_RISK_PER_TRADE = "bot:risk_per_trade"
@@ -711,6 +712,23 @@ class RuntimeConfig:
             logger.info("Runtime: стратегия включена — %s", name)
         except Exception as e:
             logger.warning("RuntimeConfig srem failed: %s", e)
+
+    def ensure_experimental_disabled(self, names: Iterable[str]) -> List[str]:
+        """Новые экспериментальные стратегии при первом появлении выключаются.
+
+        Каждое имя обрабатывается один раз: дальше решает пользователь (включил —
+        остаётся включённой). Возвращает, какие были выключены сейчас.
+        """
+        try:
+            seen = self._smembers(_KEY_EXPERIMENTAL_SEEN)
+            fresh = [n for n in names if n not in seen]
+            for name in fresh:
+                self.disable_strategy(name)
+                self._r.redis_client.sadd(_KEY_EXPERIMENTAL_SEEN, name)
+            return fresh
+        except Exception as e:
+            logger.warning("RuntimeConfig experimental seeding failed: %s", e)
+            return []
 
     def reset_strategies(self) -> None:
         """Включить все стратегии (очистить список отключённых)."""

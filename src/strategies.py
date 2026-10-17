@@ -7,7 +7,6 @@ Trend Following), реестр STRATEGY_REGISTRY и класс TradingStrategy-�
 """
 
 import logging
-from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Tuple, Type
 
 import pandas as pd
@@ -15,73 +14,10 @@ import pandas as pd
 from config import Config
 
 from .redis_client import RedisClient
+from .strategies_base import BaseStrategy
+from .strategies_ported import PORTED_STRATEGIES
 
 logger = logging.getLogger(__name__)
-
-
-class BaseStrategy(ABC):
-    """
-    Базовый абстрактный класс для всех торговых стратегий.
-
-    Определяет интерфейс generate_signal() и вспомогательные методы
-    для безопасного доступа к значениям DataFrame.
-    """
-
-    name: str = ""
-    description: str = ""
-    recommended_timeframes: List[str] = []
-    risk_level: str = "medium"  # low / medium / high
-    market_type: str = "any"  # trending / ranging / volatile / any
-    # Где стратегия вообще применима: spot (только лонг), futures (нужны шорты
-    # или перпетуалы) или both. На споте шорта нет — futures-стратегии там
-    # не участвуют ни в отборе, ни в промпте AI.
-    markets: str = "both"
-
-    @abstractmethod
-    def generate_signal(self, data: pd.DataFrame) -> Dict[str, Any]:
-        """
-        Генерирует торговый сигнал на основе рыночных данных.
-
-        :param data: DataFrame с OHLCV и техническими индикаторами.
-        :return: Словарь с ключами action, confidence и опционально price.
-        """
-
-    def get_info(self) -> Dict[str, Any]:
-        """
-        Возвращает метаданные стратегии.
-
-        :return: Словарь с name, description, recommended_timeframes,
-            risk_level, market_type.
-        """
-        return {
-            "name": self.name,
-            "description": self.description,
-            "recommended_timeframes": self.recommended_timeframes,
-            "risk_level": self.risk_level,
-            "market_type": self.market_type,
-            "markets": self.markets,
-        }
-
-    def _last(self, data: pd.DataFrame, col: str, default: float = 0.0) -> float:
-        """Возвращает последнее значение колонки или default."""
-        if col in data.columns and len(data) > 0:
-            val = data[col].iloc[-1]
-            return float(val) if pd.notna(val) else default
-        return default
-
-    def _prev(self, data: pd.DataFrame, col: str, default: float = 0.0) -> float:
-        """Возвращает предпоследнее значение колонки или default."""
-        if col in data.columns and len(data) > 1:
-            val = data[col].iloc[-2]
-            return float(val) if pd.notna(val) else default
-        return default
-
-    def _prev2(self, data: pd.DataFrame, col: str, default: float = 0.0) -> float:
-        """Возвращает третье с конца значение колонки или default."""
-        if col in data.columns and len(data) > 2:
-            val = data[col].iloc[-3]
-            return float(val) if pd.notna(val) else default
-        return default
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1390,6 +1326,10 @@ STRATEGY_REGISTRY: Dict[str, Type[BaseStrategy]] = {
     "liquidity_sweep": LiquiditySweepStrategy,
     "amd": AMDStrategy,
 }
+
+# Стратегии из Argent-Systems (см. strategies_ported.py) — отдельным блоком,
+# чтобы было видно, что их преимущество не доказано.
+STRATEGY_REGISTRY.update(PORTED_STRATEGIES)
 
 
 # Профильные варианты volume_spike слиты в одну стратегию; старые имена остаются

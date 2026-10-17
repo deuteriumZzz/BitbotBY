@@ -51,7 +51,7 @@ from src.sentiment_poller import SentimentPoller
 from src.settings_registry import apply_overrides as apply_config_overrides
 from src.settings_registry import effective_config
 from src.signal_combiner import SignalCombiner
-from src.strategies import TradingStrategy
+from src.strategies import STRATEGY_REGISTRY, TradingStrategy
 from src.telegram_commander import (
     TelegramCommander,
     _kb_main,
@@ -1545,6 +1545,11 @@ class TradingBot:
         mode = "paper" if Config.PAPER_TRADING else "live"
         self._runtime_config.ensure_first_start_date()
         self._runtime_config.ensure_default_market_profile()
+        _off = self._runtime_config.ensure_experimental_disabled(
+            n for n, c in STRATEGY_REGISTRY.items() if c.experimental
+        )
+        if _off:
+            logger.info("Экспериментальные стратегии выключены по умолчанию: %s", _off)
         # Синхронизируем os.environ["MARKET_TYPE"] из Redis при старте —
         # RuntimeConfig.set_market_type() зеркалит его в env только пока
         # процесс жив; после рестарта переменная окружения откатывается к

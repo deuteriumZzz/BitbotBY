@@ -531,6 +531,12 @@ def run_strategy(
     closed_trades: List[Dict[str, Any]] = []
     trade_returns: List[float] = []
 
+    # Порты из Argent считают вес позиции по всей истории один раз (он причинный),
+    # а не заново на каждом шаге walk-forward.
+    prepare = getattr(strategy, "prepare", None)
+    if callable(prepare):
+        prepare(df)
+
     n = len(df)
     dot_interval = max(1000, n // 10)
 
