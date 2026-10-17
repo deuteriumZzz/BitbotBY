@@ -1165,7 +1165,7 @@ class TelegramCommander:
         excluded = sorted(self._rc.get_excluded_symbols())
         lev_mode = self._rc.get_leverage_mode()
         lev_target = self._rc.get_leverage_target_risk()
-        lev_dd = self._rc.get_max_drawdown_percent()
+        lev_dd = self._rc.get_leverage_dd_threshold()
         provider = self._rc.get_ai_provider()
         hours = self._rc.get_trading_hours()
         max_pos = self._rc.get_max_positions()
@@ -1551,7 +1551,7 @@ class TelegramCommander:
         if not args:
             mode = self._rc.get_leverage_mode()
             risk = self._rc.get_leverage_target_risk()
-            dd = self._rc.get_max_drawdown_percent()
+            dd = self._rc.get_leverage_dd_threshold()
             mode_desc = {
                 "fixed": "Фиксированное (LEVERAGE из .env)",
                 "volatility": "ATR-таргетинг (авто по волатильности) ✅",
@@ -1588,7 +1588,7 @@ class TelegramCommander:
                 }[sub]
                 extra = (
                     f"\n_Текущий порог просадки: "
-                    f"{self._rc.get_max_drawdown_percent():.0%} "
+                    f"{self._rc.get_leverage_dd_threshold():.0%} "
                     f"(изменить: `/lev drawdown 0.15`)_"
                     if sub == "full"
                     else ""
@@ -1626,7 +1626,7 @@ class TelegramCommander:
             except ValueError:
                 await self._reply(update, "❌ Укажи число: `/lev drawdown 0.15`")
                 return
-            if self._rc.set_max_drawdown_percent(pct):
+            if self._rc.set_leverage_dd_threshold(pct):
                 await self._reply(
                     update,
                     f"✅ Порог просадки: `{pct:.0%}`\n"
@@ -2795,7 +2795,7 @@ class TelegramCommander:
         elif data == "lev_menu":
             mode = self._rc.get_leverage_mode()
             target = self._rc.get_leverage_target_risk()
-            dd = self._rc.get_max_drawdown_percent()
+            dd = self._rc.get_leverage_dd_threshold()
             mode_desc = {
                 "fixed": "Фиксированное плечо из LEVERAGE",
                 "volatility": "ATR-таргетинг (авто по волатильности)",
@@ -2816,7 +2816,7 @@ class TelegramCommander:
             self._rc.set_leverage_mode(val)
             mode = val
             target = self._rc.get_leverage_target_risk()
-            dd = self._rc.get_max_drawdown_percent()
+            dd = self._rc.get_leverage_dd_threshold()
             desc = {
                 "fixed": "Фиксированное плечо из LEVERAGE",
                 "volatility": "ATR-таргетинг (авто по волатильности)",
@@ -2832,7 +2832,7 @@ class TelegramCommander:
             val_f = float(data.split(":", 2)[2])
             self._rc.set_leverage_target_risk(val_f)
             mode = self._rc.get_leverage_mode()
-            dd = self._rc.get_max_drawdown_percent()
+            dd = self._rc.get_leverage_dd_threshold()
             await self._edit(
                 query,
                 f"✅ Риск на ATR: `{val_f*100:.1f}%`\n\n_Выбери режим или параметр:_",
@@ -2841,7 +2841,7 @@ class TelegramCommander:
 
         elif data.startswith("lev:drawdown:"):
             val_f = float(data.split(":", 2)[2])
-            self._rc.set_max_drawdown_percent(val_f)
+            self._rc.set_leverage_dd_threshold(val_f)
             mode = self._rc.get_leverage_mode()
             target = self._rc.get_leverage_target_risk()
             await self._edit(
@@ -2853,7 +2853,7 @@ class TelegramCommander:
         elif data == "lev:manual":
             mode = self._rc.get_leverage_mode()
             target = self._rc.get_leverage_target_risk()
-            dd = self._rc.get_max_drawdown_percent()
+            dd = self._rc.get_leverage_dd_threshold()
             await self._edit(
                 query,
                 "✏️ *Ручной ввод параметров плеча*\n\n"

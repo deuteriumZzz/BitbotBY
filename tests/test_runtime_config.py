@@ -18,7 +18,7 @@ def rc_bundle():
     cfg.AI_PROVIDER = "auto"
     cfg.LEVERAGE_MODE = "volatility"
     cfg.LEVERAGE_TARGET_RISK = 0.01
-    cfg.MAX_DRAWDOWN_PERCENT = 0.15
+    cfg.LEVERAGE_DD_THRESHOLD = 0.15
     cfg.RISK_PER_TRADE = 0.02
     cfg.MAX_POSITIONS = 3
     cfg.DRAWDOWN_SCALE_ENABLED = True

@@ -61,7 +61,7 @@ def _make_cfg(
     cfg.LEVERAGE_MAX = 5
     cfg.LEVERAGE_MODE = "volatility"
     cfg.LEVERAGE_TARGET_RISK = 0.01
-    cfg.MAX_DRAWDOWN_PERCENT = 0.15
+    cfg.LEVERAGE_DD_THRESHOLD = 0.15
     cfg.TRADING_HOURS = ""
     cfg.MAX_SPREAD_PCT = 0.3
     cfg.MIN_VOLUME_USDT = 1_000_000.0
@@ -163,7 +163,8 @@ class TestCalcDynamicLeverage:
         cfg.LEVERAGE_MAX = kwargs.get("LEVERAGE_MAX", 5)
         cfg.LEVERAGE_MODE = kwargs.get("LEVERAGE_MODE", "volatility")
         cfg.LEVERAGE_TARGET_RISK = kwargs.get("LEVERAGE_TARGET_RISK", 0.01)
-        cfg.MAX_DRAWDOWN_PERCENT = kwargs.get("MAX_DRAWDOWN_PERCENT", 0.15)
+        cfg.LEVERAGE_DD_THRESHOLD = kwargs.get("LEVERAGE_DD_THRESHOLD", 0.15)
+        cfg.MAX_DRAWDOWN_PERCENT = kwargs.get("MAX_DRAWDOWN_PERCENT", 0.2)
         return cfg
 
     def test_fixed_mode_returns_fallback(self):
@@ -222,7 +223,7 @@ class TestCalcDynamicLeverage:
     def test_mode_full_downtrend_drawdown(self):
         """mode == 'full', downtrend with drawdown → reduced leverage (lines 97-111)."""
         cfg = self._cfg(
-            LEVERAGE_MODE="full", LEVERAGE_TARGET_RISK=0.05, MAX_DRAWDOWN_PERCENT=0.20
+            LEVERAGE_MODE="full", LEVERAGE_TARGET_RISK=0.05, LEVERAGE_DD_THRESHOLD=0.20
         )
         top = {
             "symbol": "ETH/USDT",
@@ -320,12 +321,12 @@ class TestCalcDynamicLeverage:
         assert lev_with_dd <= lev_no_dd
 
     def test_full_mode_max_drawdown_from_runtime_config(self):
-        """runtime_config supplies max_drawdown_percent (line 101)."""
+        """runtime_config supplies leverage_dd_threshold."""
         cfg = self._cfg(LEVERAGE_MODE="full", LEVERAGE_TARGET_RISK=0.02)
         rc = MagicMock()
         rc.get_leverage_mode.return_value = "full"
         rc.get_leverage_target_risk.return_value = 0.02
-        rc.get_max_drawdown_percent.return_value = 0.10
+        rc.get_leverage_dd_threshold.return_value = 0.10
         top = {
             "symbol": "BTC/USDT",
             "atr": 1.0,
@@ -342,14 +343,14 @@ class TestCalcDynamicLeverage:
         assert isinstance(lev, int)
 
     def test_full_mode_max_drawdown_runtime_raises(self):
-        """runtime_config.get_max_drawdown_percent() raises → Config fallback (lines 105-106)."""
+        """runtime_config.get_leverage_dd_threshold() raises → Config fallback."""
         cfg = self._cfg(
-            LEVERAGE_MODE="full", LEVERAGE_TARGET_RISK=0.02, MAX_DRAWDOWN_PERCENT=0.15
+            LEVERAGE_MODE="full", LEVERAGE_TARGET_RISK=0.02, LEVERAGE_DD_THRESHOLD=0.15
         )
         rc = MagicMock()
         rc.get_leverage_mode.return_value = "full"
         rc.get_leverage_target_risk.return_value = 0.02
-        rc.get_max_drawdown_percent.side_effect = Exception("broken")
+        rc.get_leverage_dd_threshold.side_effect = Exception("broken")
         top = {
             "symbol": "BTC/USDT",
             "atr": 1.0,
@@ -365,6 +366,24 @@ class TestCalcDynamicLeverage:
             )
         assert isinstance(lev, int)
 
+
+    def test_full_mode_uses_leverage_dd_not_halt_threshold(self):
+        """Плечо режется по LEVERAGE_DD_THRESHOLD, а не по hard-halt MAX_DRAWDOWN_PERCENT."""
+        cfg = self._cfg(
+            LEVERAGE_MODE="full",
+            LEVERAGE_TARGET_RISK=0.10,
+            LEVERAGE_MAX=20,
+            LEVERAGE_DD_THRESHOLD=0.10,
+            MAX_DRAWDOWN_PERCENT=0.50,
+        )
+        top = {"symbol": "BTC/USDT", "atr": 1.0, "indicators": {"trend": "uptrend"}}
+        with patch("src.order_executor.Config", cfg):
+            lev = _calc_dynamic_leverage(
+                top, entry=100.0, balance=9500.0, peak_balance=10000.0
+            )
+        # base = 0.10/0.01 = 10; dd 5% / 10% → mult 0.5 → 5x
+        # (с порогом halt 50% было бы 1 - 0.05/0.5 = 0.9 → 9x)
+        assert lev == 5
 
 # ── Trading hours filter ──────────────────────────────────────────────────────
 
