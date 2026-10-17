@@ -366,7 +366,6 @@ class TestCalcDynamicLeverage:
             )
         assert isinstance(lev, int)
 
-
     def test_full_mode_uses_leverage_dd_not_halt_threshold(self):
         """Плечо режется по LEVERAGE_DD_THRESHOLD, а не по hard-halt MAX_DRAWDOWN_PERCENT."""
         cfg = self._cfg(
@@ -384,6 +383,7 @@ class TestCalcDynamicLeverage:
         # base = 0.10/0.01 = 10; dd 5% / 10% → mult 0.5 → 5x
         # (с порогом halt 50% было бы 1 - 0.05/0.5 = 0.9 → 9x)
         assert lev == 5
+
 
 # ── Trading hours filter ──────────────────────────────────────────────────────
 
