@@ -1,0 +1,115 @@
+# Инвентаризация стратегий
+
+Составлено 2026-10-17, чтобы решить, что оставить, склеить и добавить из
+[Argent-Systems](https://github.com/deuteriumZzz/Argent-Systems). По этому документу в коде
+пока ничего не менялось.
+
+## Главное
+
+- У нас **20** стратегий в 6 семействах. Бэктест (`data/backtest_results.json` от 2026-09-18:
+  20 монет, 15m, 12 месяцев): **у 18 стратегий Sharpe отрицательный**. Единственный плюс — у
+  `scalping` (+0.04), но на 10 сделках, это не результат; `sentiment` вообще без сделок.
+- В Argent **133** стратегии. Их собственная проверка (Deflated Sharpe): **0 из ~105 ценовых
+  значимы**. Брать их пачкой — значит добавить шум.
+- Для нашего бота реально подходят **7** (раздел C); остальные не подходят по
+  архитектуре, данным, горизонту или повторяют наши.
+- Результатов бэктеста Argent в репозитории нет (папка `results/` не коммитится), поэтому цифр
+  по отдельным стратегиям оттуда мы не берём — только выводы из их README.
+
+## A. Наши 20 стратегий
+
+| Стратегия | Семейство | Рынок | Режим | Риск | Сделок в бэктесте | Sharpe | Доля прибыльных | Заметка |
+|---|---|---|---|---|---|---|---|---|
+| `ema_crossover` | Тренд (скользящие) | both | trending | medium | 2931 | -0.12 | 34% |  |
+| `rsi_momentum` | Возврат к среднему | both | ranging | medium | 2808 | -0.10 | 36% |  |
+| `macd_crossover` | Тренд (скользящие) | both | trending | medium | 3937 | -0.14 | 34% |  |
+| `bollinger_bands` | Возврат к среднему | both | volatile | medium | 4259 | -0.09 | 38% |  |
+| `scalping` | Пробой | both | volatile | high | 10 | +0.04 | 40% | в бэктесте всего 10 сделок — вывода нет |
+| `swing_trading` | Тренд (скользящие) | both | trending | medium | 5082 | -0.09 | 33% |  |
+| `breakout` | Пробой | both | volatile | high | 4526 | -0.12 | 33% |  |
+| `mean_reversion` | Возврат к среднему | both | ranging | medium | 2257 | -0.11 | 37% |  |
+| `trend_following` | Тренд (скользящие) | both | trending | low | 5017 | -0.09 | 33% |  |
+| `volume_spike` | Объём | both | volatile | high | 3153 | -0.15 | 33% | порог зависит от профиля монет (2.0 / 3.0 / 5.0) |
+| `momentum_burst` | Мем-профиль | both | volatile | high | 150 | -0.04 | 37% | мало сделок (150) |
+| `pump_exit` | Мем-профиль | futures | volatile | high | 572 | -0.14 | 32% | только сигналы на продажу, поэтому «только фьючерсы» |
+| `sentiment` | Мем-профиль | both | volatile | high | 0 | +0.00 | 0% | в бэктесте 0 сделок: нужны данные настроений, которых в свечах нет |
+| `support_resistance` | Возврат к среднему | both | ranging | medium | 3006 | -0.13 | 36% |  |
+| `fibonacci_retracement` | ICT / SMC | both | trending | medium | 1619 | -0.05 | 38% |  |
+| `cvd_divergence` | Объём | both | any | high | 1158 | -0.10 | 38% |  |
+| `fair_value_gap` | ICT / SMC | both | trending | medium | 3057 | -0.09 | 35% |  |
+| `inverse_fair_value_gap` | ICT / SMC | both | volatile | high | 2415 | -0.11 | 35% |  |
+| `liquidity_sweep` | ICT / SMC | both | ranging | high | 1771 | -0.05 | 39% |  |
+| `amd` | ICT / SMC | both | ranging | high | 295 | -0.00 | 41% | мало сделок (295) |
+
+Что видно:
+- **Тренд (4):** `ema_crossover`, `macd_crossover`, `swing_trading`, `trend_following` — все на
+  скользящих, сигналы сильно пересекаются. Кандидаты на сокращение, если сделки совпадают по времени.
+- **ICT / SMC (5):** Sharpe лучше остальных (−0.05…−0.09), но всё равно отрицательный.
+- `scalping` и `sentiment` бэктестом не проверены (10 и 0 сделок).
+
+## B. Argent: что делать со 133 стратегиями
+
+| Группа | Сколько | Вердикт | Почему |
+|---|---|---|---|
+| Другие данные или модель торговли (funding-carry, on-chain, межбиржевая премия) | 15 | не сейчас | Нужны ставка фандинга, цепочка или две биржи; carry ещё и только фьючерсы с хеджем. Это отдельный продукт, а не ещё одна стратегия |
+| Сетки и DCA (grid, martingale, усреднение) | 14 | не подходят | Несколько ордеров и усреднение вниз, а у нас одна позиция на монету со стопом и тейком. Martingale опасен |
+| Календарные эффекты (день недели, конец квартала, праздники) | 11 | не брать | Нет рыночного механизма, на 15m бессмысленны; в README Argent ничего значимого |
+| Научные работы на дневном горизонте (моментум 12-1 и т. п.) | 24 | не подходят | Рассчитаны на удержание днями и месяцами и на веса портфеля; бот торгует 15m с процентным стопом |
+| ICT / SMC (order block, kill zone и др.) | 7 | не брать | У нас уже 5 ICT-стратегий; по README Argent наивные реализации среди худших, kill zone провалилась во всех 11 режимах |
+| Повторяют наши по смыслу | 15 | не брать | См. таблицу ниже |
+| **Кандидаты** | **7** | **добавить** | См. раздел C |
+| Остальные индикаторные варианты | 40 | пока не нужны | Осцилляторы и каналы без отличия по сути от наших семейств; можно вернуться, если понадобится больше разнообразия |
+
+### Повторы: что чему соответствует
+
+| Argent | Наша |
+|---|---|
+| `macd_trend` | `macd_crossover` |
+| `niche_ema_threshold` | `ema_crossover` |
+| `trend_triple_ema` | `ema_crossover` |
+| `niche_ma_adx_regime` | `ema_crossover` |
+| `bollinger_breakout` | `breakout` |
+| `donchian_channel` | `breakout` |
+| `nfi_donchian_quiet_breakout` | `breakout` |
+| `trend_keltner_breakout` | `breakout` |
+| `rsi_mean_reversion` | `rsi_momentum` |
+| `reversion_bollinger_percent_b` | `bollinger_bands` |
+| `pattern_bollinger_recognition` | `bollinger_bands` |
+| `reversion_zscore` | `mean_reversion` |
+| `niche_turtle_soup` | `liquidity_sweep` |
+| `nfi_squeeze_momentum_release` | community_ttm_squeeze_carter (из кандидатов) |
+| `nfi_mfi_cmf_bb_accumulation` | `bollinger_bands` |
+
+### Остальные индикаторные варианты (40)
+
+`community_chaikin_oscillator`, `community_coppock_curve`, `community_coral_trend`, `community_kst_oscillator`, `community_rvi_oscillator`, `community_waddah_attar_explosion`, `community_zlsma_trend`, `nfi_cci_aroon_reversal`, `nfi_engulfing_trend_continuation`, `niche_chaikin_money_flow`, `niche_fisher_transform`, `niche_kdj`, `niche_klinger_volume`, `pattern_awesome_oscillator`, `pattern_heikin_ashi`, `pattern_london_breakout`, `pattern_rsi_divergence`, `pattern_shooting_star`, `reversion_cci`, `reversion_ifr2_trend_filtered`, `reversion_keltner_fade`, `reversion_stoch_rsi`, `reversion_stochastic`, `reversion_williams_r`, `trend_adx_dmi`, `trend_chandelier_exit`, `trend_halftrend`, `trend_ichimoku`, `trend_parabolic_sar`, `trend_ssl_channel`, `trend_vortex`, `volume_ad_line_trend`, `volume_ease_of_movement`, `volume_elder_force_index`, `volume_inventory_skew_adaptive`, `volume_mfi_trend_filter`, `volume_obv_trend`, `volume_profile_poc_reversion`, `volume_vwap_trend_filter`, `volume_weighted_macd`
+
+## C. Кандидаты на добавление (7)
+
+Отбор: только свечи (без новых данных), понятный вход и выход в формате buy/sell, не повторяют
+наши, работают на 15m–1h, нет усреднения вниз.
+
+| Стратегия | Рынок | Тип | Зачем нам | Источник и лицензия |
+|---|---|---|---|---|
+| `trend_supertrend` | both | тренд | Разворотная полоса по ATR: подстраивается под волатильность, чего у наших скользящих нет. Простая и объяснимая. | классика, без лицензии |
+| `niche_dual_thrust` | both | пробой | По README Argent — лучшая по среднему Sharpe в кросс-режимной проверке (8 из 11 режимов в плюс). Не топовая классика, поэтому не повтор. | MIT (jesse-ai) |
+| `community_ttm_squeeze_carter` | both | сжатие → импульс | Пружина: Боллинджер внутри Кельтнера, затем выход. Такого у нас нет. | формула индикатора, открыта |
+| `nfi_adx_trend_birth` | both | рождение тренда | Вход, когда ADX пересекает порог при перевесе +DI: ловит старт тренда, а не середину. | GPL-3.0 у источника; реализация оригинальная (по идее) |
+| `reversion_vwap` | both | возврат к VWAP | Отклонение от VWAP с RSI-фильтром: привязка к «справедливой цене», у наших возвратов к среднему её нет. | MIT, переписано независимо |
+| `nfi_crash_bounce_capitulation` | spot | отскок после обвала | Покупка после капитуляции, только лонг: единственная логика для спота, работающая именно на падении. Высокий риск. | GPL-3.0 у источника; реализация оригинальная (по идее) |
+| `hedge_trend_vol_bear` | futures | шорт в медвежьем тренде | Шорт при подтверждённом даунтренде и повышенной волатильности. У нас нет ни одной стратегии под медвежий рынок. Идея автора, не проверена. | своя идея, без проверки |
+
+Замечания:
+- **Две стратегии (`nfi_*`) основаны на NostalgiaForInfinity под GPL-3.0.** В Argent это новая
+  реализация «по идее», без копирования кода; если вы с этим не согласны, их лучше пропустить.
+  Остальные: MIT, классика или собственная идея.
+- **Доказательств преимущества нет ни у одной.** Это разнообразие, а не гарантия прибыли. Каждая
+  пройдёт наш бэктест, и в приложении у неё будет метка «нет edge», пока не покажет обратное.
+- `nfi_crash_bounce_capitulation` помечена «спот» (лонг), `hedge_trend_vol_bear` — «фьючерсы» (только шорт).
+
+## D. Что дальше
+
+1. Согласовать список из раздела C (убрать, добавить, заменить).
+2. Портировать выбранные в наш формат `generate_signal(df)` с признаком рынка.
+3. Прогнать бэктест на тех же данных, что и текущие 20, и показать результат рядом.
+4. По итогам решить, сокращать ли тренд-семейство из 4 похожих стратегий.
