@@ -83,6 +83,7 @@ BASIC = frozenset(
         "TRADING_HOURS",
         "AUTO_EXECUTE",
         "LOCAL_FALLBACK",
+        "PAPER_GUARDS_OFF",
         "TELEGRAM_CONFIRM_TIMEOUT",
         "CONFIRM_ON_TIMEOUT",
         "INITIAL_BALANCE",
@@ -138,6 +139,7 @@ def _hours_ok(v: str) -> bool:
 _G_TRADE = "Торговля"
 _G_RISK = "Риск на сделку"
 _G_GUARD = "Аварийная защита"
+_G_PORT = "Защита портфеля"
 _G_LEV = "Плечо"
 _G_EXIT = "Выход из сделки"
 _G_FILTER = "Фильтры входа"
@@ -686,6 +688,19 @@ SETTINGS: Tuple[Setting, ...] = (
         "доказанного преимущества). Выключено: нет сигнала от AI/SAC — нет "
         "сделки. В режиме Local не используется.",
         **_rc("set_local_fallback", "get_local_fallback"),
+    ),
+    Setting(
+        "PAPER_GUARDS_OFF",
+        _G_PORT,
+        "Paper: выключить защиты портфеля",
+        "bool",
+        False,
+        hint="Только Paper, чтобы быстрее копить сделки. Отключает паузу по "
+        "монете, всплеск волатильности, паузу на макро-новости, фильтр "
+        "корреляции, лимит нагрузки портфеля и kill-switch стратегий, а также "
+        "предупреждения о просадке, дневном лимите и серии убытков. SL/TP и "
+        "проверка ликвидности остаются. В Live переключатель игнорируется.",
+        **_rc("set_paper_guards_off", "get_paper_guards_off"),
     ),
     Setting(
         "AI_PROVIDER",

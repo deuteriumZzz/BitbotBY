@@ -37,6 +37,7 @@
 | `season_dismiss` (+ уведомление о смене сезона) | Оставить профиль | Баннер «Сменился сезон: переключить / оставить» | WS `season.changed`, `POST /api/profile` / `POST /api/season/dismiss` | ✓ |
 | `market_type_menu`, `market_type:*` | Спот / фьючерсы | Бот → «Рынок» | `PATCH /api/config {MARKET_TYPE}` | ✓ |
 | `toggle_auto_exec` | Автоисполнение | Бот → «Без моего подтверждения» | `PATCH /api/config {AUTO_EXECUTE}` | ✓ |
+| `toggle_paper_guards` (Риск-профиль; только Paper, в Live кнопки нет) | Paper без защит портфеля: пауза по монете, ATR-всплеск, макро-пауза, корреляция, нагрузка портфеля, kill-switch. SL/TP и ликвидность остаются | Настройки → Основное → «Защиты портфеля» + плашка «Защиты портфеля: выключены» в строке состояния терминала | `PATCH /api/config {PAPER_GUARDS_OFF}`; в Live игнорируется кодом (`RuntimeConfig.paper_guards_off()`) | ✓ |
 | `timeout_menu`, `timeout:*` | Таймаут подтверждения | Бот → «Сколько ждать ответа» | `PATCH /api/config {TELEGRAM_CONFIRM_TIMEOUT}` | ✓ |
 | notifier `confirm` / `reject` | Подтвердить сделку | Окно подтверждения с таймером | WS `signal.pending`, `POST /api/signals/{id}/confirm`, `/reject` | ✓ |
 | `/risk`, `risk_menu`, `risk:*` | Пресеты риска | Бот → карточки режимов | `POST /api/presets/risk {name}` | ✓ |

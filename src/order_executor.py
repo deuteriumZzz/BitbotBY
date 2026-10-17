@@ -290,11 +290,15 @@ class OrderExecutor:
             monitored[sym] = None  # type: ignore[assignment]
             open_syms = [s for s in monitored if s != sym]
 
+        _grc = getattr(self, "_runtime_config", None)
+        guards_off = _grc is not None and _grc.paper_guards_off() is True
         position_opened = False
         try:
             # Correlation guard: block positions too correlated with existing ones.
-            if Config.MAX_CORRELATION > 0 and not self._corr_filter.is_allowed(
-                sym, open_syms
+            if (
+                not guards_off
+                and Config.MAX_CORRELATION > 0
+                and not self._corr_filter.is_allowed(sym, open_syms)
             ):
                 max_corr = self._corr_filter.max_correlation(sym, open_syms)
                 logger.warning(
@@ -321,7 +325,8 @@ class OrderExecutor:
             )
 
             if (
-                Config.LIVE_ALPHA_KILL_ENABLED
+                not guards_off
+                and Config.LIVE_ALPHA_KILL_ENABLED
                 and live_n >= Config.LIVE_ALPHA_KILL_MIN_TRADES
                 and live_ev <= Config.LIVE_ALPHA_KILL_EV_THRESHOLD
             ):
@@ -437,7 +442,7 @@ class OrderExecutor:
             # MAX_CORRELATION действуют на сделку/пару, а не на портфель
             # целиком — при MAX_POSITIONS одновременных позициях и leverage
             # это может дать многократный excess-exposure без этого чека.
-            if Config.MAX_PORTFOLIO_EXPOSURE > 0:
+            if not guards_off and Config.MAX_PORTFOLIO_EXPOSURE > 0:
                 current_notional = sum(
                     float(p.get("qty") or 0) * float(p.get("entry") or 0)
                     for s, p in monitored.items()

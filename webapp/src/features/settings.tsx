@@ -50,6 +50,7 @@ function Main({ go }: { go: (pane: Pane) => void }) {
       <div className="cols">
         <div className="col">
           <HoursCard />
+          <GuardsCard />
           <SymbolsCard />
           <AlertsCard />
         </div>
@@ -109,6 +110,58 @@ function HoursCard() {
         <span>12</span>
         <span>18</span>
         <span>24 UTC</span>
+      </div>
+    </article>
+  );
+}
+
+const GUARDS_OFF = [
+  "Пауза по монете после сделки",
+  "Пауза и закрытие позиций при всплеске волатильности",
+  "Пауза вокруг макро-новостей",
+  "Фильтр корреляции с открытыми позициями",
+  "Лимит общей нагрузки портфеля",
+  "Kill-switch убыточных стратегий",
+  "Предупреждения о просадке, дневном лимите и серии убытков (в Paper они и так ничего не останавливают)",
+];
+const GUARDS_KEPT = [
+  "Стоп-лосс и тейк-профит на бирже",
+  "Проверка ликвидности (спред и объём)",
+  "Риск на сделку, лимит позиций, масштабирование при просадке",
+  "Живой режим: переключатель в нём не действует вообще",
+];
+
+function GuardsCard() {
+  const paper = useStore((s) => s.bot?.paper ?? true);
+  const off = useStore((s) => cfg<boolean>(s.config, "PAPER_GUARDS_OFF", false));
+  return (
+    <article className="card">
+      <div className="card-h">
+        <h2>Защиты портфеля</h2>
+        <Q tip="Только для Paper: чтобы быстрее накопить много сделок для обучения, можно отключить паузы и лимиты портфеля. В Live переключатель игнорируется." />
+      </div>
+      <div className="row-tgl">
+        <span>Paper: торговать без защит портфеля</span>
+        <Toggle on={off} disabled={!paper} label="Paper без защит портфеля" onChange={(v) => void actions.patchConfig({ PAPER_GUARDS_OFF: v })} />
+      </div>
+      <p className="note-soon" style={{ marginTop: 8 }}>
+        {paper
+          ? "Бот будет входить чаще и держать больше позиций подряд, в том числе во время обвалов. Результаты Paper перестанут показывать, как бот справился бы с защитами."
+          : "Сейчас включён Live, здесь переключатель недоступен: защиты работают всегда."}
+      </p>
+      <div className="note-soon" style={{ marginTop: 8 }}>
+        <b>Отключается в Paper</b>
+        <ul>
+          {GUARDS_OFF.map((t) => (
+            <li key={t}>{t}</li>
+          ))}
+        </ul>
+        <b>Остаётся всегда</b>
+        <ul>
+          {GUARDS_KEPT.map((t) => (
+            <li key={t}>{t}</li>
+          ))}
+        </ul>
       </div>
     </article>
   );

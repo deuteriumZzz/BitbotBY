@@ -485,6 +485,7 @@ def _kb_risk_menu(
     confirm_cycles: int = 3,
     conf_live: float = 0.65,
     conf_paper: float = 0.60,
+    guards_off: "bool | None" = None,
 ) -> "InlineKeyboardMarkup":
     dd_label = (
         "✅ Защита просадки: ВКЛ  →  выкл"
@@ -503,6 +504,22 @@ def _kb_risk_menu(
             InlineKeyboardButton("➕", callback_data="pos_more"),
         ],
         [InlineKeyboardButton(dd_label, callback_data="toggle_drawdown")],
+        *(  # только в Paper: guards_off=None означает Live, кнопки нет
+            []
+            if guards_off is None
+            else [
+                [
+                    InlineKeyboardButton(
+                        (
+                            "⚠️ Paper без защит портфеля: ВКЛ  →  выкл"
+                            if guards_off
+                            else "🛡 Paper без защит портфеля: ВЫКЛ  →  вкл"
+                        ),
+                        callback_data="toggle_paper_guards",
+                    )
+                ]
+            ]
+        ),
         [
             InlineKeyboardButton("➖", callback_data="dd_confirm_less"),
             InlineKeyboardButton(
@@ -1283,7 +1300,10 @@ class TelegramCommander:
             f"🟡 Умер. — 3 поз, 2%, защита ВКЛ\n"
             f"🔴 Агр. — 5 поз, 4%, защита ВЫКЛ\n"
         )
-        return text, _kb_risk_menu(dd, max_pos, confirm, cl, cp)
+        paper_off = self._rc.get_paper_guards_off() if Config.PAPER_TRADING else None
+        if paper_off:
+            text += "\n⚠️ *Paper без защит портфеля* — паузы и лимиты не действуют.\n"
+        return text, _kb_risk_menu(dd, max_pos, confirm, cl, cp, paper_off)
 
     def _build_hours_text(self) -> str:
         hours = self._rc.get_trading_hours()
@@ -2735,6 +2755,14 @@ class TelegramCommander:
                 }
                 label = names.get(preset, preset)
                 await self._edit(query, f"✅ {label}\n\n" + text, kb)
+
+        elif data == "toggle_paper_guards":
+            if not Config.PAPER_TRADING:  # в Live переключатель недоступен
+                await query.answer("Только в Paper", show_alert=True)
+                return
+            self._rc.set_paper_guards_off(not self._rc.get_paper_guards_off())
+            text, kb = self._build_risk()
+            await self._edit(query, text, kb)
 
         elif data == "toggle_drawdown":
             current = self._rc.get_drawdown_scale_enabled()

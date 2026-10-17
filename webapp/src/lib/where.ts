@@ -28,6 +28,7 @@ export const OWN_HOME: Record<string, Home> = {
   CHRONOS_ENABLED: WHAT,
   MARKET_TYPE: WHAT,
   SEASON_SWITCH_MODE: WHAT,
+  PAPER_GUARDS_OFF: { tab: "settings", pane: "main", where: "Настройки → Основное → Защиты портфеля" },
   LOCAL_FALLBACK: { tab: "bots", where: "Бот → Стратегии" },
   TRADING_HOURS: { tab: "settings", pane: "main", where: "Настройки → Основное → Часы торговли" },
   TESTNET: { tab: "settings", pane: "conn", where: "Настройки → Подключения → Bybit" },

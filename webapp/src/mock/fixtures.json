@@ -878,6 +878,22 @@
    "basic": true
   },
   {
+   "key": "PAPER_GUARDS_OFF",
+   "group": "Защита портфеля",
+   "label": "Paper: выключить защиты портфеля",
+   "type": "bool",
+   "default": false,
+   "min": null,
+   "max": null,
+   "step": null,
+   "unit": "",
+   "options": [],
+   "hint": "Только Paper, чтобы быстрее копить сделки. Отключает паузу по монете, всплеск волатильности, паузу на макро-новости, фильтр корреляции, лимит нагрузки портфеля и kill-switch стратегий, а также предупреждения о просадке, дневном лимите и серии убытков. SL/TP и проверка ликвидности остаются. В Live переключатель игнорируется.",
+   "readonly": false,
+   "hot": true,
+   "basic": true
+  },
+  {
    "key": "AI_PROVIDER",
    "group": "AI и решения",
    "label": "AI-провайдер",
@@ -1909,6 +1925,10 @@
    "source": "default"
   },
   "LOCAL_FALLBACK": {
+   "value": false,
+   "source": "default"
+  },
+  "PAPER_GUARDS_OFF": {
    "value": false,
    "source": "default"
   }

@@ -32,7 +32,7 @@ import {
 import { reducedMotion } from "../lib/platform";
 import type { Candle, Position } from "../lib/types";
 import { actions, positionPnl, useStore, type Store } from "../store";
-import { profileName, stratName } from "./bots";
+import { cfg, profileName, stratName } from "./bots";
 import { MarketPulse } from "./market";
 import { ReadinessCard } from "./setup";
 import { Flash, Gauge, Q, Seg, Tween, hideTip, showTip, useArm } from "../ui";
@@ -52,6 +52,7 @@ function HealthStrip() {
   const mode = useStore((s) => s.bot?.mode);
   const paused = useStore((s) => s.bot?.paused ?? false);
   const cycleAt = useStore((s) => s.cycleAt);
+  const guardsOff = useStore((s) => (s.bot?.paper ?? true) && cfg<boolean>(s.config, "PAPER_GUARDS_OFF", false));
   const ai = useStore((s) => {
     const id = s.ai?.last || s.bot?.ai;
     return id ? (s.ai?.providers.find((p) => p.id === id)?.name ?? id) : "";
@@ -92,6 +93,7 @@ function HealthStrip() {
       mode === "local" || ai ? "ok" : "warn",
     ],
     ["Цикл", agoText, stale ? "bad" : ago === null ? "warn" : "ok"],
+    ...(guardsOff ? [["Защиты портфеля", "выключены (Paper)", "warn"] as [string, string, string]] : []),
   ];
   return (
     <ul className="health" aria-label="Состояние системы">

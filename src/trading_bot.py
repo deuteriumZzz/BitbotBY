@@ -829,7 +829,7 @@ class TradingBot:
         if not filtered:
             return
         # УЛУЧШЕНИЕ 7: пропускаем исполнение во время макро-событийного blackout
-        if Config.MACRO_BLACKOUT_ENABLED:
+        if Config.MACRO_BLACKOUT_ENABLED and not self._guards_off():
             if await self._macro_calendar.is_blackout():
                 logger.warning("Macro blackout active — skipping execution")
                 self._publish_event(
@@ -853,7 +853,9 @@ class TradingBot:
                 max_pos,
             )
             return
-        cooldown_secs = Config.SYMBOL_COOLDOWN_HOURS * 3600
+        cooldown_secs = (
+            0.0 if self._guards_off() else Config.SYMBOL_COOLDOWN_HOURS * 3600
+        )
         now = time.time()
         for rec in filtered[:slots]:
             sym = rec.get("symbol", "")
@@ -915,6 +917,10 @@ class TradingBot:
         self._save_monitored_state()
         logger.info("Telegram /closeall: closed %d positions", count)
         return count
+
+    def _guards_off(self) -> bool:
+        """Paper-only переключатель «без защит портфеля»; в Live всегда False."""
+        return self._runtime_config.paper_guards_off() is True
 
     def _is_atr_spike(self, market_data: Dict) -> bool:
         """Возвращает True если ATR вырос в ATR_SPIKE_MULT раз от медианы.
@@ -1683,7 +1689,8 @@ class TradingBot:
                 # по свободному балансу. Подтверждение N циклов подряд.
                 # В paper режиме: уведомляет но не останавливает торговлю.
                 if (
-                    self._peak_balance > 0
+                    not self._guards_off()
+                    and self._peak_balance > 0
                     and (self._peak_balance - equity) / self._peak_balance
                     >= Config.MAX_DRAWDOWN_PERCENT
                 ):
@@ -1793,7 +1800,10 @@ class TradingBot:
                     )
                 else:
                     _equity_for_limit = self._live_equity_cache
-                if not self.risk_manager.check_daily_loss_limit(_equity_for_limit):
+                if (
+                    not self._guards_off()
+                    and not self.risk_manager.check_daily_loss_limit(_equity_for_limit)
+                ):
                     now_utc = datetime.utcnow()
                     midnight = (now_utc + timedelta(days=1)).replace(
                         hour=0, minute=0, second=0, microsecond=0
@@ -1882,7 +1892,7 @@ class TradingBot:
                 # ── [П.1] ATR spike / volatility circuit breaker ──────────
                 # Если ATR вырос в ATR_SPIKE_MULT раз от нормы → закрыть
                 # позиции и пропустить этот цикл (следующий через 30 с).
-                if self._is_atr_spike(market_data):
+                if not self._guards_off() and self._is_atr_spike(market_data):
                     _now = time.time()
                     _atr_cool = (
                         self._runtime_config.get_alert_cooldown_mins("atr_spike") * 60

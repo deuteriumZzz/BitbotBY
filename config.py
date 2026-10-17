@@ -208,6 +208,10 @@ class Config:
     # преимущества, а сделки смешивались бы с сделками модели. В Local не влияет.
     LOCAL_FALLBACK: bool = os.getenv("LOCAL_FALLBACK", "false").lower() == "true"
 
+    # Paper-only: отключить защиты портфеля, чтобы быстрее копить сделки.
+    # В Live игнорируется (RuntimeConfig.paper_guards_off проверяет PAPER_TRADING).
+    PAPER_GUARDS_OFF: bool = os.getenv("PAPER_GUARDS_OFF", "false").lower() == "true"
+
     # ── News ───────────────────────────────────────────────────────────────
     NEWS_API_KEY: str = os.getenv("NEWS_API_KEY", "")
     # Интервал обновления новостей в секундах (900 = 15 мин)

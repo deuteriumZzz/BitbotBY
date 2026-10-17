@@ -22,6 +22,7 @@ _KEY_SCAN_TOP_N = "bot:scan_top_n"
 _KEY_PAUSED = "bot:paused"
 _KEY_AUTO_EXECUTE = "bot:auto_execute"
 _KEY_LOCAL_FALLBACK = "bot:local_fallback"
+_KEY_PAPER_GUARDS_OFF = "bot:paper_guards_off"
 _KEY_FORCED = "bot:forced_symbols"
 _KEY_EXCLUDED = "bot:excluded_symbols"
 _KEY_DISABLED_STRATS = "bot:disabled_strategies"
@@ -269,6 +270,21 @@ class RuntimeConfig:
     def set_local_fallback(self, enabled: bool) -> None:
         self._set(_KEY_LOCAL_FALLBACK, "1" if enabled else "0")
         logger.info("Runtime: local_fallback → %s", "ВКЛ" if enabled else "ВЫКЛ")
+
+    def get_paper_guards_off(self) -> bool:
+        """Сохранённый выбор (в Live не действует, см. paper_guards_off)."""
+        val = self._get(_KEY_PAPER_GUARDS_OFF)
+        if val is None:
+            return Config.PAPER_GUARDS_OFF
+        return val == "1"
+
+    def set_paper_guards_off(self, enabled: bool) -> None:
+        self._set(_KEY_PAPER_GUARDS_OFF, "1" if enabled else "0")
+        logger.warning("Runtime: paper_guards_off → %s", "ВКЛ" if enabled else "ВЫКЛ")
+
+    def paper_guards_off(self) -> bool:
+        """True только в Paper и только если защиты выключены. В Live всегда False."""
+        return bool(Config.PAPER_TRADING) and self.get_paper_guards_off()
 
     # ── Symbol overrides ──────────────────────────────────────────────────────
 
@@ -1289,6 +1305,7 @@ class RuntimeConfig:
         _KEY_PAUSED,
         _KEY_AUTO_EXECUTE,
         _KEY_LOCAL_FALLBACK,
+        _KEY_PAPER_GUARDS_OFF,
         _KEY_FORCED,
         _KEY_EXCLUDED,
         _KEY_DISABLED_STRATS,
