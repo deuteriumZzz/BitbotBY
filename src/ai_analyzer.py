@@ -426,7 +426,9 @@ class AIAnalyzer:
 
         prompt = self._build_prompt(snapshots, balance)
         now = time.time()
-        for provider, model in chain:
+        queue = list(chain)
+        while queue:
+            provider, model = queue.pop(0)
             wait = self._provider_retry_after.get(provider, 0) - now
             if wait > 0:
                 self.logger.debug(
@@ -444,6 +446,12 @@ class AIAnalyzer:
                 continue
             except Exception as e:
                 status, pause = _classify(e)
+                default = catalog.BY_ID[provider].default_model
+                if status == "bad_model" and model != default:
+                    # Модели из .env или приложения у провайдера больше нет —
+                    # сразу пробуем рекомендованную, провайдер не на паузу.
+                    queue.insert(0, (provider, default))
+                    pause = 0.0
                 self.logger.warning(
                     "AI [%s/%s] %s (HTTP %s) — trying next provider: %s",
                     provider,

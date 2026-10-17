@@ -419,6 +419,27 @@ class TestAnalyze:
         rc.set_last_ai_provider.assert_called_with("local")
 
     @pytest.mark.asyncio
+    async def test_missing_custom_model_falls_back_to_recommended(self):
+        ai = self._make_ai([("gemini", "gemini-2.0-flash"), ("groq", "m")])
+        seen = []
+
+        async def call(provider, model, prompt):
+            seen.append((provider, model))
+            if model == "gemini-2.0-flash":
+                raise _http_error(404, "model not found")
+            return _REC
+
+        ai._call = AsyncMock(side_effect=call)
+        with patch("src.ai_analyzer.Config", _make_config()):
+            result = await ai.analyze([{"symbol": "BTC/USDT"}], 10000)
+        assert len(result) == 1
+        assert seen == [
+            ("gemini", "gemini-2.0-flash"),
+            ("gemini", "gemini-flash-latest"),
+        ]
+        assert "gemini" not in ai._provider_retry_after
+
+    @pytest.mark.asyncio
     async def test_bad_request_does_not_stop_the_chain(self):
         # Раньше 400 обрывал цикл; с десятком провайдеров один капризный
         # (не принял параметры запроса) не должен оставлять бота без AI.
