@@ -1,7 +1,7 @@
 // Фоновые задачи бота — всё, что есть в меню Telegram: бэктест, обучение и тюнинг SAC,
 // откат модели, отчёты. Бот продолжает торговать, пока задача идёт.
 
-import { useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { base, fmtN, pct } from "../lib/format";
 import type { JobDone, JobId, JobState, ProfileInfo } from "../lib/types";
@@ -152,7 +152,15 @@ function JobRow({ def, profile }: { def: JobDef; profile?: ProfileInfo }) {
         <>
           {d && (
             <div className={`job-res ${d.ok ? "" : "down"}`}>
-              <p className="note-soon">{resultText(def.id, d)}</p>
+              <p className="note-soon">
+                {d.ok && (
+                  <svg className="chk" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M7 12.5l3.2 3.2L17 9" />
+                  </svg>
+                )}
+                {resultText(def.id, d)}
+              </p>
               {d.ok && d.output && <pre className="job-out">{d.output}</pre>}
             </div>
           )}
@@ -254,12 +262,56 @@ function ProfilePicker({
   value: string;
   onChange: (id: string) => void;
 }) {
+  const wrap = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState<{
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  } | null>(null);
+  // Рамка выбранной карточки плавно переезжает на новую; следим и за шириной окна.
+  const measure = () => {
+    const el = wrap.current?.querySelector<HTMLElement>(
+      '[aria-checked="true"]',
+    );
+    setBox(
+      el
+        ? {
+            x: el.offsetLeft,
+            y: el.offsetTop,
+            w: el.offsetWidth,
+            h: el.offsetHeight,
+          }
+        : null,
+    );
+  };
+  useLayoutEffect(measure, [value, profiles.length]);
+  useEffect(() => {
+    if (!wrap.current || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(wrap.current);
+    return () => ro.disconnect();
+  }, []);
   return (
     <div
       className="prof-pick"
       role="radiogroup"
       aria-label="Профиль для обучения"
+      ref={wrap}
     >
+      <i
+        className="prof-ind"
+        aria-hidden="true"
+        style={
+          box
+            ? {
+                transform: `translate(${box.x}px, ${box.y}px)`,
+                width: box.w,
+                height: box.h,
+              }
+            : { display: "none" }
+        }
+      />
       {profiles.map((p) => (
         <button
           key={p.id}

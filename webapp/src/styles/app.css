@@ -762,7 +762,7 @@ details.risk-box>:not(summary){margin-top:10px}
 .prof{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;gap:2px;padding:10px 12px;border:1px solid var(--line-ui);border-radius:var(--r);background:var(--bg);font:400 12px/1.4 var(--f-ui);color:var(--ink-2);transition:border-color var(--t-fast),background var(--t-fast)}
 .prof b{color:var(--ink);font-weight:600;font-size:13px}
 .prof:hover{border-color:var(--ink-3)}
-.prof.on{border-color:var(--brand);background:var(--panel-2);box-shadow:inset 0 -2px 0 var(--brand)}
+.prof.on{background:var(--panel-2)}
 .prof:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
 .prof .pill{align-self:flex-start;margin-top:4px;font-style:normal}
 .prof-m{color:var(--ink-3)}
@@ -788,3 +788,49 @@ details.risk-box>:not(summary){margin-top:10px}
 .season-kv dd{margin:0;font:600 15px/1.4 var(--f-ui)}
 .strat-tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0}
 .strat-tools .inp{flex:1 1 160px;min-width:0}
+/* Телефон: две главные метрики, остальные по кнопке; позиции сразу после метрик */
+.metrics-more{display:none}
+@container dev (max-width:899px){
+  .metrics:not(.open) .tile:nth-child(n+3){display:none}
+  .metrics-more{display:inline-flex;grid-column:1/-1;justify-content:center}
+  .term>*{order:3}
+  .term>.health,.term>.ready,.term>.hero{order:0}
+  .term>.metrics{order:1}
+  .term>.positions{order:2}
+}
+.chip-btn{all:unset;box-sizing:border-box;cursor:pointer;padding:6px 12px;border:1px solid var(--line-ui);border-radius:var(--r);font:500 13px/1.3 var(--f-ui);color:var(--ink-2);transition:color var(--t-fast),border-color var(--t-fast),background var(--t-fast)}
+.chip-btn:hover{color:var(--ink);border-color:var(--ink-3)}
+.chip-btn[aria-pressed="true"]{color:var(--ink);background:var(--panel-2);border-color:var(--brand);box-shadow:inset 0 -2px 0 var(--brand)}
+.chip-btn:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+details.extra{display:flex;flex-direction:column;gap:12px}
+details.extra>summary{cursor:pointer;list-style:none;font:500 13px var(--f-ui);color:var(--ink-2);padding:10px 14px;border:1px dashed var(--line-ui);border-radius:var(--r);transition:color var(--t-fast),border-color var(--t-fast)}
+details.extra>summary:hover{color:var(--ink);border-color:var(--ink-3)}
+details.extra>summary::-webkit-details-marker{display:none}
+details.extra>summary::before{content:"▸ ";color:var(--ink-3)}
+details.extra[open]>summary::before{content:"▾ "}
+details.extra[open]>summary{margin-bottom:0}
+details.extra[open]>.card{animation:viewin .28s var(--ease-mech)}
+/* Рамка выбранного профиля скользит между карточками */
+.prof-pick{position:relative}
+.prof-ind{position:absolute;left:0;top:0;box-sizing:border-box;border:1px solid var(--brand);border-radius:var(--r);box-shadow:inset 0 -2px 0 var(--brand);pointer-events:none;transition:transform var(--t-norm) var(--ease-mech),width var(--t-norm) var(--ease-mech),height var(--t-norm) var(--ease-mech)}
+/* Задача закончилась: галочка рисуется один раз */
+.chk{vertical-align:-3px;margin-right:6px;fill:none;stroke:var(--up);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.chk circle{stroke-dasharray:63;stroke-dashoffset:63;animation:chk-draw .5s var(--ease-mech) forwards}
+.chk path{stroke-dasharray:14;stroke-dashoffset:14;animation:chk-draw .3s .35s var(--ease-mech) forwards}
+@keyframes chk-draw{to{stroke-dashoffset:0}}
+/* Идёт задача: по полосе пробегает блик, видно, что бот не завис */
+.prog i{position:relative;overflow:hidden}
+.prog i::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.35),transparent);transform:translateX(-100%);animation:prog-shim 1.5s linear infinite}
+@keyframes prog-shim{to{transform:translateX(100%)}}
+/* Колокольчик уведомлений */
+.bell{position:relative}
+.bell-n{position:absolute;top:-6px;right:-6px;min-width:16px;height:16px;padding:0 4px;box-sizing:border-box;border-radius:8px;background:var(--brand);color:var(--on-brand);font:700 10px/16px var(--f-num);text-align:center;font-style:normal;animation:bell-pop .4s var(--ease-mech)}
+@keyframes bell-pop{from{transform:scale(0)}}
+.notif-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+@container dev (max-width:479px){.lat-t{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}}
+/* Свайп по карточке позиции: красная полоса «Закрыть» под карточкой */
+.pos-swipe{position:relative;overflow:hidden;border-radius:var(--r)}
+.pos-swipe>.pos{transition:transform var(--t-norm) var(--ease-mech);position:relative;z-index:1}
+.pos-swipe-act{position:absolute;top:0;right:0;bottom:0;width:96px;border:0;border-radius:0 var(--r) var(--r) 0;background:var(--down);color:var(--bg);font:700 13px var(--f-ui);cursor:pointer}
+.pos-swipe-act.armed{background:var(--bg);color:var(--down);box-shadow:inset 0 0 0 2px var(--down)}
+.pos-swipe-act:disabled{opacity:.5}

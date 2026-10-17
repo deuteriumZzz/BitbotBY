@@ -209,6 +209,7 @@ async def get_strategies() -> JSONResponse:
             {
                 "name": name,
                 "markets": cls.markets,
+                "type": cls.market_type,
                 "experimental": cls.experimental,
                 "enabled": name not in disabled,
                 "backtest": backtest.get(name),

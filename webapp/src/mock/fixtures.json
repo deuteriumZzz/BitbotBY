@@ -2569,7 +2569,8 @@
    },
    "live": null,
    "markets": "both",
-   "experimental": false
+   "experimental": false,
+   "type": "trending"
   },
   {
    "name": "rsi_momentum",
@@ -2581,7 +2582,8 @@
    },
    "live": null,
    "markets": "both",
-   "experimental": false
+   "experimental": false,
+   "type": "ranging"
   },
   {
    "name": "macd_crossover",
@@ -2593,7 +2595,8 @@
    },
    "live": null,
    "markets": "both",
-   "experimental": false
+   "experimental": false,
+   "type": "trending"
   },
   {
    "name": "bollinger_bands",
@@ -2605,7 +2608,8 @@
    },
    "live": null,
    "markets": "both",
-   "experimental": false
+   "experimental": false,
+   "type": "volatile"
   },
   {
    "name": "scalping",
@@ -2617,7 +2621,8 @@
    },
    "live": null,
    "markets": "both",
-   "experimental": false
+   "experimental": false,
+   "type": "volatile"
   },
   {
    "name": "swing_trading",
@@ -2629,7 +2634,8 @@
    },
    "live": null,
    "markets": "both",
-   "experimental": false
+   "experimental": false,
+   "type": "trending"
   },
   {
    "name": "breakout",
@@ -2641,7 +2647,8 @@
    },
    "live": null,
    "markets": "both",
-   "experimental": false
+   "experimental": false,
+   "type": "volatile"
   },
   {
    "name": "mean_reversion",
@@ -2653,7 +2660,8 @@
    },
    "live": null,
    "markets": "both",
-   "experimental": false
+   "experimental": false,
+   "type": "ranging"
   },
   {
    "name": "trend_following",
@@ -2665,7 +2673,8 @@
    },
    "live": null,
    "markets": "both",
-   "experimental": false
+   "experimental": false,
+   "type": "trending"
   },
   {
    "name": "volume_spike",
@@ -2677,7 +2686,8 @@
    },
    "live": null,
    "markets": "both",
-   "experimental": false
+   "experimental": false,
+   "type": "volatile"
   },
   {
    "name": "momentum_burst",
@@ -2689,7 +2699,8 @@
    },
    "live": null,
    "markets": "both",
-   "experimental": false
+   "experimental": false,
+   "type": "volatile"
   },
   {
    "name": "pump_exit",
@@ -2701,7 +2712,8 @@
    },
    "live": null,
    "markets": "futures",
-   "experimental": false
+   "experimental": false,
+   "type": "volatile"
   },
   {
    "name": "sentiment",
@@ -2713,7 +2725,8 @@
    },
    "live": null,
    "markets": "both",
-   "experimental": false
+   "experimental": false,
+   "type": "volatile"
   },
   {
    "name": "support_resistance",
@@ -2725,7 +2738,8 @@
    },
    "live": null,
    "markets": "both",
-   "experimental": false
+   "experimental": false,
+   "type": "ranging"
   },
   {
    "name": "fibonacci_retracement",
@@ -2737,7 +2751,8 @@
    },
    "live": null,
    "markets": "both",
-   "experimental": false
+   "experimental": false,
+   "type": "trending"
   },
   {
    "name": "cvd_divergence",
@@ -2749,7 +2764,8 @@
    },
    "live": null,
    "markets": "both",
-   "experimental": false
+   "experimental": false,
+   "type": "any"
   },
   {
    "name": "fair_value_gap",
@@ -2761,7 +2777,8 @@
    },
    "live": null,
    "markets": "both",
-   "experimental": false
+   "experimental": false,
+   "type": "trending"
   },
   {
    "name": "inverse_fair_value_gap",
@@ -2773,7 +2790,8 @@
    },
    "live": null,
    "markets": "both",
-   "experimental": false
+   "experimental": false,
+   "type": "volatile"
   },
   {
    "name": "liquidity_sweep",
@@ -2785,7 +2803,8 @@
    },
    "live": null,
    "markets": "both",
-   "experimental": false
+   "experimental": false,
+   "type": "ranging"
   },
   {
    "name": "amd",
@@ -2797,7 +2816,8 @@
    },
    "live": null,
    "markets": "both",
-   "experimental": false
+   "experimental": false,
+   "type": "ranging"
   },
   {
    "name": "supertrend",
@@ -2809,7 +2829,8 @@
     "trades": 2605,
     "sharpe": -0.171
    },
-   "live": null
+   "live": null,
+   "type": "trending"
   },
   {
    "name": "dual_thrust",
@@ -2821,7 +2842,8 @@
     "trades": 1177,
     "sharpe": -0.154
    },
-   "live": null
+   "live": null,
+   "type": "volatile"
   },
   {
    "name": "ttm_squeeze",
@@ -2833,7 +2855,8 @@
     "trades": 2511,
     "sharpe": -0.188
    },
-   "live": null
+   "live": null,
+   "type": "volatile"
   },
   {
    "name": "adx_trend_birth",
@@ -2845,7 +2868,8 @@
     "trades": 1696,
     "sharpe": -0.158
    },
-   "live": null
+   "live": null,
+   "type": "trending"
   },
   {
    "name": "vwap_reversion",
@@ -2857,7 +2881,8 @@
     "trades": 1901,
     "sharpe": -0.059
    },
-   "live": null
+   "live": null,
+   "type": "ranging"
   },
   {
    "name": "crash_bounce",
@@ -2869,7 +2894,8 @@
     "trades": 0,
     "sharpe": 0
    },
-   "live": null
+   "live": null,
+   "type": "volatile"
   },
   {
    "name": "bear_hedge",
@@ -2881,7 +2907,8 @@
     "trades": 1125,
     "sharpe": -0.143
    },
-   "live": null
+   "live": null,
+   "type": "trending"
   },
   {
    "name": "williams_r",
@@ -2893,7 +2920,8 @@
     "trades": 3330,
     "sharpe": -0.052
    },
-   "live": null
+   "live": null,
+   "type": "ranging"
   },
   {
    "name": "stoch_rsi",
@@ -2905,7 +2933,8 @@
     "trades": 3919,
     "sharpe": -0.065
    },
-   "live": null
+   "live": null,
+   "type": "ranging"
   },
   {
    "name": "keltner_fade",
@@ -2917,7 +2946,8 @@
     "trades": 2315,
     "sharpe": -0.079
    },
-   "live": null
+   "live": null,
+   "type": "ranging"
   },
   {
    "name": "ichimoku",
@@ -2929,7 +2959,8 @@
     "trades": 3016,
     "sharpe": -0.111
    },
-   "live": null
+   "live": null,
+   "type": "trending"
   },
   {
    "name": "mfi_trend",
@@ -2941,7 +2972,8 @@
     "trades": 3630,
     "sharpe": -0.138
    },
-   "live": null
+   "live": null,
+   "type": "trending"
   },
   {
    "name": "vortex",
@@ -2953,7 +2985,8 @@
     "trades": 3776,
     "sharpe": -0.145
    },
-   "live": null
+   "live": null,
+   "type": "trending"
   },
   {
    "name": "parabolic_sar",
@@ -2965,7 +2998,8 @@
     "trades": 3954,
     "sharpe": -0.147
    },
-   "live": null
+   "live": null,
+   "type": "trending"
   },
   {
    "name": "obv_trend",
@@ -2977,7 +3011,8 @@
     "trades": 3909,
     "sharpe": -0.156
    },
-   "live": null
+   "live": null,
+   "type": "trending"
   },
   {
    "name": "ifr2",
@@ -2989,7 +3024,8 @@
     "trades": 1899,
     "sharpe": 0.019
    },
-   "live": null
+   "live": null,
+   "type": "ranging"
   },
   {
    "name": "shooting_star",
@@ -3001,7 +3037,8 @@
     "trades": 0,
     "sharpe": 0.0
    },
-   "live": null
+   "live": null,
+   "type": "ranging"
   },
   {
    "name": "cci_aroon",
@@ -3013,7 +3050,8 @@
     "trades": 2474,
     "sharpe": -0.028
    },
-   "live": null
+   "live": null,
+   "type": "ranging"
   },
   {
    "name": "cci_reversion",
@@ -3025,7 +3063,8 @@
     "trades": 2868,
     "sharpe": -0.042
    },
-   "live": null
+   "live": null,
+   "type": "ranging"
   },
   {
    "name": "stochastic",
@@ -3037,7 +3076,8 @@
     "trades": 2758,
     "sharpe": -0.055
    },
-   "live": null
+   "live": null,
+   "type": "ranging"
   },
   {
    "name": "fisher_transform",
@@ -3049,7 +3089,8 @@
     "trades": 2745,
     "sharpe": -0.076
    },
-   "live": null
+   "live": null,
+   "type": "ranging"
   },
   {
    "name": "rsi_divergence",
@@ -3061,7 +3102,8 @@
     "trades": 782,
     "sharpe": -0.08
    },
-   "live": null
+   "live": null,
+   "type": "ranging"
   },
   {
    "name": "vw_macd",
@@ -3073,7 +3115,8 @@
     "trades": 4070,
     "sharpe": -0.099
    },
-   "live": null
+   "live": null,
+   "type": "trending"
   },
   {
    "name": "engulfing_trend",
@@ -3085,7 +3128,8 @@
     "trades": 4198,
     "sharpe": -0.115
    },
-   "live": null
+   "live": null,
+   "type": "trending"
   },
   {
    "name": "kst",
@@ -3097,7 +3141,8 @@
     "trades": 3594,
     "sharpe": -0.111
    },
-   "live": null
+   "live": null,
+   "type": "trending"
   },
   {
    "name": "coppock",
@@ -3109,7 +3154,8 @@
     "trades": 3383,
     "sharpe": -0.125
    },
-   "live": null
+   "live": null,
+   "type": "trending"
   },
   {
    "name": "heikin_ashi",
@@ -3121,7 +3167,8 @@
     "trades": 4884,
     "sharpe": -0.118
    },
-   "live": null
+   "live": null,
+   "type": "trending"
   },
   {
    "name": "adx_dmi",
@@ -3133,7 +3180,8 @@
     "trades": 3088,
     "sharpe": -0.127
    },
-   "live": null
+   "live": null,
+   "type": "trending"
   },
   {
    "name": "ad_line_trend",
@@ -3145,7 +3193,8 @@
     "trades": 2761,
     "sharpe": -0.144
    },
-   "live": null
+   "live": null,
+   "type": "trending"
   },
   {
    "name": "poc_reversion",
@@ -3157,7 +3206,8 @@
     "trades": 2670,
     "sharpe": -0.115
    },
-   "live": null
+   "live": null,
+   "type": "ranging"
   },
   {
    "name": "klinger",
@@ -3169,7 +3219,8 @@
     "trades": 4175,
     "sharpe": -0.125
    },
-   "live": null
+   "live": null,
+   "type": "trending"
   },
   {
    "name": "elder_force",
@@ -3181,7 +3232,8 @@
     "trades": 4106,
     "sharpe": -0.136
    },
-   "live": null
+   "live": null,
+   "type": "trending"
   },
   {
    "name": "kdj",
@@ -3193,7 +3245,8 @@
     "trades": 4687,
     "sharpe": -0.124
    },
-   "live": null
+   "live": null,
+   "type": "ranging"
   },
   {
    "name": "coral_trend",
@@ -3205,7 +3258,8 @@
     "trades": 3333,
     "sharpe": -0.144
    },
-   "live": null
+   "live": null,
+   "type": "trending"
   },
   {
    "name": "chaikin_money_flow",
@@ -3217,7 +3271,8 @@
     "trades": 3446,
     "sharpe": -0.15
    },
-   "live": null
+   "live": null,
+   "type": "trending"
   },
   {
    "name": "ease_of_movement",
@@ -3229,7 +3284,8 @@
     "trades": 3691,
     "sharpe": -0.139
    },
-   "live": null
+   "live": null,
+   "type": "trending"
   },
   {
    "name": "vwap_trend",
@@ -3241,7 +3297,8 @@
     "trades": 3299,
     "sharpe": -0.149
    },
-   "live": null
+   "live": null,
+   "type": "trending"
   },
   {
    "name": "halftrend",
@@ -3253,7 +3310,8 @@
     "trades": 246,
     "sharpe": -0.184
    },
-   "live": null
+   "live": null,
+   "type": "trending"
   },
   {
    "name": "awesome_saucer",
@@ -3265,7 +3323,8 @@
     "trades": 3760,
     "sharpe": -0.132
    },
-   "live": null
+   "live": null,
+   "type": "trending"
   },
   {
    "name": "rvi",
@@ -3277,7 +3336,8 @@
     "trades": 4949,
     "sharpe": -0.142
    },
-   "live": null
+   "live": null,
+   "type": "trending"
   },
   {
    "name": "chandelier",
@@ -3289,7 +3349,8 @@
     "trades": 3374,
     "sharpe": -0.154
    },
-   "live": null
+   "live": null,
+   "type": "trending"
   },
   {
    "name": "waddah_attar",
@@ -3301,7 +3362,8 @@
     "trades": 4625,
     "sharpe": -0.154
    },
-   "live": null
+   "live": null,
+   "type": "volatile"
   },
   {
    "name": "chaikin_osc",
@@ -3313,7 +3375,8 @@
     "trades": 4005,
     "sharpe": -0.154
    },
-   "live": null
+   "live": null,
+   "type": "trending"
   },
   {
    "name": "ssl_channel",
@@ -3325,7 +3388,8 @@
     "trades": 3740,
     "sharpe": -0.166
    },
-   "live": null
+   "live": null,
+   "type": "trending"
   },
   {
    "name": "zlsma",
@@ -3337,7 +3401,8 @@
     "trades": 3959,
     "sharpe": -0.168
    },
-   "live": null
+   "live": null,
+   "type": "trending"
   },
   {
    "name": "spike_reversal",
@@ -3349,7 +3414,8 @@
     "trades": 1467,
     "sharpe": -0.071
    },
-   "live": null
+   "live": null,
+   "type": "ranging"
   },
   {
    "name": "bollinger_reentry",
@@ -3361,7 +3427,8 @@
     "trades": 3429,
     "sharpe": -0.088
    },
-   "live": null
+   "live": null,
+   "type": "ranging"
   },
   {
    "name": "dual_momentum",
@@ -3373,7 +3440,8 @@
     "trades": 1214,
     "sharpe": -0.106
    },
-   "live": null
+   "live": null,
+   "type": "trending"
   },
   {
    "name": "gtaa_ma",
@@ -3385,7 +3453,8 @@
     "trades": 1590,
     "sharpe": -0.158
    },
-   "live": null
+   "live": null,
+   "type": "trending"
   }
  ],
  "ai": {

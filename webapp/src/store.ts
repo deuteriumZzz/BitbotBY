@@ -121,6 +121,9 @@ export interface Store {
   setupInfo: SetupInfo | null;
   /** Окно справки открыто. */
   helpOpen: boolean;
+  /** Окно уведомлений открыто и номер последнего просмотренного события. */
+  notifOpen: boolean;
+  seenFeed: number;
   /** Открытый шаг мастера первого запуска; null — мастер закрыт. */
   setup: SetupStep | null;
   tab: Tab;
@@ -132,6 +135,7 @@ export interface Store {
   setTab(tab: Tab): void;
   openSetup(step: SetupStep | null): void;
   openHelp(open: boolean): void;
+  openNotif(open: boolean): void;
   /** Открыть «Настройки → Параметры» с фокусом в поиске. */
   searchParams(q?: string): void;
   clearParamSearch(): void;
@@ -242,6 +246,8 @@ export const useStore = create<Store>((set, get) => {
     setupInfo: null,
     setup: null,
     helpOpen: false,
+    notifOpen: false,
+    seenFeed: 0,
     paramSearch: null,
     tab: "terminal",
     toast: null,
@@ -302,6 +308,7 @@ export const useStore = create<Store>((set, get) => {
     setTab: (tab) => set({ tab, setup: null }),
     openSetup: (setup) => set({ setup }),
     openHelp: (helpOpen) => set({ helpOpen }),
+    openNotif: (notifOpen) => set((s) => (notifOpen ? { notifOpen, seenFeed: s.feed[0]?.id ?? s.seenFeed } : { notifOpen })),
     searchParams: (q = "") => set({ tab: "settings", setup: null, paramSearch: q }),
     clearParamSearch: () => set({ paramSearch: null }),
     setPeriod(period) {

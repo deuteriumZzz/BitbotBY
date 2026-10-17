@@ -52,7 +52,11 @@ function HealthStrip() {
   const mode = useStore((s) => s.bot?.mode);
   const paused = useStore((s) => s.bot?.paused ?? false);
   const cycleAt = useStore((s) => s.cycleAt);
-  const guardsOff = useStore((s) => (s.bot?.paper ?? true) && cfg<boolean>(s.config, "PAPER_GUARDS_OFF", false));
+  const guardsOff = useStore(
+    (s) =>
+      (s.bot?.paper ?? true) &&
+      cfg<boolean>(s.config, "PAPER_GUARDS_OFF", false),
+  );
   const ai = useStore((s) => {
     const id = s.ai?.last || s.bot?.ai;
     return id ? (s.ai?.providers.find((p) => p.id === id)?.name ?? id) : "";
@@ -93,7 +97,15 @@ function HealthStrip() {
       mode === "local" || ai ? "ok" : "warn",
     ],
     ["Цикл", agoText, stale ? "bad" : ago === null ? "warn" : "ok"],
-    ...(guardsOff ? [["Защиты портфеля", "выключены (Paper)", "warn"] as [string, string, string]] : []),
+    ...(guardsOff
+      ? [
+          ["Защиты портфеля", "выключены (Paper)", "warn"] as [
+            string,
+            string,
+            string,
+          ],
+        ]
+      : []),
   ];
   return (
     <ul className="health" aria-label="Состояние системы">
@@ -356,13 +368,15 @@ function Equity() {
 
 function MetricsCard() {
   const m = useStore((s) => s.metrics[s.period]);
+  // На телефоне видны две главные метрики, остальные раскрываются кнопкой.
+  const [open, setOpen] = useState(false);
   if (!m) return <article className="card metrics" aria-busy="true" />;
   const wr = m.win_rate ?? 0;
   const aw = m.avg_win ?? 0;
   const al = Math.abs(m.avg_loss ?? 0);
   const tot = aw + al || 1;
   return (
-    <article className="card metrics">
+    <article className={`card metrics${open ? " open" : ""}`}>
       <div className="tile">
         <div className="t-h">
           <span>Доля прибыльных</span>
@@ -471,6 +485,14 @@ function MetricsCard() {
           </>
         )}
       </div>
+      <button
+        className="btn metrics-more"
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
+        {open ? "Скрыть метрики" : "Ещё 4 метрики"}
+      </button>
     </article>
   );
 }
@@ -558,13 +580,11 @@ function Scope(props: {
 }) {
   const blips = [
     ...props.lanes.flatMap((list, lane) =>
-      list
-        .slice(0, 10)
-        .map((s) => ({
-          s,
-          lane,
-          cls: props.rejected.has(s) ? "rej" : props.side(s),
-        })),
+      list.slice(0, 10).map((s) => ({
+        s,
+        lane,
+        cls: props.rejected.has(s) ? "rej" : props.side(s),
+      })),
     ),
     ...props.open.map((p) => ({
       s: p.symbol,
@@ -955,6 +975,36 @@ function PositionCard({ p, enter }: { p: Position; enter: boolean }) {
   }, [p.qty]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const can = online && p.trade_id !== null && !busy;
+  // Свайп влево (только пальцем) открывает полосу «Закрыть». Она не закрывает сделку сама:
+  // нажатие по ней запускает то же двустороннее подтверждение, что и кнопка в карточке.
+  const SWIPE_W = 96;
+  const [dx, setDx] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const drag = useRef<{ x: number; y: number; base: number; on: boolean } | null>(null);
+  const revealed = dx <= -SWIPE_W / 2;
+  const onSwipeDown = (e: React.PointerEvent) => {
+    if (e.pointerType !== "touch" || !can || editing) return;
+    drag.current = { x: e.clientX, y: e.clientY, base: dx, on: false };
+  };
+  const onSwipeMove = (e: React.PointerEvent) => {
+    const d = drag.current;
+    if (!d) return;
+    const mx = e.clientX - d.x;
+    if (!d.on) {
+      if (Math.abs(e.clientY - d.y) > 10) return void (drag.current = null); // это скролл
+      if (Math.abs(mx) < 10) return;
+      d.on = true;
+      setDragging(true);
+    }
+    setDx(Math.max(-SWIPE_W, Math.min(0, d.base + mx)));
+  };
+  const onSwipeEnd = () => {
+    const d = drag.current;
+    drag.current = null;
+    if (!d?.on) return;
+    setDragging(false);
+    setDx((v) => (v < -SWIPE_W / 2 ? -SWIPE_W : 0));
+  };
   const run = async (fn: () => Promise<boolean>) => {
     setBusy(true);
     await fn();
@@ -983,9 +1033,26 @@ function PositionCard({ p, enter }: { p: Position; enter: boolean }) {
   };
 
   return (
+    <div className="pos-swipe">
+      <button
+        className={`pos-swipe-act ${closeArmed ? "armed" : ""}`}
+        type="button"
+        tabIndex={revealed ? 0 : -1}
+        aria-hidden={!revealed}
+        disabled={!can}
+        onClick={() => armClose() && void run(() => actions.closePosition(p))}
+      >
+        {closeArmed ? "Точно?" : "Закрыть"}
+      </button>
     <article
       ref={self}
       className={`pos ${pnl >= 0 ? "win" : "loss"} ${enter ? "enter" : ""}`}
+      style={dx || dragging ? { transform: `translateX(${dx}px)`, transition: dragging ? "none" : undefined, touchAction: "pan-y" } : { touchAction: "pan-y" }}
+      onPointerDown={onSwipeDown}
+      onPointerMove={onSwipeMove}
+      onPointerUp={onSwipeEnd}
+      onPointerCancel={onSwipeEnd}
+      onClick={() => revealed && setDx(0)}
     >
       <div className="pos-h">
         <span className="coin">{base(p.symbol)}</span>
@@ -1128,6 +1195,7 @@ function PositionCard({ p, enter }: { p: Position; enter: boolean }) {
         </form>
       )}
     </article>
+    </div>
   );
 }
 

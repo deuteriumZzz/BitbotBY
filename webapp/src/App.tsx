@@ -9,6 +9,7 @@ import type { Tab } from "./lib/types";
 import { Bots, profileName, stratName } from "./features/bots";
 import { Learn } from "./features/jobs";
 import { HelpButton, HelpSheet } from "./features/help";
+import { NotifButton, NotifSheet } from "./features/notifications";
 import { Journal } from "./features/journal";
 import { Settings } from "./features/settings";
 import { Setup } from "./features/setup";
@@ -73,6 +74,7 @@ export function App() {
       <Nav />
       <SignalSheet />
       <HelpSheet />
+      <NotifSheet />
       <Toast />
       <TipLayer />
     </div>
@@ -124,8 +126,9 @@ function TopBar({ onPanic }: { onPanic: () => void }) {
       {isMock && <span className="demo">демо</span>}
       <span className="lat" title={wsUp ? "Поток событий подключён" : "Переподключаюсь к серверу"}>
         <span className={`dot ${wsUp && alive ? "ok live" : wsUp ? "warn" : "bad"}`} />
-        {wsUp ? (alive ? "онлайн" : "бот молчит") : "нет связи"}
+        <span className="lat-t">{wsUp ? (alive ? "онлайн" : "бот молчит") : "нет связи"}</span>
       </span>
+      <NotifButton />
       <HelpButton />
       <span className="break" />
       <Toggle className="master" on={!paused} onChange={(on) => void toggle(on)} label="Бот" disabled={busy || !alive}>

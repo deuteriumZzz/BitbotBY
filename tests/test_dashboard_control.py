@@ -459,3 +459,12 @@ def test_reset_config_route(keyed):
         resp = keyed.post("/api/config/reset", headers={"X-API-Key": "secret"})
     assert resp.status_code == 200 and resp.json() == {"ok": True}
     assert "config.changed" in [m["type"] for _, m in r.published]
+
+
+def test_strategies_rows_carry_type_and_markets(client):
+    with patch.object(data, "get_redis", return_value=StrRedis()):
+        rows = client.get("/api/strategies").json()
+    assert rows and all(
+        r["type"] in ("trending", "ranging", "volatile", "any") for r in rows
+    )
+    assert {r["markets"] for r in rows} <= {"spot", "futures", "both"}

@@ -95,6 +95,8 @@ export interface Strategy {
   name: string;
   /** Где применима: spot — только лонг, futures — нужны шорты, both — везде. */
   markets: "spot" | "futures" | "both";
+  /** Тип логики: trending — тренд, ranging — возврат к средней, volatile — пробой и всплески. */
+  type?: string;
   /** Добавлена без доказанного преимущества; выключена по умолчанию. */
   experimental?: boolean;
   enabled: boolean;

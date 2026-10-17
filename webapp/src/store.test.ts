@@ -108,3 +108,21 @@ describe("события", () => {
     expect(useStore.getState().feed[0].text).toContain("пропущена (в Telegram)");
   });
 });
+
+describe("notifications", () => {
+  it("открытие окна помечает все события просмотренными, закрытие номер не трогает", () => {
+    useStore.setState({
+      seenFeed: 0,
+      feed: [
+        { id: 7, at: 1, kind: "win", text: "a" },
+        { id: 5, at: 0, kind: "open", text: "b" },
+      ],
+    });
+    useStore.getState().openNotif(true);
+    expect(useStore.getState().seenFeed).toBe(7);
+    useStore.setState({ feed: [{ id: 9, at: 2, kind: "guard", text: "c" }, ...useStore.getState().feed] });
+    useStore.getState().openNotif(false);
+    expect(useStore.getState().seenFeed).toBe(7);
+    expect(useStore.getState().notifOpen).toBe(false);
+  });
+});

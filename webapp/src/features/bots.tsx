@@ -1,8 +1,9 @@
 // Вкладка «Бот»: режим риска, тонкая настройка, подтверждение сделок, что торговать, стратегии.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { fmtN, plural, tone } from "../lib/format";
+import { reducedMotion } from "../lib/platform";
 import type { ConfigValues, Strategy } from "../lib/types";
 import { actions, useStore } from "../store";
 import { Icon, Q, Seg, Toggle } from "../ui";
@@ -150,12 +151,15 @@ export function Bots() {
     <section className="view enter" aria-label="Бот">
       <div className="cols">
         <div className="col">
+          <WhatCard />
           <RiskCard />
-          <TuneCard />
-          <ConfirmCard />
+          <details className="extra">
+            <summary>Дополнительно: точная настройка и подтверждение сделок</summary>
+            <TuneCard />
+            <ConfirmCard />
+          </details>
         </div>
         <div className="col">
-          <WhatCard />
           <StrategiesCard />
         </div>
       </div>
@@ -539,6 +543,26 @@ function StrategiesCard() {
   const [all, setAll] = useState(false);
   const [view, setView] = useState<"futures" | "spot" | null>(null);
   const [q, setQ] = useState("");
+  // Строки плавно переезжают при смене рынка, фильтра и поиска (FLIP: было → стало).
+  const listRef = useRef<HTMLUListElement>(null);
+  const prevTop = useRef(new Map<string, number>());
+  useLayoutEffect(() => {
+    const ul = listRef.current;
+    if (!ul) return;
+    const next = new Map<string, number>();
+    for (const li of Array.from(ul.children) as HTMLElement[]) {
+      const key = li.dataset.name ?? "";
+      const top = li.offsetTop - ul.offsetTop;
+      next.set(key, top);
+      const was = prevTop.current.get(key);
+      if (was !== undefined && Math.abs(was - top) > 1 && !reducedMotion() && li.animate) {
+        li.animate([{ transform: `translateY(${was - top}px)` }, { transform: "none" }], { duration: 280, easing: "cubic-bezier(.3,.7,.1,1)" });
+      }
+    }
+    prevTop.current = next;
+  });
+  const [kind, setKind] = useState<"all" | "trending" | "ranging" | "volatile">("all");
+  const [onlyOn, setOnlyOn] = useState(false);
   // Что показываем: по умолчанию рынок из настроек; переключатель только меняет вид списка.
   // На споте нет шортов, поэтому стратегии «только фьючерсы» там не работают.
   const shown: "futures" | "spot" = view ?? (marketSpot ? "spot" : "futures");
@@ -548,9 +572,16 @@ function StrategiesCard() {
   const strategies = all0.filter((s) => fits(s, shown));
   const hidden = all0.length - strategies.length;
   const needle = q.trim().toLowerCase();
-  const found = needle ? strategies.filter((s) => stratName(s.name).toLowerCase().includes(needle) || s.name.includes(needle)) : strategies;
+  const kindOf = (s: Strategy) => (s.type === "trending" || s.type === "ranging" ? s.type : "volatile");
+  const found = strategies.filter(
+    (s) =>
+      (kind === "all" || kindOf(s) === kind) &&
+      (!onlyOn || s.enabled) &&
+      (!needle || stratName(s.name).toLowerCase().includes(needle) || s.name.includes(needle)),
+  );
   const sorted = [...found].sort((a, b) => (b.backtest?.sharpe ?? -9) - (a.backtest?.sharpe ?? -9));
-  const rows = all || needle ? sorted : sorted.slice(0, 6);
+  const filtering = Boolean(needle) || kind !== "all" || onlyOn;
+  const rows = all || filtering ? sorted : sorted.slice(0, 6);
   const on = strategies.filter((s) => s.enabled).length;
   const tested = strategies.filter((s) => s.backtest && s.backtest.trades > 0);
   const edge = tested.filter((s) => s.backtest!.trades >= 100 && s.backtest!.sharpe > 0);
@@ -589,15 +620,32 @@ function StrategiesCard() {
         />
         <input className="inp" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Найти стратегию" aria-label="Найти стратегию" autoComplete="off" />
       </div>
+      <div className="strat-tools">
+        <Seg
+          className="sm"
+          value={kind}
+          options={[
+            ["all", "Все"],
+            ["trending", "Тренд"],
+            ["ranging", "Возврат"],
+            ["volatile", "Пробой"],
+          ]}
+          onChange={setKind}
+          label="Тип стратегий"
+        />
+        <button className="chip-btn" type="button" aria-pressed={onlyOn} onClick={() => setOnlyOn(!onlyOn)}>
+          Только включённые
+        </button>
+      </div>
       {view && view !== (marketSpot ? "spot" : "futures") && (
         <p className="note-soon">Это просмотр: бот сейчас торгует на рынке «{marketSpot ? "Спот" : "Фьючерсы"}». Переключить — выше, в «Рынок».</p>
       )}
-      <ul className="strats">
+      <ul className="strats" ref={listRef}>
         {rows.map((s) => {
           const bt = s.backtest;
           const st = !bt || !bt.trades ? ["", "нет данных"] : bt.trades < 100 ? ["", "мало сделок"] : bt.sharpe > 0 ? ["ok", "есть плюс"] : ["warn", "нет edge"];
           return (
-            <li key={s.name} className={`strat${s.enabled ? "" : " off"}`}>
+            <li key={s.name} data-name={s.name} className={`strat${s.enabled ? "" : " off"}`}>
               <div className="nm">
                 <b>{stratName(s.name)}</b>
                 <code>{s.name}</code>
@@ -640,7 +688,7 @@ function StrategiesCard() {
         </p>
       )}
       <div className="btn-row" style={{ marginTop: 8 }}>
-        {found.length > 6 && !needle && (
+        {found.length > 6 && !filtering && (
           <button className="btn" type="button" onClick={() => setAll(!all)}>
             {all ? "Свернуть" : `Показать все ${strategies.length}`}
           </button>
