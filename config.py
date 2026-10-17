@@ -204,8 +204,9 @@ class Config:
     # True → автоматически исполнять топ-1 рекомендацию
     AUTO_EXECUTE: bool = os.getenv("AUTO_EXECUTE", "false").lower() == "true"
     # Когда AI/SAC/Hybrid не дали ни одного сигнала, бот может открыть сделку по
-    # локальным стратегиям. В режиме Local это и есть основной путь, там не влияет.
-    LOCAL_FALLBACK: bool = os.getenv("LOCAL_FALLBACK", "true").lower() == "true"
+    # локальным стратегиям. По умолчанию выключено: у стратегий нет доказанного
+    # преимущества, а сделки смешивались бы с сделками модели. В Local не влияет.
+    LOCAL_FALLBACK: bool = os.getenv("LOCAL_FALLBACK", "false").lower() == "true"
 
     # ── News ───────────────────────────────────────────────────────────────
     NEWS_API_KEY: str = os.getenv("NEWS_API_KEY", "")

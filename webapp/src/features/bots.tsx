@@ -477,7 +477,7 @@ const MODE_ROLE: Record<string, { title: string; text: string }> = {
   local: { title: "Стратегии", text: "" },
   ai: {
     title: "Запасные стратегии и подсказки для AI",
-    text: "Сделку решает AI. Включённые стратегии он видит как список типов сетапов и подписывает ими свои сделки — это подсказка, а не проверка: код стратегии при этом не запускается. Отключённых AI не видит.",
+    text: "Сделку решает AI. Включённые стратегии он видит как список типов сетапов и подписывает ими свои сделки — это подсказка, а не проверка: код стратегии при этом не запускается. Отключённых AI не видит. Сами стратегии торгуют, только если включить запасной путь ниже.",
   },
   hybrid: {
     title: "Запасные стратегии и подсказки для AI",
@@ -485,7 +485,7 @@ const MODE_ROLE: Record<string, { title: string; text: string }> = {
   },
   dqn: {
     title: "Запасные стратегии",
-    text: "Сделку решает нейросеть SAC и стратегии не использует. Они нужны только как запасной путь, если SAC не дала сигнала.",
+    text: "Сделку решает нейросеть SAC и стратегии не использует. Они нужны только если включить запасной путь ниже: тогда бот торгует по ним, когда SAC не дала сигнала.",
   },
 };
 
@@ -493,7 +493,7 @@ function StrategiesCard() {
   const all0 = useStore((s) => s.strategies);
   const spot = useStore((s) => cfg<string>(s.config, "MARKET_TYPE", "linear") === "spot");
   const mode = useStore((s) => s.bot?.mode ?? "ai");
-  const fallback = useStore((s) => cfg<boolean>(s.config, "LOCAL_FALLBACK", true));
+  const fallback = useStore((s) => cfg<boolean>(s.config, "LOCAL_FALLBACK", false));
   const [all, setAll] = useState(false);
   // Показываем только то, что подходит текущему рынку: на споте нет шортов,
   // стратегии «только фьючерсы» там не работают, и наоборот.

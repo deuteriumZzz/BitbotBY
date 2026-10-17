@@ -172,3 +172,9 @@ def test_changes_are_logged_with_old_and_new_value(keyed):
     assert change["key"] == "ATR_SPIKE_MULT" and change["new"] == 4.0
     assert change["old"] != 4.0 and hist[0]["by"] == "app"
     assert change["label"]
+
+
+def test_local_fallback_is_a_hot_toggle_and_off_by_default():
+    s = reg.BY_KEY["LOCAL_FALLBACK"]
+    assert s.type == "bool" and s.default is False and s.hot
+    assert Config.LOCAL_FALLBACK is False

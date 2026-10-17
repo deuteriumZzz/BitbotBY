@@ -866,13 +866,13 @@
    "group": "AI и решения",
    "label": "Если AI молчит — торговать локальными стратегиями",
    "type": "bool",
-   "default": true,
+   "default": false,
    "min": null,
    "max": null,
    "step": null,
    "unit": "",
    "options": [],
-   "hint": "В режимах AI, SAC и Hybrid бывают циклы без сигналов. Включено: тогда бот сам ищет вход по включённым локальным стратегиям. Выключено: нет сигнала от AI/SAC — нет сделки. В режиме Local не используется.",
+   "hint": "В режимах AI, SAC и Hybrid бывают циклы без сигналов. Включено: тогда бот сам ищет вход по включённым локальным стратегиям (у них нет доказанного преимущества). Выключено: нет сигнала от AI/SAC — нет сделки. В режиме Local не используется.",
    "readonly": false,
    "hot": true,
    "basic": true
@@ -1909,8 +1909,8 @@
    "source": "default"
   },
   "LOCAL_FALLBACK": {
-   "value": true,
-   "source": "live"
+   "value": false,
+   "source": "default"
   }
  },
  "secrets": [
