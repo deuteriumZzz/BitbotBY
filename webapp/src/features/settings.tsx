@@ -986,6 +986,7 @@ function SettingsTools({ schema, config, onImport }: { schema: SettingDef[]; con
   const [hist, setHist] = useState<ConfigHistoryItem[] | null>(null);
   const [paste, setPaste] = useState<string | null>(null);
   const [err, setErr] = useState("");
+  const [resetAsk, setResetAsk] = useState(false);
   const val = (d: SettingDef, v: unknown): string => (v === null || v === undefined ? "—" : fmtVal(d, v));
 
   const loadHistory = () => void api<ConfigHistoryItem[]>("GET", "/api/config/history").then(setHist).catch(() => setHist([]));
@@ -1031,7 +1032,33 @@ function SettingsTools({ schema, config, onImport }: { schema: SettingDef[]; con
         <button className="btn" type="button" aria-expanded={hist !== null} onClick={() => (hist ? setHist(null) : loadHistory())}>
           {hist ? "Скрыть журнал" : "Что менялось"}
         </button>
+        <button className="btn danger" type="button" onClick={() => setResetAsk(true)}>
+          Сбросить всё к .env
+        </button>
       </div>
+      {resetAsk && (
+        <div className="confirm-box">
+          <span>
+            Все настройки, которые вы меняли из приложения и Telegram, вернутся к значениям из <code>.env</code>: режим, пауза, символы, риск, стратегии.
+            Экспериментальные стратегии снова выключатся. Ключи API не затрагиваются.
+          </span>
+          <div className="btn-row">
+            <button className="btn" type="button" onClick={() => setResetAsk(false)}>
+              Отмена
+            </button>
+            <button
+              className="btn danger"
+              type="button"
+              onClick={() => {
+                setResetAsk(false);
+                void actions.resetConfig();
+              }}
+            >
+              Да, сбросить
+            </button>
+          </div>
+        </div>
+      )}
       {paste !== null && (
         <div className="paste">
           <textarea className="inp" rows={6} spellCheck={false} aria-label="Набор настроек (JSON)" value={paste} onChange={(e) => setPaste(e.target.value)} />

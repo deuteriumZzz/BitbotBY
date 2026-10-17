@@ -12,6 +12,9 @@ import type {
   ConfigValues,
   DailyRow,
   Guard,
+  JobDone,
+  JobId,
+  JobsStatus,
   JobState,
   Journal,
   Metrics,
@@ -62,6 +65,15 @@ const emptyRadar = (cycle = 0): Radar => ({
   note: "",
 });
 
+export const JOB_TITLE: Record<string, string> = {
+  backtest: "бэктест стратегий",
+  train: "обучение SAC",
+  tune: "тюнинг и обучение SAC",
+  alpha_report: "значимость альфы",
+  live_divergence: "Live vs бэктест",
+  ai_isolation: "проверка AI",
+};
+
 export const GUARD_TEXT: Record<string, string> = {
   drawdown_halt: "Входы остановлены: предельная просадка",
   daily_limit: "Входы остановлены: дневной лимит убытка",
@@ -98,7 +110,10 @@ export interface Store {
   secretsNote: string;
   ai: AiState | null;
   journal: Journal | null;
-  backtest: JobState;
+  jobs: Partial<Record<JobId, JobState>>;
+  /** Занятые группы задач: {sac: "telegram"} — запущено не из приложения, но тоже идёт. */
+  jobGroups: Record<string, string>;
+  rollbackAvailable: boolean;
   setupInfo: SetupInfo | null;
   /** Открытый шаг мастера первого запуска; null — мастер закрыт. */
   setup: SetupStep | null;
@@ -130,6 +145,7 @@ export interface Store {
   loadAi(): Promise<void>;
   loadJournal(p: Period): Promise<void>;
   loadSetup(): Promise<void>;
+  loadJobs(): Promise<void>;
 
   requestCode(): Promise<boolean>;
   verifyCode(code: string): Promise<boolean>;
@@ -209,7 +225,9 @@ export const useStore = create<Store>((set, get) => {
     secretsNote: "",
     ai: null,
     journal: null,
-    backtest: { running: false, pct: 0 },
+    jobs: {},
+    jobGroups: {},
+    rollbackAvailable: false,
     setupInfo: null,
     setup: null,
     paramSearch: null,
@@ -255,6 +273,7 @@ export const useStore = create<Store>((set, get) => {
         get().loadSecrets(),
         get().loadAi(),
         get().loadSetup(),
+        get().loadJobs(),
         api<PendingSignal[]>("GET", "/api/signals/pending").then((pending) => set({ pending })),
       ]);
       unsubscribe?.();
@@ -380,16 +399,22 @@ export const useStore = create<Store>((set, get) => {
           }
           break;
         }
-        case "job.progress":
-          if (d.job === "backtest")
-            set({ backtest: { running: true, pct: Number(d.pct ?? 0), step: d.strategy ? { symbol: String(d.symbol ?? ""), strategy: String(d.strategy) } : undefined } });
+        case "job.progress": {
+          const id = d.job as JobId;
+          set((s) => ({ jobs: { ...s.jobs, [id]: { running: true, info: d, done: undefined } } }));
           break;
-        case "job.done":
-          if (d.job === "backtest") {
-            set({ backtest: { running: false, pct: 100, done: d as JobState["done"] } });
-            feed(d.ok ? "edit" : "guard", d.ok ? `Бэктест готов: ${d.n} стратегий` : "Бэктест не завершился");
-            void get().loadStrategies().catch(() => undefined);
-          }
+        }
+        case "job.done": {
+          const id = d.job as JobId;
+          set((s) => ({ jobs: { ...s.jobs, [id]: { running: false, info: {}, done: d as unknown as JobDone } } }));
+          feed(d.ok ? "edit" : "guard", d.ok ? `Задача готова: ${JOB_TITLE[id] ?? id}` : `Задача не завершилась: ${JOB_TITLE[id] ?? id}`);
+          if (id === "backtest") void get().loadStrategies().catch(() => undefined);
+          void get().loadJobs().catch(() => undefined);
+          break;
+        }
+        case "model.rolled_back":
+          void get().loadJobs().catch(() => undefined);
+          feed("edit", "Модель SAC откатана к предыдущей");
           break;
         case "cycle": {
           // Пауза могла прийти из Telegram — цикл бота знает о ней раньше снимка.
@@ -464,6 +489,17 @@ export const useStore = create<Store>((set, get) => {
       const period = p ?? get().period;
       const m = await api<Metrics>("GET", `/api/metrics?period=${period}`);
       set((s) => ({ metrics: { ...s.metrics, [period]: m } }));
+    },
+    async loadJobs() {
+      const st = await api<JobsStatus>("GET", "/api/jobs");
+      set((s) => {
+        const jobs = { ...s.jobs };
+        for (const id of ["backtest", "train", "tune"] as const) {
+          const info = st.progress[id];
+          if (info) jobs[id] = { running: true, info, done: undefined };
+        }
+        return { jobs, jobGroups: st.running, rollbackAvailable: st.rollback_available };
+      });
     },
     async loadSetup() {
       set({ setupInfo: await api<SetupInfo>("GET", "/api/setup") });
@@ -596,11 +632,13 @@ export const actions = {
       st().say(`Закрыто ${c} ${plural(c, ["позиция", "позиции", "позиций"])}. Бот на паузе.`);
     }),
   restart: () => st().act(() => command("POST", "/api/bot/restart"), "Бот перезапускается…"),
-  runBacktest: () =>
+  runJob: (id: JobId) =>
     st().act(async () => {
-      await command("POST", "/api/jobs/backtest");
-      useStore.setState({ backtest: { running: true, pct: 0 } });
+      await command("POST", `/api/jobs/${id}`);
+      useStore.setState((s) => ({ jobs: { ...s.jobs, [id]: { running: true, info: { pct: 0 } } } }));
     }),
+  resetConfig: () => st().act(() => api("POST", "/api/config/reset"), "Настройки сброшены к значениям из .env"),
+  rollbackModel: () => st().act(() => command("POST", "/api/model/rollback"), "Модель SAC откатана — бот подхватит её в следующем цикле"),
   closePosition: (p: Position, fraction = 1) =>
     st().act(
       () => command("POST", `/api/positions/${p.trade_id}/close`, { fraction }),

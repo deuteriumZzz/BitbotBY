@@ -31,7 +31,7 @@ from fastapi.responses import JSONResponse
 from starlette.requests import HTTPConnection
 
 from config import Config
-from src import ai_providers, bot_bus, secrets_store
+from src import ai_providers, background_jobs, bot_bus, secrets_store
 from src import settings_registry as registry
 from src.dashboard import auth, data
 from src.runtime_config import RuntimeConfig
@@ -306,16 +306,26 @@ async def cmd_panic(request: Request) -> JSONResponse:
     return await _command(request, "panic")
 
 
-@router.post("/api/jobs/backtest")
-async def cmd_backtest(request: Request) -> JSONResponse:
-    return await _command(request, "run_backtest")
+@router.post("/api/jobs/{job}")
+async def cmd_job(job: str, request: Request) -> JSONResponse:
+    """Фоновая задача из меню Telegram (список — background_jobs.JOBS)."""
+    if job not in background_jobs.JOBS:
+        return _err(404, "unknown_job", "Такой задачи нет.")
+    return await _command(request, "run_job", {"job": job})
 
 
-@router.get("/api/jobs/backtest")
-async def backtest_status() -> JSONResponse:
-    """Идёт ли бэктест и на каком он шаге (то же, что видно в Telegram)."""
-    progress = data.redis_get("bot:backtest_progress")
-    return JSONResponse({"running": bool(progress), "progress": progress})
+@router.get("/api/jobs")
+async def jobs_status() -> JSONResponse:
+    """Что идёт сейчас, прогресс и можно ли откатить модель SAC."""
+    r = data.get_redis()
+    if r is None:
+        return _err(503, "bot_unreachable", "Нет связи с ботом: Redis недоступен.")
+    return JSONResponse(background_jobs.status(_runtime_config(r)))
+
+
+@router.post("/api/model/rollback")
+async def cmd_rollback(request: Request) -> JSONResponse:
+    return await _command(request, "rollback_model")
 
 
 @router.post("/api/bot/restart")
@@ -487,6 +497,21 @@ def _rc_or_error(
             _err(503, "bot_unreachable", "Нет связи с ботом: Redis недоступен."),
         )
     return _runtime_config(r), r, None
+
+
+@router.post("/api/config/reset")
+async def reset_config(request: Request) -> JSONResponse:
+    """Сброс runtime-настроек к значениям из .env (как «Сброс настроек» в Telegram)."""
+    rc, r, denied = _rc_or_error(request)
+    if denied is not None:
+        return denied
+    rc.reset_to_defaults()
+    bot_bus.emit(
+        r,
+        "config.changed",
+        {"keys": ["STRATEGIES", "SYMBOLS", "MARKET_PROFILE", "MODE", "AI_CHAIN"]},
+    )
+    return JSONResponse({"ok": True})
 
 
 @router.post("/api/profile")

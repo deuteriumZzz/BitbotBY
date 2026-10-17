@@ -1910,6 +1910,7 @@ class TelegramCommander:
             await self._notifier.notify(f"❌ Бэктест: непредвиденная ошибка\n`{e}`")
         finally:
             self._backtesting = False
+            self._rc.end_job("backtest")
             self._rc.clear_backtest_progress()
 
     @staticmethod
@@ -1960,6 +1961,7 @@ class TelegramCommander:
             )
         finally:
             self._alpha_report_running = False
+            self._rc.end_job("alpha_report")
 
     async def _run_live_divergence(self) -> None:
         """Запускает backtest_live_divergence.py — расхождение реальной цены
@@ -1981,6 +1983,7 @@ class TelegramCommander:
             )
         finally:
             self._live_divergence_running = False
+            self._rc.end_job("live_divergence")
 
     async def _run_ai_isolation_backtest(self) -> None:
         """Запускает ai_signal_isolation_backtest.py — изолирует вклад AI(LLM)
@@ -2000,6 +2003,7 @@ class TelegramCommander:
             await self._notifier.notify(f"❌ AI-изоляция: непредвиденная ошибка\n`{e}`")
         finally:
             self._ai_isolation_running = False
+            self._rc.end_job("ai_isolation")
 
     async def _run_sac_training(self) -> None:
         """Запускает train_sac.py как subprocess, не блокируя event loop."""
@@ -2118,6 +2122,7 @@ class TelegramCommander:
             await self._notifier.notify(f"❌ SAC обучение упало: {e}")
         finally:
             self._sac_training = False
+            self._rc.end_job("sac")
             self._rc.clear_train_progress()
 
     async def _run_sac_tune_and_train(self) -> None:
@@ -2228,6 +2233,7 @@ class TelegramCommander:
             await self._notifier.notify(f"❌ Тюнинг упал: {e}")
         finally:
             self._sac_training = False
+            self._rc.end_job("sac")
             self._rc.clear_tune_progress()
 
     async def _handle_text(
@@ -3095,7 +3101,9 @@ class TelegramCommander:
             )
 
         elif data == "backtest_now":
-            if self._backtesting:
+            if self._backtesting or not self._rc.try_start_job(
+                "backtest", "telegram", 3 * 3600
+            ):
                 await query.answer("⏳ Бэктест уже выполняется...", show_alert=True)
                 return
             self._backtesting = True
@@ -3112,7 +3120,9 @@ class TelegramCommander:
             task.add_done_callback(self._background_tasks.discard)
 
         elif data == "alpha_report_now":
-            if self._alpha_report_running:
+            if self._alpha_report_running or not self._rc.try_start_job(
+                "alpha_report", "telegram", 3600
+            ):
                 await query.answer("⏳ Отчёт уже выполняется...", show_alert=True)
                 return
             self._alpha_report_running = True
@@ -3130,7 +3140,9 @@ class TelegramCommander:
             task.add_done_callback(self._background_tasks.discard)
 
         elif data == "live_divergence_now":
-            if self._live_divergence_running:
+            if self._live_divergence_running or not self._rc.try_start_job(
+                "live_divergence", "telegram", 3600
+            ):
                 await query.answer("⏳ Отчёт уже выполняется...", show_alert=True)
                 return
             self._live_divergence_running = True
@@ -3162,7 +3174,9 @@ class TelegramCommander:
             )
 
         elif data == "ai_isolation_now":
-            if self._ai_isolation_running:
+            if self._ai_isolation_running or not self._rc.try_start_job(
+                "ai_isolation", "telegram", 3600
+            ):
                 await query.answer("⏳ Уже выполняется...", show_alert=True)
                 return
             self._ai_isolation_running = True
@@ -3263,7 +3277,9 @@ class TelegramCommander:
             )
 
         elif data == "tune_sac_now":
-            if self._sac_training:
+            if self._sac_training or not self._rc.try_start_job(
+                "sac", "telegram", 8 * 3600
+            ):
                 await self._edit(
                     query, "⏳ Обучение уже запущено, ожидайте...", _kb_after_action()
                 )
@@ -3295,6 +3311,7 @@ class TelegramCommander:
             # Авто-сброс если все фоновые задачи завершились
             if self._sac_training and all(t.done() for t in self._background_tasks):
                 self._sac_training = False
+                self._rc.end_job("sac")
                 self._rc.clear_train_progress()
                 self._rc.clear_tune_progress()
 
@@ -3379,7 +3396,9 @@ class TelegramCommander:
             await self._edit(query, text, InlineKeyboardMarkup(kb_rows))
 
         elif data == "train_sac_now":
-            if self._sac_training:
+            if self._sac_training or not self._rc.try_start_job(
+                "sac", "telegram", 4 * 3600
+            ):
                 await self._edit(
                     query, "⏳ Обучение уже запущено, ожидайте...", _kb_after_action()
                 )

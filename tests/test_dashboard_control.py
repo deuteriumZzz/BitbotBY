@@ -162,6 +162,12 @@ def test_setup_sees_keys_from_env(client, monkeypatch):
     assert resp.json() == {"keys_in_app": False, "bybit": True, "telegram": False}
 
 
+def test_unknown_job_is_404_and_status_needs_redis(client):
+    assert client.post("/api/jobs/rm-rf", json={}).status_code == 404
+    with patch.object(data, "get_redis", return_value=None):
+        assert client.get("/api/jobs").status_code == 503
+
+
 def test_portfolio_key_follows_mode():
     with patch.object(data, "paper_mode", return_value=True):
         assert data.portfolio_key() == "portfolio_state_paper"
@@ -432,3 +438,11 @@ def test_single_provider_mode_via_api(keyed):
     assert [c["provider"] for c in both["chain"]] == ["groq", "gemini"]
     assert one["single"] is True
     assert [c["provider"] for c in one["chain"]] == ["groq"]
+
+
+def test_reset_config_route(keyed):
+    r = FakeRedis()
+    with patch.object(data, "get_redis", return_value=r):
+        resp = keyed.post("/api/config/reset", headers={"X-API-Key": "secret"})
+    assert resp.status_code == 200 and resp.json() == {"ok": True}
+    assert "config.changed" in [m["type"] for _, m in r.published]

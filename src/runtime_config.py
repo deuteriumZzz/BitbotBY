@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Any, Iterable, List, Optional, Set
+from typing import Any, Dict, Iterable, List, Optional, Set
 
 from config import Config
 from src import ai_providers
@@ -25,6 +25,7 @@ _KEY_FORCED = "bot:forced_symbols"
 _KEY_EXCLUDED = "bot:excluded_symbols"
 _KEY_DISABLED_STRATS = "bot:disabled_strategies"
 _KEY_EXPERIMENTAL_SEEN = "bot:experimental_strategies_seen"
+_KEY_JOB = "bot:job:"
 _KEY_TRADING_HOURS = "bot:trading_hours"
 _KEY_MAX_POSITIONS = "bot:max_positions"
 _KEY_RISK_PER_TRADE = "bot:risk_per_trade"
@@ -1052,6 +1053,37 @@ class RuntimeConfig:
         except Exception:
             return None
 
+    # ── Фоновые задачи: общий замок для Telegram и приложения ─────────────────
+
+    def try_start_job(self, group: str, source: str, ttl: int) -> bool:
+        """Занимает группу задач (sac, backtest, …); False, если уже занята.
+
+        Замок общий для Telegram и приложения, поэтому один и тот же бэктест или
+        обучение не запустятся дважды. TTL — страховка на случай падения бота.
+        """
+        try:
+            return bool(
+                self._r.redis_client.set(_KEY_JOB + group, source, nx=True, ex=ttl)
+            )
+        except Exception as e:
+            logger.warning("RuntimeConfig job lock failed: %s", e)
+            return True  # без Redis замок невозможен — не блокируем запуск
+
+    def end_job(self, group: str) -> None:
+        try:
+            self._r.redis_client.delete(_KEY_JOB + group)
+        except Exception as e:
+            logger.warning("RuntimeConfig job unlock failed: %s", e)
+
+    def running_jobs(self, groups: Iterable[str]) -> Dict[str, str]:
+        """{группа: источник запуска} для занятых групп."""
+        out: Dict[str, str] = {}
+        for g in groups:
+            val = self._get(_KEY_JOB + g)
+            if val:
+                out[g] = val
+        return out
+
     def get_sac_backup_path(self) -> str:
         return self._get(_KEY_SAC_BACKUP) or ""
 
@@ -1232,10 +1264,17 @@ class RuntimeConfig:
         Вызывается при старте бота — каждый запуск начинается чисто.
         """
         try:
-            self._r.redis_client.delete(*self._ALL_KEYS)
+            self._r.redis_client.delete(*self._ALL_KEYS, _KEY_EXPERIMENTAL_SEEN)
             logger.info("RuntimeConfig: сброс к .env-дефолтам выполнен")
         except Exception as e:
             logger.warning("RuntimeConfig reset failed: %s", e)
+            return
+        # Экспериментальные стратегии после сброса снова выключены по умолчанию.
+        from src.strategies import STRATEGY_REGISTRY  # noqa: PLC0415
+
+        self.ensure_experimental_disabled(
+            n for n, c in STRATEGY_REGISTRY.items() if c.experimental
+        )
 
     # ── Summary ───────────────────────────────────────────────────────────────
 

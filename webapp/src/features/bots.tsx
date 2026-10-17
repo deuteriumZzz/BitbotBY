@@ -2,10 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { base, fmtN, plural, tone } from "../lib/format";
+import { fmtN, plural, tone } from "../lib/format";
 import type { ConfigValues } from "../lib/types";
 import { actions, useStore } from "../store";
 import { Icon, Q, Seg, Toggle } from "../ui";
+import { JobsCard } from "./jobs";
 
 export const STRATEGY_NAME: Record<string, string> = {
   scalping: "Скальпинг",
@@ -555,75 +556,6 @@ function StrategiesCard() {
           Включить все
         </button>
       </div>
-    </article>
-  );
-}
-
-// ── Обучение и проверки: пока только из Telegram ──────────────────────────────
-
-function JobsCard() {
-  const job = useStore((s) => s.backtest);
-  const online = useStore((s) => s.alive);
-  const [confirm, setConfirm] = useState(false);
-  const d = job.done;
-  return (
-    <article className="card">
-      <div className="card-h">
-        <h2>Бэктест стратегий</h2>
-        <Q tip="Бот прогоняет все стратегии по истории свечей и показывает, как они работали. Это ничего не меняет в торговле: результаты только обновляют цифры в списке стратегий." />
-      </div>
-      {job.running ? (
-        <>
-          <div className="prog" role="progressbar" aria-valuenow={Math.round(job.pct)} aria-valuemin={0} aria-valuemax={100} aria-label="Ход бэктеста">
-            <i style={{ width: `${job.pct}%` }} />
-          </div>
-          <p className="note-soon">
-            Идёт: {Math.round(job.pct)}%{job.step ? ` · ${base(job.step.symbol)} · ${stratName(job.step.strategy)}` : ""}. Можно закрыть приложение — бот
-            доработает сам.
-          </p>
-        </>
-      ) : (
-        <>
-          {d && (
-            <p className={`note-soon ${d.ok ? "" : "down"}`}>
-              {d.ok
-                ? `Готово: ${d.n} стратегий${d.best ? `. Лучший Sharpe — ${stratName(d.best.strategy)} (${d.best.sharpe}, сделок ${d.best.trades})` : ""}. Это ориентир: Sharpe ниже нуля значит, что стратегия не заработала на истории.`
-                : `Не получилось: ${d.error ?? "ошибка бота"}.`}
-            </p>
-          )}
-          {confirm ? (
-            <div className="confirm-box">
-              <span>
-                Займёт несколько минут и загрузит процессор сервера. Бот продолжит торговать. Загрузит свечи с биржи и <b>заменит прежние результаты</b>{" "}
-                бэктеста.
-              </span>
-              <div className="btn-row">
-                <button className="btn" type="button" onClick={() => setConfirm(false)}>
-                  Отмена
-                </button>
-                <button
-                  className="btn primary"
-                  type="button"
-                  onClick={() => {
-                    setConfirm(false);
-                    void actions.runBacktest();
-                  }}
-                >
-                  Запустить
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button className="btn" type="button" disabled={!online} onClick={() => setConfirm(true)}>
-              Запустить бэктест
-            </button>
-          )}
-        </>
-      )}
-      <p className="note-soon" style={{ marginTop: 10 }}>
-        Обучение SAC (~60 мин), тюнинг (~3 ч), откат модели, значимость альфы и проверка AI (~150 запросов) пока только в Telegram:{" "}
-        <code>/trainn</code> и меню «Бэктест». Они меняют модель или тратят дневную квоту AI, поэтому запускаются осознанно, не одной кнопкой.
-      </p>
     </article>
   );
 }

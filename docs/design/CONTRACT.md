@@ -111,8 +111,10 @@
 | `GET /api/metrics?period=24h\|7d\|30d\|all` | `{realized, fees, net, n, win_rate, profit_factor, avg_win, avg_loss, rr, max_drawdown, sharpe\|null}`; `sharpe = null` при n < 50 |
 | `GET /api/metrics/execution` | `{latency_ms_avg, slippage_plan, slippage_fact, fees_30d}` |
 | `GET /api/pnl/daily?days=35` | `[{date, net, gross, fees, trades}]` |
-| `POST /api/jobs/backtest` | команда `run_backtest` (как остальные: `request_id`) → `{started: true}`; ошибка `busy`, если бэктест уже идёт. Прогресс — события `job.progress {job, pct, step, total, symbol, strategy}`, итог — `job.done {job, ok, n, best, months, timeframe}` или `{ok: false, error}` |
-| `GET /api/jobs/backtest` | `{running, progress}` — тот же прогресс, что видит Telegram |
+| `POST /api/jobs/{job}` | `job` ∈ `backtest`, `train`, `tune`, `alpha_report`, `live_divergence`, `ai_isolation`: команда `run_job` (как остальные, с `request_id`) → `{started: true}`; `busy`, если группа задач уже занята (обучение и тюнинг — одна группа `sac`; замок общий с Telegram), `unknown_job` — 404. События: `job.progress {job, pct, …}` (backtest: `symbol, strategy`; train: `step, total, eta_min`; tune: `trial, total, best_pnl, eta_min`, на втором этапе `stage: "train"`) и `job.done {job, ok, error?}` + итог (backtest: `n, best, months, timeframe`; train/tune: `sac_pct, bh_pct, worse`; отчёты: `output`) |
+| `GET /api/jobs` | `{running: {группа: источник}, progress: {backtest, train, tune}, rollback_available}` |
+| `POST /api/model/rollback` | команда `rollback_model`: возвращает модель SAC из резервной копии; `no_backup`, `busy` (идёт обучение); событие `model.rolled_back` |
+| `POST /api/config/reset` | сброс runtime-настроек к `.env` (как «Сброс настроек» в Telegram); экспериментальные стратегии снова выключаются |
 | `GET /api/config/history?limit=50` | `[{ts, by, changes: [{key, label, old, new}]}]` — что меняли из приложения, свежие сверху |
 | `GET /api/setup` | `{keys_in_app, bybit, telegram}` — для мастера первого запуска: ключ есть в приложении или в `.env` (без значений) |
 | `GET /api/journal?period=24h\|7d\|30d\|all` | `{period, limit, trades: [{id, symbol, side, strategy, confidence, entry, exit, qty, pnl, pnl_pct, fees, opened, closed, reason, reasoning}]}` — свежие сверху, не больше `limit` |

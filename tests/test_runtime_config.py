@@ -665,3 +665,20 @@ class TestExperimentalStrategies:
         client.smembers.return_value = {"supertrend"}  # включена пользователем
         assert rc.ensure_experimental_disabled(["supertrend"]) == []
         client.sadd.assert_not_called()
+
+
+def test_reset_keeps_experimental_strategies_off(rc_bundle):
+    rc, redis_mock, _ = rc_bundle
+    client = redis_mock.redis_client
+    client.smembers.return_value = set()
+    rc.reset_to_defaults()
+    # метка «уже видели» стирается вместе с остальным и экспериментальные
+    # стратегии выключаются заново, а не остаются включёнными после сброса
+    deleted = [a for c in client.delete.call_args_list for a in c.args]
+    assert "bot:experimental_strategies_seen" in deleted
+    disabled = {
+        c.args[1]
+        for c in client.sadd.call_args_list
+        if c.args[0] == "bot:disabled_strategies"
+    }
+    assert {"supertrend", "bear_hedge"} <= disabled

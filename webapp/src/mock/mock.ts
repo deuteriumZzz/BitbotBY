@@ -539,25 +539,46 @@ const NUMERIC = ["int", "float", "pct"];
 
 const configHistory: { ts: number; by: string; changes: { key: string; label: string; old: unknown; new: unknown }[] }[] = [];
 
-let backtestRunning = false;
+const jobGroup: Record<string, string> = { backtest: "backtest", train: "sac", tune: "sac", alpha_report: "alpha_report", live_divergence: "live_divergence", ai_isolation: "ai_isolation" };
+const busyGroups = new Set<string>();
+let modelBackup = false;
 
-/** Имитация бэктеста: ~6 секунд, прогресс по стратегиям, как BACKTEST_PROGRESS у бота. */
-function startBacktest(b: Body) {
-  if (backtestRunning) return done(b, err("busy", "Бэктест уже идёт — дождитесь результата."));
-  backtestRunning = true;
-  const names = strategies.map((s) => s.name);
+/** Имитация фоновых задач бота: прогресс событиями, как job.progress/job.done. */
+function startJob(job: string, b: Body) {
+  const group = jobGroup[job];
+  if (!group) return fail(404, "unknown_job", "Такой задачи нет.");
+  if (busyGroups.has(group)) return done(b, err("busy", "Эта задача уже выполняется — дождитесь конца."));
+  busyGroups.add(group);
+  const steps = job === "backtest" ? strategies.length : job === "train" || job === "tune" ? 20 : 3;
   let i = 0;
   const tick = setInterval(() => {
     i++;
-    if (i <= names.length) {
-      emit("job.progress", { job: "backtest", pct: Math.round((i / names.length) * 100), symbol: "BTC/USDT", strategy: names[i - 1] });
+    if (i <= steps) {
+      const pct = Math.round((i / steps) * 100);
+      const extra =
+        job === "backtest"
+          ? { symbol: "BTC/USDT", strategy: strategies[i - 1].name }
+          : job === "train"
+            ? { step: i * 5000, total: steps * 5000, eta_min: Math.round((steps - i) * 3) }
+            : job === "tune"
+              ? { trial: Math.ceil((i / steps) * 30), total: 30, best_pnl: 400 + i * 20, eta_min: Math.round((steps - i) * 9) }
+              : {};
+      emit("job.progress", { job, pct, ...extra });
       return;
     }
     clearInterval(tick);
-    backtestRunning = false;
-    emit("job.done", { job: "backtest", ok: true, n: names.length, months: 12, timeframe: "15m", best: { strategy: "liquidity_sweep", sharpe: -0.05, trades: 1771 } });
+    busyGroups.delete(group);
+    if (job === "train" || job === "tune") modelBackup = true;
+    const result: Record<string, unknown> =
+      job === "backtest"
+        ? { n: strategies.length, months: 12, timeframe: "15m", best: { strategy: "liquidity_sweep", sharpe: -0.05, trades: 1771 } }
+        : job === "train" || job === "tune"
+          ? { sac_pct: -4.2, bh_pct: 18.6, worse: true }
+          : { output: job === "alpha_report" ? "strategy      n   sharpe   p-value\nema_crossover 120 -0.12    0.81\n0/20 значимы после поправки Bonferroni" : "расхождение исполнения: +0.04% на сделку" };
+    emit("job.done", { job, ok: true, ...result });
+    emit("config.changed", { keys: [] });
   }, 300);
-  return done(b, { ok: true, started: true });
+  return done(b, { ok: true, started: true, job });
 }
 
 function patchConfig(changes: Body) {
@@ -697,8 +718,17 @@ function route(method: string, path: string, body: unknown): unknown {
       emit("cycle", { state: "paused" });
       return done(b, { ok: true, closed: syms.length, paused: true });
     }
-    case "POST /api/jobs/backtest":
-      return startBacktest(b);
+    case "POST /api/config/reset":
+      strategies.forEach((s) => (s.enabled = !s.experimental));
+      emit("config.changed", { keys: ["STRATEGIES", "SYMBOLS", "MARKET_PROFILE", "MODE"] });
+      return { ok: true };
+    case "GET /api/jobs":
+      return { running: Object.fromEntries([...busyGroups].map((g) => [g, "app"])), progress: {}, rollback_available: modelBackup };
+    case "POST /api/model/rollback":
+      if (!modelBackup) return done(b, err("no_backup", "Резервная копия модели не найдена."));
+      modelBackup = false;
+      emit("model.rolled_back", {});
+      return done(b, { ok: true, rolled_back: true });
     case "POST /api/bot/restart":
       return done(b, { ok: true, restarting: true });
     case "POST /api/account/mode":
@@ -730,6 +760,7 @@ function route(method: string, path: string, body: unknown): unknown {
     return { provider: prov.id, models: [...prov.models.map((x) => x.id), `${prov.id}-preview-2026`].sort() };
   }
   if ((m = p.match(/^\/api\/commands\/(.+)$/))) return results[m[1]] ?? { request_id: m[1], status: "pending" };
+  if (method === "POST" && (m = p.match(/^\/api\/jobs\/(.+)$/))) return startJob(m[1], b);
   if (method === "POST" && (m = p.match(/^\/api\/positions\/(.+)\/close$/))) {
     const pos = findPos(m[1]);
     if (!pos) return done(b, err("not_found", "Позиция уже закрыта."));

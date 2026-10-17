@@ -94,12 +94,37 @@ export interface SettingDef {
 
 export type ConfigValues = Record<string, { value: unknown; source: string }>;
 
-/** Фоновая задача бота: бэктест. Прогресс приходит событиями job.progress / job.done. */
+/** Фоновая задача бота. Прогресс приходит событиями job.progress, итог — job.done. */
+export type JobId = "backtest" | "train" | "tune" | "alpha_report" | "live_divergence" | "ai_isolation";
+
+export interface JobDone {
+  ok: boolean;
+  error?: string;
+  // бэктест
+  n?: number;
+  months?: number;
+  timeframe?: string;
+  best?: { strategy: string; sharpe: number; trades: number } | null;
+  // обучение и тюнинг SAC
+  sac_pct?: number | null;
+  bh_pct?: number | null;
+  worse?: boolean;
+  // отчёты
+  output?: string;
+}
+
 export interface JobState {
   running: boolean;
-  pct: number;
-  step?: { symbol: string; strategy: string };
-  done?: { ok: boolean; error?: string; n?: number; months?: number; timeframe?: string; best?: { strategy: string; sharpe: number; trades: number } | null };
+  /** Последнее событие прогресса: pct, eta_min, step/total, trial, symbol, strategy… */
+  info: Record<string, unknown>;
+  done?: JobDone;
+}
+
+/** `GET /api/jobs`: занятые группы (sac, backtest, …), прогресс и наличие резервной копии модели. */
+export interface JobsStatus {
+  running: Record<string, string>;
+  progress: Partial<Record<"backtest" | "train" | "tune", Record<string, unknown> | null>>;
+  rollback_available: boolean;
 }
 
 /** Запись журнала изменений настроек (`GET /api/config/history`). */
