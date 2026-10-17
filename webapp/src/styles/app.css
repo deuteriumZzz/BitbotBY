@@ -372,7 +372,7 @@ summary .chgb{font:600 10px/1 var(--f-num);padding:3px 6px;border-radius:var(--r
 .banner.season{background:color-mix(in oklab,var(--cyan) 7%,var(--bg));border-color:color-mix(in oklab,var(--cyan) 30%,transparent)}
 .b-acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .strat .row-r{display:flex;align-items:center;gap:8px}
-.strat.off .nm b{color:var(--ink-3);text-decoration:line-through}
+.strat.off .nm b{color:var(--ink-3)}
 .strat.off .nums{opacity:.5}
 .confirm-box{margin-top:12px;padding:12px;border-radius:var(--r);border:1px solid color-mix(in oklab,var(--down) 45%,transparent);background:color-mix(in oklab,var(--down) 6%,var(--bg));display:flex;flex-direction:column;gap:10px;font-size:13px;line-height:1.45;color:var(--ink-2)}
 .confirm-box b{color:var(--ink)}
