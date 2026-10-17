@@ -340,6 +340,10 @@ def clean_chain(raw: Any) -> Dict[str, Any]:
         if raw["mode"] not in MODES:
             raise ValueError("Режим — free, auto или paid.")
         out["mode"] = raw["mode"]
+    if "single" in raw:
+        if not isinstance(raw["single"], bool):
+            raise ValueError("single — true или false.")
+        out["single"] = raw["single"]
     # keyless — провайдеры без ключа (LLM7, своя Ollama), которые пользователь
     # включил сам: без его согласия данные не уходят новому сервису.
     for key in ("order", "disabled", "keyless"):
@@ -375,6 +379,10 @@ def chain(
     Модель: выбранная в приложении → из .env → рекомендованная каталогом.
     pinned (AI_PROVIDER, /provider в Telegram) идёт первым при любом режиме:
     это явный выбор пользователя.
+
+    single — «один провайдер»: решения всегда принимает одна модель (закреплённая,
+    иначе первая в цепочке), без запасных. Недоступна — цикл идёт без AI, на
+    локальных стратегиях, а не на другой модели.
     """
     order = [p for p in settings.get("order", []) if p in BY_ID]
     ids = order + [p.id for p in PROVIDERS if p.id not in order]
@@ -395,4 +403,6 @@ def chain(
     if mode == "auto":
         out.sort(key=lambda c: not BY_ID[c[0]].is_free(c[1]))  # стабильно
     head = [c for c in out if c[0] == pinned]
+    if settings.get("single"):
+        return head if pinned != "auto" else out[:1]
     return head + [c for c in out if c[0] != pinned]

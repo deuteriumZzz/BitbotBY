@@ -693,6 +693,7 @@ def _ai_view(rc: Any) -> Dict[str, Any]:
     chain = ai_providers.chain(settings, available, env_models, pinned)
     return {
         "mode": settings.get("mode", ai_providers.DEFAULT_MODE),
+        "single": bool(settings.get("single", False)),
         "pinned": pinned,
         "last": rc.get_last_ai_provider() if rc else "",
         "providers": providers,

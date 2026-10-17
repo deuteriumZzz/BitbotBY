@@ -607,8 +607,11 @@ def _kb_market_type_menu(current: str) -> "InlineKeyboardMarkup":
     )
 
 
-def _kb_provider_menu(current: str) -> "InlineKeyboardMarkup":
-    """Провайдеры с ключом (и выбранный сейчас) по три в ряд; 🆓 — бесплатные."""
+def _kb_provider_menu(current: str, single: bool = False) -> "InlineKeyboardMarkup":
+    """Провайдеры с ключом (и выбранный сейчас) по три в ряд; 🆓 — бесплатные.
+
+    Последняя строка — как работать: цепочкой или одним провайдером.
+    """
     shown = [
         p
         for p in ai_providers.PROVIDERS
@@ -631,6 +634,16 @@ def _kb_provider_menu(current: str) -> "InlineKeyboardMarkup":
                 InlineKeyboardButton(
                     f"{auto_tick}🔄 auto (цепочка)", callback_data="provider:auto"
                 )
+            ],
+            [
+                InlineKeyboardButton(
+                    "🎯 Один провайдер ✅" if single else "🎯 Один провайдер",
+                    callback_data="ai_single:1",
+                ),
+                InlineKeyboardButton(
+                    "🔗 Цепочка" if single else "🔗 Цепочка ✅",
+                    callback_data="ai_single:0",
+                ),
             ],
             [InlineKeyboardButton("« Настройки", callback_data="settings")],
         ]
@@ -2979,8 +2992,31 @@ class TelegramCommander:
                 f"{providers_text}\n\n"
                 f"{_last_str}"
                 f"Режим: *{current}* — {desc}\n\n"
-                f"_При сбое — автоматически переходит к следующему._",
-                _kb_provider_menu(current),
+                + (
+                    "_Один провайдер: решения принимает только он, без запасных; "
+                    "недоступен — работают локальные стратегии._"
+                    if _settings.get("single")
+                    else "_Цепочка: при сбое — автоматически следующий провайдер._"
+                ),
+                _kb_provider_menu(current, bool(_settings.get("single"))),
+            )
+
+        elif data.startswith("ai_single:"):
+            single = data.endswith(":1")
+            self._rc.set_ai_chain({"single": single})
+            current = self._rc.get_ai_provider()
+            await self._edit(
+                query,
+                (
+                    "🎯 *Один провайдер*: решения всегда принимает "
+                    f"`{current if current != 'auto' else 'первый в цепочке'}`, "
+                    "без запасных. Недоступен — работают локальные стратегии."
+                    if single
+                    else "🔗 *Цепочка*: при сбое или лимите — сразу следующий "
+                    "провайдер."
+                )
+                + "\n\n_Применится к следующему циклу анализа._",
+                _kb_provider_menu(current, single),
             )
 
         elif data.startswith("provider:"):
@@ -2990,7 +3026,10 @@ class TelegramCommander:
                 await self._edit(
                     query,
                     f"❌ Неизвестный провайдер: *{val}*",
-                    _kb_provider_menu(self._rc.get_ai_provider()),
+                    _kb_provider_menu(
+                        self._rc.get_ai_provider(),
+                        bool(self._rc.get_ai_chain().get("single")),
+                    ),
                 )
                 return
             desc = (
@@ -3002,7 +3041,7 @@ class TelegramCommander:
                 query,
                 f"✅ AI-провайдер: *{val}*\n{desc}\n\n"
                 f"_Применится к следующему циклу анализа._",
-                _kb_provider_menu(val),
+                _kb_provider_menu(val, bool(self._rc.get_ai_chain().get("single"))),
             )
 
         # ── Стратегии ────────────────────────────────────────────────────────

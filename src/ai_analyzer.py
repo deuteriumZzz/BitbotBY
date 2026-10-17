@@ -467,7 +467,9 @@ class AIAnalyzer:
                     self._provider_retry_after[provider] = until
                 self._mark(provider, model, status, until)
                 if status not in ("error", "bad_request"):
-                    await self._notify_provider_failure(provider, status, model)
+                    await self._notify_provider_failure(
+                        provider, status, model, last=not queue
+                    )
                 continue
             self.logger.info(
                 "AI [%s/%s]: %d signals from %d symbols",
@@ -489,7 +491,7 @@ class AIAnalyzer:
         return []
 
     async def _notify_provider_failure(
-        self, provider: str, status: str, model: str = ""
+        self, provider: str, status: str, model: str = "", last: bool = False
     ) -> None:
         """Уведомляет в Telegram о сбое провайдера — не чаще раза в час."""
         from datetime import datetime, timezone
@@ -521,7 +523,12 @@ class AIAnalyzer:
         name = catalog.BY_ID[provider].name if provider in catalog.BY_ID else provider
         try:
             await self._telegram.notify(
-                f"⚠️ *{name}*: {reason}\nПереключаюсь на следующего провайдера."
+                f"⚠️ *{name}*: {reason}\n"
+                + (
+                    "Запасных нет — до восстановления работают локальные стратегии."
+                    if last
+                    else "Переключаюсь на следующего провайдера."
+                )
             )
         except Exception:
             pass

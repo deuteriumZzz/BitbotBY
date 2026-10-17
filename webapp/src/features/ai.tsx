@@ -21,6 +21,19 @@ const MODE_NOTE: Record<AiMode, string> = {
   paid: "Только платные провайдеры: бесплатные не используются.",
 };
 
+const HOW: readonly (readonly ["chain" | "single", string])[] = [
+  ["chain", "Цепочка"],
+  ["single", "Один провайдер"],
+];
+const HOW_NOTE = {
+  chain: "Если провайдер не ответил или упёрся в лимит, бот сразу спрашивает следующего — AI почти всегда на связи.",
+  single:
+    "Решения всегда принимает одна и та же модель — стабильнее и предсказуемее. Если она недоступна (лимит, нет связи), цикл идёт без AI, на локальных стратегиях.",
+};
+
+/** Провайдер, который решает в режиме «Один провайдер». */
+const chosenId = (ai: AiState) => (ai.pinned !== "auto" ? ai.pinned : (ai.chain[0]?.provider ?? ""));
+
 const STATUS: Record<string, [string, string]> = {
   ok: ["ok", "работает"],
   rate_limit: ["warn", "лимит"],
@@ -43,6 +56,19 @@ const modelLabel = (m: AiModel) =>
 const appModels = (ai: AiState) =>
   Object.fromEntries(ai.providers.filter((p) => p.model_source === "app").map((p) => [p.id, p.model]));
 
+/** Закрепить провайдера (AI_PROVIDER, как /provider в Telegram) и сразу обновить раздел. */
+async function pin(id: string): Promise<void> {
+  if (await actions.patchConfig({ AI_PROVIDER: id })) await useStore.getState().loadAi().catch(() => undefined);
+}
+
+/** Цепочка ↔ один провайдер. Переходя к одному, явно закрепляем того, кто сейчас первый. */
+async function setHow(ai: AiState, how: "chain" | "single"): Promise<void> {
+  if (how === "single" && ai.pinned === "auto" && ai.chain[0]) {
+    await pin(ai.chain[0].provider);
+  }
+  await actions.putAiChain({ single: how === "single" }, how === "single" ? "Работает один провайдер, без запасных" : "Работает цепочка провайдеров");
+}
+
 export function AiPane() {
   const ai = useStore((s) => s.ai);
   const secrets = useStore((s) => s.secrets);
@@ -56,8 +82,14 @@ export function AiPane() {
       <ChainCard ai={ai} />
       <article className="card">
         <div className="card-h">
-          <h2>В цепочке</h2>
-          <Q tip="Бот спрашивает провайдеров сверху вниз. Ошибка или лимит — сразу следующий; после лимита провайдер отдыхает и потом возвращается." />
+          <h2>{ai.single ? "Подключённые провайдеры" : "В цепочке"}</h2>
+          <Q
+            tip={
+              ai.single
+                ? "В режиме «Один провайдер» решает только выбранный; остальные подключены, но не используются."
+                : "Бот спрашивает провайдеров сверху вниз. Ошибка или лимит — сразу следующий; после лимита провайдер отдыхает и потом возвращается."
+            }
+          />
           <span className="pill sp">{ai.chain.length}</span>
         </div>
         {inChain.length ? <ChainList ai={ai} list={inChain} /> : <p className="empty">Пока ни одного провайдера. Добавьте бесплатный ниже — хватит одного ключа.</p>}
@@ -98,10 +130,43 @@ function ChainCard({ ai }: { ai: AiState }) {
           </span>
         )}
       </div>
-      <Seg className="full" value={ai.mode} options={MODES} label="Режим цепочки" onChange={(mode) => void actions.putAiChain({ mode }, MODES.find(([m]) => m === mode)?.[1])} />
-      <p className="note-soon" style={{ marginTop: 8 }}>
-        {MODE_NOTE[ai.mode]}
-      </p>
+      <div className="field">
+        <div className="field-h">
+          <span>Как работать</span>
+        </div>
+        <Seg className="full" value={ai.single ? "single" : "chain"} options={HOW} label="Как работать" onChange={(how) => void setHow(ai, how)} />
+        <p>{HOW_NOTE[ai.single ? "single" : "chain"]}</p>
+      </div>
+      {ai.single ? (
+        <div className="field">
+          <div className="field-h">
+            <span>Провайдер</span>
+          </div>
+          <select
+            className="sel"
+            value={chosenId(ai)}
+            aria-label="Провайдер, который принимает решения"
+            onChange={(e) => void pin(e.target.value)}
+          >
+            {!chosenId(ai) && <option value="">— выберите —</option>}
+            {ai.providers
+              .filter((p) => p.usable)
+              .map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} · {p.model}
+                </option>
+              ))}
+          </select>
+        </div>
+      ) : (
+        <div className="field">
+          <div className="field-h">
+            <span>Какие модели</span>
+          </div>
+          <Seg className="full" value={ai.mode} options={MODES} label="Режим цепочки" onChange={(mode) => void actions.putAiChain({ mode }, MODES.find(([m]) => m === mode)?.[1])} />
+          <p>{MODE_NOTE[ai.mode]}</p>
+        </div>
+      )}
       <p className="ai-route">
         {ai.chain.length ? (
           ai.chain.map((c, i) => (
@@ -111,15 +176,18 @@ function ChainCard({ ai }: { ai: AiState }) {
             </span>
           ))
         ) : (
-          <span className="down">Нет доступных провайдеров — бот работает на локальных стратегиях.</span>
+          <span className="down">
+            {ai.single ? "Выбранный провайдер недоступен" : "Нет доступных провайдеров"} — бот работает на локальных стратегиях.
+          </span>
         )}
+        {ai.single && ai.chain[0] && <span className="muted"> · {ai.chain[0].model} · без запасных</span>}
       </p>
-      {pinned && (
+      {pinned && !ai.single && (
         <div className="row-tgl" style={{ marginTop: 8 }}>
           <span className="note-soon">
             Первым всегда идёт <b>{pinned.name}</b> — выбран в /provider.
           </span>
-          <button className="btn" type="button" onClick={() => void actions.patchConfig({ AI_PROVIDER: "auto" })}>
+          <button className="btn" type="button" onClick={() => void pin("auto")}>
             Открепить
           </button>
         </div>
@@ -171,6 +239,7 @@ function ChainList({ ai, list }: { ai: AiState; list: AiProvider[] }) {
 }
 
 function why(ai: AiState, p: AiProvider): string {
+  if (ai.single) return p.id === chosenId(ai) ? "" : "запасной — не используется в режиме «Один провайдер»";
   if (p.id === ai.pinned) return "";
   if (p.disabled) return "выключен вами";
   if (ai.mode === "free" && !p.free) return "платная модель — не используется в режиме «Бесплатные»";
@@ -222,9 +291,9 @@ function ProviderRow(props: { ai: AiState; p: AiProvider; n?: number; first: boo
         {p.tokens_today > 0 && ` · ${fmtN(p.tokens_today, 0)} токенов`}
       </small>
       <div className="btn-row">
-        {p.id !== ai.pinned && (
-          <button className="btn" type="button" onClick={() => void actions.patchConfig({ AI_PROVIDER: p.id })}>
-            Сделать первым
+        {p.id !== (ai.single ? chosenId(ai) : ai.pinned) && (
+          <button className="btn" type="button" onClick={() => void pin(p.id)}>
+            {ai.single ? "Выбрать" : "Сделать первым"}
           </button>
         )}
         {p.keyless_on && (

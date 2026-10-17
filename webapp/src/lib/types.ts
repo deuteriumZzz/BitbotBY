@@ -200,6 +200,8 @@ export interface AiProvider {
 
 export interface AiState {
   mode: AiMode;
+  /** Один провайдер без запасных — иначе цепочка. */
+  single: boolean;
   pinned: string;
   last: string;
   providers: AiProvider[];
@@ -208,6 +210,7 @@ export interface AiState {
 
 export interface AiChainChanges {
   mode?: AiMode;
+  single?: boolean;
   order?: string[];
   disabled?: string[];
   keyless?: string[];

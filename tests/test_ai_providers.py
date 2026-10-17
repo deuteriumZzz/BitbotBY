@@ -71,3 +71,17 @@ def test_chain_modes():
     # Платная модель у бесплатного провайдера в режиме «только бесплатные» — мимо.
     paid_model = {"models": {"gemini": "gemini-pro-latest"}}
     assert [p for p, _ in ap.chain(paid_model, keys)] == ["groq"]
+
+
+def test_single_provider_mode():
+    keys = ["groq", "gemini", "openrouter"]
+    # Закреплён — только он, без запасных.
+    assert ap.chain({"single": True}, keys, pinned="gemini") == [
+        ("gemini", "gemini-flash-latest")
+    ]
+    # Не закреплён — первый в цепочке.
+    assert [p for p, _ in ap.chain({"single": True}, keys)] == ["groq"]
+    # Закреплённого нет среди доступных — AI в этом цикле не работает.
+    assert ap.chain({"single": True}, keys, pinned="cerebras") == []
+    with pytest.raises(ValueError):
+        ap.clean_chain({"single": "yes"})

@@ -384,3 +384,15 @@ def test_ai_models_live_list(keyed, monkeypatch):
             "/api/ai/providers/gemini/models", headers={"X-API-Key": "secret"}
         )
     assert resp.json() == {"provider": "gemini", "models": ["b", "gemini-x"]}
+
+
+def test_single_provider_mode_via_api(keyed):
+    h = {"X-API-Key": "secret"}
+    with patch.object(data, "get_redis", return_value=StrRedis()), _keys(
+        "GROQ_API_KEY", "GEMINI_API_KEY"
+    ):
+        both = keyed.get("/api/ai", headers=h).json()
+        one = keyed.put("/api/ai/chain", json={"single": True}, headers=h).json()
+    assert [c["provider"] for c in both["chain"]] == ["groq", "gemini"]
+    assert one["single"] is True
+    assert [c["provider"] for c in one["chain"]] == ["groq"]
