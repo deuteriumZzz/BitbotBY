@@ -130,6 +130,8 @@ function TopBar({ onPanic }: { onPanic: () => void }) {
 function PanicButton({ onFire, disabled }: { onFire: () => void; disabled: boolean }) {
   const [holding, setHolding] = useState(false);
   const [open, setOpen] = useState(false);
+  // Крышка нужна там, где легко задеть экран пальцем; с мышью хватает удержания.
+  const covered = useRef(typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches).current;
   const timer = useRef<ReturnType<typeof setTimeout>>();
   const cover = useRef<ReturnType<typeof setTimeout>>();
   const t0 = useRef(0);
@@ -144,7 +146,7 @@ function PanicButton({ onFire, disabled }: { onFire: () => void; disabled: boole
   };
   const start = () => {
     if (disabled) return;
-    if (!open) return lift();
+    if (covered && !open) return lift();
     clearTimeout(cover.current);
     t0.current = Date.now();
     setHolding(true);
@@ -167,12 +169,12 @@ function PanicButton({ onFire, disabled }: { onFire: () => void; disabled: boole
   };
   return (
     <button
-      className={`panic${holding ? " holding" : ""}${open ? " open" : ""}`}
+      className={`panic${holding ? " holding" : ""}${covered ? " covered" : ""}${open ? " open" : ""}`}
       type="button"
       disabled={disabled}
-      aria-expanded={open}
+      aria-expanded={covered ? open : undefined}
       title={
-        open
+        open || !covered
           ? "Удерживайте 1 секунду: закрыть все позиции по рынку и поставить бота на паузу"
           : "PANIC под крышкой: нажмите, чтобы поднять, затем удерживайте 1 секунду"
       }
