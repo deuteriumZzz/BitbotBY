@@ -117,6 +117,16 @@ class TradeHistory:
                     )
                 except sqlite3.OperationalError:
                     pass  # column already exists
+            # Частичные закрытия: сколько уже закрыто, какой результат зафиксирован
+            # и сколько комиссий ушло на эти закрытия.
+            for column in ("closed_qty", "realized_pnl", "partial_fees"):
+                try:
+                    self._conn.execute(
+                        f"ALTER TABLE trades ADD COLUMN {column} "
+                        "REAL NOT NULL DEFAULT 0"
+                    )
+                except sqlite3.OperationalError:
+                    pass  # column already exists
 
     # ── Executor helper ───────────────────────────────────────────────────────
 
@@ -187,6 +197,51 @@ class TradeHistory:
 
             return await self._run_db(_write)
 
+    async def record_partial_close(
+        self, trade_id: int, qty: float, exit_price: float, commission: float = 0.0
+    ) -> Optional[float]:
+        """Фиксирует результат частичного закрытия, сделка остаётся открытой.
+
+        Доля комиссии за вход, приходящаяся на закрытый объём, списывается сразу;
+        итог сделки при полном закрытии складывается из частей.
+
+        :return: зафиксированный результат части или None, если сделки нет.
+        """
+        async with self._lock:
+
+            def _read():
+                return self._conn.execute(
+                    "SELECT action, entry_price, quantity, commission, "
+                    "closed_qty, partial_fees FROM trades "
+                    "WHERE id = ? AND status = 'open'",
+                    (trade_id,),
+                ).fetchone()
+
+            row = await self._run_db(_read)
+            if row is None:
+                logger.warning("partial close: open trade_id=%s not found", trade_id)
+                return None
+            action, entry_price, total_qty, comm, closed, fees = row
+            qty = min(qty, max(0.0, total_qty - closed))
+            entry_comm = comm - fees
+            share = entry_comm * qty / total_qty if total_qty else 0.0
+            move = (exit_price - entry_price) * qty
+            pnl = move if action == "buy" else -move
+            pnl -= share + commission
+
+            def _write():
+                self._conn.execute(
+                    "UPDATE trades SET closed_qty = closed_qty + ?, "
+                    "realized_pnl = realized_pnl + ?, "
+                    "partial_fees = partial_fees + ?, "
+                    "commission = commission + ? WHERE id = ?",
+                    (qty, pnl, commission, commission, trade_id),
+                )
+                self._conn.commit()
+
+            await self._run_db(_write)
+            return pnl
+
     async def record_close(
         self,
         trade_id: int,
@@ -214,8 +269,9 @@ class TradeHistory:
 
             def _read():
                 return self._conn.execute(
-                    "SELECT action, entry_price, quantity, "
-                    "commission FROM trades WHERE id = ?",
+                    "SELECT action, entry_price, quantity, commission, "
+                    "closed_qty, realized_pnl, partial_fees "
+                    "FROM trades WHERE id = ?",
                     (trade_id,),
                 ).fetchone()
 
@@ -223,12 +279,14 @@ class TradeHistory:
             if row is None:
                 logger.warning("trade_id=%s not found", trade_id)
                 return None
-            action, entry_price, qty, entry_comm = row
-            total_comm = entry_comm + commission
-            if action == "buy":
-                pnl = (exit_price - entry_price) * qty - total_comm
-            else:
-                pnl = (entry_price - exit_price) * qty - total_comm
+            action, entry_price, qty, comm, closed, realized, partial_fees = row
+            # Остаток после частичных закрытий: их результат уже в realized_pnl,
+            # комиссия за вход делится пропорционально объёму.
+            remaining = max(0.0, qty - closed)
+            entry_comm = (comm - partial_fees) * (remaining / qty if qty else 1.0)
+            move = (exit_price - entry_price) * remaining
+            pnl = realized + (move if action == "buy" else -move)
+            pnl -= entry_comm + commission
             # УЛУЧШЕНИЕ 2: pnl_pct от маржи, а не от notional.
             # Маржа = notional / leverage → при leverage=3 результат корректен.
             lev = max(1, int(leverage))

@@ -573,7 +573,14 @@ class PositionMonitor:
             return pos
 
         updated, remaining_unprotected = await self.close_fraction(
-            sym, pos, fraction, monitored, lock, sl_after=entry, label="partial_tp"
+            sym,
+            pos,
+            fraction,
+            monitored,
+            lock,
+            sl_after=entry,
+            label="partial_tp",
+            price=price,
         )
         if updated is None:
             return pos
@@ -607,6 +614,7 @@ class PositionMonitor:
         lock: asyncio.Lock,
         sl_after: Optional[float] = None,
         label: str = "partial",
+        price: Optional[float] = None,
     ) -> Tuple[Optional[PositionRecord], bool]:
         """Закрывает долю позиции по рынку и переставляет SL/TP на остаток.
 
@@ -699,7 +707,42 @@ class PositionMonitor:
         updated = {**pos, "qty": new_qty, "stop_loss": new_sl}
         if not Config.PAPER_TRADING:
             updated.update(exchange_sl_id=new_sl_id, exchange_tp_id=new_tp_id)
+        await self._book_partial(sym, pos, partial_qty, close_side, price)
         return updated, remaining_unprotected  # type: ignore[return-value]
+
+    async def _book_partial(
+        self,
+        sym: str,
+        pos: PositionRecord,
+        qty: float,
+        close_side: str,
+        price: Optional[float],
+    ) -> None:
+        """Учёт частичного закрытия: баланс портфеля и результат в истории.
+
+        Раньше доля закрывалась на бирже, но в баланс и историю не попадала:
+        деньги «терялись», а итоговое закрытие считалось на полный первоначальный
+        объём.
+        """
+        if price is None:
+            try:
+                price = float(await self._api.get_current_price(sym) or 0.0)
+            except Exception as exc:
+                logger.error("Partial close %s: no price (%s)", sym, exc)
+                price = 0.0
+        if not price or price <= 0:
+            logger.error("Partial close of %s not booked: unknown exit price", sym)
+            return
+        await self._portfolio_manager.update_portfolio(sym, close_side, qty, price)
+        trade_id = pos.get("trade_id")
+        if not trade_id:
+            return
+        try:
+            await self._trade_history.record_partial_close(
+                trade_id, qty, price, qty * price * Config.COMMISSION_RATE
+            )
+        except Exception as exc:
+            logger.error("record_partial_close for trade %s failed: %s", trade_id, exc)
 
     async def update_levels(
         self,

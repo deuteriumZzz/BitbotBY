@@ -108,3 +108,31 @@ async def test_reasoning_and_exit_reason_are_kept(db):
     assert row.fetchone()[0] == "tp"
     # Повторное закрытие несуществующей сделки — None, без исключения.
     assert await db.record_close(9999, exit_price=1.0) is None
+
+
+async def test_partial_closes_add_up_to_the_same_result_as_one_close(db):
+    # Покупка 10 по 100, комиссия входа 1.0; закрыли 4 по 110 (комиссия 0.44),
+    # остаток 6 по 120 (комиссия 0.72).
+    tid = await db.record_open("BTC/USDT", "x", "buy", 100.0, 10.0, 0.8, 1.0)
+    part = await db.record_partial_close(tid, 4.0, 110.0, 0.44)
+    final = await db.record_close(tid, exit_price=120.0, commission=0.72)
+    # (110-100)*4 - 0.4 - 0.44 = 39.16;  (120-100)*6 - 0.6 - 0.72 = 118.68
+    assert part == pytest.approx(39.16)
+    assert final == pytest.approx(39.16 + 118.68)
+    row = db._conn.execute(
+        "SELECT commission, closed_qty, status FROM trades WHERE id=?", (tid,)
+    ).fetchone()
+    assert row[0] == pytest.approx(1.0 + 0.44 + 0.72)  # все комиссии учтены
+    assert row[1] == 4.0 and row[2] == "closed"
+
+
+async def test_short_partial_close(db):
+    tid = await db.record_open("ETH/USDT", "x", "sell", 100.0, 10.0, 0.8, 1.0)
+    part = await db.record_partial_close(tid, 5.0, 90.0, 0.0)
+    final = await db.record_close(tid, exit_price=95.0, commission=0.0)
+    assert part == pytest.approx(50.0 - 0.5)
+    assert final == pytest.approx(49.5 + 25.0 - 0.5)
+
+
+async def test_partial_close_of_missing_trade_is_none(db):
+    assert await db.record_partial_close(999, 1.0, 100.0) is None

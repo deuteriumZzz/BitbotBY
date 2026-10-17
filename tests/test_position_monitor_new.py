@@ -64,6 +64,7 @@ def _make_monitor(
 
     trade_history = MagicMock()
     trade_history.record_close = AsyncMock()
+    trade_history.record_partial_close = AsyncMock()
     trade_history.get_summary = AsyncMock(
         return_value={"closed_trades": 1, "win_rate": 0.6, "total_pnl": 10.0}
     )
@@ -1338,3 +1339,38 @@ async def test_close_all_without_price_leaves_history_alone():
         await monitor.close_all_positions(monitored, asyncio.Lock())
     assert monitored == {}
     monitor._trade_history.record_close.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_partial_close_books_balance_and_history():
+    """Частичное закрытие возвращает деньги в баланс и пишется в историю."""
+    cfg = _make_cfg()
+    cfg.COMMISSION_RATE = 0.001
+    monitor = _make_monitor(cfg=cfg)
+    pos = _open_pos(side="buy", entry=50000.0, qty=0.02, trade_id=5)
+    monitored = {"BTC/USDT": dict(pos)}
+    with patch("src.position_monitor.Config", cfg):
+        updated, _ = await monitor.close_fraction(
+            "BTC/USDT", pos, 0.5, monitored, asyncio.Lock(), price=51000.0
+        )
+    assert updated["qty"] == pytest.approx(0.01)
+    monitor._portfolio_manager.update_portfolio.assert_awaited_once_with(
+        "BTC/USDT", "sell", pytest.approx(0.01), 51000.0
+    )
+    args = monitor._trade_history.record_partial_close.await_args.args
+    assert args[0] == 5 and args[1] == pytest.approx(0.01) and args[2] == 51000.0
+    assert args[3] == pytest.approx(0.01 * 51000.0 * 0.001)
+
+
+@pytest.mark.asyncio
+async def test_partial_close_without_price_is_not_booked_but_still_closes():
+    cfg = _make_cfg()
+    monitor = _make_monitor(cfg=cfg)
+    monitor._api.get_current_price = AsyncMock(return_value=None)
+    pos = _open_pos(trade_id=6)
+    with patch("src.position_monitor.Config", cfg):
+        updated, _ = await monitor.close_fraction(
+            "BTC/USDT", pos, 0.5, {"BTC/USDT": dict(pos)}, asyncio.Lock()
+        )
+    assert updated is not None
+    monitor._trade_history.record_partial_close.assert_not_awaited()

@@ -122,6 +122,7 @@ class BotCommands:
                 bot._monitored,
                 bot._monitored_lock,
                 label="partial_app",
+                price=price,
             )
             if updated is None:
                 return error(
