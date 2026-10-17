@@ -2978,6 +2978,414 @@
     "sharpe": -0.156
    },
    "live": null
+  },
+  {
+   "name": "ifr2",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.4013,
+    "trades": 1899,
+    "sharpe": 0.019
+   },
+   "live": null
+  },
+  {
+   "name": "shooting_star",
+   "markets": "futures",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.0,
+    "trades": 0,
+    "sharpe": 0.0
+   },
+   "live": null
+  },
+  {
+   "name": "cci_aroon",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.384,
+    "trades": 2474,
+    "sharpe": -0.028
+   },
+   "live": null
+  },
+  {
+   "name": "cci_reversion",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.3842,
+    "trades": 2868,
+    "sharpe": -0.042
+   },
+   "live": null
+  },
+  {
+   "name": "stochastic",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.3872,
+    "trades": 2758,
+    "sharpe": -0.055
+   },
+   "live": null
+  },
+  {
+   "name": "fisher_transform",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.3464,
+    "trades": 2745,
+    "sharpe": -0.076
+   },
+   "live": null
+  },
+  {
+   "name": "rsi_divergence",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.3427,
+    "trades": 782,
+    "sharpe": -0.08
+   },
+   "live": null
+  },
+  {
+   "name": "vw_macd",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.3553,
+    "trades": 4070,
+    "sharpe": -0.099
+   },
+   "live": null
+  },
+  {
+   "name": "engulfing_trend",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.323,
+    "trades": 4198,
+    "sharpe": -0.115
+   },
+   "live": null
+  },
+  {
+   "name": "kst",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.3495,
+    "trades": 3594,
+    "sharpe": -0.111
+   },
+   "live": null
+  },
+  {
+   "name": "coppock",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.3376,
+    "trades": 3383,
+    "sharpe": -0.125
+   },
+   "live": null
+  },
+  {
+   "name": "heikin_ashi",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.3374,
+    "trades": 4884,
+    "sharpe": -0.118
+   },
+   "live": null
+  },
+  {
+   "name": "adx_dmi",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.3297,
+    "trades": 3088,
+    "sharpe": -0.127
+   },
+   "live": null
+  },
+  {
+   "name": "ad_line_trend",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.3318,
+    "trades": 2761,
+    "sharpe": -0.144
+   },
+   "live": null
+  },
+  {
+   "name": "poc_reversion",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.3566,
+    "trades": 2670,
+    "sharpe": -0.115
+   },
+   "live": null
+  },
+  {
+   "name": "klinger",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.3418,
+    "trades": 4175,
+    "sharpe": -0.125
+   },
+   "live": null
+  },
+  {
+   "name": "elder_force",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.3234,
+    "trades": 4106,
+    "sharpe": -0.136
+   },
+   "live": null
+  },
+  {
+   "name": "kdj",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.3444,
+    "trades": 4687,
+    "sharpe": -0.124
+   },
+   "live": null
+  },
+  {
+   "name": "coral_trend",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.3261,
+    "trades": 3333,
+    "sharpe": -0.144
+   },
+   "live": null
+  },
+  {
+   "name": "chaikin_money_flow",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.3294,
+    "trades": 3446,
+    "sharpe": -0.15
+   },
+   "live": null
+  },
+  {
+   "name": "ease_of_movement",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.3368,
+    "trades": 3691,
+    "sharpe": -0.139
+   },
+   "live": null
+  },
+  {
+   "name": "vwap_trend",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.3304,
+    "trades": 3299,
+    "sharpe": -0.149
+   },
+   "live": null
+  },
+  {
+   "name": "halftrend",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.2805,
+    "trades": 246,
+    "sharpe": -0.184
+   },
+   "live": null
+  },
+  {
+   "name": "awesome_saucer",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.3457,
+    "trades": 3760,
+    "sharpe": -0.132
+   },
+   "live": null
+  },
+  {
+   "name": "rvi",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.3387,
+    "trades": 4949,
+    "sharpe": -0.142
+   },
+   "live": null
+  },
+  {
+   "name": "chandelier",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.3213,
+    "trades": 3374,
+    "sharpe": -0.154
+   },
+   "live": null
+  },
+  {
+   "name": "waddah_attar",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.3204,
+    "trades": 4625,
+    "sharpe": -0.154
+   },
+   "live": null
+  },
+  {
+   "name": "chaikin_osc",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.3321,
+    "trades": 4005,
+    "sharpe": -0.154
+   },
+   "live": null
+  },
+  {
+   "name": "ssl_channel",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.3273,
+    "trades": 3740,
+    "sharpe": -0.166
+   },
+   "live": null
+  },
+  {
+   "name": "zlsma",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.3233,
+    "trades": 3959,
+    "sharpe": -0.168
+   },
+   "live": null
+  },
+  {
+   "name": "spike_reversal",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.3708,
+    "trades": 1467,
+    "sharpe": -0.071
+   },
+   "live": null
+  },
+  {
+   "name": "bollinger_reentry",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.3607,
+    "trades": 3429,
+    "sharpe": -0.088
+   },
+   "live": null
+  },
+  {
+   "name": "dual_momentum",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.3468,
+    "trades": 1214,
+    "sharpe": -0.106
+   },
+   "live": null
+  },
+  {
+   "name": "gtaa_ma",
+   "markets": "both",
+   "experimental": true,
+   "enabled": false,
+   "backtest": {
+    "win_rate": 0.3283,
+    "trades": 1590,
+    "sharpe": -0.158
+   },
+   "live": null
   }
  ],
  "ai": {
