@@ -128,6 +128,19 @@ class TradeHistory:
                 except sqlite3.OperationalError:
                     pass  # column already exists
 
+            # Качество исполнения: цена решения, цена исполнения и время
+            # отправки/исполнения ордера (epoch, сек). У старых строк — NULL.
+            for column in (
+                "signal_price",
+                "fill_price",
+                "order_sent_at",
+                "order_filled_at",
+            ):
+                try:
+                    self._conn.execute(f"ALTER TABLE trades ADD COLUMN {column} REAL")
+                except sqlite3.OperationalError:
+                    pass  # column already exists
+
     # ── Executor helper ───────────────────────────────────────────────────────
 
     async def _run_db(self, func):
@@ -151,6 +164,10 @@ class TradeHistory:
         commission: float = 0.0,
         context_flags: str = "",
         reasoning: str = "",
+        signal_price: Optional[float] = None,
+        fill_price: Optional[float] = None,
+        order_sent_at: Optional[float] = None,
+        order_filled_at: Optional[float] = None,
     ) -> int:
         """
         Записывает открытие сделки в БД.
@@ -165,6 +182,10 @@ class TradeHistory:
         :param context_flags: JSON со сработавшими контекстными фильтрами
             (funding/OI/liquidation/ETF/etc.) на момент входа — для
             последующей корреляции с исходом сделки (win/loss).
+        :param signal_price: Цена в момент решения (до поправок).
+        :param fill_price: Цена исполнения (paper — симулированная).
+        :param order_sent_at: Время отправки ордера, epoch сек.
+        :param order_filled_at: Время исполнения, epoch сек.
         :return: ID новой записи в таблице.
         """
         now_iso = datetime.now().isoformat()
@@ -176,8 +197,10 @@ class TradeHistory:
                     INSERT INTO trades
                       (symbol, strategy, action, entry_price,
                        quantity, confidence, commission,
-                       entry_time, context_flags, reasoning)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                       entry_time, context_flags, reasoning,
+                       signal_price, fill_price,
+                       order_sent_at, order_filled_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         symbol,
@@ -190,6 +213,10 @@ class TradeHistory:
                         now_iso,
                         context_flags,
                         reasoning[:1000],
+                        signal_price,
+                        fill_price,
+                        order_sent_at,
+                        order_filled_at,
                     ),
                 )
                 self._conn.commit()

@@ -379,6 +379,8 @@ class OrderExecutor:
             entry = top.get("entry", 0.0)
             if not entry:
                 return
+            # Цена в момент решения — до поправки на импакт; для метрик исполнения.
+            signal_price = float(entry)
 
             # УЛУЧШЕНИЕ 5: фильтр по ликвидности (спред + объём)
             if not await self._check_liquidity(sym, entry):
@@ -572,6 +574,10 @@ class OrderExecutor:
                 runtime_config=self._runtime_config,
             )
 
+            order_sent_at = time.time()
+            fill_price = float(entry)  # paper: симулированное исполнение
+            order_filled_at = order_sent_at
+
             if Config.PAPER_TRADING:
                 logger.info(
                     "[PAPER] %s %.6f %s @ %.4f", action.upper(), quantity, sym, entry
@@ -598,6 +604,11 @@ class OrderExecutor:
                 if not order:
                     logger.error("Order creation failed for %s", sym)
                     return
+                order_filled_at = time.time()
+                # Реальная цена исполнения, если биржа её вернула.
+                fill_price = float(
+                    order.get("average") or order.get("price") or fill_price
+                )
                 # Use actual exchange fee when available — varies by user tier
                 # (VIP discounts) and order type (maker < taker).
                 fee_cost = float((order.get("fee") or {}).get("cost") or 0)
@@ -618,6 +629,10 @@ class OrderExecutor:
                 commission=commission,
                 context_flags=top.get("context_flags", ""),
                 reasoning=str(top.get("reasoning") or ""),
+                signal_price=signal_price,
+                fill_price=fill_price,
+                order_sent_at=order_sent_at,
+                order_filled_at=order_filled_at,
             )
 
             pos: PositionRecord = {

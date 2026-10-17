@@ -148,6 +148,21 @@ async def get_metrics(period: str = "30d") -> JSONResponse:
     return JSONResponse({"period": period, **data.compute_metrics(trades, start)})
 
 
+@router.get("/api/metrics/execution")
+async def get_execution_metrics(period: str = "30d") -> JSONResponse:
+    if period not in PERIODS:
+        return _err(400, "bad_period", "Период — один из: 24h, 7d, 30d, all.")
+    delta = PERIODS[period]
+    rows = data.get_execution_rows(datetime.now() - delta if delta else None)
+    return JSONResponse(
+        {
+            "period": period,
+            "simulated": data.paper_mode(),
+            **data.compute_execution(rows),
+        }
+    )
+
+
 JOURNAL_LIMIT = 1000
 
 

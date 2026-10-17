@@ -10,6 +10,7 @@ import type {
   ConfigValues,
   DailyRow,
   JournalTrade,
+  ExecutionMetrics,
   Metrics,
   PendingSignal,
   Position,
@@ -213,6 +214,28 @@ function journalRow(p: Position, exitPrice: number, qty: number, net: number, fe
       balance += net;
     }
   }
+}
+
+// ── Качество исполнения — та же логика, что compute_execution на сервере ─────
+const EXEC_MIN_TRADES = 20;
+
+function execution(period: string): ExecutionMetrics {
+  const since = PERIOD_MS[period] ? Date.now() - PERIOD_MS[period] : 0;
+  // Детерминированно от номера сделки: слегка в минус для сделки, как у paper с импактом.
+  const rows = closed
+    .map((c, k) => ({ c, lat: 120 + ((k * 53) % 260), slip: 0.004 + ((k * 29) % 40) / 2000 - 0.004 }))
+    .filter((r) => r.c.exit >= since);
+  const n = rows.length;
+  const ok = n >= EXEC_MIN_TRADES;
+  return {
+    period: period as ExecutionMetrics["period"],
+    simulated: true,
+    n,
+    min_n: EXEC_MIN_TRADES,
+    latency_ms_avg: ok ? +(rows.reduce((s, r) => s + r.lat, 0) / n).toFixed(1) : null,
+    slippage_pct_avg: ok ? +(rows.reduce((s, r) => s + r.slip, 0) / n).toFixed(4) : null,
+    slippage_pct_worst: ok ? +Math.max(...rows.map((r) => r.slip)).toFixed(4) : null,
+  };
 }
 
 const publicPos = (p: Position) => ({
@@ -696,6 +719,8 @@ function route(method: string, path: string, body: unknown): unknown {
       return state().positions;
     case "GET /api/metrics":
       return metrics(q.get("period") ?? "30d");
+    case "GET /api/metrics/execution":
+      return execution(q.get("period") ?? "30d");
     case "GET /api/journal": {
       const period = q.get("period") ?? "30d";
       const since = PERIOD_MS[period] ? Date.now() - PERIOD_MS[period] : 0;

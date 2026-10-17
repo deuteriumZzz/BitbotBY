@@ -83,7 +83,7 @@
 | Изменить SL/TP | Перевыставить SL/TP на бирже + валидация сторон | `PATCH /api/positions/{id} {sl, tp}` |
 | Трейлинг для одной позиции | Флаг трейлинга на позицию в `position_monitor` | `PATCH /api/positions/{id} {trailing}` |
 | Радар: стадии скана | Публикация событий из `cycle.py` / `order_executor.py` | WS `radar.stage` |
-| Задержка, проскальзывание | Писать `expected_price`, `latency_ms` в таблицу `trades` (миграция) | `GET /api/metrics/execution` |
+| Задержка, проскальзывание ✓ | Колонки `signal_price`, `fill_price`, `order_sent_at`, `order_filled_at` (REAL, NULL у старых строк) пишет `order_executor` через `record_open`; paper пишет симулированное исполнение так же | `GET /api/metrics/execution` |
 | P&L-календарь, Sharpe, PF, R:R, просадка | Агрегаты по SQLite | `GET /api/metrics`, `GET /api/pnl/daily` |
 | Ключи API | Зашифрованное хранилище + проверка ключа | `/api/secrets/*` |
 | Все параметры | Реестр настроек + слой переопределений | `/api/config*` |
@@ -110,7 +110,7 @@
 | `GET /api/positions` | `[{id, symbol, side, leverage, entry, price, qty, sl, tp, trailing, strategy, confidence, flags[], opened_at, pnl, pnl_pct}]` |
 | `GET /api/trades?from&to&limit` | Закрытые сделки из SQLite |
 | `GET /api/metrics?period=24h\|7d\|30d\|all` | `{realized, fees, net, n, win_rate, profit_factor, avg_win, avg_loss, rr, max_drawdown, sharpe\|null}`; `sharpe = null` при n < 50 |
-| `GET /api/metrics/execution` | `{latency_ms_avg, slippage_plan, slippage_fact, fees_30d}` |
+| `GET /api/metrics/execution?period=24h\|7d\|30d\|all` | `{period, simulated, n, min_n, latency_ms_avg, slippage_pct_avg, slippage_pct_worst}`; задержка — от отправки до исполнения, мс; проскальзывание — исполнение против цены сигнала, %, плюс = хуже для сделки (buy дороже / sell дешевле); три метрики `null` при n < `min_n` (20); `simulated` = paper (цена и время симулированы); строки без данных исполнения пропускаются |
 | `GET /api/pnl/daily?days=35` | `[{date, net, gross, fees, trades}]` |
 | `POST /api/jobs/{job}` | `job` ∈ `backtest`, `train`, `tune`, `alpha_report`, `live_divergence`, `ai_isolation`: команда `run_job` (как остальные, с `request_id`) → `{started: true}`; `busy`, если группа задач уже занята (обучение и тюнинг — одна группа `sac`; замок общий с Telegram), `unknown_job` — 404. События: `job.progress {job, pct, …}` (backtest: `symbol, strategy`; train: `step, total, eta_min`; tune: `trial, total, best_pnl, eta_min`, на втором этапе `stage: "train"`) и `job.done {job, ok, error?}` + итог (backtest: `n, best, months, timeframe`; train/tune: `sac_pct, bh_pct, worse`; отчёты: `output`) |
 | `GET /api/jobs` | `{running: {группа: источник}, progress: {backtest, train, tune}, rollback_available}` |

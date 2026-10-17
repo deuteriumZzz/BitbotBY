@@ -277,6 +277,66 @@ def get_journal(since: Optional[datetime] = None, limit: int = 1000) -> List[dic
     ]
 
 
+EXEC_MIN_TRADES = 20
+
+
+def get_execution_rows(since: Optional[datetime] = None) -> List[dict]:
+    """Сделки с записанными данными исполнения (старые строки с NULL пропускаются)."""
+    path = db_path()
+    if not os.path.exists(path):
+        return []
+    sql = (
+        "SELECT action, signal_price, fill_price, order_sent_at, order_filled_at "
+        "FROM trades WHERE signal_price > 0 AND fill_price > 0 "
+        "AND order_sent_at IS NOT NULL AND order_filled_at IS NOT NULL"
+    )
+    params: tuple = ()
+    if since is not None:
+        sql += " AND entry_time >= ?"
+        params = (since.isoformat(),)
+    try:
+        conn = sqlite3.connect(path)
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(sql, params).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+    except sqlite3.OperationalError:
+        return []  # база ещё без колонок исполнения — бот добавит их при старте
+    except Exception as e:
+        logger.error("Execution rows query error: %s", e)
+        return []
+
+
+def compute_execution(rows: List[dict]) -> dict:
+    """Задержка (отправка → исполнение, мс) и проскальзывание (исполнение против
+    цены решения, %, со знаком по направлению: плюс — хуже для сделки).
+
+    Средние отдаются только от EXEC_MIN_TRADES сделок: на меньшей выборке они случайны.
+    """
+    n = len(rows)
+    out: dict = {
+        "n": n,
+        "min_n": EXEC_MIN_TRADES,
+        "latency_ms_avg": None,
+        "slippage_pct_avg": None,
+        "slippage_pct_worst": None,
+    }
+    if n < EXEC_MIN_TRADES:
+        return out
+    lat = [(r["order_filled_at"] - r["order_sent_at"]) * 1000 for r in rows]
+    slip = [
+        (1 if r["action"] == "buy" else -1)
+        * (r["fill_price"] - r["signal_price"])
+        / r["signal_price"]
+        * 100
+        for r in rows
+    ]
+    out["latency_ms_avg"] = round(sum(lat) / n, 1)
+    out["slippage_pct_avg"] = round(sum(slip) / n, 4)
+    out["slippage_pct_worst"] = round(max(slip), 4)
+    return out
+
+
 SHARPE_MIN_TRADES = 50
 
 

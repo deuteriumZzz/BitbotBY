@@ -16,6 +16,7 @@ import type {
   JobId,
   JobsStatus,
   JobState,
+  ExecutionMetrics,
   Journal,
   Metrics,
   PendingSignal,
@@ -102,6 +103,7 @@ export interface Store {
   pending: PendingSignal[];
   period: Period;
   metrics: Partial<Record<Period, Metrics>>;
+  execution: Partial<Record<Period, ExecutionMetrics>>;
   daily: DailyRow[];
   strategies: Strategy[];
   schema: SettingDef[];
@@ -147,6 +149,7 @@ export interface Store {
 
   loadState(): Promise<void>;
   loadMetrics(p?: Period): Promise<void>;
+  loadExecution(p?: Period): Promise<void>;
   loadDaily(): Promise<void>;
   loadStrategies(): Promise<void>;
   loadConfig(): Promise<void>;
@@ -183,6 +186,7 @@ export const useStore = create<Store>((set, get) => {
     refreshTimer = setTimeout(() => {
       void get().loadState().catch(() => undefined);
       void get().loadMetrics().catch(() => undefined);
+      void get().loadExecution().catch(() => undefined);
       void get().loadDaily().catch(() => undefined);
       const j = get().journal;
       if (j) void get().loadJournal(j.period).catch(() => undefined);
@@ -227,6 +231,7 @@ export const useStore = create<Store>((set, get) => {
     pending: [],
     period: "30d",
     metrics: {},
+    execution: {},
     daily: [],
     strategies: [],
     schema: [],
@@ -283,6 +288,7 @@ export const useStore = create<Store>((set, get) => {
       set({ ready: true, needLogin: false });
       void Promise.allSettled([
         get().loadMetrics(),
+        get().loadExecution(),
         get().loadDaily(),
         get().loadStrategies(),
         get().loadConfig(),
@@ -314,6 +320,7 @@ export const useStore = create<Store>((set, get) => {
     setPeriod(period) {
       set({ period });
       if (!get().metrics[period]) void get().loadMetrics(period).catch(() => undefined);
+      if (!get().execution[period]) void get().loadExecution(period).catch(() => undefined);
     },
     say: (text) => set({ toast: { id: ++toastSeq, text } }),
 
@@ -509,6 +516,11 @@ export const useStore = create<Store>((set, get) => {
       const period = p ?? get().period;
       const m = await api<Metrics>("GET", `/api/metrics?period=${period}`);
       set((s) => ({ metrics: { ...s.metrics, [period]: m } }));
+    },
+    async loadExecution(p) {
+      const period = p ?? get().period;
+      const m = await api<ExecutionMetrics>("GET", `/api/metrics/execution?period=${period}`);
+      set((s) => ({ execution: { ...s.execution, [period]: m } }));
     },
     async loadJobs() {
       const st = await api<JobsStatus>("GET", "/api/jobs");

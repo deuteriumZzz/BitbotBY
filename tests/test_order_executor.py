@@ -304,3 +304,37 @@ class TestLiveAlphaKillSwitch:
     async def test_can_be_switched_off(self):
         executor = await self._run(enabled=False, n=15, ev=-0.8)
         executor._trade_history.record_open.assert_called_once()
+
+
+# ── Качество исполнения: запись цены решения, времени и цены исполнения ──────
+
+
+class TestExecutionRecording:
+    async def _open(self, paper: bool, impact: float, order=None):
+        executor, _ = _make_executor()
+        if order is not None:
+            executor._api.create_order = AsyncMock(return_value=order)
+        with patch("src.order_executor.Config", _make_cfg(paper=paper)):
+            with patch("src.order_executor._ac_impact", return_value=impact):
+                with patch(
+                    "src.trade_history.get_backtest_stats", return_value=_BT_STATS
+                ):
+                    await executor.execute(_TOP_BUY, {"BTC/USDT": _make_df()}, 10_000.0)
+        return executor._trade_history.record_open.call_args.kwargs
+
+    @pytest.mark.asyncio
+    async def test_paper_records_signal_fill_and_times(self):
+        kw = await self._open(paper=True, impact=0.01)
+        assert kw["signal_price"] == 100.0
+        assert kw["fill_price"] == pytest.approx(101.0)  # цена после импакта
+        assert kw["entry_price"] == pytest.approx(101.0)  # прежнее поведение
+        assert kw["order_filled_at"] >= kw["order_sent_at"] > 0
+
+    @pytest.mark.asyncio
+    async def test_live_takes_fill_price_from_exchange(self):
+        kw = await self._open(
+            paper=False, impact=0.0, order={"id": "1", "average": 100.4}
+        )
+        assert kw["signal_price"] == 100.0
+        assert kw["fill_price"] == pytest.approx(100.4)
+        assert kw["order_filled_at"] >= kw["order_sent_at"]

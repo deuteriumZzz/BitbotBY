@@ -136,3 +136,46 @@ async def test_short_partial_close(db):
 
 async def test_partial_close_of_missing_trade_is_none(db):
     assert await db.record_partial_close(999, 1.0, 100.0) is None
+
+
+async def test_execution_fields_roundtrip_and_old_rows_are_null(db):
+    new = await db.record_open(
+        "BTC/USDT", "s", "buy", 101.0, 1.0, 0.5, 0.0,
+        signal_price=100.0, fill_price=101.0, order_sent_at=10.0, order_filled_at=10.2,
+    )  # fmt: skip
+    old = await db.record_open("BTC/USDT", "s", "buy", 101.0, 1.0, 0.5, 0.0)
+    rows = {
+        r[0]: r[1:]
+        for r in db._conn.execute(
+            "SELECT id, signal_price, fill_price, order_sent_at, order_filled_at "
+            "FROM trades"
+        )
+    }
+    assert rows[new] == (100.0, 101.0, 10.0, 10.2)
+    assert rows[old] == (None, None, None, None)
+
+
+def test_migration_adds_execution_columns_to_legacy_db(tmp_path):
+    import sqlite3
+
+    path = str(tmp_path / "legacy.db")
+    conn = sqlite3.connect(path)
+    conn.execute(
+        "CREATE TABLE trades (id INTEGER PRIMARY KEY AUTOINCREMENT, symbol TEXT "
+        "NOT NULL, strategy TEXT NOT NULL, action TEXT NOT NULL, entry_price REAL "
+        "NOT NULL, exit_price REAL, quantity REAL NOT NULL, confidence REAL NOT NULL "
+        "DEFAULT 0.0, pnl REAL, pnl_pct REAL, commission REAL NOT NULL DEFAULT 0.0, "
+        "entry_time TEXT NOT NULL, exit_time TEXT, status TEXT NOT NULL DEFAULT "
+        "'open', context_flags TEXT NOT NULL DEFAULT '')"
+    )
+    conn.execute(
+        "INSERT INTO trades (symbol,strategy,action,entry_price,quantity,entry_time)"
+        " VALUES ('A','s','buy',1,1,'2026-01-01')"
+    )
+    conn.commit()
+    conn.close()
+    th = TradeHistory(db_path=path)
+    row = th._conn.execute(
+        "SELECT signal_price, order_filled_at FROM trades"
+    ).fetchone()
+    assert row == (None, None)

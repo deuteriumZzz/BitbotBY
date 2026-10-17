@@ -468,3 +468,54 @@ def test_strategies_rows_carry_type_and_markets(client):
         r["type"] in ("trending", "ranging", "volatile", "any") for r in rows
     )
     assert {r["markets"] for r in rows} <= {"spot", "futures", "both"}
+
+
+# ── качество исполнения ───────────────────────────────────────────────────────
+
+
+def _ex(action, signal, fill, lat_s=0.2):
+    return {
+        "action": action,
+        "signal_price": signal,
+        "fill_price": fill,
+        "order_sent_at": 100.0,
+        "order_filled_at": 100.0 + lat_s,
+    }
+
+
+def test_execution_hides_averages_on_small_sample():
+    m = data.compute_execution([_ex("buy", 100, 101)] * (data.EXEC_MIN_TRADES - 1))
+    assert m["n"] == data.EXEC_MIN_TRADES - 1
+    assert m["latency_ms_avg"] is None and m["slippage_pct_avg"] is None
+
+
+def test_execution_slippage_is_signed_against_direction():
+    # buy дороже сигнала (+1%) и sell дешевле сигнала (+1%) — оба хуже для сделки;
+    # buy дешевле сигнала даёт улучшение (минус).
+    rows = [_ex("buy", 100, 101), _ex("sell", 100, 99)] * 10 + [_ex("buy", 100, 99)] * 0
+    m = data.compute_execution(rows)
+    assert m["slippage_pct_avg"] == pytest.approx(1.0)
+    assert m["latency_ms_avg"] == pytest.approx(200.0)
+    better = data.compute_execution([_ex("sell", 100, 101)] * data.EXEC_MIN_TRADES)
+    assert better["slippage_pct_avg"] == pytest.approx(-1.0)
+    assert better["slippage_pct_worst"] == pytest.approx(-1.0)
+
+
+async def test_execution_endpoint_skips_old_null_rows(tmp_path, monkeypatch, client):
+    from src.trade_history import TradeHistory
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data").mkdir()
+    th = TradeHistory(db_path=str(tmp_path / "data" / "trades_paper.db"))
+    await th.record_open("A/USDT", "s", "buy", 1.0, 1.0, 0.5)  # старая строка, NULL
+    for _ in range(data.EXEC_MIN_TRADES):
+        await th.record_open(
+            "A/USDT", "s", "buy", 101.0, 1.0, 0.5,
+            signal_price=100.0, fill_price=101.0, order_sent_at=5.0, order_filled_at=5.1,
+        )  # fmt: skip
+    with patch.object(data, "paper_mode", return_value=True):
+        body = client.get("/api/metrics/execution?period=all").json()
+        bad = client.get("/api/metrics/execution?period=year")
+    assert body["n"] == data.EXEC_MIN_TRADES and body["simulated"] is True
+    assert body["slippage_pct_avg"] == pytest.approx(1.0)
+    assert bad.status_code == 400

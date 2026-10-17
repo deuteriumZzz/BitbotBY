@@ -133,6 +133,7 @@ export function Terminal() {
       <Chart />
       <Feed />
       <Calendar />
+      <ExecutionCard />
     </section>
   );
 }
@@ -493,6 +494,51 @@ function MetricsCard() {
       >
         {open ? "Скрыть метрики" : "Ещё 4 метрики"}
       </button>
+    </article>
+  );
+}
+
+// ── Качество исполнения: задержка ордера и проскальзывание ────────────────────
+
+function ExecutionCard() {
+  const e = useStore((s) => s.execution[s.period]);
+  if (!e) return <article className="card exec" aria-busy="true" />;
+  const few = e.latency_ms_avg === null || e.slippage_pct_avg === null;
+  return (
+    <article className="card exec">
+      <div className="card-h">
+        <h2>Качество исполнения</h2>
+        <Q tip="Насколько ордер отстал от решения бота: сколько миллисекунд прошло от отправки до исполнения и на сколько процентов цена исполнения хуже цены сигнала. Считаем от 20 сделок: на меньшем числе цифра случайна." />
+      </div>
+      {few ? (
+        <p className="muted">
+          Мало данных: {e.n} из {e.min_n}{" "}
+          {plural(e.min_n, ["сделки", "сделок", "сделок"])}, нужных для расчёта.
+        </p>
+      ) : (
+        <div className="exec-rows">
+          <div className="exec-row">
+            <span className="label">Задержка ордера</span>
+            <b>{fmtN(e.latency_ms_avg ?? 0, 0)} мс</b>
+            <small>в среднем, от отправки до исполнения</small>
+          </div>
+          <div className="exec-row">
+            <span className="label">Проскальзывание</span>
+            <b className={tone(-(e.slippage_pct_avg ?? 0))}>
+              {fmtN(e.slippage_pct_avg ?? 0, 3)}%
+            </b>
+            <small>
+              в среднем, плюс — хуже цены сигнала; худшая сделка{" "}
+              {fmtN(e.slippage_pct_worst ?? 0, 3)}%
+            </small>
+          </div>
+          <small className="muted">
+            {e.simulated
+              ? `Paper: исполнение симулировано, по ${e.n} сделкам.`
+              : `По ${e.n} сделкам.`}
+          </small>
+        </div>
+      )}
     </article>
   );
 }

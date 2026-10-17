@@ -84,6 +84,19 @@ export interface Metrics {
   sharpe: number | null;
 }
 
+export interface ExecutionMetrics {
+  period: Period;
+  /** Paper: цена и время исполнения симулированы. */
+  simulated: boolean;
+  n: number;
+  min_n: number;
+  /** null, пока n < min_n. */
+  latency_ms_avg: number | null;
+  /** %, плюс — хуже для сделки. */
+  slippage_pct_avg: number | null;
+  slippage_pct_worst: number | null;
+}
+
 export interface DailyRow {
   date: string;
   net: number;
