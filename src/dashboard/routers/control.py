@@ -1105,6 +1105,30 @@ async def auth_desktop_verify(request: Request) -> JSONResponse:
     return _err(401, f"code_{result}", messages[result])
 
 
+@router.post("/api/auth/local")
+async def auth_local(request: Request) -> JSONResponse:
+    """Вход по токену запуска лаунчера (только на своём компьютере, см. auth.py)."""
+    r = data.get_redis()
+    if r is None:
+        return _err(503, "bot_unreachable", "Нет связи с ботом: Redis недоступен.")
+    body = await _body(request)
+    result = auth.check_local_login(
+        r, str(body.get("token", "")), request.headers.get("host", "")
+    )
+    if result == "ok":
+        return _session_response(r, "local", "local")
+    messages = {
+        "disabled": "Локальный вход выключен.",
+        "host": "Локальный вход работает только по адресу localhost.",
+        "locked": "Слишком много неверных попыток. Запустите лаунчер заново.",
+        "wrong": "Ссылка входа не подошла. Запустите лаунчер заново.",
+        "used": "Эта ссылка уже использована. Запустите лаунчер заново.",
+    }
+    return _err(
+        401 if result != "disabled" else 404, f"local_{result}", messages[result]
+    )
+
+
 @router.post("/api/auth/logout")
 async def auth_logout(request: Request) -> JSONResponse:
     auth.drop_session(data.get_redis(), auth.bearer_token(request.headers))

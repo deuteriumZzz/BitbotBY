@@ -126,3 +126,15 @@ describe("notifications", () => {
     expect(useStore.getState().notifOpen).toBe(false);
   });
 });
+
+describe("ссылка лаунчера", () => {
+  it("берёт токен только из #local= и только достаточно длинный", async () => {
+    const { parseLocalHash } = await import("./lib/platform");
+    const t = "a".repeat(43);
+    expect(parseLocalHash(`#local=${t}`)).toBe(t);
+    expect(parseLocalHash("#local=short")).toBeNull();
+    expect(parseLocalHash(`#other=${t}`)).toBeNull();
+    expect(parseLocalHash(`#local=${t}&x=1`)).toBeNull();
+    expect(parseLocalHash("")).toBeNull();
+  });
+});

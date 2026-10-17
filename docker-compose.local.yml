@@ -1,0 +1,67 @@
+# Запуск на своём компьютере одной кнопкой (см. launcher/launch.py).
+# Только Redis, бот и дашборд; порт открыт на 127.0.0.1, наружу ничего не торчит.
+# Переменные подставляет лаунчер из .launcher/compose.env (ключи туда пишет он сам).
+name: bitbotby
+
+x-bot-env: &bot-env
+  REDIS_HOST: redis
+  PYTHONPATH: /app
+  PAPER_TRADING: "true"
+  # Без ключей AI бот в режиме AI не стартует; решение по локальным стратегиям работает сразу,
+  # а AI включается в приложении после ввода ключа (Бот → Кто принимает решение).
+  MODE: local
+  BITBOT_SECRETS_KEY: ${BITBOT_SECRETS_KEY:?запустите через лаунчер}
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --appendfsync everysec
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  bot:
+    build: .
+    restart: unless-stopped
+    command: python supervisor.py
+    environment:
+      <<: *bot-env
+      HEALTH_PORT: "8080"
+    volumes:
+      - ${BITBOT_DATA:-./data}:/app/data
+      - ${BITBOT_MODELS:-./models}:/app/models
+      - ${BITBOT_LOGS:-./logs}:/app/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  dashboard:
+    build: .
+    restart: unless-stopped
+    command: python dashboard.py
+    ports:
+      - "127.0.0.1:${BITBOT_PORT:-8080}:8080"
+    environment:
+      <<: *bot-env
+      REDIS_URL: redis://redis:6379/0
+      BITBOT_LOCAL_MODE: "1"
+      BITBOT_LOCAL_LOGIN_TOKEN: ${BITBOT_LOCAL_LOGIN_TOKEN:-}
+    volumes:
+      - ${BITBOT_DATA:-./data}:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
+volumes:
+  redis_data:

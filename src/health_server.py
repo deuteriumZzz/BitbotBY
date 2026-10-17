@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict
 
@@ -21,6 +22,32 @@ if TYPE_CHECKING:
     from src.trading_bot import TradingBot
 
 logger = logging.getLogger(__name__)
+
+# Пульс для дашборда: он живёт в другом процессе (контейнере) и читает этот файл
+# через общую папку data (src/dashboard/data.py: check_healthcheck, порог 120 с).
+HEARTBEAT_PATH = os.path.join("data", "healthcheck.txt")
+HEARTBEAT_EVERY = 30
+
+
+def write_heartbeat(path: str = HEARTBEAT_PATH) -> None:
+    """Пишет текущее время; замена файла целиком, чтобы читатель не увидел обрезок."""
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    tmp = f"{path}.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(datetime.now().isoformat(timespec="seconds"))
+    os.replace(tmp, path)
+
+
+async def heartbeat_loop(
+    path: str = HEARTBEAT_PATH, every: int = HEARTBEAT_EVERY
+) -> None:
+    while True:
+        try:
+            write_heartbeat(path)
+        except OSError:
+            logger.warning("Не удалось записать пульс в %s", path, exc_info=True)
+        await asyncio.sleep(every)
+
 
 # ── Prometheus gauges/counters ────────────────────────────────────────────────
 _g_open_positions = Gauge("bot_open_positions", "Открытых позиций")

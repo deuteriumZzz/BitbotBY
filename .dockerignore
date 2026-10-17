@@ -17,3 +17,6 @@ logs/
 webapp/node_modules
 webapp/dist
 desktop/
+
+# Лаунчер: мастер-ключ шифрования не должен попасть в слои образа
+.launcher/

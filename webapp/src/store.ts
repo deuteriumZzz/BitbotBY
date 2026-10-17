@@ -274,6 +274,16 @@ export const useStore = create<Store>((set, get) => {
           get().say(e instanceof ApiError ? e.message : "Не удалось войти через Telegram.");
         }
       }
+      // Ссылка лаунчера: обмениваем одноразовый токен на сессию (работает только на этом компьютере).
+      const local = !isMock && platform.kind === "web" ? platform.takeLocalToken() : null;
+      if (local) {
+        try {
+          const r = await api<{ token: string }>("POST", "/api/auth/local", { token: local });
+          platform.setToken(r.token);
+        } catch (e) {
+          get().say(e instanceof ApiError ? e.message : "Не удалось войти по ссылке запуска.");
+        }
+      }
       try {
         await get().loadState();
       } catch (e) {

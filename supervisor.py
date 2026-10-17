@@ -27,7 +27,7 @@ import logging  # noqa: E402
 import signal  # noqa: E402
 
 from config import Config  # noqa: E402
-from src.health_server import start_health_server  # noqa: E402
+from src.health_server import heartbeat_loop, start_health_server  # noqa: E402
 from src.secrets_store import apply_secrets  # noqa: E402
 from src.settings_registry import effective_config  # noqa: E402
 from src.trading_bot import TradingBot  # noqa: E402
@@ -61,6 +61,7 @@ async def main() -> None:
 
     if Config.HEALTH_PORT > 0:
         await start_health_server(bot, port=Config.HEALTH_PORT)
+    heartbeat = asyncio.create_task(heartbeat_loop())
 
     try:
         while True:
@@ -91,6 +92,7 @@ async def main() -> None:
         logger.critical("Критическая ошибка супервизора: %s", e, exc_info=True)
         raise
     finally:
+        heartbeat.cancel()
         await bot.stop()
         logger.info("Бот остановлен")
 

@@ -238,6 +238,19 @@ Dynamic leverage (fixed/volatility/full, ATR-based) · Trailing stop + partial T
 
 Python 3.11 · Docker + Docker Compose (рекомендуется) · API-ключи Bybit · один AI-провайдер · Telegram-бот
 
+### Запуск одной кнопкой (на своём компьютере)
+
+Нужен только [Docker Desktop](https://www.docker.com/products/docker-desktop/) и Python 3.
+
+- **macOS:** двойной щелчок по `BitbotBY.command`. **Windows:** `BitbotBY.bat`. **Linux:** `./bitbotby.sh`.
+- Первый раз лаунчер соберёт образ (5–15 минут), поднимет Redis, бота и дашборд и сам откроет приложение. Следующие запуски быстрые.
+- Старт в **Paper** и в режиме **Local** (решают локальные стратегии), поэтому ключи для начала не нужны. Ключи Bybit и AI вводятся в приложении: Настройки → Подключения; они хранятся зашифрованными. Мастер-ключ лаунчер создаёт сам в `.launcher/state.json` (права 600, в git и в образ не попадает).
+- Вход в приложение: лаунчер открывает одноразовую ссылку `#local=…`. Она работает только на этом компьютере (порт открыт на 127.0.0.1) и только пока включён флаг лаунчера; на сервере этого входа нет. Если окно закрыли: `python launcher/launch.py url`.
+- Остановить: `BitbotBY-stop.command` / `BitbotBY-stop.bat` или `python launcher/launch.py stop`. Данные (`data/`, `models/`) и ключи сохраняются.
+- Свои данные в другом месте: `python launcher/launch.py start --data-dir=/путь` (внутри `data/`, `models/`, `logs/`).
+
+Для сервера по-прежнему используйте `docker compose` и nginx (раздел ниже).
+
 ### Запуск через Docker (рекомендуется)
 
 ```bash

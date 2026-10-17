@@ -22,3 +22,6 @@ nginx/htpasswd
 # Ключи API из приложения (зашифрованы, но всё равно не для git)
 data/secrets.enc.json
 data/.secrets.*
+
+# Лаунчер: мастер-ключ и токен входа (никогда не в git и не в образ)
+.launcher/

@@ -15,6 +15,7 @@ import asyncio
 import hashlib
 import hmac
 import json
+import os
 import secrets
 import time
 import urllib.parse
@@ -151,6 +152,58 @@ def check_desktop_code(r: Any, code: str) -> str:
     state["tries"] += 1
     r.set(_CODE_KEY, json.dumps(state), keepttl=True)
     return "locked" if state["tries"] >= CODE_MAX_ATTEMPTS else "wrong"
+
+
+# ── Локальный вход лаунчера ───────────────────────────────────────────────────
+#
+# Только для запуска на своём компьютере: лаунчер включает BITBOT_LOCAL_MODE=1,
+# кладёт в окружение случайный токен запуска и открывает приложение со ссылкой
+# `#local=<токен>`. На сервере переменных нет, и этот вход выключен.
+# Защита: токен ≥ 32 символов, сравнение за постоянное время, использовать можно
+# один раз, 5 неверных попыток — блокировка на 10 минут, и запрос должен прийти
+# на адрес localhost (защита от DNS-rebinding), а порт лаунчер открывает только
+# на 127.0.0.1.
+
+LOCAL_TOKEN_MIN = 32
+LOCAL_MAX_FAILS = 5
+LOCAL_LOCK_SEC = 600
+_LOCAL_HOSTS = {"localhost", "127.0.0.1", "[::1]"}
+_LOCAL_FAIL_KEY = "bot:local_login_fails"
+
+
+def local_login_token() -> str:
+    """Токен запуска, если локальный вход включён; иначе пустая строка."""
+    if os.getenv("BITBOT_LOCAL_MODE") != "1":
+        return ""
+    token = os.getenv("BITBOT_LOCAL_LOGIN_TOKEN", "")
+    return token if len(token) >= LOCAL_TOKEN_MIN else ""
+
+
+def _host_only(host_header: str) -> str:
+    host = host_header.strip().lower()
+    if host.startswith("["):  # [::1]:8080
+        return host.split("]", 1)[0] + "]"
+    return host.split(":", 1)[0]
+
+
+def check_local_login(r: Any, token: str, host_header: str) -> str:
+    """ok | disabled | host | locked | wrong | used."""
+    expected = local_login_token()
+    if not expected:
+        return "disabled"
+    if _host_only(host_header) not in _LOCAL_HOSTS:
+        return "host"
+    fails = r.get(_LOCAL_FAIL_KEY)
+    if int(fails or 0) >= LOCAL_MAX_FAILS:
+        return "locked"
+    if not hmac.compare_digest(str(token).encode(), expected.encode()):
+        if r.incr(_LOCAL_FAIL_KEY) == 1:
+            r.expire(_LOCAL_FAIL_KEY, LOCAL_LOCK_SEC)
+        return "wrong"
+    # Один раз на токен запуска: повторное открытие той же ссылки не пускает.
+    if not r.set(f"bot:local_login_used:{_sha(expected)[:16]}", "1", nx=True, ex=86400):
+        return "used"
+    return "ok"
 
 
 def _send_owner_sync(text: str) -> bool:

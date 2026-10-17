@@ -22,6 +22,7 @@ scikit-learn>=1.0.0
 python-telegram-bot>=20.0
 fastapi>=0.110.0
 uvicorn>=0.29.0
+websockets>=12.0  # без неё дашборд не принимает /ws: приложение теряет поток событий
 prometheus-client>=0.20.0
 pytest-cov>=5.0.0
 optuna>=3.6.0

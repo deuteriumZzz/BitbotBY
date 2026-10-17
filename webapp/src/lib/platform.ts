@@ -74,6 +74,19 @@ export function setApiBase(url: string): void {
 // после перезагрузки. Системная связка ключей для Tauri — следующим шагом.
 let memoryToken: string | null = null;
 
+/** Токен запуска из ссылки лаунчера `#local=…`; другие фрагменты игнорируются. */
+export function parseLocalHash(hash: string): string | null {
+  const m = /^#local=([A-Za-z0-9_-]{32,})$/.exec(hash);
+  return m ? m[1] : null;
+}
+
+/** Забирает токен из адреса и сразу стирает его из строки браузера и истории. */
+export function takeLocalToken(): string | null {
+  const token = parseLocalHash(window.location.hash);
+  if (token) window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  return token;
+}
+
 export function getToken(): string | null {
   if (memoryToken || kind === "miniapp") return memoryToken;
   try {
