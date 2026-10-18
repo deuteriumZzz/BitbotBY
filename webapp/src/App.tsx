@@ -415,15 +415,51 @@ function SignalSheet() {
 function Toast() {
   const toast = useStore((s) => s.toast);
   const [show, setShow] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout>>();
+  const left = useRef(0);
+  const since = useRef(0);
+  const total = toast?.undo ? 8000 : 3200;
+  const arm = (ms: number) => {
+    clearTimeout(timer.current);
+    left.current = ms;
+    since.current = Date.now();
+    timer.current = setTimeout(() => setShow(false), ms);
+  };
   useEffect(() => {
     if (!toast) return;
     setShow(true);
-    const t = setTimeout(() => setShow(false), 3200);
-    return () => clearTimeout(t);
-  }, [toast]);
+    arm(total);
+    return () => clearTimeout(timer.current);
+  }, [toast]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Под курсором или фокусом время останавливается, чтобы успеть нажать «Отменить».
+  const hold = () => {
+    clearTimeout(timer.current);
+    left.current -= Date.now() - since.current;
+  };
+  const resume = () => arm(Math.max(left.current, 1200));
   return (
-    <div className={`toast${show ? " show" : ""}`} role="status">
-      {toast?.text}
+    <div
+      className={`toast${show ? " show" : ""}${toast?.undo ? " act" : ""}`}
+      role="status"
+      onMouseEnter={hold}
+      onMouseLeave={resume}
+      onFocus={hold}
+      onBlur={resume}
+    >
+      <span>{toast?.text}</span>
+      {toast?.undo && (
+        <button
+          className="toast-undo"
+          type="button"
+          onClick={() => {
+            toast.undo?.();
+            setShow(false);
+          }}
+        >
+          Отменить
+        </button>
+      )}
+      {show && <i className="toast-bar" key={toast?.id} style={{ animationDuration: `${total}ms` }} />}
     </div>
   );
 }

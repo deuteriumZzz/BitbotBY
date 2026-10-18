@@ -131,7 +131,7 @@ export interface Store {
   tab: Tab;
   /** Поиск параметра по Cmd/Ctrl+K: null — не запрошен, строка — что подставить. */
   paramSearch: string | null;
-  toast: { id: number; text: string } | null;
+  toast: { id: number; text: string; undo?: () => void } | null;
 
   boot(): Promise<void>;
   setTab(tab: Tab): void;
@@ -143,6 +143,8 @@ export interface Store {
   clearParamSearch(): void;
   setPeriod(p: Period): void;
   say(text: string): void;
+  /** Сообщение с кнопкой «Отменить»; живёт дольше обычного. */
+  sayUndo(text: string, undo: () => void): void;
   apply(e: BotEvent): void;
   /** Выполнить действие: успех — тост ok, ошибка — тост с текстом сервера. */
   act(fn: () => Promise<unknown>, ok?: string): Promise<boolean>;
@@ -333,6 +335,7 @@ export const useStore = create<Store>((set, get) => {
       if (!get().execution[period]) void get().loadExecution(period).catch(() => undefined);
     },
     say: (text) => set({ toast: { id: ++toastSeq, text } }),
+    sayUndo: (text, undo) => set({ toast: { id: ++toastSeq, text, undo } }),
 
     async act(fn, ok) {
       try {
@@ -744,6 +747,16 @@ export const actions = {
     } catch (e) {
       st().say(e instanceof ApiError ? e.message : "Не удалось загрузить список моделей.");
       return [];
+    }
+  },
+  /** Проверка связи с провайдером: запрос списка моделей по сохранённому ключу (лимит не тратит). */
+  aiProbe: async (provider: string): Promise<{ ok: boolean; ms: number; message: string }> => {
+    const t0 = performance.now();
+    try {
+      await api("GET", `/api/ai/providers/${provider}/models`);
+      return { ok: true, ms: Math.round(performance.now() - t0), message: "" };
+    } catch (e) {
+      return { ok: false, ms: Math.round(performance.now() - t0), message: e instanceof ApiError ? e.message : "нет связи с сервером" };
     }
   },
   deleteSecret: (service: string) =>
