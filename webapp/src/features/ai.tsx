@@ -265,6 +265,7 @@ interface Probe {
 }
 interface Drag {
   id: string;
+  h: number;
   dy: number;
   orig: Record<string, number>;
   tops: Record<string, number>;
@@ -419,7 +420,7 @@ function ChainList({ ai, list }: { ai: AiState; list: AiProvider[] }) {
       const seq = others.map((r) => r.id);
       seq.splice(idx, 0, id);
       plan = overBin ? rects.map((r) => r.id) : seq;
-      setDrag({ id, dy, orig, tops: layout(plan), bin: overBin });
+      setDrag({ id, h: me.h, dy, orig, tops: layout(plan), bin: overBin });
     };
     const end = (cancel: boolean) => {
       grip.removeEventListener("pointermove", onMove);
@@ -432,7 +433,7 @@ function ChainList({ ai, list }: { ai: AiState; list: AiProvider[] }) {
         return void toReserve(p);
       }
       // Строка «садится» в свою ячейку, и только потом порядок уходит на сервер.
-      setDrag({ id, dy: layout(plan)[id] - me.top, orig, tops: layout(plan), bin: false });
+      setDrag({ id, h: me.h, dy: layout(plan)[id] - me.top, orig, tops: layout(plan), bin: false });
       setTimeout(() => {
         noFlip.current = true;
         commit(plan);
@@ -444,7 +445,7 @@ function ChainList({ ai, list }: { ai: AiState; list: AiProvider[] }) {
     grip.addEventListener("pointermove", onMove);
     grip.addEventListener("pointerup", onUp);
     grip.addEventListener("pointercancel", onCancel);
-    setDrag({ id, dy: 0, orig, tops: layout(plan), bin: false });
+    setDrag({ id, h: me.h, dy: 0, orig, tops: layout(plan), bin: false });
   };
 
   // ── Клавиатура: пробел «взять», стрелки — перенести, пробел — положить, Esc — отмена ──
@@ -543,9 +544,13 @@ function ChainList({ ai, list }: { ai: AiState; list: AiProvider[] }) {
             onPick={() => setPicked((s) => (s.includes(p.id) ? s.filter((x) => x !== p.id) : [...s, p.id]))}
           />
         ))}
+        {drag && !drag.bin && <li className="slot" aria-hidden="true" style={{ transform: `translateY(${drag.tops[drag.id]}px)`, height: drag.h }} />}
       </ol>
       <div className={`chain-bin${drag?.bin ? " over" : ""}`} aria-label="Резерв: выключенные провайдеры">
-        <span className="bin-h">Резерв</span>
+        <span className="bin-h">
+          {Icon.reserve}
+          Резерв
+        </span>
         {reserve.length ? (
           reserve.map((p) => (
             <button key={p.id} className="bin-chip" type="button" title="Вернуть в цепочку" onClick={() => void setDisabled(p.id, false)}>
@@ -593,6 +598,16 @@ interface RowProps {
   onPick: () => void;
 }
 
+/** Значок провайдера: монограмма в собственном приглушённом цвете (чужие логотипы не используем). */
+function Avatar({ id, name }: { id: string; name: string }) {
+  const h = [...id].reduce((acc, c) => (acc * 31 + c.charCodeAt(0)) % 360, 7);
+  return (
+    <span className="pav" style={{ background: `hsl(${h} 30% 22%)`, color: `hsl(${h} 65% 78%)`, borderColor: `hsl(${h} 32% 36%)` }} aria-hidden="true">
+      {name.replace(/[^A-Za-zА-Яа-я0-9]/g, "").slice(0, 2)}
+    </span>
+  );
+}
+
 function ProviderRow(props: RowProps) {
   const { ai, p } = props;
   const [cls, text] = STATUS[p.status] ?? ["warn", p.status];
@@ -620,7 +635,7 @@ function ProviderRow(props: RowProps) {
   const moving = props.lifted !== undefined || props.shift !== undefined;
   const style: React.CSSProperties | undefined =
     props.lifted !== undefined
-      ? { transform: `translateY(${props.lifted}px)`, zIndex: 4 }
+      ? { transform: `translateY(${props.lifted}px) scale(1.015) rotate(0.35deg)`, zIndex: 4 }
       : props.shift !== undefined
         ? { transform: `translateY(${props.shift}px)` }
         : undefined;
@@ -657,7 +672,7 @@ function ProviderRow(props: RowProps) {
           onPointerDown={props.onGripDown}
           onKeyDown={props.onGripKey}
         >
-          ⋮⋮
+          {Icon.grip}
         </button>
         <span className="n">
           {props.n ?? "—"}
@@ -668,6 +683,7 @@ function ProviderRow(props: RowProps) {
             </svg>
           )}
         </span>
+        <Avatar id={p.id} name={p.name} />
         <b>{p.name}</b>
         <span className={`tag ${p.free ? "hot" : "rst"}`}>{p.free ? "бесплатно" : "платно"}</span>
         {role && <span className="tag rst">{role}</span>}
@@ -685,10 +701,10 @@ function ProviderRow(props: RowProps) {
           </span>
           <span className="mv">
             <button className="btn" type="button" aria-label={`Выше: ${p.name}`} disabled={props.first} onClick={() => props.onMove(-1)}>
-              ↑
+              {Icon.up}
             </button>
             <button className="btn" type="button" aria-label={`Ниже: ${p.name}`} disabled={props.lastRow} onClick={() => props.onMove(1)}>
-              ↓
+              {Icon.down}
             </button>
             <button
               className="btn"
@@ -700,7 +716,7 @@ function ProviderRow(props: RowProps) {
                 props.onMenu(r.left, r.bottom + 4);
               }}
             >
-              ⋯
+              {Icon.dots}
             </button>
           </span>
           <Toggle

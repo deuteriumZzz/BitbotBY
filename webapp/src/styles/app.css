@@ -934,3 +934,12 @@ details.extra[open]>.card{animation:viewin .28s var(--ease-mech)}
 /* Цепочка: пунктир между провайдерами показывает порядок опроса */
 .aichain:not(.dragging) .aip:not(:first-child)::before{content:"";position:absolute;top:-9px;left:34px;height:9px;border-left:2px dashed var(--line-ui)}
 .aichain:not(.dragging) .aip.off::before{display:none}
+/* Значки, ручка и ячейка при перетаскивании */
+.pav{flex:none;width:26px;height:26px;display:grid;place-items:center;border:1px solid;border-radius:var(--r);font:700 10.5px/1 var(--f-num);letter-spacing:.02em;text-transform:uppercase}
+.grip{letter-spacing:0}
+.mv .btn svg,.star svg{display:block}
+.star[aria-pressed="true"] svg{fill:currentColor}
+.bin-h{display:inline-flex;align-items:center;gap:6px}
+.chain-bin.over .bin-h svg{animation:bell-pop .25s var(--ease-mech)}
+.aip.lifted{box-shadow:0 14px 28px rgba(0,0,0,.6),0 0 0 1px var(--brand),0 0 22px color-mix(in oklab,var(--brand) 22%,transparent)}
+.slot{position:absolute;left:0;right:0;top:0;pointer-events:none;border:1.5px dashed var(--brand);border-radius:var(--r);background:color-mix(in oklab,var(--brand) 7%,transparent);transition:transform .18s var(--ease-mech);list-style:none}

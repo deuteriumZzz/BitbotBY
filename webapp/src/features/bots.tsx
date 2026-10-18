@@ -681,7 +681,7 @@ function StrategiesCard() {
                 </span>
                 <span className={`pill ${st[0]}`}>{st[1]}</span>
                 <button className="star" type="button" aria-pressed={pins.includes(s.name)} aria-label={`Закрепить: ${stratName(s.name)}`} title="Закрепить вверху списка" onClick={() => togglePin(s.name)}>
-                  ★
+                  {Icon.star}
                 </button>
                 <Toggle on={s.enabled} label={`Стратегия «${stratName(s.name)}»`} onChange={(v) => void actions.setStrategy(s.name, v)} />
               </div>

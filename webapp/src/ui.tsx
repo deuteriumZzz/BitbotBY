@@ -252,6 +252,39 @@ const svg = (d: ReactNode, size = 18) => (
 );
 
 export const Icon = {
+  // Иконки управления списками: одна обводка 1.8, скруглённые концы, как у остальных.
+  grip: (
+    <svg width="14" height="18" viewBox="0 0 14 18" aria-hidden="true">
+      {[3, 9, 15].map((y) => [4, 10].map((x) => <circle key={`${x}-${y}`} cx={x} cy={y} r="1.5" fill="currentColor" />))}
+    </svg>
+  ),
+  dots: (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+      {[3, 8, 13].map((x) => (
+        <circle key={x} cx={x} cy="8" r="1.5" fill="currentColor" />
+      ))}
+    </svg>
+  ),
+  up: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 10l4-4 4 4" />
+    </svg>
+  ),
+  down: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 6l4 4 4-4" />
+    </svg>
+  ),
+  star: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" aria-hidden="true">
+      <path d="M8 1.8l1.9 3.9 4.3.6-3.1 3 .7 4.3L8 11.5l-3.8 2.1.7-4.3-3.1-3 4.3-.6z" />
+    </svg>
+  ),
+  reserve: (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M2.5 6.5h13v8a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1zM1.8 3.5h14.4v3H1.8zM7 10.5h4" />
+    </svg>
+  ),
   logo: (
     <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
       <path d="M12 1.5 21.5 7v10L12 22.5 2.5 17V7z" style={{ fill: "var(--brand)" }} />
