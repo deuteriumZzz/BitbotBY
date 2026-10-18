@@ -248,6 +248,36 @@ class TradingBot:
         self._season_detector = SeasonDetector()
         self._pumpfun_tracker = PumpfunTracker(Config.PUMPPORTAL_API_KEY)
 
+    async def _connect_exchange(self) -> None:
+        """Подключение к Bybit. В Paper неверный или просроченный ключ — не ошибка:
+        работаем на публичных данных, подпись не нужна."""
+        try:
+            await self.api.initialize(
+                Config.BYBIT_API_KEY,
+                Config.BYBIT_API_SECRET,
+                testnet=Config.TESTNET,
+            )
+        except ccxt.AuthenticationError as e:
+            if not Config.PAPER_TRADING:
+                logger.error("Failed to initialize Bybit API: %s", e)
+                raise
+            logger.warning(
+                "API auth failed — paper trading mode, public data only: %s", e
+            )
+            await self.api.initialize("", "", testnet=Config.TESTNET)
+
+    async def _connect_data_loader(self) -> None:
+        """Загрузчик свечей: то же правило, в Paper без валидного ключа — публичный API."""
+        try:
+            await self.data_loader.initialize(
+                Config.BYBIT_API_KEY, Config.BYBIT_API_SECRET
+            )
+        except ccxt.AuthenticationError as e:
+            if not Config.PAPER_TRADING:
+                raise
+            logger.warning("Data loader auth failed — public data only: %s", e)
+            await self.data_loader.initialize("", "")
+
     async def initialize(self) -> None:
         """
         Инициализирует API, стратегию, Redis-состояние.
@@ -256,26 +286,9 @@ class TradingBot:
         """
         # Действующие значения: с учётом настроек и ключей из приложения.
         effective_config(Config).validate()
+        await self._connect_exchange()
         try:
-            await self.api.initialize(
-                Config.BYBIT_API_KEY,
-                Config.BYBIT_API_SECRET,
-                testnet=Config.TESTNET,
-            )
-        except ccxt.AuthenticationError as e:
-            if Config.PAPER_TRADING:
-                logger.warning(
-                    "API auth failed — paper trading mode, public data only: %s",
-                    e,
-                )
-            else:
-                logger.error("Failed to initialize Bybit API: %s", e)
-                raise
-        try:
-            await self.data_loader.initialize(
-                Config.BYBIT_API_KEY,
-                Config.BYBIT_API_SECRET,
-            )
+            await self._connect_data_loader()
             if not Config.PAPER_TRADING:
                 try:
                     bal = await self.api.get_balance()

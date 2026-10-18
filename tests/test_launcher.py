@@ -132,3 +132,8 @@ def test_stale_tunnel_file_is_not_alive(tmp_path):
     )
     assert launch.tunnel_alive(launch.tunnel_info(tmp_path)) is False
     assert launch.tunnel_info(tmp_path / "missing") == {}
+
+
+def test_env_for_import_drops_comments_and_empty_values():
+    text = "# c\nGROQ_API_KEY=abc\nEMPTY=\n  # x=1\nMODE=ai\n"
+    assert launch.env_for_import(text) == "GROQ_API_KEY=abc\nMODE=ai\n"

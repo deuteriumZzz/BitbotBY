@@ -8,6 +8,7 @@
     python launcher/launch.py url      # новая ссылка входа, если окно закрыли
     python launcher/launch.py autostart on|off|status   # запуск при входе в систему
     python launcher/launch.py awake on|off|status       # не давать компьютеру уснуть
+    python launcher/launch.py import-env [--env=путь] [--overwrite]   # ключи из .env → хранилище
     python launcher/launch.py phone on|off|status       # MiniApp в Telegram: адрес до компьютера
 
 Нужны только Docker и Python 3 (стандартная библиотека, ничего ставить не надо).
@@ -425,6 +426,45 @@ def cmd_phone(action: str, port: int, flags: Dict[str, str]) -> int:
     return cmd_start(port, None, open_browser=False)
 
 
+def env_for_import(text: str) -> str:
+    """Из .env берём только строки KEY=VALUE: комментарии и пустое не нужны."""
+    keep = [
+        ln
+        for ln in text.splitlines()
+        if "=" in ln and not ln.lstrip().startswith("#") and ln.split("=", 1)[1].strip()
+    ]
+    return "\n".join(keep) + "\n"
+
+
+def cmd_import_env(env_path: Path, overwrite: bool) -> int:
+    """Переносит ключи из .env в зашифрованное хранилище приложения."""
+    if not env_path.exists():
+        say(f"Не нашёл {env_path}. Укажите файл: import-env --env=/путь/к/.env")
+        return 2
+    if not (STATE_DIR / "compose.env").exists() or not own_dashboard_running():
+        say("Сначала запустите BitbotBY (BitbotBY.command), потом повторите.")
+        return 2
+    say("Переношу ключи из .env в зашифрованное хранилище (значения не показываются)…")
+    cmd = compose_cmd(["exec", "-T", "dashboard", "python", "-m", "src.secrets_import"])
+    if overwrite:
+        cmd.append("--overwrite")
+    proc = run(
+        cmd,
+        input=env_for_import(env_path.read_text(encoding="utf-8")),
+        text=True,
+        capture_output=True,
+    )
+    say((proc.stdout or "").strip() or (proc.stderr or "").strip()[-300:])
+    if proc.returncode != 0:
+        return proc.returncode
+    run(compose_cmd(["restart", "bot"]), capture_output=True)
+    say(
+        "Бот перезапущен и подхватит ключи. Проверка у сервисов: Настройки → Подключения."
+    )
+    say("Теперь ключи из .env можно удалить — они уже в хранилище.")
+    return 0
+
+
 # ── Автозапуск при входе в систему и «не засыпать» ───────────────────────────
 # Оба режима включаются явной командой: это изменение настроек вашей системы.
 
@@ -660,6 +700,9 @@ def main(argv: List[str]) -> int:
         return cmd_start(port, data_dir, open_browser="--no-browser" not in argv)
     if action == "url":
         return cmd_url(port, data_dir)
+    if action == "import-env":
+        env = Path(flags["--env"]).expanduser() if "--env" in flags else ROOT / ".env"
+        return cmd_import_env(env, "--overwrite" in argv)
     if action == "autostart":
         return cmd_autostart(args[1] if len(args) > 1 else "status")
     if action == "awake":
