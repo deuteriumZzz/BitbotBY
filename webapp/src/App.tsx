@@ -500,7 +500,8 @@ function Toast() {
   const timer = useRef<ReturnType<typeof setTimeout>>();
   const left = useRef(0);
   const since = useRef(0);
-  const total = toast?.undo ? 8000 : 3200;
+  // Длинную подсказку успеть прочитать: время зависит от длины текста.
+  const total = toast?.undo ? 8000 : Math.min(9000, Math.max(3200, (toast?.text.length ?? 0) * 70));
   const arm = (ms: number) => {
     clearTimeout(timer.current);
     left.current = ms;

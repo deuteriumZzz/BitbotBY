@@ -83,3 +83,19 @@ def test_route_is_404_when_disabled_and_rejects_foreign_host(monkeypatch, client
     assert (
         foreign.status_code == 401 and foreign.json()["error"]["code"] == "local_host"
     )
+
+
+def test_denied_message_in_local_mode_tells_how_to_sign_in(local, client):
+    with patch.object(data, "get_redis", return_value=FakeRedis()):
+        resp = client.post("/api/bot/pause", json={"request_id": "12345678"})
+    assert resp.status_code == 403
+    msg = resp.json()["error"]["message"]
+    assert "BitbotBY.command" in msg and "DASHBOARD_API_KEY" not in msg
+
+
+def test_denied_message_on_a_server_is_unchanged(monkeypatch, client):
+    monkeypatch.delenv("BITBOT_LOCAL_MODE", raising=False)
+    monkeypatch.delenv("DASHBOARD_API_KEY", raising=False)
+    with patch.object(data, "get_redis", return_value=FakeRedis()):
+        resp = client.post("/api/bot/pause", json={"request_id": "12345678"})
+    assert "DASHBOARD_API_KEY" in resp.json()["error"]["message"]

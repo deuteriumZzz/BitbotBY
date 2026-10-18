@@ -51,8 +51,22 @@ async def _owner_only(conn: HTTPConnection) -> None:
     if not auth.check_session(data.get_redis(), auth.bearer_token(conn.headers)):
         raise HTTPException(
             401,
-            {"code": "unauthorized", "message": "Войдите через Telegram."},
+            {
+                "code": "unauthorized",
+                "message": _signin_hint("Войдите через Telegram."),
+            },
         )
+
+
+def _signin_hint(default: str) -> str:
+    """При запуске лаунчером вход — это ярлык, а не Telegram и не ключ на сервере."""
+    if os.getenv("BITBOT_LOCAL_MODE") == "1":
+        return (
+            "Вы не вошли в приложение. Откройте его ярлыком BitbotBY "
+            "(BitbotBY.command или BitbotBY.bat) — он войдёт сам. "
+            "Или в Терминале: python3 launcher/launch.py url"
+        )
+    return default
 
 
 router = APIRouter(dependencies=[Depends(_owner_only)])
@@ -271,10 +285,16 @@ def _control_denied(request: Request) -> Optional[JSONResponse]:
         return _err(
             403,
             "control_disabled",
-            "Управление из приложения выключено: подключите Telegram-бота "
-            "или задайте DASHBOARD_API_KEY на сервере.",
+            _signin_hint(
+                "Управление из приложения выключено: подключите Telegram-бота "
+                "или задайте DASHBOARD_API_KEY на сервере."
+            ),
         )
-    return _err(401, "unauthorized", "Войдите через Telegram, чтобы управлять ботом.")
+    return _err(
+        401,
+        "unauthorized",
+        _signin_hint("Войдите через Telegram, чтобы управлять ботом."),
+    )
 
 
 def _source(request: Request) -> str:
@@ -1091,7 +1111,11 @@ def _session_response(r: Any, subject: str, source: str) -> JSONResponse:
 async def auth_telegram(request: Request) -> JSONResponse:
     token, owner = auth.owner_credentials()
     if not token or not owner:
-        return _err(503, "auth_unconfigured", "На сервере не настроен Telegram-бот.")
+        return _err(
+            503,
+            "auth_unconfigured",
+            _signin_hint("На сервере не настроен Telegram-бот."),
+        )
     body = await _body(request)
     user, code = auth.verify_init_data(str(body.get("initData", "")), token, owner)
     if user is None:
@@ -1105,7 +1129,11 @@ async def auth_telegram(request: Request) -> JSONResponse:
 @router.post("/api/auth/desktop/request")
 async def auth_desktop_request() -> JSONResponse:
     if not auth.telegram_auth_configured():
-        return _err(503, "auth_unconfigured", "На сервере не настроен Telegram-бот.")
+        return _err(
+            503,
+            "auth_unconfigured",
+            _signin_hint("На сервере не настроен Telegram-бот."),
+        )
     r = data.get_redis()
     if r is None:
         return _err(503, "bot_unreachable", "Нет связи с ботом: Redis недоступен.")
