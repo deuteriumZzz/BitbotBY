@@ -108,7 +108,28 @@ export function Journal() {
             ) : trades.length ? (
               <TradeList key={`${period}${strategy}${side}${result}`} trades={trades} />
             ) : (
-              <p className="empty">{all.length ? "Под фильтр ничего не попало." : "За этот период закрытых сделок нет."}</p>
+              <div className="empty">
+                <p>{all.length ? "Под фильтр ничего не попало." : "За этот период закрытых сделок нет."}</p>
+                {all.length > 0 ? (
+                  <button
+                    className="btn"
+                    type="button"
+                    onClick={() => {
+                      setStrategy("");
+                      setSide("all");
+                      setResult("all");
+                    }}
+                  >
+                    Сбросить фильтры
+                  </button>
+                ) : (
+                  period !== "all" && (
+                    <button className="btn" type="button" onClick={() => setPeriod("all")}>
+                      Показать за всё время
+                    </button>
+                  )
+                )}
+              </div>
             )}
           </article>
         </div>

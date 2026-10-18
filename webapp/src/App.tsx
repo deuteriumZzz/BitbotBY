@@ -10,6 +10,7 @@ import { Bots, profileName, stratName } from "./features/bots";
 import { Learn } from "./features/jobs";
 import { HelpButton, HelpSheet } from "./features/help";
 import { NotifButton, NotifSheet } from "./features/notifications";
+import { Palette } from "./features/palette";
 import { Journal } from "./features/journal";
 import { Settings } from "./features/settings";
 import { Setup } from "./features/setup";
@@ -41,8 +42,27 @@ export function App() {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        if (useStore.getState().ready) useStore.getState().searchParams();
+        if (useStore.getState().ready) useStore.getState().openPalette(true);
       }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  // Горячие клавиши без модификаторов: 1–5 — вкладки, ? — справка, N — уведомления.
+  // Не срабатывают, пока вы печатаете или открыто окно.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return;
+      const st = useStore.getState();
+      if (!st.ready || st.needLogin || st.helpOpen || st.notifOpen) return;
+      const n = Number(e.key);
+      if (n >= 1 && n <= TABS.length) st.setTab(TABS[n - 1][0]);
+      else if (e.key === "?") st.openHelp(true);
+      else if (e.key.toLowerCase() === "n") st.openNotif(true);
+      else return;
+      e.preventDefault();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -75,6 +95,7 @@ export function App() {
       <SignalSheet />
       <HelpSheet />
       <NotifSheet />
+      <Palette />
       <Toast />
       <TipLayer />
     </div>

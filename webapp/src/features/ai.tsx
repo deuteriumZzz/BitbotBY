@@ -106,7 +106,12 @@ export function AiPane() {
           />
           <span className="pill sp">{ai.chain.length}</span>
         </div>
-        {inChain.length ? <ChainList ai={ai} list={inChain} /> : <p className="empty">Пока ни одного провайдера. Добавьте бесплатный ниже — хватит одного ключа.</p>}
+        {inChain.length ? <ChainList ai={ai} list={inChain} /> : <div className="empty">
+            <p>Пока ни одного провайдера. Добавьте бесплатный — хватит одного ключа.</p>
+            <button className="btn primary" type="button" onClick={() => document.querySelector<HTMLInputElement>(".quick input")?.focus()}>
+              Вставить ключ
+            </button>
+          </div>}
       </article>
       <QuickAdd ai={ai} secretOf={secretOf} onSaved={() => setNeedRestart(true)} />
       <AddProviders ai={ai} list={rest} secretOf={secretOf} onSaved={() => setNeedRestart(true)} />

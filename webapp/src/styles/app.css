@@ -893,3 +893,13 @@ details.extra[open]>.card{animation:viewin .28s var(--ease-mech)}
 .quick-guess{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px;font:13px/1.4 var(--f-ui);color:var(--ink-2);animation:viewin .2s var(--ease-mech)}
 .quick-guess b{color:var(--ink)}
 .quick-guess .btn{margin-left:auto}
+/* Командная палитра */
+.pal-back{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.55);display:flex;justify-content:center;align-items:flex-start;padding:12vh 16px 16px;animation:fade-in var(--t-fast) linear}
+.pal{width:min(520px,100%);background:var(--panel);border:1px solid var(--line);border-radius:var(--r);box-shadow:0 18px 40px rgba(0,0,0,.6);animation:ctx-in .16s var(--ease-mech);transform-origin:top center;overflow:hidden}
+.pal-in{all:unset;box-sizing:border-box;width:100%;padding:14px 16px;border-bottom:1px solid var(--line);font:500 15px var(--f-ui);color:var(--ink)}
+.pal-in::placeholder{color:var(--ink-3)}
+.pal-list{list-style:none;margin:0;padding:6px;max-height:min(50vh,360px);overflow:auto}
+.pal-list li{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 10px;border-radius:var(--r-s);cursor:pointer;font:500 13px var(--f-ui);color:var(--ink-2)}
+.pal-list li.on{background:var(--panel-2);color:var(--ink);box-shadow:inset 2px 0 0 var(--brand)}
+.pal-list kbd{font:600 11px var(--f-num);color:var(--ink-3);border:1px solid var(--line-ui);border-radius:var(--r-s);padding:1px 6px}
+.pal-empty{cursor:default!important;color:var(--ink-3)!important}

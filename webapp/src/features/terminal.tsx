@@ -929,9 +929,12 @@ function Positions() {
           </article>
         ))}
         {!list.length && !leaving.length && (
-          <p className="empty">
-            Открытых позиций нет. Бот ищет сделки — следите за радаром.
-          </p>
+          <div className="empty">
+            <p>Открытых позиций нет. Бот ищет сделки — следите за радаром.</p>
+            <button className="btn" type="button" onClick={() => useStore.getState().openHelp(true)}>
+              Как бот выбирает сделки
+            </button>
+          </div>
         )}
       </div>
     </article>

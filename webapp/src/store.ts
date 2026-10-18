@@ -125,6 +125,7 @@ export interface Store {
   helpOpen: boolean;
   /** Окно уведомлений открыто и номер последнего просмотренного события. */
   notifOpen: boolean;
+  paletteOpen: boolean;
   seenFeed: number;
   /** Открытый шаг мастера первого запуска; null — мастер закрыт. */
   setup: SetupStep | null;
@@ -138,6 +139,7 @@ export interface Store {
   openSetup(step: SetupStep | null): void;
   openHelp(open: boolean): void;
   openNotif(open: boolean): void;
+  openPalette(open: boolean): void;
   /** Открыть «Настройки → Параметры» с фокусом в поиске. */
   searchParams(q?: string): void;
   clearParamSearch(): void;
@@ -254,6 +256,7 @@ export const useStore = create<Store>((set, get) => {
     setup: null,
     helpOpen: false,
     notifOpen: false,
+    paletteOpen: false,
     seenFeed: 0,
     paramSearch: null,
     tab: "terminal",
@@ -326,6 +329,7 @@ export const useStore = create<Store>((set, get) => {
     setTab: (tab) => set({ tab, setup: null }),
     openSetup: (setup) => set({ setup }),
     openHelp: (helpOpen) => set({ helpOpen }),
+    openPalette: (paletteOpen) => set({ paletteOpen }),
     openNotif: (notifOpen) => set((s) => (notifOpen ? { notifOpen, seenFeed: s.feed[0]?.id ?? s.seenFeed } : { notifOpen })),
     searchParams: (q = "") => set({ tab: "settings", setup: null, paramSearch: q }),
     clearParamSearch: () => set({ paramSearch: null }),
@@ -704,18 +708,24 @@ export const actions = {
     ),
   accountMode: (paper: boolean, pin = "") =>
     st().act(() => command("POST", "/api/account/mode", { paper, pin }), paper ? "Вернулись в Paper" : "Включён Live"),
-  async patchConfig(changes: Record<string, unknown>): Promise<PatchResult | null> {
+  async patchConfig(changes: Record<string, unknown>, opts?: { undo?: boolean }): Promise<PatchResult | null> {
+    // Прежние значения нужны для «Отменить»: возвращаем их тем же запросом.
+    const before = Object.fromEntries(
+      Object.keys(changes)
+        .map((k) => [k, st().config[k]?.value] as const)
+        .filter(([, v]) => v !== undefined),
+    );
     let result: PatchResult | null = null;
     const ok = await st().act(async () => {
       result = await api<PatchResult>("PATCH", "/api/config", changes);
     });
     if (!ok || !result) return null;
     const r: PatchResult = result;
-    st().say(
-      r.pending_restart.length
-        ? `Сразу: ${r.applied_hot.length}. После перезапуска: ${r.pending_restart.length}.`
-        : "Применено — бот уже работает с новыми настройками",
-    );
+    const text = r.pending_restart.length
+      ? `Сразу: ${r.applied_hot.length}. После перезапуска: ${r.pending_restart.length}.`
+      : "Применено — бот уже работает с новыми настройками";
+    if (opts?.undo !== false && Object.keys(before).length) st().sayUndo(text, () => void actions.patchConfig(before, { undo: false }));
+    else st().say(text);
     await st().loadConfig().catch(() => undefined);
     return r;
   },
