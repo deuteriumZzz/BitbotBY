@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { fmtN, plural } from "../lib/format";
+import { detectProvider } from "../lib/keys";
 import { reducedMotion } from "../lib/platform";
 import type { AiMode, AiModel, AiProvider, AiState, SecretItem } from "../lib/types";
 import { actions, useStore } from "../store";
@@ -107,6 +108,7 @@ export function AiPane() {
         </div>
         {inChain.length ? <ChainList ai={ai} list={inChain} /> : <p className="empty">Пока ни одного провайдера. Добавьте бесплатный ниже — хватит одного ключа.</p>}
       </article>
+      <QuickAdd ai={ai} secretOf={secretOf} onSaved={() => setNeedRestart(true)} />
       <AddProviders ai={ai} list={rest} secretOf={secretOf} onSaved={() => setNeedRestart(true)} />
       {needRestart && (
         <div className="applybar">
@@ -767,6 +769,108 @@ function ModelPicker({ ai, p }: { ai: AiState; p: AiProvider }) {
         {busy ? <span className="spin" /> : "Загрузить список"}
       </button>
     </div>
+  );
+}
+
+// ── Быстрое добавление: вставили ключ — провайдер определился сам ─────────────
+
+function QuickAdd(props: { ai: AiState; secretOf: (id: string) => SecretItem | undefined; onSaved: () => void }) {
+  const { ai } = props;
+  const [val, setVal] = useState("");
+  const [pick, setPick] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  const [over, setOver] = useState(false);
+  const guess = detectProvider(val);
+  const chosen = guess.length === 1 ? guess[0] : pick;
+  const provider = ai.providers.find((p) => p.id === chosen);
+  const field = props.secretOf(chosen)?.fields.find((f) => f.secret) ?? props.secretOf(chosen)?.fields[0];
+  const take = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setOver(false);
+    const file = e.dataTransfer.files[0];
+    const text = file ? await file.text() : e.dataTransfer.getData("text");
+    if (text.trim()) setVal(text.trim().split(/\s+/)[0]);
+  };
+  const save = async () => {
+    if (!provider || !field) return;
+    setBusy(true);
+    const ok = await actions.putSecret(provider.id, { [field.env]: val.trim() });
+    setBusy(false);
+    if (ok) {
+      setVal("");
+      setPick("");
+      setDone(true);
+      setTimeout(() => setDone(false), 1800);
+      props.onSaved();
+    }
+  };
+  return (
+    <article className={`card quick${over ? " over" : ""}${done ? " done" : ""}`} onDragOver={(e) => (e.preventDefault(), setOver(true))} onDragLeave={() => setOver(false)} onDrop={(e) => void take(e)}>
+      <div className="card-h">
+        <h2>Вставьте ключ</h2>
+        <Q tip="Определю провайдера по началу ключа (например, gsk_ — Groq). Ключ уходит на сервер, проверяется запросом к сервису и хранится зашифрованным. Можно перетащить сюда текст или файл с ключом." />
+      </div>
+      <div className="quick-row">
+        <svg className="lock" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+          <rect x="5" y="11" width="14" height="9" rx="2" />
+          <path className="shackle" d="M8 11V8a4 4 0 0 1 8 0v3" />
+        </svg>
+        <input
+          className="inp"
+          type="password"
+          autoComplete="off"
+          spellCheck={false}
+          placeholder="Вставьте или перетащите ключ"
+          aria-label="Ключ нового провайдера"
+          value={val}
+          onChange={(e) => setVal(e.target.value)}
+        />
+      </div>
+      {val.trim().length >= 8 && (
+        <div className="quick-guess" aria-live="polite">
+          {guess.length === 1 && provider && (
+            <span>
+              Похоже на <b>{provider.name}</b>
+              {provider.key_set && " — ключ уже есть, он будет заменён"}.
+            </span>
+          )}
+          {guess.length > 1 && (
+            <>
+              <span>Начало подходит нескольким — выберите:</span>
+              {guess.map((id) => (
+                <button key={id} type="button" className="chip-btn" aria-pressed={pick === id} onClick={() => setPick(id)}>
+                  {ai.providers.find((p) => p.id === id)?.name ?? id}
+                </button>
+              ))}
+            </>
+          )}
+          {guess.length === 0 && (
+            <>
+              <span>Формат не узнал — выберите провайдера:</span>
+              <select className="sel" value={pick} aria-label="Провайдер" onChange={(e) => setPick(e.target.value)}>
+                <option value="">—</option>
+                {ai.providers.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
+          <button className="btn primary" type="button" disabled={busy || !provider || !field} onClick={() => void save()}>
+            {busy ? (
+              <>
+                <span className="spin" />
+                Проверяю…
+              </>
+            ) : (
+              "Проверить и сохранить"
+            )}
+          </button>
+        </div>
+      )}
+    </article>
   );
 }
 
