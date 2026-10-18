@@ -561,6 +561,51 @@ function checkField(env: string, label: string, secret: boolean, v: string): str
   return "";
 }
 
+/** Подсказка для Telegram: вы пишете боту, мы находим ваш chat id и подставляем его в поле. */
+function ChatFinder({ token, hasToken, onFound }: { token: string; hasToken: boolean; onFound: (id: string) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [chats, setChats] = useState<{ id: string; name: string }[] | null>(null);
+  const [note, setNote] = useState("");
+  const find = async () => {
+    setBusy(true);
+    const found = await actions.findTelegramChat(token.trim());
+    setBusy(false);
+    if (!found) return;
+    setChats(found);
+    if (found.length === 1) {
+      onFound(found[0].id);
+      setNote(`Нашёл: ${found[0].name || "ваш чат"} (${found[0].id}). Он подставлен в поле, осталось сохранить.`);
+    } else setNote(found.length ? "Писало несколько человек — выберите себя:" : "Пока ничего не пришло: откройте своего бота в Telegram, отправьте ему /start и нажмите ещё раз.");
+  };
+  return (
+    <div className="chatfind">
+      <p className="kf-h">
+        1. Вставьте токен бота (@BotFather). 2. Откройте своего бота в Telegram и отправьте ему <code>/start</code>. 3. Нажмите кнопку, и chat id найдётся сам.
+      </p>
+      <button className="btn" type="button" disabled={busy || (!token.trim() && !hasToken)} onClick={() => void find()}>
+        {busy ? (
+          <>
+            <span className="spin" />
+            Ищу…
+          </>
+        ) : (
+          "Найти мой chat id"
+        )}
+      </button>
+      {note && <p className="note-soon" aria-live="polite">{note}</p>}
+      {chats && chats.length > 1 && (
+        <div className="chatpick">
+          {chats.map((c) => (
+            <button key={c.id} type="button" className="chip-btn" onClick={() => (onFound(c.id), setNote(`Выбран ${c.name || c.id}. Осталось сохранить.`))}>
+              {c.name || c.id}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function KeyCard({ item }: { item: SecretItem }) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [model, setModel] = useState(item.model?.value ?? "");
@@ -660,6 +705,13 @@ export function KeyCard({ item }: { item: SecretItem }) {
         </div>
       )}
       {item.service === "bybit" && <TestnetRow />}
+      {item.service === "telegram" && (
+        <ChatFinder
+          token={values.TELEGRAM_BOT_TOKEN ?? ""}
+          hasToken={item.fields.some((f) => f.env === "TELEGRAM_BOT_TOKEN" && f.set)}
+          onFound={(id) => setValues((v) => ({ ...v, TELEGRAM_CHAT_ID: id }))}
+        />
+      )}
       <div className="kc-a">
         <button className="btn primary" type="button" disabled={busy} onClick={() => void save()}>
           {busy ? (

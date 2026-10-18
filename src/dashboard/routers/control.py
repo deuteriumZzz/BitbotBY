@@ -899,6 +899,42 @@ def _secret_item(service_id: str) -> Dict[str, Any]:
     return next(i for i in secrets_store.public_view() if i["service"] == service_id)
 
 
+@router.post("/api/secrets/telegram/chat")
+async def telegram_find_chat(request: Request) -> JSONResponse:
+    """Помощник: найти свой chat id по тому, кто написал боту (токен не сохраняется)."""
+    denied = _control_denied(request)
+    if denied is not None:
+        return denied
+    body = await _body(request)
+    token = str(body.get("token") or "").strip() or (
+        secrets_store.get_value("TELEGRAM_BOT_TOKEN") or ""
+    )
+    if not token:
+        return _err(400, "no_token", "Сначала вставьте токен бота от @BotFather.")
+    import httpx  # noqa: PLC0415
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(
+                f"https://api.telegram.org/bot{token}/getUpdates",
+                params={"limit": 50, "timeout": 0},
+            )
+    except httpx.HTTPError:
+        return _err(502, "telegram_unreachable", "Telegram не ответил. Повторите.")
+    if resp.status_code in (401, 404):
+        return _err(400, "bad_token", "Токен не подошёл. Проверьте его в @BotFather.")
+    if resp.status_code == 409:
+        return _err(
+            409,
+            "busy",
+            "Этот бот уже опрашивает другая программа (например, сервер). "
+            "Узнайте chat id у @userinfobot.",
+        )
+    if resp.status_code != 200:
+        return _err(502, "telegram_error", f"Telegram ответил {resp.status_code}.")
+    return JSONResponse({"chats": secrets_store.telegram_chats(resp.json())})
+
+
 @router.get("/api/secrets")
 async def get_secrets(request: Request) -> JSONResponse:
     denied = _secrets_unavailable(request)

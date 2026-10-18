@@ -8,11 +8,13 @@ import sqlite3
 from datetime import datetime, timedelta
 from unittest.mock import patch
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from src import bot_bus
+from src import secrets_store as ss
 from src.dashboard import data
 from src.dashboard.routers import control
 from tests.test_bot_bus import FakeRedis
@@ -519,3 +521,61 @@ async def test_execution_endpoint_skips_old_null_rows(tmp_path, monkeypatch, cli
     assert body["n"] == data.EXEC_MIN_TRADES and body["simulated"] is True
     assert body["slippage_pct_avg"] == pytest.approx(1.0)
     assert bad.status_code == 400
+
+
+def _telegram_transport(status, payload):
+    def handler(request):
+        assert "/getUpdates" in request.url.path
+        return httpx.Response(status, json=payload)
+
+    return httpx.MockTransport(handler)
+
+
+def test_find_telegram_chat_returns_private_chats(client, monkeypatch):
+    real = httpx.AsyncClient
+    transport = _telegram_transport(
+        200,
+        {
+            "ok": True,
+            "result": [
+                {"message": {"chat": {"id": 5, "type": "private", "first_name": "Я"}}}
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda **kw: real(transport=transport, timeout=kw.get("timeout")),
+    )
+    with patch.object(control, "_control_denied", return_value=None):
+        resp = client.post("/api/secrets/telegram/chat", json={"token": "1" * 40})
+    assert resp.status_code == 200 and resp.json() == {
+        "chats": [{"id": "5", "name": "Я"}]
+    }
+
+
+@pytest.mark.parametrize("status,code", [(401, "bad_token"), (409, "busy")])
+def test_find_telegram_chat_explains_failures(client, monkeypatch, status, code):
+    real = httpx.AsyncClient
+    transport = _telegram_transport(status, {"ok": False})
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda **kw: real(transport=transport, timeout=kw.get("timeout")),
+    )
+    with patch.object(control, "_control_denied", return_value=None):
+        resp = client.post("/api/secrets/telegram/chat", json={"token": "1" * 40})
+    assert resp.json()["error"]["code"] == code
+
+
+def test_find_telegram_chat_needs_token_and_control(client):
+    with patch.object(control, "_control_denied", return_value=None), patch.object(
+        ss, "get_value", return_value=None
+    ):
+        assert (
+            client.post("/api/secrets/telegram/chat", json={}).json()["error"]["code"]
+            == "no_token"
+        )
+    assert client.post(
+        "/api/secrets/telegram/chat", json={"token": "x"}
+    ).status_code in (401, 403)

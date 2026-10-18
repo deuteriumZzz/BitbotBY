@@ -71,3 +71,32 @@ def test_pick_port_skips_busy_ones():
     assert launch.pick_port(8080, lambda p: p in busy) == 8082
     assert launch.pick_port(8080, lambda p: False) == 8080
     assert launch.pick_port(8080, lambda p: True) == 8080  # всё занято: прежний порт
+
+
+def test_autostart_templates_point_at_the_launcher(tmp_path):
+    script = tmp_path / "launch.py"
+    plist = launch.launchd_plist(
+        "/usr/bin/python3", script, tmp_path, tmp_path / "l.log"
+    )
+    assert "RunAtLoad" in plist and str(script) in plist and "--no-browser" in plist
+    assert launch.LAUNCHD_LABEL in plist
+    unit = launch.systemd_unit("/usr/bin/python3", script, tmp_path)
+    assert f"ExecStart=/usr/bin/python3 {script} start --no-browser" in unit
+    assert "ExecStop=/usr/bin/python3" in unit
+    bat = launch.windows_startup_bat("C:\\py\\python.exe", script, tmp_path)
+    assert "start --no-browser" in bat and bat.startswith("@echo off")
+
+
+def test_state_keeps_other_keys_when_saved(tmp_path):
+    state = launch.load_state(tmp_path)
+    key = state["secrets_key"]
+    state["keep_awake"] = "1"
+    launch.save_state(state, tmp_path)
+    again = launch.load_state(tmp_path)
+    assert again["secrets_key"] == key and again["keep_awake"] == "1"
+
+
+def test_awake_not_running_without_pid_file(tmp_path):
+    assert launch.awake_running(tmp_path) is False
+    (tmp_path / launch.AWAKE_PID).write_text("not-a-number")
+    assert launch.awake_running(tmp_path) is False

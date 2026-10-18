@@ -769,6 +769,15 @@ export const actions = {
       return { ok: false, ms: Math.round(performance.now() - t0), message: e instanceof ApiError ? e.message : "нет связи с сервером" };
     }
   },
+  /** Найти свой chat id: кто писал боту. Токен берётся из поля или из сохранённого. */
+  findTelegramChat: async (token: string): Promise<{ id: string; name: string }[] | null> => {
+    try {
+      return (await api<{ chats: { id: string; name: string }[] }>("POST", "/api/secrets/telegram/chat", token ? { token } : {})).chats;
+    } catch (e) {
+      st().say(e instanceof ApiError ? e.message : "Не удалось связаться с Telegram.");
+      return null;
+    }
+  },
   deleteSecret: (service: string) =>
     st().act(() => api("DELETE", `/api/secrets/${service}`).then(() => st().loadSecrets()), "Ключ удалён"),
 };

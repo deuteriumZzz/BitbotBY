@@ -218,3 +218,41 @@ def test_x_account_routes(keyed):
     assert ok.status_code == 200 and "pw" not in ok.text and "mp" not in ok.text
     assert ok.json()["accounts"] == [{"login": "alice", "email": "a***@m.com"}]
     assert gone.json()["accounts"] == [] and again.status_code == 404
+
+
+def test_telegram_chats_only_private_and_deduplicated():
+    payload = {
+        "result": [
+            {
+                "message": {
+                    "chat": {
+                        "id": 42,
+                        "type": "private",
+                        "first_name": "Дмитрий",
+                        "last_name": "В",
+                    }
+                }
+            },
+            {
+                "message": {
+                    "chat": {"id": 42, "type": "private", "first_name": "Дмитрий"}
+                }
+            },
+            {
+                "message": {
+                    "chat": {"id": -100, "type": "supergroup", "title": "группа"}
+                }
+            },
+            {
+                "edited_message": {
+                    "chat": {"id": 7, "type": "private", "username": "bob"}
+                }
+            },
+            {"callback_query": {"id": "x"}},
+        ]
+    }
+    assert ss.telegram_chats(payload) == [
+        {"id": "42", "name": "Дмитрий"},
+        {"id": "7", "name": "bob"},
+    ]
+    assert ss.telegram_chats({}) == []

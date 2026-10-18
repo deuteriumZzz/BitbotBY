@@ -6,6 +6,8 @@
     python launcher/launch.py status   # что запущено
     python launcher/launch.py logs     # последние логи
     python launcher/launch.py url      # новая ссылка входа, если окно закрыли
+    python launcher/launch.py autostart on|off|status   # запуск при входе в систему
+    python launcher/launch.py awake on|off|status       # не давать компьютеру уснуть
 
 Нужны только Docker и Python 3 (стандартная библиотека, ничего ставить не надо).
 Бот стартует в Paper. Ключи API вводятся в самом приложении и хранятся зашифрованными.
@@ -17,6 +19,7 @@ import base64
 import json
 import os
 import secrets
+import shutil
 import socket
 import subprocess
 import sys
@@ -250,6 +253,8 @@ def cmd_start(port: int, data_dir: Optional[Path], open_browser: bool = True) ->
         "Они хранятся зашифрованными."
     )
     say("Остановить: python launcher/launch.py stop")
+    if load_state().get("keep_awake") == "1":
+        spawn_awake()
     if open_browser:
         webbrowser.open(url)
     else:
@@ -269,6 +274,221 @@ def cmd_url(port: int, data_dir: Optional[Path]) -> int:
         return 1
     webbrowser.open(url)
     return 0
+
+
+# ── Автозапуск при входе в систему и «не засыпать» ───────────────────────────
+# Оба режима включаются явной командой: это изменение настроек вашей системы.
+
+LAUNCHD_LABEL = "by.bitbotby.launcher"
+AWAKE_PID = "awake.pid"
+
+
+def save_state(state: Dict[str, str], state_dir: Path = STATE_DIR) -> None:
+    write_private(state_dir / "state.json", json.dumps(state))
+
+
+def launchd_plist(
+    python: str, script: Path, root: Path, log: Path
+) -> str:  # noqa: E501
+    """Агент входа macOS: при входе в систему поднимает бота без окна браузера."""
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>{LAUNCHD_LABEL}</string>
+  <key>ProgramArguments</key><array>
+    <string>{python}</string><string>{script}</string><string>start</string><string>--no-browser</string>
+  </array>
+  <key>WorkingDirectory</key><string>{root}</string>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>{log}</string>
+  <key>StandardErrorPath</key><string>{log}</string>
+</dict></plist>
+"""
+
+
+def systemd_unit(python: str, script: Path, root: Path) -> str:
+    return f"""[Unit]
+Description=BitbotBY (локальный запуск)
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory={root}
+ExecStart={python} {script} start --no-browser
+ExecStop={python} {script} stop
+
+[Install]
+WantedBy=default.target
+"""
+
+
+def windows_startup_bat(python: str, script: Path, root: Path) -> str:
+    return (
+        f'@echo off\r\ncd /d "{root}"\r\n"{python}" "{script}" start --no-browser\r\n'
+    )
+
+
+def autostart_file() -> Path:
+    home = Path.home()
+    if sys.platform == "darwin":
+        return home / "Library" / "LaunchAgents" / f"{LAUNCHD_LABEL}.plist"
+    if sys.platform.startswith("win"):
+        appdata = Path(os.environ.get("APPDATA", str(home)))
+        return appdata / "Microsoft/Windows/Start Menu/Programs/Startup/BitbotBY.bat"
+    return home / ".config" / "systemd" / "user" / "bitbotby.service"
+
+
+def cmd_autostart(action: str) -> int:
+    path = autostart_file()
+    script = Path(__file__).resolve()
+    if action == "status":
+        say("Автозапуск при входе: " + ("включён" if path.exists() else "выключен"))
+        return 0
+    if action == "off":
+        if sys.platform == "darwin" and path.exists():
+            run(
+                ["launchctl", "bootout", f"gui/{os.getuid()}", str(path)],
+                capture_output=True,
+            )
+        elif sys.platform.startswith("linux") and path.exists():
+            run(
+                ["systemctl", "--user", "disable", "--now", "bitbotby.service"],
+                capture_output=True,
+            )
+        path.unlink(missing_ok=True)
+        say("Автозапуск выключен.")
+        return 0
+    if action != "on":
+        say("Используйте: autostart on | off | status")
+        return 2
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if sys.platform == "darwin":
+        path.write_text(
+            launchd_plist(sys.executable, script, ROOT, STATE_DIR / "autostart.log"),
+            encoding="utf-8",
+        )
+        run(
+            ["launchctl", "bootstrap", f"gui/{os.getuid()}", str(path)],
+            capture_output=True,
+        )
+    elif sys.platform.startswith("win"):
+        path.write_text(
+            windows_startup_bat(sys.executable, script, ROOT), encoding="utf-8"
+        )
+    else:
+        path.write_text(systemd_unit(sys.executable, script, ROOT), encoding="utf-8")
+        run(
+            ["systemctl", "--user", "enable", "--now", "bitbotby.service"],
+            capture_output=True,
+        )
+    say("Автозапуск включён: бот будет подниматься сам при входе в систему.")
+    say(
+        "Docker Desktop тоже должен запускаться при входе "
+        "(его настройка «Start Docker Desktop when you sign in»)."
+    )
+    return 0
+
+
+def awake_running(state_dir: Path = STATE_DIR) -> bool:
+    try:
+        pid = int((state_dir / AWAKE_PID).read_text().strip())
+        os.kill(pid, 0)
+        return True
+    except (OSError, ValueError):
+        return False
+
+
+def spawn_awake() -> None:
+    """Фоновый процесс, который не даёт компьютеру уснуть, пока работает бот."""
+    if awake_running():
+        return
+    kw: Dict[str, object] = {
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.DEVNULL,
+        "stdin": subprocess.DEVNULL,
+    }
+    if sys.platform.startswith("win"):
+        kw["creationflags"] = 0x00000008  # DETACHED_PROCESS
+    else:
+        kw["start_new_session"] = True
+    me = str(Path(__file__).resolve())
+    subprocess.Popen([sys.executable, me, "awake-run"], **kw)  # type: ignore[call-overload]
+
+
+def bot_running() -> bool:
+    try:
+        out = run(
+            ["docker", "ps", "-q", "--filter", "name=bitbotby-bot-1"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return True  # не можем проверить — не отпускаем сон раньше времени
+    return bool(out.stdout.strip())
+
+
+def cmd_awake_run() -> int:
+    write_private(STATE_DIR / AWAKE_PID, str(os.getpid()))
+    guard: Optional[subprocess.Popen] = None  # type: ignore[type-arg]
+    try:
+        if sys.platform == "darwin":
+            guard = subprocess.Popen(["caffeinate", "-i"])
+        elif sys.platform.startswith("win"):
+            import ctypes  # noqa: PLC0415
+
+            keep = 0x80000001  # ES_CONTINUOUS | ES_SYSTEM_REQUIRED
+            ctypes.windll.kernel32.SetThreadExecutionState(keep)  # type: ignore[attr-defined]
+        elif shutil.which("systemd-inhibit"):
+            guard = subprocess.Popen(
+                [
+                    "systemd-inhibit",
+                    "--what=idle:sleep",
+                    "--why=BitbotBY работает",
+                    "sleep",
+                    "infinity",
+                ]
+            )
+        while bot_running():
+            time.sleep(60)
+    finally:
+        if guard is not None:
+            guard.terminate()
+        (STATE_DIR / AWAKE_PID).unlink(missing_ok=True)
+    return 0
+
+
+def cmd_awake(action: str) -> int:
+    state = load_state()
+    if action == "status":
+        say(
+            "Не давать компьютеру уснуть: "
+            + ("включено" if state.get("keep_awake") == "1" else "выключено")
+            + (", работает сейчас" if awake_running() else "")
+        )
+        return 0
+    if action == "on":
+        state["keep_awake"] = "1"
+        save_state(state)
+        if bot_running():
+            spawn_awake()
+        say(
+            "Включено: пока работает бот, компьютер не уснёт сам. "
+            "Закрытая крышка ноутбука всё равно усыпляет его."
+        )
+        return 0
+    if action == "off":
+        state["keep_awake"] = "0"
+        save_state(state)
+        try:
+            os.kill(int((STATE_DIR / AWAKE_PID).read_text().strip()), 15)
+        except (OSError, ValueError):
+            pass
+        say("Выключено.")
+        return 0
+    say("Используйте: awake on | off | status")
+    return 2
 
 
 def main(argv: List[str]) -> int:
@@ -291,6 +511,12 @@ def main(argv: List[str]) -> int:
         return cmd_start(port, data_dir, open_browser="--no-browser" not in argv)
     if action == "url":
         return cmd_url(port, data_dir)
+    if action == "autostart":
+        return cmd_autostart(args[1] if len(args) > 1 else "status")
+    if action == "awake":
+        return cmd_awake(args[1] if len(args) > 1 else "status")
+    if action == "awake-run":
+        return cmd_awake_run()
     if action == "stop":
         return run(compose_cmd(["down"])).returncode
     if action == "status":

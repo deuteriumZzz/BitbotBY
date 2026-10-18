@@ -41,7 +41,7 @@ export function readiness(info: SetupInfo | null, ai: AiState | null, preset: st
       title: "Telegram",
       ok: Boolean(info?.telegram),
       need: false,
-      text: info?.telegram ? "уведомления и подтверждения в чате" : "необязательно — всё видно в приложении",
+      text: info?.telegram ? "уведомления и подтверждения в чате" : "необязательно — приложение работает и без него",
     },
     {
       step: "ai",

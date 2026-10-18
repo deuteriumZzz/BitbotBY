@@ -739,6 +739,8 @@ function route(method: string, path: string, body: unknown): unknown {
       return configHistory;
     case "GET /api/secrets":
       return secrets;
+    case "POST /api/secrets/telegram/chat":
+      return { chats: [{ id: "123456789", name: "Дмитрий" }] };
     case "GET /api/setup": {
       const has = (id: string) => Boolean(secrets.find((s) => s.service === id)?.fields.every((f) => f.set || f.optional));
       return { keys_in_app: true, bybit: has("bybit"), telegram: has("telegram") };

@@ -563,6 +563,21 @@ async def _check_http(client: Any, service_id: str, values: Dict[str, str]) -> R
     return "warn", _NOT_SUPPORTED
 
 
+def telegram_chats(payload: Dict[str, Any]) -> List[Dict[str, str]]:
+    """Личные чаты из ответа getUpdates: те, кто писал боту (без групп и каналов)."""
+    seen: Dict[str, str] = {}
+    for update in payload.get("result") or []:
+        msg = update.get("message") or update.get("edited_message") or {}
+        chat = msg.get("chat") or {}
+        if chat.get("type") != "private" or "id" not in chat:
+            continue
+        name = " ".join(
+            x for x in (chat.get("first_name"), chat.get("last_name")) if x
+        ) or str(chat.get("username") or "")
+        seen[str(chat["id"])] = name
+    return [{"id": k, "name": v} for k, v in seen.items()]
+
+
 def bybit_permissions_result(info: Dict[str, Any]) -> Result:
     """Разбор ответа Bybit /v5/user/query-api."""
     perms = info.get("permissions") or {}
