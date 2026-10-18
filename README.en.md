@@ -11,8 +11,7 @@ Claude / DeepSeek / OpenAI / Groq / Gemini · SAC (RL) · Amazon Chronos · 10+ 
 [![Python 3.11](https://img.shields.io/badge/python-3.11-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/dashboard-FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![Docker](https://img.shields.io/badge/deploy-Docker%20Compose-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
-[![Tests](https://img.shields.io/badge/tests-1242%20passing-brightgreen)](#-tests)
-[![Coverage](https://img.shields.io/badge/coverage-69%25-yellow)](#-tests)
+[![Tests](https://img.shields.io/badge/tests-1881%20python%20%2B%2016%20web-brightgreen)](#-tests)
 [![Bybit](https://img.shields.io/badge/exchange-Bybit%20Futures-F7A600)](https://www.bybit.com/)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
@@ -230,6 +229,33 @@ Macro blackout (FOMC/CPI/NFP) · Correlation filter · Liquidity filter (spread/
 Circuit breaker and daily loss limit · **Hard drawdown halt** (closes losing positions, moves SL to
 breakeven on profitable ones, blocks new entries) · **ATR spike protection** (closes all positions,
 1h pause) · Dynamic leverage (fixed/volatility/full, ATR-based) · Trailing stop + partial TP.
+
+---
+
+## 📲 App, One-Click Launcher and What's New
+
+> The Russian [README.md](README.md) is the most up to date; this section summarises what changed.
+
+- **App** (`webapp/`, React + Vite): Telegram MiniApp, browser (`/app/`) and desktop shell share one interface with
+  the same capabilities as the Telegram menu. Tabs: Terminal (balance, radar, positions with "why opened", chart,
+  Fear & Greed gauge and market season), Bot (risk mode, market profile, spot/futures, decision mode, strategies),
+  Learn (train/tune SAC **per profile**, rollback, backtest, alpha checks), Journal (trades with reasons, CSV export),
+  Settings (AI providers, keys, all parameters with history, undo and search). Command palette `Ctrl/⌘ K`,
+  hotkeys `1–5` / `?` / `N`, notification centre.
+- **One-click launcher** (needs Docker Desktop and Python 3): double-click `BitbotBY.command` (macOS) or
+  `BitbotBY.bat` (Windows), or run `./bitbotby.sh`. It builds the image, starts Redis + bot + dashboard on
+  `127.0.0.1` (a free port is picked if 8080 is taken), creates the encryption master key itself and opens the app
+  with a one-time local login link. It starts in **Paper** and **Local** mode, so no keys are needed at first.
+- **AI providers**: 16 providers, a chain (ask the next one on error or limit) or a single provider. The chain is
+  shown as a node canvas: drag a node to reorder, drag it into "Reserve" to switch it off (the key stays), right-click
+  for actions (probe, who replaces it, delete key with undo). Paste a key and the provider is detected automatically.
+- **Keys** entered in the app are stored encrypted (Fernet, master key `BITBOT_SECRETS_KEY`); the app shows only the
+  last 4 characters. A key from the app wins over `.env`.
+- **Strategies**: 20 built-in plus 49 experimental ports from Argent-Systems (off by default). Each has a spot/futures
+  flag. Backtests found **no statistically significant edge** for any of them — see [docs/STRATEGIES.md](docs/STRATEGIES.md).
+  `MODE=local` runs on local strategies only, without AI.
+- **Paper tools**: `PAPER_GUARDS_OFF` switches portfolio protections off in Paper (ignored in Live).
+- Tests: 1881 backend (pytest) + 16 frontend (vitest).
 
 ---
 
