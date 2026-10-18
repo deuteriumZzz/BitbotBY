@@ -8,6 +8,8 @@ import { reducedMotion } from "../lib/platform";
 import type { AiMode, AiModel, AiProvider, AiState, SecretItem } from "../lib/types";
 import { actions, useStore } from "../store";
 import { Icon, Q, Seg, Skel, Toggle } from "../ui";
+import { ChainGraph } from "./chaingraph";
+import { Avatar, ChainMenu, STATUS, chosenId, hhmm, pin, useChainOps, type Probe } from "./chainops";
 
 const EASE = "cubic-bezier(.2,.8,.2,1)";
 
@@ -32,35 +34,12 @@ const HOW_NOTE = {
     "Решения всегда принимает одна и та же модель — стабильнее и предсказуемее. Если она недоступна (лимит, нет связи), цикл идёт без AI, на локальных стратегиях.",
 };
 
-/** Провайдер, который решает в режиме «Один провайдер». */
-const chosenId = (ai: AiState) => (ai.pinned !== "auto" ? ai.pinned : (ai.chain[0]?.provider ?? ""));
-
-const STATUS: Record<string, [string, string]> = {
-  ok: ["ok", "работает"],
-  rate_limit: ["warn", "лимит"],
-  no_balance: ["bad", "нет денег"],
-  bad_key: ["bad", "ключ не принят"],
-  bad_model: ["bad", "нет такой модели"],
-  bad_format: ["warn", "ломает формат ответа"],
-  bad_request: ["warn", "отклонил запрос"],
-  error: ["warn", "нет связи"],
-  unknown: ["", "ещё не отвечал"],
-};
-
-const hhmm = (epoch: number) =>
-  new Date(epoch * 1000).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
-
 const modelLabel = (m: AiModel) =>
   `${m.id}${m.recommended ? " ★" : ""} · ${m.free ? "бесплатно" : "платно"}${m.strong ? "" : " · слабая"}`;
 
 /** Модели, выбранные в приложении: PUT заменяет карту целиком. */
 const appModels = (ai: AiState) =>
   Object.fromEntries(ai.providers.filter((p) => p.model_source === "app").map((p) => [p.id, p.model]));
-
-/** Закрепить провайдера (AI_PROVIDER, как /provider в Telegram) и сразу обновить раздел. */
-async function pin(id: string): Promise<void> {
-  if (await actions.patchConfig({ AI_PROVIDER: id })) await useStore.getState().loadAi().catch(() => undefined);
-}
 
 /** Цепочка ↔ один провайдер. Переходя к одному, явно закрепляем того, кто сейчас первый. */
 async function setHow(ai: AiState, how: "chain" | "single"): Promise<void> {
@@ -75,6 +54,21 @@ export function AiPane() {
   const secrets = useStore((s) => s.secrets);
   const [needRestart, setNeedRestart] = useState(false);
   const local = useStore((s) => s.bot?.mode === "local");
+  const [chainView, setChainView] = useState<"list" | "graph">(() => {
+    try {
+      return localStorage.getItem("bitbot.chainview") === "list" ? "list" : "graph";
+    } catch {
+      return "graph";
+    }
+  });
+  const pickView = (v: "list" | "graph") => {
+    setChainView(v);
+    try {
+      localStorage.setItem("bitbot.chainview", v);
+    } catch {
+      /* без хранилища выбор живёт до перезагрузки */
+    }
+  };
   if (!ai) return <Skel rows={4} label="Загружаю список провайдеров" />;
   const inChain = ai.providers.filter((p) => p.usable);
   const rest = ai.providers.filter((p) => !p.usable);
@@ -105,8 +99,19 @@ export function AiPane() {
             }
           />
           <span className="pill sp">{ai.chain.length}</span>
+          <Seg className="sm" value={chainView} options={[["graph", "Схема"], ["list", "Список"]]} onChange={pickView} label="Вид цепочки" />
         </div>
-        {inChain.length ? <ChainList ai={ai} list={inChain} /> : <div className="empty">
+        {inChain.length && chainView === "graph" ? (
+          <ChainGraph
+            ai={ai}
+            list={inChain}
+            onAdd={() => {
+              const f = document.querySelector<HTMLInputElement>(".quick input");
+              f?.scrollIntoView({ block: "center", behavior: "smooth" });
+              f?.focus();
+            }}
+          />
+        ) : inChain.length ? <ChainList ai={ai} list={inChain} /> : <div className="empty">
             <p>Пока ни одного провайдера. Добавьте бесплатный — хватит одного ключа.</p>
             <button className="btn primary" type="button" onClick={() => document.querySelector<HTMLInputElement>(".quick input")?.focus()}>
               Вставить ключ
@@ -251,18 +256,6 @@ function useRelay(host: React.RefObject<HTMLElement>, last: string): React.CSSPr
   return at && { transform: `translateY(${at[0]}px)`, height: at[1] };
 }
 
-const applyOrder = (all: string[], subset: string[], next: string[]): string[] => {
-  const inSet = new Set(subset);
-  let k = 0;
-  return all.map((id) => (inSet.has(id) ? next[k++] : id));
-};
-
-interface Probe {
-  busy?: boolean;
-  ok?: boolean;
-  ms?: number;
-  message?: string;
-}
 interface Drag {
   id: string;
   h: number;
@@ -271,119 +264,29 @@ interface Drag {
   tops: Record<string, number>;
   bin: boolean;
 }
-interface CtxItem {
-  label: string;
-  hint?: string;
-  danger?: boolean;
-  disabled?: boolean;
-  run: () => void;
-}
-
-/** Контекстное меню: правый щелчок, долгое нажатие или кнопка «⋯»; стрелки, Enter, Esc. */
-function ChainMenu({ items, x, y, onClose }: { items: CtxItem[]; x: number; y: number; onClose: () => void }) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    ref.current?.querySelector<HTMLElement>("button:not(:disabled)")?.focus();
-    const away = (e: PointerEvent) => {
-      if (!ref.current?.contains(e.target as Node)) onClose();
-    };
-    const key = (e: KeyboardEvent) => {
-      const bs = Array.from(ref.current?.querySelectorAll<HTMLElement>("button:not(:disabled)") ?? []);
-      const i = bs.indexOf(document.activeElement as HTMLElement);
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onClose();
-      } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-        e.preventDefault();
-        const step = e.key === "ArrowDown" ? 1 : -1;
-        bs[(i + step + bs.length) % bs.length]?.focus();
-      }
-    };
-    window.addEventListener("pointerdown", away, true);
-    window.addEventListener("keydown", key);
-    return () => {
-      window.removeEventListener("pointerdown", away, true);
-      window.removeEventListener("keydown", key);
-    };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const style = { left: Math.max(8, Math.min(x, window.innerWidth - 248)), top: Math.max(8, Math.min(y, window.innerHeight - items.length * 52 - 16)) };
-  return (
-    <div ref={ref} className="ctx" role="menu" style={style}>
-      {items.map((it) => (
-        <button
-          key={it.label}
-          type="button"
-          role="menuitem"
-          className={`ctx-i${it.danger ? " danger" : ""}`}
-          disabled={it.disabled}
-          onClick={() => {
-            onClose();
-            it.run();
-          }}
-        >
-          <span>{it.label}</span>
-          {it.hint && <small>{it.hint}</small>}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function ChainList({ ai, list }: { ai: AiState; list: AiProvider[] }) {
   const host = useRef<HTMLOListElement>(null);
   const noFlip = useRef(false);
   useListFlip(host, noFlip);
   const relay = useRelay(host, ai.last);
-  const say = useStore((s) => s.say);
+  const ops = useChainOps(ai, list);
   const sayUndo = useStore((s) => s.sayUndo);
+  const { active, ids, disabledIds, reserve, probes, heir, nameOf, setDisabled, toReserve, probe } = ops;
   const position = new Map(ai.chain.map((c, i) => [c.provider, i + 1]));
-  const active = list.filter((p) => !p.disabled);
-  const reserve = list.filter((p) => p.disabled);
-  const ids = active.map((p) => p.id);
-  const disabledIds = reserve.map((p) => p.id);
   const [order, setOrder] = useState<string[] | null>(null); // клавиатура и ожидание ответа сервера
   const [grab, setGrab] = useState<string | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
-  const [probes, setProbes] = useState<Record<string, Probe>>({});
   const [picked, setPicked] = useState<string[]>([]);
-  const [heir, setHeir] = useState<string | null>(null);
   useEffect(() => setOrder(null), [ids.join()]); // eslint-disable-line react-hooks/exhaustive-deps
   const shown = (order ?? ids).map((id) => active.find((p) => p.id === id)).filter((p): p is AiProvider => Boolean(p));
-  const nameOf = (id: string) => ai.providers.find((p) => p.id === id)?.name ?? id;
 
   const commit = (next: string[]) => {
     if (next.join() === ids.join()) return setOrder(null);
     setOrder(next);
-    void actions.putAiChain({ order: applyOrder(ai.providers.map((x) => x.id), ids, next) }).then((ok) => {
+    void ops.commitOrder(next).then((ok) => {
       if (!ok) setOrder(null);
     });
-  };
-  const setDisabled = (id: string, off: boolean) =>
-    actions.putAiChain({ disabled: off ? [...new Set([...disabledIds, id])] : disabledIds.filter((x) => x !== id) });
-  const toReserve = async (p: AiProvider) => {
-    if (await setDisabled(p.id, true)) sayUndo(`${p.name} в резерве: бот его не спрашивает, ключ сохранён`, () => void setDisabled(p.id, false));
-  };
-  const probe = async (p: AiProvider) => {
-    setProbes((s) => ({ ...s, [p.id]: { busy: true } }));
-    const r = await actions.aiProbe(p.id);
-    setProbes((s) => ({ ...s, [p.id]: { ok: r.ok, ms: r.ms, message: r.message } }));
-    setTimeout(() => setProbes((s) => Object.fromEntries(Object.entries(s).filter(([k]) => k !== p.id))), 12000);
-  };
-  const showHeir = (p: AiProvider) => {
-    if (ai.single) return say("В режиме «Один провайдер» запасных нет: если он упадёт, цикл пойдёт на локальных стратегиях.");
-    const chain = ai.chain.map((c) => c.provider);
-    const i = chain.indexOf(p.id);
-    if (i < 0) return say(`${p.name} и так не участвует в цепочке.`);
-    const next = chain[i + 1];
-    if (!next) return say(`После ${p.name} запасных нет: цикл пойдёт на локальных стратегиях.`);
-    setHeir(next);
-    say(`Если ${p.name} упадёт, ответит ${nameOf(next)}.`);
-    setTimeout(() => setHeir(null), 2600);
-  };
-  const removeKey = (p: AiProvider) => {
-    const t = setTimeout(() => void actions.deleteSecret(p.id), 8000);
-    sayUndo(`Ключ ${p.name} будет удалён`, () => clearTimeout(t));
   };
 
   // ── Перетаскивание мышью и пальцем ──
@@ -475,21 +378,6 @@ function ChainList({ ai, list }: { ai: AiState; list: AiProvider[] }) {
   }, [order, grab]);
 
   const menuProvider = menu ? ai.providers.find((p) => p.id === menu.id) : undefined;
-  const items = (p: AiProvider): CtxItem[] => {
-    const first = p.id === (ai.single ? chosenId(ai) : ai.pinned);
-    const out: CtxItem[] = [];
-    if (!first) out.push({ label: ai.single ? "Выбрать" : "Сделать первым", hint: "бот спросит его раньше остальных", run: () => void pin(p.id) });
-    out.push({ label: "Проверить связь", hint: "лимит не тратится", run: () => void probe(p) });
-    if (!ai.single) out.push({ label: "Если он упадёт…", hint: "покажет, кто его заменит", run: () => showHeir(p) });
-    out.push(
-      p.disabled
-        ? { label: "Вернуть в цепочку", run: () => void setDisabled(p.id, false) }
-        : { label: "В резерв", hint: "ключ останется, бот не спросит", run: () => void toReserve(p) },
-    );
-    if (p.key_set) out.push({ label: "Удалить ключ…", hint: "через 8 секунд, можно отменить", danger: true, run: () => removeKey(p) });
-    return out;
-  };
-
   return (
     <div className="aichain-wrap">
       {picked.length > 0 && (
@@ -565,7 +453,7 @@ function ChainList({ ai, list }: { ai: AiState; list: AiProvider[] }) {
       <p className="sr-only" aria-live="polite">
         {grab ? `${nameOf(grab)}: позиция ${shown.findIndex((p) => p.id === grab) + 1} из ${shown.length}. Стрелки переносят, пробел сохраняет, Esc отменяет.` : ""}
       </p>
-      {menu && menuProvider && <ChainMenu items={items(menuProvider)} x={menu.x} y={menu.y} onClose={() => setMenu(null)} />}
+      {menu && menuProvider && <ChainMenu items={ops.items(menuProvider)} x={menu.x} y={menu.y} onClose={() => setMenu(null)} />}
     </div>
   );
 }
@@ -596,16 +484,6 @@ interface RowProps {
   onGripKey: (e: React.KeyboardEvent<HTMLButtonElement>) => void;
   onMenu: (x: number, y: number) => void;
   onPick: () => void;
-}
-
-/** Значок провайдера: монограмма в собственном приглушённом цвете (чужие логотипы не используем). */
-function Avatar({ id, name }: { id: string; name: string }) {
-  const h = [...id].reduce((acc, c) => (acc * 31 + c.charCodeAt(0)) % 360, 7);
-  return (
-    <span className="pav" style={{ background: `hsl(${h} 30% 22%)`, color: `hsl(${h} 65% 78%)`, borderColor: `hsl(${h} 32% 36%)` }} aria-hidden="true">
-      {name.replace(/[^A-Za-zА-Яа-я0-9]/g, "").slice(0, 2)}
-    </span>
-  );
 }
 
 function ProviderRow(props: RowProps) {
