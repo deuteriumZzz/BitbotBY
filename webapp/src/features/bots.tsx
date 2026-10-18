@@ -543,6 +543,24 @@ function StrategiesCard() {
   const [all, setAll] = useState(false);
   const [view, setView] = useState<"futures" | "spot" | null>(null);
   const [q, setQ] = useState("");
+  // Закреплённые стратегии идут первыми; хранится только в этом браузере.
+  const [pins, setPins] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("bitbot.pins") ?? "[]") as string[];
+    } catch {
+      return [];
+    }
+  });
+  const togglePin = (name: string) =>
+    setPins((cur) => {
+      const next = cur.includes(name) ? cur.filter((x) => x !== name) : [...cur, name];
+      try {
+        localStorage.setItem("bitbot.pins", JSON.stringify(next));
+      } catch {
+        /* без хранилища закрепление живёт до перезагрузки */
+      }
+      return next;
+    });
   // Строки плавно переезжают при смене рынка, фильтра и поиска (FLIP: было → стало).
   const listRef = useRef<HTMLUListElement>(null);
   const prevTop = useRef(new Map<string, number>());
@@ -579,7 +597,9 @@ function StrategiesCard() {
       (!onlyOn || s.enabled) &&
       (!needle || stratName(s.name).toLowerCase().includes(needle) || s.name.includes(needle)),
   );
-  const sorted = [...found].sort((a, b) => (b.backtest?.sharpe ?? -9) - (a.backtest?.sharpe ?? -9));
+  const sorted = [...found].sort(
+    (a, b) => Number(pins.includes(b.name)) - Number(pins.includes(a.name)) || (b.backtest?.sharpe ?? -9) - (a.backtest?.sharpe ?? -9),
+  );
   const filtering = Boolean(needle) || kind !== "all" || onlyOn;
   const rows = all || filtering ? sorted : sorted.slice(0, 6);
   const on = strategies.filter((s) => s.enabled).length;
@@ -660,6 +680,9 @@ function StrategiesCard() {
                   {s.markets === "futures" ? "только фьючерсы" : "спот и фьючерсы"}
                 </span>
                 <span className={`pill ${st[0]}`}>{st[1]}</span>
+                <button className="star" type="button" aria-pressed={pins.includes(s.name)} aria-label={`Закрепить: ${stratName(s.name)}`} title="Закрепить вверху списка" onClick={() => togglePin(s.name)}>
+                  ★
+                </button>
                 <Toggle on={s.enabled} label={`Стратегия «${stratName(s.name)}»`} onChange={(v) => void actions.setStrategy(s.name, v)} />
               </div>
               <div className="nums">

@@ -8,6 +8,19 @@ import { useStore } from "../store";
 import { Seg, Skel } from "../ui";
 import { stratName } from "./bots";
 
+/** Выгрузка показанных сделок: открывается в Excel и Numbers. */
+function exportCsv(trades: JournalTrade[]): void {
+  const cols: (keyof JournalTrade)[] = ["id", "symbol", "side", "strategy", "confidence", "entry", "exit", "qty", "pnl", "pnl_pct", "fees", "opened", "closed", "reason"];
+  const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const text = [cols.join(","), ...trades.map((t) => cols.map((c) => esc(t[c])).join(","))].join("\n");
+  const url = URL.createObjectURL(new Blob(["\ufeff" + text], { type: "text/csv;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `bitbotby-journal-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 const PERIODS = [
   ["24h", "24ч"],
   ["7d", "7д"],
@@ -100,6 +113,11 @@ export function Journal() {
             <div className="card-h">
               <h2>Сделки</h2>
               {all && <span className="pill sp">{trades.length}</span>}
+              {all && trades.length > 0 && (
+                <button className="btn" type="button" title="Скачать показанные сделки в CSV" onClick={() => exportCsv(trades)}>
+                  CSV
+                </button>
+              )}
             </div>
             {failed ? (
               <p className="empty">Не удалось загрузить журнал — бот не на связи.</p>

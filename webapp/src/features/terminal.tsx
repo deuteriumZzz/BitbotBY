@@ -142,6 +142,16 @@ export function Terminal() {
 
 function Hero() {
   const balance = useStore((s) => s.balance);
+  // Баланс коротко вспыхивает цветом сделки, когда закрытая позиция «приземляется» в него.
+  const prevBal = useRef(balance);
+  const [balFx, setBalFx] = useState("");
+  useEffect(() => {
+    if (balance === prevBal.current) return;
+    setBalFx(balance > prevBal.current ? "fl-up" : "fl-down");
+    prevBal.current = balance;
+    const t = setTimeout(() => setBalFx(""), 900);
+    return () => clearTimeout(t);
+  }, [balance]);
   const paper = useStore((s) => s.bot?.paper ?? true);
   const period = useStore((s) => s.period);
   const setPeriod = useStore((s) => s.setPeriod);
@@ -161,7 +171,7 @@ function Hero() {
           label="Период"
         />
       </div>
-      <div className="bal">
+      <div className={`bal ${balFx}`}>
         <Tween value={balance} fmt={(v) => `$${fmtN(v)}`} />
       </div>
       <div className="hero-stats">

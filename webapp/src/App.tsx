@@ -71,6 +71,46 @@ export function App() {
     views.current?.scrollTo(0, 0);
     hideTip();
   }, [tab, setup]);
+  // «Наверх» после длинной прокрутки и обновление свайпом вниз (пальцем, с верха страницы).
+  const [showTop, setShowTop] = useState(false);
+  const [pull, setPull] = useState(0);
+  useEffect(() => {
+    const el = views.current;
+    if (!el) return;
+    let y0 = 0;
+    let dy = 0;
+    let on = false;
+    const onScroll = () => setShowTop(el.scrollTop > 700);
+    const start = (e: TouchEvent) => {
+      on = el.scrollTop <= 0 && e.touches.length === 1;
+      y0 = e.touches[0].clientY;
+      dy = 0;
+    };
+    const move = (e: TouchEvent) => {
+      if (!on) return;
+      dy = e.touches[0].clientY - y0;
+      setPull(dy > 0 ? Math.min(dy * 0.5, 70) : 0);
+    };
+    const end = () => {
+      if (!on) return;
+      on = false;
+      setPull(0);
+      if (dy > 120) {
+        const st = useStore.getState();
+        void Promise.allSettled([st.loadState(), st.loadMetrics(), st.loadStrategies()]).then(() => st.say("Обновлено"));
+      }
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    el.addEventListener("touchstart", start, { passive: true });
+    el.addEventListener("touchmove", move, { passive: true });
+    el.addEventListener("touchend", end);
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      el.removeEventListener("touchstart", start);
+      el.removeEventListener("touchmove", move);
+      el.removeEventListener("touchend", end);
+    };
+  }, [ready]);
 
   if (!ready) return <div className="boot">Подключаюсь к боту…</div>;
   if (needLogin) return <Login />;
@@ -91,6 +131,14 @@ export function App() {
           </>
         )}
       </main>
+      <div className="ptr" style={{ transform: `translate(-50%, ${pull - 40}px) rotate(${pull * 5}deg)`, opacity: pull / 70 }} aria-hidden="true">
+        ↻
+      </div>
+      {showTop && (
+        <button className="totop" type="button" aria-label="Наверх" onClick={() => views.current?.scrollTo({ top: 0, behavior: platform.reducedMotion() ? "auto" : "smooth" })}>
+          ↑
+        </button>
+      )}
       <Nav />
       <SignalSheet />
       <HelpSheet />

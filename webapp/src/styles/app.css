@@ -903,3 +903,34 @@ details.extra[open]>.card{animation:viewin .28s var(--ease-mech)}
 .pal-list li.on{background:var(--panel-2);color:var(--ink);box-shadow:inset 2px 0 0 var(--brand)}
 .pal-list kbd{font:600 11px var(--f-num);color:var(--ink-3);border:1px solid var(--line-ui);border-radius:var(--r-s);padding:1px 6px}
 .pal-empty{cursor:default!important;color:var(--ink-3)!important}
+/* ── Микро-моменты ── */
+.tip{animation:ctx-in .14s var(--ease-mech);transform-origin:top left}
+.tile,.kcard,.prof,.pos{transition:border-color var(--t-fast),box-shadow var(--t-fast),transform var(--t-fast)}
+@media (hover:hover){.tile:hover,.kcard:hover{border-color:var(--ink-3)}}
+/* Параметр применился: галочка рисуется, при отказе поле вздрагивает */
+.prm.fx-ok{animation:prm-ok 1.2s var(--ease)}
+@keyframes prm-ok{0%{background:color-mix(in oklab,var(--up) 14%,transparent)}100%{background:transparent}}
+.prm.fx-bad{animation:fail-shake .5s var(--ease-mech)}
+.prm-tick{fill:none;stroke:var(--up);stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:24;stroke-dashoffset:24;animation:chk-draw .4s var(--ease-mech) forwards}
+.prm.bad .err{animation:fail-shake .5s var(--ease-mech)}
+/* Кольцо прогресса обучения */
+.ring-row{display:flex;align-items:center;gap:12px}
+.ring-row p{margin:0}
+.ring{flex:none}
+.ring-bg{fill:none;stroke:var(--line-ui);stroke-width:3}
+.ring-fg{fill:none;stroke:var(--brand);stroke-width:3;stroke-linecap:round;transform:rotate(-90deg);transform-origin:18px 18px;transition:stroke-dashoffset .5s var(--ease-mech)}
+.ring text{fill:var(--ink);font:600 10px var(--f-num)}
+/* Наверх и обновление свайпом */
+.totop{position:fixed;right:16px;bottom:92px;z-index:20;width:40px;height:40px;border-radius:var(--r);border:1px solid var(--line-ui);background:var(--panel);color:var(--ink-2);font:600 16px var(--f-ui);cursor:pointer;box-shadow:0 2px 0 rgba(0,0,0,.6);animation:bell-pop .25s var(--ease-mech)}
+.totop:hover{color:var(--ink);border-color:var(--brand)}
+@container dev (min-width:900px){.totop{bottom:24px}}
+.ptr{position:fixed;left:50%;top:112px;z-index:15;width:34px;height:34px;display:grid;place-items:center;border-radius:50%;background:var(--panel-2);border:1px solid var(--line-ui);color:var(--brand-ink);font:600 16px var(--f-ui);pointer-events:none;transition:opacity .15s}
+/* Закрепление стратегии */
+.star{all:unset;cursor:pointer;width:28px;height:28px;display:grid;place-items:center;border-radius:var(--r-s);color:var(--ink-3);font:14px/1 var(--f-ui);transition:color var(--t-fast),transform var(--t-fast)}
+.star:hover{color:var(--ink)}
+.star[aria-pressed="true"]{color:var(--brand)}
+.star:active{transform:scale(.85)}
+.star:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
+/* Цепочка: пунктир между провайдерами показывает порядок опроса */
+.aichain:not(.dragging) .aip:not(:first-child)::before{content:"";position:absolute;top:-9px;left:34px;height:9px;border-left:2px dashed var(--line-ui)}
+.aichain:not(.dragging) .aip.off::before{display:none}

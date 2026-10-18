@@ -112,6 +112,21 @@ function resultText(id: JobId, d: JobDone): string {
   return "Готово.";
 }
 
+function Ring({ pct }: { pct: number }) {
+  const r = 14;
+  const c = 2 * Math.PI * r;
+  const v = Math.max(0, Math.min(100, pct));
+  return (
+    <svg className="ring" viewBox="0 0 36 36" width="40" height="40" role="img" aria-label={`${Math.round(v)}%`}>
+      <circle className="ring-bg" cx="18" cy="18" r={r} />
+      <circle className="ring-fg" cx="18" cy="18" r={r} strokeDasharray={c} strokeDashoffset={c * (1 - v / 100)} />
+      <text x="18" y="21.5" textAnchor="middle">
+        {Math.round(v)}
+      </text>
+    </svg>
+  );
+}
+
 function JobRow({ def, profile }: { def: JobDef; profile?: ProfileInfo }) {
   const job: JobState | undefined = useStore((s) => s.jobs[def.id]);
   const jobs = useStore((s) => s.jobs);
@@ -133,20 +148,32 @@ function JobRow({ def, profile }: { def: JobDef; profile?: ProfileInfo }) {
       </div>
       {job?.running ? (
         <>
-          <div
-            className="prog"
-            role="progressbar"
-            aria-valuenow={Math.round(num(job.info.pct) ?? 0)}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-label={def.title}
-          >
-            <i style={{ width: `${num(job.info.pct) ?? 0}%` }} />
-          </div>
-          <p className="note-soon">
-            {progressText(def.id, job.info)}. Закрыть приложение можно — бот
-            доработает сам.
-          </p>
+          {def.id === "train" || def.id === "tune" ? (
+            <div className="ring-row">
+              <Ring pct={num(job.info.pct) ?? 0} />
+              <p className="note-soon">
+                {progressText(def.id, job.info)}. Закрыть приложение можно — бот
+                доработает сам.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div
+                className="prog"
+                role="progressbar"
+                aria-valuenow={Math.round(num(job.info.pct) ?? 0)}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label={def.title}
+              >
+                <i style={{ width: `${num(job.info.pct) ?? 0}%` }} />
+              </div>
+              <p className="note-soon">
+                {progressText(def.id, job.info)}. Закрыть приложение можно — бот
+                доработает сам.
+              </p>
+            </>
+          )}
         </>
       ) : (
         <>

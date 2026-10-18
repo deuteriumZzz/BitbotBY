@@ -774,11 +774,18 @@ function AllParams({ go }: { go: (pane: Pane) => void }) {
     setPending(nextPending);
   };
 
+  const [fx, setFx] = useState<Record<string, "ok" | "bad">>({});
+  const flashKeys = (keys: string[], kind: "ok" | "bad") => {
+    setFx(Object.fromEntries(keys.map((k) => [k, kind])));
+    setTimeout(() => setFx({}), 1500);
+  };
   const apply = async () => {
     setBusy(true);
+    const keys = Object.keys(pending);
     const r: PatchResult | null = await actions.patchConfig(pending);
     setBusy(false);
-    if (!r) return;
+    if (!r) return flashKeys(keys, "bad");
+    flashKeys(keys, "ok");
     setPending({});
     setRestartKeys((k) => [...new Set([...k, ...r.pending_restart])]);
   };
@@ -838,7 +845,7 @@ function AllParams({ go }: { go: (pane: Pane) => void }) {
                 OWN_HOME[d.key] ? (
                   <HomeRow key={d.key} d={d} go={go} />
                 ) : (
-                <ParamRow key={d.key} d={d} value={d.key in pending ? pending[d.key] : config[d.key]?.value} source={config[d.key]?.source ?? "default"} changed={d.key in pending} err={bad[d.key]} onChange={(v) => change(d, v)} onReset={() => change(d, rawOf(d, d.default))} />
+                <ParamRow key={d.key} d={d} value={d.key in pending ? pending[d.key] : config[d.key]?.value} source={config[d.key]?.source ?? "default"} changed={d.key in pending} err={bad[d.key]} fx={fx[d.key]} onChange={(v) => change(d, v)} onReset={() => change(d, rawOf(d, d.default))} />
                 ),
               )}
             </details>
@@ -924,7 +931,7 @@ const rawOf = (d: SettingDef, v: unknown): unknown => (d.type === "pct" && typeo
 const sameVal = (a: unknown, b: unknown): boolean =>
   typeof a === "number" && typeof b === "number" ? Math.abs(a - b) < 1e-9 : a === b;
 
-function ParamRow(props: { d: SettingDef; value: unknown; source: string; changed: boolean; err?: string; onChange: (v: unknown) => void; onReset: () => void }) {
+function ParamRow(props: { d: SettingDef; value: unknown; source: string; changed: boolean; err?: string; fx?: "ok" | "bad"; onChange: (v: unknown) => void; onReset: () => void }) {
   const { d, value } = props;
   const id = `c-${d.key}`;
   let control: JSX.Element;
@@ -946,7 +953,7 @@ function ParamRow(props: { d: SettingDef; value: unknown; source: string; change
       <NumField id={id} d={d} value={Number(shown(d, value))} disabled={d.readonly} onChange={props.onChange} />
     );
   return (
-    <div className={`prm${props.changed ? " chg" : ""}${props.err ? " bad" : ""}`}>
+    <div className={`prm${props.changed ? " chg" : ""}${props.err ? " bad" : ""}${props.fx ? ` fx-${props.fx}` : ""}`}>
       <div className="prm-l">
         <label htmlFor={id}>{d.label}</label>
         <code>{d.key}</code>
@@ -959,6 +966,11 @@ function ParamRow(props: { d: SettingDef; value: unknown; source: string; change
       <div className="prm-c">
         {d.readonly ? <span className="tag rst">только .env</span> : <span className={`tag ${d.hot ? "hot" : "rst"}`}>{d.hot ? "сразу" : "перезапуск"}</span>}
         {control}
+        {props.fx === "ok" && (
+          <svg className="prm-tick" viewBox="0 0 24 24" width="18" height="18" aria-label="Применено" role="img">
+            <path d="M5 12.5l4.5 4.5L19 7.5" />
+          </svg>
+        )}
         {!d.readonly && !sameVal(value, d.default) && (
           <button className="btn reset" type="button" title={`Вернуть по умолчанию: ${fmtVal(d, d.default)}`} aria-label={`${d.label}: вернуть по умолчанию`} onClick={props.onReset}>
             ↺

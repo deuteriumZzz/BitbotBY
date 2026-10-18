@@ -2,6 +2,8 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
+import { haptic } from "./lib/platform";
+
 // ── Подсказки «?» и всплывающие пояснения ─────────────────────────────────────
 
 interface TipState {
@@ -86,7 +88,10 @@ export function Toggle(props: {
       aria-checked={props.on}
       aria-label={props.label}
       disabled={props.disabled}
-      onClick={() => props.onChange(!props.on)}
+      onClick={() => {
+        haptic("tap");
+        props.onChange(!props.on);
+      }}
     >
       <span className="tr">
         <span className="kn" />
