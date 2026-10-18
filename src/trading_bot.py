@@ -267,7 +267,7 @@ class TradingBot:
             await self.api.initialize("", "", testnet=Config.TESTNET)
 
     async def _connect_data_loader(self) -> None:
-        """Загрузчик свечей: то же правило, в Paper без валидного ключа — публичный API."""
+        """Загрузчик свечей: в Paper без валидного ключа берёт публичный API."""
         try:
             await self.data_loader.initialize(
                 Config.BYBIT_API_KEY, Config.BYBIT_API_SECRET
