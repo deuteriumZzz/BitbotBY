@@ -785,24 +785,59 @@ def _kb_alerts(rc: "Any") -> "InlineKeyboardMarkup":
     return InlineKeyboardMarkup(rows)
 
 
-def _kb_strategies(strategies: list) -> "InlineKeyboardMarkup":
-    """Кнопка на каждую стратегию — нажатие переключает вкл/выкл."""
-    buttons = []
-    row: list = []
-    for i, s in enumerate(strategies):
-        icon = "✅" if s["enabled"] else "❌"
-        label = f"{icon} {_STRAT_SHORT.get(s['name'], s['name'])}"
-        row.append(InlineKeyboardButton(label, callback_data=f"strat:{s['name']}"))
-        if len(row) == 3 or i == len(strategies) - 1:
-            buttons.append(row)
-            row = []
-    buttons.append(
+STRAT_PAGE = 12  # экспериментальных на одной странице меню
+
+
+def _strat_button(s: dict, page: "int | None" = None) -> "InlineKeyboardButton":
+    icon = "✅" if s["enabled"] else "❌"
+    label = f"{icon} {_STRAT_SHORT.get(s['name'], s['name'])}"
+    tail = "" if page is None else f":{page}"
+    return InlineKeyboardButton(label, callback_data=f"strat:{s['name']}{tail}")
+
+
+def _rows_of_three(buttons: list) -> list:
+    return [buttons[i : i + 3] for i in range(0, len(buttons), 3)]
+
+
+def _kb_strategies(
+    core: list, exp_total: int = 0, exp_on: int = 0
+) -> "InlineKeyboardMarkup":
+    """Основные стратегии кнопками; экспериментальные — одним переходом ниже."""
+    rows = _rows_of_three([_strat_button(s) for s in core])
+    if exp_total:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    f"🧪 Экспериментальные ({exp_on}/{exp_total}) →",
+                    callback_data="strat_exp:0",
+                )
+            ]
+        )
+    rows.append(
         [
-            InlineKeyboardButton("🔁 Все ВКЛ", callback_data="strat_reset"),
+            InlineKeyboardButton("🔁 Основные ВКЛ", callback_data="strat_reset"),
             InlineKeyboardButton("« Настройки", callback_data="settings"),
         ]
     )
-    return InlineKeyboardMarkup(buttons)
+    return InlineKeyboardMarkup(rows)
+
+
+def _kb_strategies_exp(items: list, page: int, pages: int) -> "InlineKeyboardMarkup":
+    """Страница экспериментальных стратегий с листанием."""
+    rows = _rows_of_three([_strat_button(s, page) for s in items])
+    nav = []
+    if page > 0:
+        nav.append(
+            InlineKeyboardButton("‹ Назад", callback_data=f"strat_exp:{page - 1}")
+        )
+    nav.append(InlineKeyboardButton(f"{page + 1}/{pages}", callback_data="noop"))
+    if page < pages - 1:
+        nav.append(
+            InlineKeyboardButton("Дальше ›", callback_data=f"strat_exp:{page + 1}")
+        )
+    rows.append(nav)
+    rows.append([InlineKeyboardButton("« Основные", callback_data="strategies")])
+    return InlineKeyboardMarkup(rows)
 
 
 # ── Тексты справки ────────────────────────────────────────────────────────────
@@ -1364,10 +1399,23 @@ class TelegramCommander:
             f"_Команда: `/hours 9-17` или `/hours` для сброса_"
         )
 
-    def _build_strategies(self) -> tuple[str, Any]:
+    def _strategy_rows(self) -> "tuple[list, list, int]":
+        """(основные, экспериментальные, скрыто) с учётом рынка: на споте нет шортов."""
         strats = self._get_state().get("strategies", [])
-        total = len(strats)
-        enabled_count = sum(1 for s in strats if s["enabled"])
+        spot = self._rc.get_market_type() == "spot"
+        want = "spot" if spot else "futures"
+        fits = [s for s in strats if s.get("markets", "both") in ("both", want)]
+        core = [s for s in fits if not s.get("experimental")]
+        exp = [s for s in fits if s.get("experimental")]
+        return core, exp, len(strats) - len(fits)
+
+    def _build_strategies(self, exp_page: "int | None" = None) -> tuple[str, Any]:
+        core, exp, hidden = self._strategy_rows()
+        exp_on = sum(1 for s in exp if s["enabled"])
+        if exp_page is not None:
+            return self._build_strategies_exp(exp, exp_page)
+        total = len(core)
+        enabled_count = sum(1 for s in core if s["enabled"])
         mode = self._rc.get_mode()
 
         if mode == "local":
@@ -1388,13 +1436,35 @@ class TelegramCommander:
             note = "\n_В режиме AI стратегии передаются как контекст в промпт._"
 
         lines = [header]
-        for s in strats:
+        for s in core:
             icon = "✅" if s["enabled"] else "❌"
             risk = _RISK_ICON.get(s.get("risk_level", "medium"), "🟡")
             mtype = s.get("market_type", "any")
             lines.append(f"{icon} `{s['name']}` {risk} _{mtype}_")
-        text = "\n".join(lines) + note
-        return text, _kb_strategies(strats)
+        if exp:
+            lines.append(
+                f"\n🧪 Экспериментальных: {len(exp)}, включено {exp_on} "
+                "(без доказанного преимущества, выключены по умолчанию)."
+            )
+        if hidden:
+            lines.append(f"_Скрыто {hidden}: не подходят рынку «Спот» (нужны шорты)._")
+        return "\n".join(lines) + note, _kb_strategies(core, len(exp), exp_on)
+
+    def _build_strategies_exp(self, exp: list, page: int) -> tuple[str, Any]:
+        pages = max(1, -(-len(exp) // STRAT_PAGE))
+        page = max(0, min(page, pages - 1))
+        items = exp[page * STRAT_PAGE : (page + 1) * STRAT_PAGE]
+        on = sum(1 for s in exp if s["enabled"])
+        lines = [
+            f"🧪 *Экспериментальные* — включено {on}/{len(exp)} "
+            f"(стр. {page + 1}/{pages})\n",
+            "_Перенесены из Argent-Systems. Бэктест не нашёл у них преимущества: "
+            "включайте осознанно, лучше по одной и в Paper._\n",
+        ]
+        for s in items:
+            icon = "✅" if s["enabled"] else "❌"
+            lines.append(f"{icon} `{s['name']}` _{s.get('market_type', 'any')}_")
+        return "\n".join(lines), _kb_strategies_exp(items, page, pages)
 
     def _build_pnl(self) -> str:
         s = self._get_state()
@@ -3142,13 +3212,28 @@ class TelegramCommander:
         elif data == "strat_reset":
             self._rc.reset_strategies()
             text, kb = self._build_strategies()
-            await self._edit(query, "🔁 *Все стратегии включены*\n\n" + text, kb)
+            await self._edit(
+                query,
+                "🔁 *Основные стратегии включены*\n"
+                "_Экспериментальные остаются выключенными._\n\n" + text,
+                kb,
+            )
+
+        elif data.startswith("strat_exp:"):
+            try:
+                page = int(data.split(":", 1)[1])
+            except ValueError:
+                page = 0
+            text, kb = self._build_strategies(page)
+            await self._edit(query, text, kb)
 
         elif data.startswith("strat:"):
-            name = data.split(":", 1)[1]
+            parts = data.split(":")
+            name = parts[1]
             now_enabled = self._rc.toggle_strategy(name)
             icon = "✅" if now_enabled else "❌"
-            text, kb = self._build_strategies()
+            page = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else None
+            text, kb = self._build_strategies(page)
             short = _STRAT_SHORT.get(name, name)
             state = "включена" if now_enabled else "отключена"
             await self._edit(query, f"{icon} `{short}` {state}\n\n" + text, kb)

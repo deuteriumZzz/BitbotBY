@@ -11,7 +11,7 @@ Claude / DeepSeek / OpenAI / Groq / Gemini · SAC (RL) · Amazon Chronos · 10+ 
 [![Python 3.11](https://img.shields.io/badge/python-3.11-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/dashboard-FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![Docker](https://img.shields.io/badge/deploy-Docker%20Compose-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
-[![Tests](https://img.shields.io/badge/tests-1881%20python%20%2B%2016%20web-brightgreen)](README.md)
+[![Tests](https://img.shields.io/badge/tests-1900%20python%20%2B%2016%20web-brightgreen)](README.md)
 [![Bybit](https://img.shields.io/badge/exchange-Bybit%20Futures-F7A600)](https://www.bybit.com/)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 

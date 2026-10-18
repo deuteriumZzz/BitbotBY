@@ -321,6 +321,21 @@ class TestRuntimeConfigStrategies:
         rc.reset_strategies()
         redis_mock.redis_client.delete.assert_called_once()
 
+    def test_reset_strategies_keeps_experimental_off(self, rc_bundle):
+        from src.strategies import STRATEGY_REGISTRY
+
+        rc, redis_mock, _ = rc_bundle
+        rc.reset_strategies()
+        disabled = {c.args[1] for c in redis_mock.redis_client.sadd.call_args_list}
+        experimental = {n for n, c in STRATEGY_REGISTRY.items() if c.experimental}
+        assert experimental and experimental <= disabled
+        assert not disabled - experimental
+
+    def test_reset_strategies_can_include_experimental(self, rc_bundle):
+        rc, redis_mock, _ = rc_bundle
+        rc.reset_strategies(include_experimental=True)
+        redis_mock.redis_client.sadd.assert_not_called()
+
     def test_toggle_strategy_disables_when_enabled(self, rc_bundle):
         rc, redis_mock, _ = rc_bundle
         redis_mock.redis_client.smembers.return_value = set()

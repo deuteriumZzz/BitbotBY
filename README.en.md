@@ -11,7 +11,7 @@ Claude / DeepSeek / OpenAI / Groq / Gemini · SAC (RL) · Amazon Chronos · 10+ 
 [![Python 3.11](https://img.shields.io/badge/python-3.11-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/dashboard-FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![Docker](https://img.shields.io/badge/deploy-Docker%20Compose-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
-[![Tests](https://img.shields.io/badge/tests-1881%20python%20%2B%2016%20web-brightgreen)](#-tests)
+[![Tests](https://img.shields.io/badge/tests-1900%20python%20%2B%2016%20web-brightgreen)](#-tests)
 [![Bybit](https://img.shields.io/badge/exchange-Bybit%20Futures-F7A600)](https://www.bybit.com/)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
@@ -255,7 +255,7 @@ breakeven on profitable ones, blocks new entries) · **ATR spike protection** (c
   flag. Backtests found **no statistically significant edge** for any of them — see [docs/STRATEGIES.md](docs/STRATEGIES.md).
   `MODE=local` runs on local strategies only, without AI.
 - **Paper tools**: `PAPER_GUARDS_OFF` switches portfolio protections off in Paper (ignored in Live).
-- Tests: 1881 backend (pytest) + 16 frontend (vitest).
+- Tests: 1900 backend (pytest) + 16 frontend (vitest).
 
 ---
 

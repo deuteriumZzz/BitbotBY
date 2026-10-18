@@ -11,7 +11,7 @@
 [![Python 3.11](https://img.shields.io/badge/python-3.11-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/dashboard-FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![Docker](https://img.shields.io/badge/deploy-Docker%20Compose-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
-[![Tests](https://img.shields.io/badge/tests-1881%20python%20%2B%2016%20web-brightgreen)](#-тесты)
+[![Tests](https://img.shields.io/badge/tests-1900%20python%20%2B%2016%20web-brightgreen)](#-тесты)
 [![Bybit](https://img.shields.io/badge/exchange-Bybit%20Futures-F7A600)](https://www.bybit.com/)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
@@ -808,6 +808,9 @@ REDIS_PASSWORD=          # Рекомендуется задать в production
 Подтверждение каждой сделки (если `AUTO_EXECUTE=false`) приходит с live win-rate/EV стратегии и
 бэктест-статистикой, таймаут — `TELEGRAM_CONFIRM_TIMEOUT`.
 
+Меню «Стратегии» двухуровневое: основные кнопками, экспериментальные (49) страницами по 12 с отметкой, что преимущества у них
+не найдено; на споте стратегии «только фьючерсы» скрыты. «Основные ВКЛ» не трогает экспериментальные.
+
 То же самое доступно и в [приложении](#-приложение-miniapp-браузер-десктоп): оба интерфейса работают с одним
 ботом, поэтому изменение в одном сразу видно в другом (настройки в Redis, события приходят по WebSocket).
 Один и тот же Telegram-токен нельзя использовать у двух запущенных ботов одновременно (Telegram вернёт конфликт
@@ -905,7 +908,7 @@ make test
 # pytest tests/ -v --cov=src --cov-fail-under=50
 ```
 
-**1881 тестов бэкенда** (pytest) — индикаторы, стратегии (в том числе проверка, что порты из Argent считают вес
+**1900 тестов бэкенда** (pytest) — индикаторы, стратегии (в том числе проверка, что порты из Argent считают вес
 причинно и совпадают с оригиналом), риск-менеджмент, CVaR, Kelly, Almgren-Chriss, корреляция, SAC-инференс,
 dynamic leverage, partial TP, drawdown scaling, liquidity filter, position monitor, online learner, runtime config,
 API приложения и вход, лаунчер, e2e торговый цикл — и **16 тестов фронтенда** (vitest, `cd webapp && npx vitest run`).

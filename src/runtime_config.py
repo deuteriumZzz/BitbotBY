@@ -759,13 +759,26 @@ class RuntimeConfig:
             logger.warning("RuntimeConfig experimental seeding failed: %s", e)
             return []
 
-    def reset_strategies(self) -> None:
-        """Включить все стратегии (очистить список отключённых)."""
+    def reset_strategies(self, include_experimental: bool = False) -> None:
+        """Включить основные стратегии (очистить список отключённых).
+
+        Экспериментальные (без доказанного преимущества) остаются выключенными,
+        если явно не попросили include_experimental: одно нажатие не должно
+        включать десятки стратегий, которые мы держим выключенными нарочно.
+        """
         try:
             self._r.redis_client.delete(_KEY_DISABLED_STRATS)
-            logger.info("Runtime: все стратегии включены")
+            logger.info("Runtime: основные стратегии включены")
         except Exception as e:
             logger.warning("RuntimeConfig delete failed: %s", e)
+            return
+        if include_experimental:
+            return
+        from src.strategies import STRATEGY_REGISTRY  # noqa: PLC0415
+
+        for name, cls in STRATEGY_REGISTRY.items():
+            if cls.experimental:
+                self.disable_strategy(name)
 
     def toggle_strategy(self, name: str) -> bool:
         """Переключает стратегию. Возвращает True если теперь включена."""

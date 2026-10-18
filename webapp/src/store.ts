@@ -734,7 +734,7 @@ export const actions = {
   setStrategy: (name: string, enabled: boolean) =>
     st().act(() => api("PATCH", `/api/strategies/${name}`, { enabled }).then(() => st().loadStrategies())),
   resetStrategies: () =>
-    st().act(() => api("POST", "/api/strategies/reset").then(() => st().loadStrategies()), "Все стратегии включены"),
+    st().act(() => api("POST", "/api/strategies/reset").then(() => st().loadStrategies()), "Основные стратегии включены, экспериментальные выключены"),
   putSymbols: (symbols: Symbols) =>
     st().act(() => api<Symbols>("PUT", "/api/symbols", symbols).then((v) => useStore.setState({ symbols: v }))),
   patchAlert: (kind: string, changes: Partial<Alert>) =>

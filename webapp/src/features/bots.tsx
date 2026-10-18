@@ -716,8 +716,8 @@ function StrategiesCard() {
             {all ? "Свернуть" : `Показать все ${strategies.length}`}
           </button>
         )}
-        <button className="btn" type="button" disabled={on === strategies.length} onClick={() => void actions.resetStrategies()}>
-          Включить все
+        <button className="btn" type="button" disabled={strategies.filter((s) => !s.experimental).every((s) => s.enabled)} title="Включить основные стратегии; экспериментальные останутся выключенными" onClick={() => void actions.resetStrategies()}>
+          Включить основные
         </button>
       </div>
     </>

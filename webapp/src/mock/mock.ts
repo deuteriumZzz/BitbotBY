@@ -806,7 +806,7 @@ function route(method: string, path: string, body: unknown): unknown {
       emit("config.changed", { keys: ["MARKET_PROFILE"], profile: b.name });
       return { profile: b.name };
     case "POST /api/strategies/reset":
-      strategies.forEach((s) => (s.enabled = true));
+      strategies.forEach((s) => (s.enabled = !s.experimental));
       emit("config.changed", { keys: ["STRATEGIES"] });
       return { ok: true };
     case "PUT /api/symbols":
