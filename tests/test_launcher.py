@@ -100,3 +100,35 @@ def test_awake_not_running_without_pid_file(tmp_path):
     assert launch.awake_running(tmp_path) is False
     (tmp_path / launch.AWAKE_PID).write_text("not-a-number")
     assert launch.awake_running(tmp_path) is False
+
+
+def test_tunnel_url_is_found_in_cloudflared_output():
+    log = "INF Requesting new quick Tunnel\nINF |  https://funny-name-1234.trycloudflare.com  |\n"
+    assert launch.find_tunnel_url(log) == "https://funny-name-1234.trycloudflare.com"
+    assert launch.find_tunnel_url("https://example.com no tunnel here") is None
+
+
+def test_public_address_adds_miniapp_url_and_closes_reads():
+    plain = launch.compose_env_text("K", "T", 8080)
+    assert "WEBAPP_URL" not in plain and "DASHBOARD_API_KEY" not in plain
+    text = launch.compose_env_text(
+        "K", "T", 8080, None, "https://x.trycloudflare.com", "KEY"
+    )
+    assert "WEBAPP_URL=https://x.trycloudflare.com/app/" in text
+    assert "DASHBOARD_API_KEY=KEY" in text
+
+
+def test_compose_passes_the_miniapp_address_and_key_through():
+    text = (
+        Path(__file__).resolve().parent.parent / "docker-compose.local.yml"
+    ).read_text()
+    assert "WEBAPP_URL: ${WEBAPP_URL:-}" in text
+    assert "DASHBOARD_API_KEY: ${DASHBOARD_API_KEY:-}" in text
+
+
+def test_stale_tunnel_file_is_not_alive(tmp_path):
+    (tmp_path / launch.TUNNEL_FILE).write_text(
+        '{"pid": 99999999, "url": "https://a.trycloudflare.com"}'
+    )
+    assert launch.tunnel_alive(launch.tunnel_info(tmp_path)) is False
+    assert launch.tunnel_info(tmp_path / "missing") == {}

@@ -7,6 +7,8 @@ x-bot-env: &bot-env
   REDIS_HOST: redis
   PYTHONPATH: /app
   PAPER_TRADING: "true"
+  # Адрес MiniApp (https): подставляет лаунчер при «phone on»; пусто — кнопки приложения в Telegram нет.
+  WEBAPP_URL: ${WEBAPP_URL:-}
   # Без ключей AI бот в режиме AI не стартует; решение по локальным стратегиям работает сразу,
   # а AI включается в приложении после ввода ключа (Бот → Кто принимает решение).
   MODE: local
@@ -50,6 +52,8 @@ services:
       <<: *bot-env
       REDIS_URL: redis://redis:6379/0
       BITBOT_LOCAL_MODE: "1"
+      # Включается вместе с публичным адресом: закрывает данные приложения для посторонних.
+      DASHBOARD_API_KEY: ${DASHBOARD_API_KEY:-}
       BITBOT_LOCAL_LOGIN_TOKEN: ${BITBOT_LOCAL_LOGIN_TOKEN:-}
     volumes:
       - ${BITBOT_DATA:-./data}:/app/data

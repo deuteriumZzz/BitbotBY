@@ -997,3 +997,8 @@ details.extra[open]>.card{animation:viewin .28s var(--ease-mech)}
 .chatfind .btn{align-self:flex-start}
 .chatfind .note-soon{margin:0}
 .chatpick{display:flex;flex-wrap:wrap;gap:6px}
+/* MiniApp внутри Telegram: заголовок окна уже показывает название, место в шапке экономим */
+.miniapp .brand{font-size:0;gap:0}
+.miniapp .brand svg{width:26px;height:26px}
+.miniapp .views{padding-bottom:calc(24px + var(--tg-safe-area-inset-bottom,0px))}
+.miniapp .nav{padding-bottom:max(8px,env(safe-area-inset-bottom,0px),var(--tg-safe-area-inset-bottom,0px))}

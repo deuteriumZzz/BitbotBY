@@ -8,6 +8,7 @@
     python launcher/launch.py url      # новая ссылка входа, если окно закрыли
     python launcher/launch.py autostart on|off|status   # запуск при входе в систему
     python launcher/launch.py awake on|off|status       # не давать компьютеру уснуть
+    python launcher/launch.py phone on|off|status       # MiniApp в Telegram: адрес до компьютера
 
 Нужны только Docker и Python 3 (стандартная библиотека, ничего ставить не надо).
 Бот стартует в Paper. Ключи API вводятся в самом приложении и хранятся зашифрованными.
@@ -18,6 +19,7 @@
 import base64
 import json
 import os
+import re
 import secrets
 import shutil
 import socket
@@ -76,13 +78,21 @@ def new_login_token() -> str:
 
 
 def compose_env_text(
-    secrets_key: str, token: str, port: int, data_dir: Optional[Path] = None
+    secrets_key: str,
+    token: str,
+    port: int,
+    data_dir: Optional[Path] = None,
+    webapp_url: str = "",
+    api_key: str = "",
 ) -> str:
     lines = [
         f"BITBOT_SECRETS_KEY={secrets_key}",
         f"BITBOT_LOCAL_LOGIN_TOKEN={token}",
         f"BITBOT_PORT={port}",
     ]
+    if webapp_url:
+        # MiniApp без публичного адреса не открыть, а с адресом закрываем чтение без входа.
+        lines += [f"WEBAPP_URL={webapp_url}/app/", f"DASHBOARD_API_KEY={api_key}"]
     if data_dir is not None:
         lines += [
             f"BITBOT_DATA={data_dir / 'data'}",
@@ -209,13 +219,20 @@ def previous_port() -> Optional[int]:
     return None
 
 
-def prepare(port: int, data_dir: Optional[Path]) -> str:
+def prepare(port: int, data_dir: Optional[Path], webapp_url: str = "") -> str:
     """Пишет compose.env с новым токеном входа; возвращает ссылку для браузера."""
     state = load_state()
     token = new_login_token()
     write_private(
         STATE_DIR / "compose.env",
-        compose_env_text(state["secrets_key"], token, port, data_dir),
+        compose_env_text(
+            state["secrets_key"],
+            token,
+            port,
+            data_dir,
+            webapp_url,
+            state.get("api_key", "") if webapp_url else "",
+        ),
     )
     return login_url(port, token)
 
@@ -232,7 +249,8 @@ def cmd_start(port: int, data_dir: Optional[Path], open_browser: bool = True) ->
         if chosen != port:
             say(f"Порт {port} занят другой программой, использую {chosen}.")
         port = chosen
-    url = prepare(port, data_dir)
+    public = public_url(port, start=True)
+    url = prepare(port, data_dir, public)
     say("Запускаю BitbotBY (Paper: сделки виртуальные).")
     say(
         "Первая сборка занимает 5–15 минут: скачиваются пакеты. "
@@ -248,6 +266,11 @@ def cmd_start(port: int, data_dir: Optional[Path], open_browser: bool = True) ->
         )
         return 1
     say(f"\nГотово. Приложение: http://localhost:{port}/app/")
+    if public:
+        say(f"MiniApp в Telegram: {public}/app/ (кнопка «Терминал» в вашем боте)")
+        say(
+            "Чтобы MiniApp заработал, подключите Telegram в приложении (токен и chat id)."
+        )
     say(
         "Ключи (Bybit, AI) вводите в приложении: Настройки → Подключения. "
         "Они хранятся зашифрованными."
@@ -262,11 +285,24 @@ def cmd_start(port: int, data_dir: Optional[Path], open_browser: bool = True) ->
     return 0
 
 
+def public_url(port: int, start: bool = False) -> str:
+    """Публичный https-адрес для MiniApp, если включён «phone on»; иначе пусто."""
+    state = load_state()
+    if state.get("phone") != "1":
+        return ""
+    if state.get("webapp_url"):
+        return state["webapp_url"]
+    info = tunnel_info()
+    if tunnel_alive(info) and info.get("url"):
+        return str(info["url"])
+    return (start_tunnel(port) or "") if start else ""
+
+
 def cmd_url(port: int, data_dir: Optional[Path]) -> int:
     """Новая ссылка входа: токен меняется, поэтому пересоздаётся только дашборд."""
     if not ensure_docker():
         return 1
-    url = prepare(port, data_dir)
+    url = prepare(port, data_dir, public_url(port))
     if run(compose_cmd(["up", "-d", "dashboard"])).returncode != 0 or not wait_healthy(
         port, 120
     ):
@@ -274,6 +310,119 @@ def cmd_url(port: int, data_dir: Optional[Path]) -> int:
         return 1
     webbrowser.open(url)
     return 0
+
+
+# ── Доступ с телефона: адрес для MiniApp через туннель Cloudflare ────────────
+# MiniApp открывается Telegram по https, поэтому телефону нужен адрес до компьютера.
+# Быстрый туннель cloudflared даёт его без аккаунта. Адрес публичный и меняется при
+# каждом новом туннеле, поэтому вместе с ним включается DASHBOARD_API_KEY: без входа
+# через Telegram (MiniApp) или ссылку лаунчера данные приложения не отдаются.
+
+_TUNNEL_RE = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com")
+TUNNEL_FILE = "tunnel.json"
+
+
+def find_tunnel_url(text: str) -> Optional[str]:
+    m = _TUNNEL_RE.search(text)
+    return m.group(0) if m else None
+
+
+def tunnel_info(state_dir: Path = STATE_DIR) -> Dict[str, object]:
+    try:
+        info = json.loads((state_dir / TUNNEL_FILE).read_text(encoding="utf-8"))
+        return info if isinstance(info, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def tunnel_alive(info: Dict[str, object]) -> bool:
+    try:
+        os.kill(int(str(info.get("pid", ""))), 0)
+        return True
+    except (OSError, ValueError):
+        return False
+
+
+def stop_tunnel(state_dir: Path = STATE_DIR) -> None:
+    info = tunnel_info(state_dir)
+    if tunnel_alive(info):
+        try:
+            os.kill(int(str(info["pid"])), 15)
+        except OSError:
+            pass
+    (state_dir / TUNNEL_FILE).unlink(missing_ok=True)
+
+
+def start_tunnel(port: int, wait: int = 45) -> Optional[str]:
+    """Адрес https для MiniApp; None, если cloudflared нет или туннель не поднялся."""
+    info = tunnel_info()
+    if tunnel_alive(info) and info.get("port") == port and info.get("url"):
+        return str(info["url"])
+    stop_tunnel()
+    exe = shutil.which("cloudflared")
+    if not exe:
+        say("Для доступа с телефона нужен cloudflared: brew install cloudflared")
+        say("(или другой https-адрес до этого компьютера: phone on --url=https://…)")
+        return None
+    log_path = STATE_DIR / "tunnel.log"
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    with open(log_path, "w", encoding="utf-8") as log:
+        proc = subprocess.Popen(
+            [exe, "tunnel", "--url", f"http://localhost:{port}", "--no-autoupdate"],
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL,
+            start_new_session=not sys.platform.startswith("win"),
+        )
+    deadline = time.time() + wait
+    while time.time() < deadline:
+        url = find_tunnel_url(log_path.read_text(encoding="utf-8", errors="replace"))
+        if url:
+            write_private(
+                STATE_DIR / TUNNEL_FILE,
+                json.dumps({"pid": proc.pid, "url": url, "port": port}),
+            )
+            return url
+        if proc.poll() is not None:
+            break
+        time.sleep(1)
+    say("Туннель не поднялся. Смотрите .launcher/tunnel.log")
+    proc.terminate()
+    return None
+
+
+def cmd_phone(action: str, port: int, flags: Dict[str, str]) -> int:
+    state = load_state()
+    if action == "status":
+        info = tunnel_info()
+        on = state.get("phone") == "1"
+        say("Доступ с телефона: " + ("включён" if on else "выключен"))
+        if on and tunnel_alive(info):
+            say(f"Адрес MiniApp: {info.get('url')}/app/")
+        return 0
+    if action == "off":
+        state["phone"] = "0"
+        state.pop("webapp_url", None)
+        save_state(state)
+        stop_tunnel()
+        if (STATE_DIR / "compose.env").exists() and ensure_docker():
+            prepare(port, None)
+            run(compose_cmd(["up", "-d"]))
+        say("Доступ с телефона выключен, адрес закрыт.")
+        return 0
+    if action != "on":
+        say("Используйте: phone on [--url=https://…] | off | status")
+        return 2
+    if "--url" in flags:
+        if not flags["--url"].startswith("https://"):
+            say("Адрес должен начинаться с https://")
+            return 2
+        state["webapp_url"] = flags["--url"].rstrip("/")
+    state["phone"] = "1"
+    state.setdefault("api_key", secrets.token_urlsafe(32))
+    save_state(state)
+    say("Включаю доступ с телефона и перезапускаю бота с новым адресом…")
+    return cmd_start(port, None, open_browser=False)
 
 
 # ── Автозапуск при входе в систему и «не засыпать» ───────────────────────────
@@ -517,7 +666,10 @@ def main(argv: List[str]) -> int:
         return cmd_awake(args[1] if len(args) > 1 else "status")
     if action == "awake-run":
         return cmd_awake_run()
+    if action == "phone":
+        return cmd_phone(args[1] if len(args) > 1 else "status", port, flags)
     if action == "stop":
+        stop_tunnel()
         return run(compose_cmd(["down"])).returncode
     if action == "status":
         return run(compose_cmd(["ps"])).returncode

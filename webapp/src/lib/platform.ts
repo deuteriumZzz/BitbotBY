@@ -10,6 +10,13 @@ interface TelegramWebApp {
     notificationOccurred(type: "success" | "warning" | "error"): void;
   };
   openLink?(url: string): void;
+  version?: string;
+  isVersionAtLeast?(version: string): boolean;
+  setHeaderColor?(color: string): void;
+  setBackgroundColor?(color: string): void;
+  setBottomBarColor?(color: string): void;
+  disableVerticalSwipes?(): void;
+  BackButton?: { show(): void; hide(): void; onClick(cb: () => void): void; offClick(cb: () => void): void };
 }
 
 declare global {
@@ -30,9 +37,45 @@ export const kind: PlatformKind = tg()?.initData
     : "web";
 
 export function init(): void {
-  if (kind === "miniapp") {
-    tg()?.ready();
-    tg()?.expand();
+  if (kind !== "miniapp") return;
+  const t = tg();
+  t?.ready();
+  t?.expand();
+  document.documentElement.classList.add("miniapp");
+  // Шапка и низ Telegram в цвет приложения, чтобы окно выглядело одним целым.
+  // Каждый вызов в try: старые версии Telegram не знают новых методов.
+  const bg = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() || "#100F0D";
+  const panel = getComputedStyle(document.documentElement).getPropertyValue("--panel").trim() || bg;
+  for (const call of [() => t?.setHeaderColor?.(bg), () => t?.setBackgroundColor?.(bg), () => t?.setBottomBarColor?.(panel)]) {
+    try {
+      call();
+    } catch {
+      /* метод недоступен в этой версии */
+    }
+  }
+  // Свайп вниз при прокрутке не должен закрывать приложение.
+  try {
+    if (t?.isVersionAtLeast?.("7.7")) t.disableVerticalSwipes?.();
+  } catch {
+    /* не критично */
+  }
+}
+
+let backHandler: (() => void) | null = null;
+
+/** Кнопка «Назад» самого Telegram: показывается, пока есть куда вернуться. */
+export function setBack(handler: (() => void) | null): void {
+  const b = kind === "miniapp" ? tg()?.BackButton : undefined;
+  if (!b) return;
+  try {
+    if (backHandler) b.offClick(backHandler);
+    backHandler = handler;
+    if (handler) {
+      b.onClick(handler);
+      b.show();
+    } else b.hide();
+  } catch {
+    /* старая версия Telegram без BackButton */
   }
 }
 

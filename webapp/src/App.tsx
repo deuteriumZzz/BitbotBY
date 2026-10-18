@@ -48,6 +48,19 @@ export function App() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+  // В MiniApp системная кнопка «Назад» Telegram закрывает окна и возвращает на терминал.
+  const overlay = useStore((s) => s.helpOpen || s.notifOpen || s.paletteOpen || Boolean(s.setup));
+  useEffect(() => {
+    if (platform.kind !== "miniapp") return;
+    const back = () => {
+      const s = useStore.getState();
+      if (s.paletteOpen) s.openPalette(false);
+      else if (s.helpOpen) s.openHelp(false);
+      else if (s.notifOpen) s.openNotif(false);
+      else s.setTab("terminal");
+    };
+    platform.setBack(overlay || tab !== "terminal" ? back : null);
+  }, [overlay, tab]);
   // Горячие клавиши без модификаторов: 1–5 — вкладки, ? — справка, N — уведомления.
   // Не срабатывают, пока вы печатаете или открыто окно.
   useEffect(() => {
