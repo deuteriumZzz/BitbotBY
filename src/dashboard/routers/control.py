@@ -126,6 +126,8 @@ def build_state() -> Dict[str, Any]:
             "season": _redis_json(r, "bot:season_index"),
             "fear_greed": _redis_json(r, "bot:fear_greed"),
         },
+        # Итог последнего цикла по узлам конвейера (src/decision_trace.py).
+        "cycle": _redis_json(r, "bot:last_cycle"),
         "balance": portfolio.get("balance", Config.INITIAL_BALANCE),
         "slots": {"used": len(positions), "max": max_pos},
         "positions": positions,

@@ -2,11 +2,14 @@
 // что у настоящего сервера, но рынок и сделки выдуманы.
 
 import { ApiError } from "../lib/api";
+import { plural } from "../lib/format";
 import type {
   AiState,
   Alert,
   BotEvent,
+  BotNode,
   Candle,
+  CycleTrace,
   ConfigValues,
   DailyRow,
   JournalTrade,
@@ -18,6 +21,7 @@ import type {
   SettingDef,
   Side,
   Strategy,
+  TraceStep,
 } from "../lib/types";
 import fixtures from "./fixtures.json";
 
@@ -123,7 +127,11 @@ function applyAi(b: Body): AiState {
 }
 
 /** Цикл зовёт AI: иногда первый провайдер упирается в лимит и уходит на паузу. */
+// Кто из AI ответил в этом цикле и кто до него не смог — для следа решения.
+let aiAnswer = { who: "", failed: [] as string[] };
+
 function simulateAi(): void {
+  aiAnswer = { who: "", failed: [] };
   const live = ai.chain.filter(({ provider }) => {
     const p = ai.providers.find((x) => x.id === provider)!;
     return !(p.cooldown_until && p.cooldown_until * 1000 > Date.now());
@@ -134,10 +142,12 @@ function simulateAi(): void {
     if (i < live.length - 1 && Math.random() < 0.2) {
       Object.assign(p, { status: "rate_limit", cooldown_until: Date.now() / 1000 + 420 });
       emit("ai.status", { provider, model, status: "rate_limit", until: p.cooldown_until });
+      aiAnswer.failed.push(`${p.name} — лимит`);
       continue;
     }
     Object.assign(p, { status: "ok", cooldown_until: null, tokens_today: p.tokens_today + 3200 });
     ai.last = provider;
+    aiAnswer.who = p.name;
     emit("ai.status", { provider, model, status: "ok", until: null });
     return;
   }
@@ -170,6 +180,77 @@ interface Closed {
 }
 const closed: Closed[] = [];
 
+// ── След решения: то же, что src/decision_trace.py, на данных симуляции ──────
+let lastCycle: CycleTrace | null = null;
+const step = (node: BotNode, ok: boolean | null, text: string): TraceStep => ({ node, ok, text });
+const modeNow = (): string => String(config.MODE?.value ?? bot.mode);
+const coins = (syms: string[], sides: Record<string, Side>): string =>
+  syms.map((s) => `${s.split("/")[0]} ${sides[s] === "long" ? "▲" : "▼"}`).join(", ");
+const nSignals = (n: number): string => `${n} ${plural(n, ["сигнал", "сигнала", "сигналов"])}`;
+const nHeld = (n: number): string => `сопровождает ${n} ${plural(n, ["позицию", "позиции", "позиций"])}`;
+
+function saveCycle(state: string, nodes: CycleTrace["nodes"]): void {
+  lastCycle = { at: Date.now() / 1000, mode: modeNow(), state, nodes };
+  emit("trace.cycle", lastCycle as unknown as Record<string, unknown>);
+}
+
+function cycleNodes(
+  scanN: number,
+  pre: string[],
+  sides: Record<string, Side>,
+  rejected: Record<string, string>,
+  opened: string[],
+  used: number,
+): CycleTrace["nodes"] {
+  const mode = modeNow();
+  const aiOn = mode === "ai" || mode === "hybrid";
+  const sigs = Object.keys(sides);
+  const rej = Object.values(rejected);
+  const top = [...rej].sort((a, b) => rej.filter((x) => x === b).length - rej.filter((x) => x === a).length)[0] ?? "";
+  const held = used + opened.length;
+  const failed = aiAnswer.failed.length ? ` после сбоя: ${aiAnswer.failed.join(", ")}` : "";
+  return {
+    scan: step("scan", true, `${scanN} ${plural(scanN, ["монета", "монеты", "монет"])} · ${pre.length} в кандидаты`),
+    strat:
+      mode === "local"
+        ? sigs.length
+          ? step("strat", true, `сигналы: ${coins(sigs, sides)}`)
+          : step("strat", null, "сигналов нет")
+        : step("strat", null, aiOn ? "подсказка для AI" : "только запасной путь"),
+    ai: !aiOn
+      ? step("ai", null, "не участвует")
+      : aiAnswer.who
+        ? step("ai", true, `ответил ${aiAnswer.who}${failed} · ${nSignals(sigs.length)}`)
+        : step("ai", false, "не ответил никто"),
+    sac: mode === "dqn" || mode === "hybrid" ? step("sac", null, "сигналов нет") : step("sac", null, "не участвует"),
+    risk: !sigs.length
+      ? step("risk", null, "нечего проверять")
+      : opened.length
+        ? step("risk", true, `прошли ${opened.length}${rej.length ? ` · отсеяно ${rej.length}: ${top}` : ""}`)
+        : step("risk", false, `отсеяно ${rej.length}: ${top}`),
+    order: opened.length ? step("order", true, `открыта: ${coins(opened, sides)}`) : step("order", null, "сделок нет"),
+    track: held ? step("track", true, nHeld(held)) : step("track", null, "позиций нет"),
+  };
+}
+
+function tradeSteps(side: Side, why: Partial<Position>, scanN: number, inPre: boolean, entry: number): TraceStep[] {
+  const mode = modeNow();
+  const aiOn = mode === "ai" || mode === "hybrid";
+  const word = side === "long" ? "LONG" : "SHORT";
+  const conf = why.confidence !== undefined ? ` · ${why.confidence.toFixed(2)}` : "";
+  const failed = aiAnswer.failed.length ? ` (после сбоя: ${aiAnswer.failed.join(", ")})` : "";
+  return [
+    step("scan", true, `в выборке из ${scanN} монет${inPre ? " · прошла предфильтр" : ""}`),
+    aiOn
+      ? step("strat", null, `подсказка: AI отнёс сигнал к «${why.strategy ?? "—"}»`)
+      : step("strat", true, `стратегия «${why.strategy ?? "—"}»`),
+    aiOn ? step("ai", true, `${aiAnswer.who || "AI"}: ${word}${conf}${failed}`) : step("ai", null, "не участвует"),
+    step("sac", null, mode === "dqn" || mode === "hybrid" ? "сигнала не дал" : "не участвует"),
+    step("risk", true, "проверки пройдены"),
+    step("order", true, `открыта ${word} по ${+entry.toPrecision(6)}`),
+  ];
+}
+
 function journalRow(p: Position, exitPrice: number, qty: number, net: number, fees: number, exit: number, opened: number, reason: string): Closed {
   const j: JournalTrade = {
     id: Number(p.trade_id),
@@ -187,6 +268,7 @@ function journalRow(p: Position, exitPrice: number, qty: number, net: number, fe
     closed: new Date(exit).toISOString(),
     reason,
     reasoning: p.reasoning ?? "",
+    trace: p.trace,
   };
   return { exit, net, fees, j };
 }
@@ -279,6 +361,7 @@ function open(symbol: string, side: Side, why: Partial<Position> = {}): Live {
 // Демо-позиции, чтобы терминал не был пустым при первом открытии.
 for (const [sym, side, move, hours] of [["SOL/USDT", "long", 1.006, 7], ["ETH/USDT", "short", 0.997, 3]] as const) {
   const p = open(sym, side);
+  p.trace = tradeSteps(side, p, SYMBOLS.length, true, p.entry);
   p.price = PRICES[sym] = p.entry * move;
   p.opened_at = Date.now() / 1000 - hours * 3600;
 }
@@ -320,7 +403,9 @@ function state() {
       strategy: p.strategy,
       confidence: p.confidence,
       reasoning: p.reasoning,
+      trace: p.trace,
     })),
+    cycle: lastCycle,
     timestamp: new Date().toISOString(),
   };
 }
@@ -427,6 +512,10 @@ function tick(): void {
 async function cycle(): Promise<void> {
   if (bot.paused) {
     emit("cycle", { state: "paused" });
+    const nodes: CycleTrace["nodes"] = {};
+    for (const n of ["scan", "strat", "ai", "sac", "risk", "order"] as BotNode[]) nodes[n] = step(n, null, "пауза — новые входы остановлены");
+    nodes.track = step("track", null, "пауза: открытые позиции сопровождаются");
+    saveCycle("paused", nodes);
     return;
   }
   cycleNo++;
@@ -434,6 +523,16 @@ async function cycle(): Promise<void> {
   const max = maxPositions();
   if (used >= max) {
     emit("cycle", { state: "monitor", used, max });
+    const skip = "пропущено: все слоты заняты";
+    saveCycle("monitor", {
+      scan: step("scan", null, skip),
+      strat: step("strat", null, skip),
+      ai: step("ai", null, skip),
+      sac: step("sac", null, skip),
+      risk: step("risk", false, `все слоты заняты (${used}/${max})`),
+      order: step("order", null, "сделок нет"),
+      track: step("track", true, nHeld(used)),
+    });
     return;
   }
   const scan = SYMBOLS.filter((s) => !lists.excluded.includes(s));
@@ -458,21 +557,31 @@ async function cycle(): Promise<void> {
     emit("radar.stage", { stage: "signal", symbol: sym, side: sides[sym], ...whys[sym] });
     await sleep(500);
   }
+  const rejected: Record<string, string> = {};
+  const opened: string[] = [];
   for (const sym of picks) {
     emit("radar.stage", { stage: "guards", symbol: sym });
     await sleep(700);
-    const reject = (reason: string) => emit("radar.stage", { stage: "rejected", symbol: sym, reason });
+    const reject = (reason: string) => {
+      rejected[sym] = reason;
+      emit("radar.stage", { stage: "rejected", symbol: sym, reason });
+    };
     if (Object.keys(positions).length >= maxPositions()) reject("все слоты заняты");
     else if (positions[sym]) reject("по монете уже есть позиция");
     else if (Math.random() < 0.55) reject(pick(REJECTS));
     // Как у бота: спрашивает только в Live без авто-сделок, в Paper — сразу сделка.
     else if (!config.AUTO_EXECUTE?.value && !bot.paper) ask(sym, sides[sym], whys[sym]);
-    else openAndEmit(sym, sides[sym], whys[sym]);
+    else {
+      openAndEmit(sym, sides[sym], whys[sym], scan.length, pre.includes(sym));
+      opened.push(sym);
+    }
   }
+  saveCycle("scan", cycleNodes(scan.length, pre, sides, rejected, opened, used));
 }
 
-function openAndEmit(sym: string, side: Side, why: Partial<Position> = {}): void {
+function openAndEmit(sym: string, side: Side, why: Partial<Position> = {}, scanN = SYMBOLS.length, inPre = true): void {
   const p = open(sym, side, why);
+  p.trace = tradeSteps(side, why, scanN, inPre, p.entry);
   emit("radar.stage", { stage: "open", symbol: sym });
   emit("position.opened", {
     symbol: sym,
@@ -486,6 +595,7 @@ function openAndEmit(sym: string, side: Side, why: Partial<Position> = {}): void
     confidence: p.confidence,
     reasoning: p.reasoning,
     opened_at: p.opened_at,
+    trace: p.trace,
   });
 }
 

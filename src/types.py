@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from typing_extensions import Required, TypedDict
 
@@ -58,3 +58,5 @@ class PositionRecord(TypedDict, total=False):
     reasoning: str
     # Время открытия (unix, с) — приложение заливает график только с этого момента
     opened_at: Optional[float]
+    # Шаги решения по узлам конвейера (src/decision_trace.py)
+    trace: List[Dict[str, Any]]

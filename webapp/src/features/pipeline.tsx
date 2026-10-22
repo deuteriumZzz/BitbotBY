@@ -2,7 +2,7 @@
 // под ним — сводка выбранного узла и его карточки (те же, что были во вкладке раньше).
 // Итогов последнего цикла на узлах пока нет: бот не сохраняет шаги решения (этап 2).
 
-import type { BotNode, SettingDef } from "../lib/types";
+import type { BotNode, SecretItem, SettingDef } from "../lib/types";
 import { actions, useStore } from "../store";
 import { Q, Seg } from "../ui";
 import { AiPane } from "./ai";
@@ -10,6 +10,7 @@ import { ConfirmCard, RiskCard, StrategiesCard, TrackCard, TuneCard, WhatCard, c
 import { STATUS, chosenId } from "./chainops";
 import { ModelCard } from "./jobs";
 import { GuardsCard } from "./settings";
+import { mark } from "./trace";
 
 const svg = (body: JSX.Element) => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -80,6 +81,17 @@ export function formatSetting(d: SettingDef | undefined, v: unknown): string {
   return d.unit ? `${String(v)} ${d.unit}` : String(v);
 }
 
+/** Состояние ключа подключения (Bybit, Telegram и т. д.) — как в Настройки → Подключения. */
+export function keyState(it?: SecretItem): string {
+  if (!it) return "—";
+  const last4 = it.fields.find((f) => f.secret && f.last4)?.last4;
+  const tail = last4 ? ` · ••••${last4}` : "";
+  if (it.status === "ok") return `▲ работает${tail}`;
+  if (it.status === "bad") return `▼ не работает${tail}`;
+  if (it.status === "warn") return `есть проблема${tail}`;
+  return "не задан";
+}
+
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 const day = (iso: string) => new Date(iso).toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
 
@@ -99,6 +111,10 @@ function usePipeline(mode: string): { status: Record<BotNode, string>; info: Rec
   const profiles = useStore((s) => s.profiles);
   const rollback = useStore((s) => s.rollbackAvailable);
   const open = useStore((s) => Object.keys(s.positions).length);
+  const secrets = useStore((s) => s.secrets);
+  const bybit = secrets?.find((s) => s.service === "bybit");
+  const tg = secrets?.find((s) => s.service === "telegram");
+  const feeds = (secrets ?? []).filter((s) => s.group === "Данные и соцсети");
   const show = (key: string) => {
     const d = schema.find((x) => x.key === key);
     return formatSetting(d, c[key]?.value ?? d?.default);
@@ -122,7 +138,7 @@ function usePipeline(mode: string): { status: Record<BotNode, string>; info: Rec
     ai: !ai ? "цепочка" : ai.single ? "один провайдер" : `${ai.chain.length} в цепочке`,
     sac: mode === "dqn" ? "решает сам" : "вместе с AI",
     risk: `${presetName(presetOf(c))}${guardsOff ? " · без защит" : ""}`,
-    order: auto ? "автоматически" : "с подтверждением",
+    order: `Bybit ${bybit?.status === "ok" ? "▲" : bybit?.status === "bad" ? "▼" : "·"} ${paper ? "Paper" : "Live"} · ${auto ? "авто" : "с подтверждением"}`,
     track: partial ? `${pct(cfg(c, "PARTIAL_TP_FRACTION", 0.5))} на ${pct(cfg(c, "PARTIAL_TP_TRIGGER", 0.6))} · безубыток` : "без частичной фиксации",
   };
   const info: Record<BotNode, Info> = {
@@ -137,6 +153,7 @@ function usePipeline(mode: string): { status: Record<BotNode, string>; info: Rec
         ["Монеты вручную", `${symbols.forced.length} всегда · ${symbols.excluded.length} никогда`],
         ["Смена сезона", cfg<string>(c, "SEASON_SWITCH_MODE", "alert") === "auto" ? "сам меняет профиль" : "предлагает в Telegram"],
         ["Прогноз Chronos", show("CHRONOS_ENABLED")],
+        ["Данные и соцсети", feeds.length ? `${feeds.filter((s) => s.status === "ok").length} из ${feeds.length} подключено` : "—"],
       ],
     },
     strat: {
@@ -200,6 +217,9 @@ function usePipeline(mode: string): { status: Record<BotNode, string>; info: Rec
     order: {
       desc: "Отправляет заявку на биржу. В Paper сделки виртуальные, но по реальным ценам.",
       fields: [
+        ["Биржа Bybit", keyState(bybit)],
+        ["Рыночные данные", bybit?.status === "ok" ? "по вашему ключу" : paper ? "публичные — для Paper ключ не нужен" : "нужен рабочий ключ"],
+        ["Telegram-бот", keyState(tg)],
         ["Как открывать", auto ? "автоматически" : paper ? "с подтверждением (в Paper не спрашивает)" : "с подтверждением"],
         ["Время на решение", `${cfg<number>(c, "TELEGRAM_CONFIRM_TIMEOUT", 60)} с`],
         ["Если не ответил", cfg<string>(c, "CONFIRM_ON_TIMEOUT", "execute") === "execute" ? "открыть сделку" : "пропустить"],
@@ -263,7 +283,7 @@ function AiStrip({ part }: { part: boolean }) {
         </li>
       </ol>
       <p>
-        {reserve > 0 && `В резерве: ${reserve}. `}Не ответил никто — {fallback ? "решают стратегии (запасной путь)" : "сделки нет"}.
+        {reserve > 0 && `В резерве: ${reserve}. `}Если не ответит никто — {fallback ? "решают стратегии (запасной путь)" : "сделки нет"}.
       </p>
     </div>
   );
@@ -278,6 +298,11 @@ export function Pipeline() {
   const at = NODES.findIndex((n) => n.id === node);
   const cur = NODES[at] ?? NODES[0];
   const part = takesPart(mode, cur.id);
+  // Итог последнего цикла (src/decision_trace.py); null — бот ещё не прошёл цикл после обновления.
+  const cycle = useStore((s) => s.lastCycle);
+  const when = cycle ? new Date(cycle.at * 1000).toLocaleTimeString("ru-RU") : "";
+  const curRes = cycle?.nodes[cur.id];
+  const [curGlyph, curCls] = mark(curRes?.ok);
   return (
     <section className="view enter" aria-label="Бот">
       <div className="pipe-canvas">
@@ -302,11 +327,16 @@ export function Pipeline() {
               <i className="idle" />
               не участвует в этом режиме
             </li>
+            <li className="pipe-legend-res">
+              итог цикла{when ? ` ${when}` : ""}: <b className="ok">▲</b> пройдено · <b>–</b> пропущено · <b className="bad">▼</b> остановил
+            </li>
           </ul>
         </div>
         <ol className="pipe" aria-label="Конвейер решений">
           {NODES.map(({ id, title, icon }, i) => {
             const on = takesPart(mode, id);
+            const res = cycle?.nodes[id];
+            const [glyph, cls] = mark(res?.ok);
             return (
               <li key={id}>
                 {i > 0 && (
@@ -326,7 +356,12 @@ export function Pipeline() {
                     <i>{String(i + 1).padStart(2, "0")}</i>
                   </span>
                   <b>{title}</b>
-                  <span>{on ? status[id] : "не участвует"}</span>
+                  <span className="st">{on ? status[id] : "не участвует"}</span>
+                  {on && res && (
+                    <span className={`res ${cls}`}>
+                      <i aria-hidden="true">{glyph}</i> {res.text}
+                    </span>
+                  )}
                 </button>
               </li>
             );
@@ -342,6 +377,16 @@ export function Pipeline() {
             <span className="pill sp">{part ? `шаг ${String(at + 1).padStart(2, "0")} из ${String(NODES.length).padStart(2, "0")}` : "не участвует в этом режиме"}</span>
           </div>
           <p className="pipe-desc">{info[cur.id].desc}</p>
+          <p className={`pipe-res-line ${curCls}`}>
+            <span className="label">Последний цикл{when ? ` · ${when}` : ""}</span>
+            {curRes ? (
+              <span>
+                <i aria-hidden="true">{curGlyph}</i> {curRes.text}
+              </span>
+            ) : (
+              <span>итогов пока нет — бот ещё не прошёл цикл после обновления</span>
+            )}
+          </p>
           <dl className="pipe-fields">
             {info[cur.id].fields.map(([k, v]) => (
               <div key={k}>
@@ -393,6 +438,11 @@ export function Pipeline() {
           <div className="cols">
             <div className="col">
               <ConfirmCard />
+              <div className="btn-row">
+                <button className="btn" type="button" onClick={() => setTab("settings")}>
+                  Подключения: биржа, Telegram, ключи →
+                </button>
+              </div>
             </div>
           </div>
         )}

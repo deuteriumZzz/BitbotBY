@@ -199,9 +199,19 @@ def get_open_positions() -> List[dict]:
                 "confidence": p.get("confidence"),
                 "reasoning": p.get("reasoning", ""),
                 "opened_at": p.get("opened_at"),
+                "trace": p.get("trace") or [],
             }
         )
     return out
+
+
+def _steps(raw: object) -> List[dict]:
+    """Шаги решения из колонки trace (JSON); у старых сделок — пусто."""
+    try:
+        val = json.loads(str(raw or "[]"))
+    except ValueError:
+        return []
+    return val if isinstance(val, list) else []
 
 
 def get_closed_trades(since: Optional[datetime] = None) -> List[dict]:
@@ -272,6 +282,7 @@ def get_journal(since: Optional[datetime] = None, limit: int = 1000) -> List[dic
             "closed": r["exit_time"],
             "reason": r.get("exit_reason") or "",
             "reasoning": r.get("reasoning") or "",
+            "trace": _steps(r.get("trace")),
         }
         for r in out
     ]

@@ -26,6 +26,7 @@ from src.constants import REDIS_TTL_MARKET_DATA, SILENT_DEATH_ALERT_COOLDOWN
 from src.correlation_filter import CorrelationFilter
 from src.cycle import CycleRunner
 from src.data_loader import DataLoader
+from src.decision_trace import DecisionTrace
 from src.experience_buffer import LOCAL_REASONING_PREFIX
 from src.funding_arb_detector import FundingArbDetector
 from src.health_server import cycles_counter
@@ -149,6 +150,12 @@ class TradingBot:
         self._monitor_task: Optional[asyncio.Task[None]] = None
         self._command_task: Optional[asyncio.Task[None]] = None
         self.trade_history = TradeHistory()
+        # След решения для приложения: только слушает события и ничего не решает.
+        self._trace = DecisionTrace(
+            mode=lambda: self._runtime_config.get_mode(),
+            store=self._store_cycle_trace,
+        )
+        self._bg_tasks: set[asyncio.Task[None]] = set()
         self.telegram = TelegramNotifier(
             Config.TELEGRAM_BOT_TOKEN,
             Config.TELEGRAM_CHAT_ID,
@@ -667,6 +674,7 @@ class TradingBot:
         return getattr(getattr(self, "redis", None), "redis_client", None)
 
     def _publish_event(self, type_: str, data: Dict[str, Any]) -> None:
+        self._trace.on_event(type_, data)
         emit(self._bus, type_, data)
         # Ожидающее подтверждения предложение сделки храним, пока оно живо,
         # чтобы приложение увидело его и после переподключения.
@@ -682,6 +690,17 @@ class TradingBot:
                 r.delete(key)
         except Exception as e:
             logger.debug("pending signal not stored: %s", e)
+
+    def _store_cycle_trace(self, summary: Dict[str, Any]) -> None:
+        """Итог цикла по узлам конвейера — для вкладки «Бот» (и после перезагрузки)."""
+        r = self._bus
+        if r is None:
+            return
+        try:
+            r.set("bot:last_cycle", json.dumps(summary, ensure_ascii=False))
+        except Exception as e:
+            logger.debug("last cycle not stored: %s", e)
+        emit(r, "trace.cycle", summary)
 
     def _publish_signal_stages(self, recs: list, passed: list) -> None:
         """radar.stage «signal» по каждой рекомендации.
@@ -722,6 +741,20 @@ class TradingBot:
         emit(self._bus, "position.closed", {"symbol": sym, **(info or {})})
 
     def _on_position_opened(self, sym: str, pos: PositionRecord) -> None:
+        # Шаги решения — к позиции («Почему открыта» в терминале) и к сделке
+        # в базе (журнал). Запись в базу — фоном, торговлю не задерживает.
+        steps = self._trace.opened(sym, dict(pos))
+        pos["trace"] = steps
+        trade_id = pos.get("trade_id")
+        if trade_id:
+            try:
+                task = asyncio.get_running_loop().create_task(
+                    self.trade_history.set_trace(int(trade_id), steps)
+                )
+                self._bg_tasks.add(task)
+                task.add_done_callback(self._bg_tasks.discard)
+            except RuntimeError as e:
+                logger.debug("trace not saved for trade %s: %s", trade_id, e)
         emit(
             self._bus,
             "position.opened",
@@ -737,6 +770,7 @@ class TradingBot:
                 "confidence": pos.get("confidence"),
                 "reasoning": pos.get("reasoning", ""),
                 "opened_at": pos.get("opened_at"),
+                "trace": steps,
             },
         )
 
@@ -2078,6 +2112,7 @@ class TradingBot:
 
                 self.combiner.sac.reload_if_updated()
                 self._last_cycle_at = time.time()
+                self._trace.end_cycle()
                 await self._check_silent_death()
                 self._save_monitored_state()
 

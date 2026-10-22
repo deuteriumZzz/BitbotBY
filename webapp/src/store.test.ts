@@ -78,6 +78,18 @@ describe("события", () => {
     expect(useStore.getState().feed[0].text).toBe("Закрыл SOL по тейк-профиту: ▲ +$10.00");
   });
 
+  it("итог цикла и шаги решения приходят живыми событиями", () => {
+    const { apply } = useStore.getState();
+    const ai = { node: "ai", ok: true, text: "ответил Gemini · 2 сигнала" };
+    apply(ev("trace.cycle", { at: 1, mode: "ai", state: "scan", nodes: { ai } }));
+    expect(useStore.getState().lastCycle?.nodes.ai).toEqual(ai);
+    // состояние цикла (скан/мониторинг/пауза) этим не затирается
+    expect(useStore.getState().cycle.state).not.toBeUndefined();
+    const trace = [{ node: "risk", ok: true, text: "проверки пройдены" }];
+    apply(ev("position.opened", { symbol: "SOL/USDT", trade_id: 4, side: "buy", entry: 100, qty: 1, stop_loss: 95, take_profit: 110, trace }));
+    expect(useStore.getState().positions["SOL/USDT"].trace).toEqual(trace);
+  });
+
   it("пауза из Telegram видна по событию цикла", () => {
     useStore.getState().apply(ev("cycle", { state: "paused" }));
     expect(useStore.getState().bot?.paused).toBe(true);

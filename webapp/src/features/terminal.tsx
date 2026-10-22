@@ -35,6 +35,7 @@ import { actions, positionPnl, useStore, type Store } from "../store";
 import { cfg, profileName, stratName } from "./bots";
 import { MarketPulse } from "./market";
 import { ReadinessCard } from "./setup";
+import { TraceSteps } from "./trace";
 import { Flash, Gauge, Q, Seg, Tween, hideTip, showTip, useArm } from "../ui";
 
 const EASE = "cubic-bezier(.2,.8,.2,1)";
@@ -1145,15 +1146,17 @@ function PositionCard({ p, enter }: { p: Position; enter: boolean }) {
           )}
         </div>
       </div>
-      {p.reasoning && (
+      {(p.reasoning || p.trace?.length) && (
         <p
           className={`pos-why ${whyOpen ? "open" : ""}`}
           title={p.reasoning}
           onClick={() => setWhyOpen(!whyOpen)}
         >
-          <em>Почему открыта:</em> {p.reasoning}
+          <em>Почему открыта:</em> {p.reasoning || "по шагам решения"}
+          {p.trace?.length && !whyOpen ? <span className="pos-why-more"> · шаги ▸</span> : null}
         </p>
       )}
+      {whyOpen && p.trace?.length ? <TraceSteps steps={p.trace} /> : null}
       <div className="range">
         <span>
           SL <Flash value={p.sl} text={price(p.sl)} />

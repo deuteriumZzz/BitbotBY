@@ -6,6 +6,21 @@ export type Tab = "terminal" | "bots" | "learn" | "journal" | "settings";
 /** Узел конвейера решений во вкладке «Бот». */
 export type BotNode = "scan" | "strat" | "ai" | "sac" | "risk" | "order" | "track";
 
+/** Шаг решения на узле (src/decision_trace.py): true — пропустил дальше, false — остановил, null — пропущен. */
+export interface TraceStep {
+  node: BotNode;
+  ok: boolean | null;
+  text: string;
+}
+
+/** Итог последнего цикла по узлам конвейера. */
+export interface CycleTrace {
+  at: number;
+  mode: string;
+  state: string;
+  nodes: Partial<Record<BotNode, TraceStep>>;
+}
+
 export interface Position {
   id: string;
   trade_id: number | string | null;
@@ -25,6 +40,8 @@ export interface Position {
   reasoning?: string;
   /** Когда открыта (unix, с); нет у позиций, открытых до обновления. */
   opened_at?: number | null;
+  /** Шаги решения по узлам конвейера; нет у позиций, открытых до этапа 2. */
+  trace?: TraceStep[];
 }
 
 export interface BotState {
@@ -42,6 +59,8 @@ export interface BotState {
   positions: Position[];
   /** Сезон рынка и индекс Страха/Жадности; null, пока бот их не загрузил. */
   market?: { season: Season | null; fear_greed: FearGreed | null };
+  /** Итог последнего цикла; null — бот ещё не прошёл цикл после обновления. */
+  cycle?: CycleTrace | null;
   timestamp: string;
 }
 
@@ -250,6 +269,8 @@ export interface JournalTrade {
   /** Код причины выхода: tp, sl, trail, manual_app, … */
   reason: string;
   reasoning: string;
+  /** Шаги решения; пусто у сделок до этапа 2. */
+  trace?: TraceStep[];
 }
 
 export interface Journal {

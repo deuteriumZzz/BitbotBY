@@ -10,6 +10,7 @@ import type {
   BotEvent,
   BotNode,
   BotState,
+  CycleTrace,
   ConfigValues,
   DailyRow,
   Guard,
@@ -91,6 +92,8 @@ export interface Store {
   wsUp: boolean;
   alive: boolean;
   bot: BotState["bot"] | null;
+  /** Итог последнего цикла по узлам конвейера (вкладка «Бот»). */
+  lastCycle: CycleTrace | null;
   balance: number;
   slots: { used: number; max: number };
   positions: Record<string, Position>;
@@ -216,6 +219,7 @@ export const useStore = create<Store>((set, get) => {
   const applyState = (st: BotState): void =>
     set({
       bot: st.bot,
+      lastCycle: st.cycle ?? null,
       alive: st.bot.alive,
       balance: st.balance,
       slots: st.slots,
@@ -229,6 +233,7 @@ export const useStore = create<Store>((set, get) => {
     wsUp: false,
     alive: true,
     bot: null,
+    lastCycle: null,
     balance: 0,
     slots: { used: 0, max: 0 },
     positions: {},
@@ -409,6 +414,7 @@ export const useStore = create<Store>((set, get) => {
             strategy: d.strategy ?? get().radar.signal[d.symbol]?.strategy,
             confidence: d.confidence ?? get().radar.signal[d.symbol]?.confidence,
             reasoning: d.reasoning || get().radar.signal[d.symbol]?.reasoning,
+            trace: d.trace,
             opened_at: d.opened_at ?? Date.now() / 1000,
           };
           set((s) => ({ positions: { ...s.positions, [p.symbol]: p } }));
@@ -466,6 +472,9 @@ export const useStore = create<Store>((set, get) => {
         case "model.rolled_back":
           void get().loadJobs().catch(() => undefined);
           feed("edit", "Модель SAC откатана к предыдущей");
+          break;
+        case "trace.cycle":
+          set({ lastCycle: d as unknown as CycleTrace });
           break;
         case "cycle": {
           // Пауза могла прийти из Telegram — цикл бота знает о ней раньше снимка.

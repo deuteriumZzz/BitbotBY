@@ -16,7 +16,7 @@ import logging
 import os
 import sqlite3
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Any, Dict, List, Optional
 
 _BACKTEST_JSON = os.path.join("data", "backtest_results.json")
 
@@ -109,7 +109,8 @@ class TradeHistory:
             # Колонки, добавленные после первых версий: в старых БД их нет.
             # reasoning — почему открыта (текст AI или стратегии),
             # exit_reason — как закрыта (tp, sl, trail, manual_app, …).
-            for column in ("context_flags", "reasoning", "exit_reason"):
+            # trace — шаги решения по узлам конвейера (JSON, src/decision_trace.py).
+            for column in ("context_flags", "reasoning", "exit_reason", "trace"):
                 try:
                     self._conn.execute(
                         f"ALTER TABLE trades ADD COLUMN {column} "
@@ -223,6 +224,19 @@ class TradeHistory:
                 return cur.lastrowid
 
             return await self._run_db(_write)
+
+    async def set_trace(self, trade_id: int, steps: List[Dict[str, Any]]) -> None:
+        """Сохраняет шаги решения («Почему открыта» в журнале) как JSON."""
+        payload = json.dumps(steps, ensure_ascii=False)
+        async with self._lock:
+
+            def _write():
+                self._conn.execute(
+                    "UPDATE trades SET trace = ? WHERE id = ?", (payload, trade_id)
+                )
+                self._conn.commit()
+
+            await self._run_db(_write)
 
     async def record_partial_close(
         self, trade_id: int, qty: float, exit_price: float, commission: float = 0.0

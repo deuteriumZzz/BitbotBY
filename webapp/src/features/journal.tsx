@@ -7,6 +7,7 @@ import type { JournalTrade, Period, Side } from "../lib/types";
 import { useStore } from "../store";
 import { Seg, Skel } from "../ui";
 import { stratName } from "./bots";
+import { TraceSteps } from "./trace";
 
 /** Выгрузка показанных сделок: открывается в Excel и Numbers. */
 function exportCsv(trades: JournalTrade[]): void {
@@ -268,7 +269,10 @@ function TradeList({ trades }: { trades: JournalTrade[] }) {
                   <dt>Уверенность</dt>
                   <dd className="num">{t.confidence.toFixed(2)}</dd>
                   <dt>Почему открыта</dt>
-                  <dd>{t.reasoning || "бот не записал объяснение"}</dd>
+                  <dd>
+                    {t.reasoning || "бот не записал объяснение"}
+                    {t.trace?.length ? <TraceSteps steps={t.trace} /> : null}
+                  </dd>
                   <dt>Почему закрыта</dt>
                   <dd>{t.reason ? exitReason(t.reason) : "причина не записана (сделка до обновления)"}</dd>
                 </dl>
