@@ -8,6 +8,7 @@ import type {
   AiState,
   Alert,
   BotEvent,
+  BotNode,
   BotState,
   ConfigValues,
   DailyRow,
@@ -130,12 +131,16 @@ export interface Store {
   /** Открытый шаг мастера первого запуска; null — мастер закрыт. */
   setup: SetupStep | null;
   tab: Tab;
+  /** Выбранный узел конвейера во вкладке «Бот». */
+  node: BotNode;
   /** Поиск параметра по Cmd/Ctrl+K: null — не запрошен, строка — что подставить. */
   paramSearch: string | null;
   toast: { id: number; text: string; undo?: () => void } | null;
 
   boot(): Promise<void>;
   setTab(tab: Tab): void;
+  /** Открыть вкладку «Бот» на нужном узле конвейера. */
+  openNode(node: BotNode): void;
   openSetup(step: SetupStep | null): void;
   openHelp(open: boolean): void;
   openNotif(open: boolean): void;
@@ -260,6 +265,7 @@ export const useStore = create<Store>((set, get) => {
     seenFeed: 0,
     paramSearch: null,
     tab: "terminal",
+    node: "scan",
     toast: null,
 
     async boot() {
@@ -327,6 +333,7 @@ export const useStore = create<Store>((set, get) => {
     },
 
     setTab: (tab) => set({ tab, setup: null }),
+    openNode: (node) => set({ tab: "bots", node, setup: null }),
     openSetup: (setup) => set({ setup }),
     openHelp: (helpOpen) => set({ helpOpen }),
     openPalette: (paletteOpen) => set({ paletteOpen }),

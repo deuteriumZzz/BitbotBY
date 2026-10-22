@@ -267,7 +267,7 @@ function sacRole(mode: string): { used: boolean; text: string } {
     };
   return {
     used: false,
-    text: "Сейчас режим не использует SAC, и обучение ни на что не повлияет, пока вы не включите режим SAC или Hybrid (Настройки → Параметры → «Кто принимает решение»).",
+    text: "Сейчас режим не использует SAC, и обучение ни на что не повлияет, пока вы не включите режим SAC или Hybrid (вкладка «Бот» → «Кто принимает решение» вверху).",
   };
 }
 
@@ -362,7 +362,7 @@ function ProfilePicker({
   );
 }
 
-function ModelCard() {
+export function ModelCard() {
   const profiles = useStore((s) => s.profiles);
   const backupProfile = useStore((s) => s.backupProfile);
   const activeId = profiles.find((p) => p.active)?.id ?? profiles[0]?.id ?? "";

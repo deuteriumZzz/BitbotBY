@@ -1,4 +1,5 @@
-// Вкладка «Бот»: режим риска, тонкая настройка, подтверждение сделок, что торговать, стратегии.
+// Карточки вкладки «Бот»: что торговать, стратегии, режим риска, тонкая настройка, открытие сделок.
+// По узлам конвейера их раскладывает features/pipeline.tsx.
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
@@ -146,27 +147,6 @@ const PROFILE_NOTE: Record<string, string> = {
   meme: "Мем-монеты и сигналы из Twitter и памп-каналов Telegram. Самый рискованный.",
 };
 
-export function Bots() {
-  return (
-    <section className="view enter" aria-label="Бот">
-      <div className="cols">
-        <div className="col">
-          <WhatCard />
-          <RiskCard />
-          <details className="extra">
-            <summary>Дополнительно: точная настройка и подтверждение сделок</summary>
-            <TuneCard />
-            <ConfirmCard />
-          </details>
-        </div>
-        <div className="col">
-          <StrategiesCard />
-        </div>
-      </div>
-    </section>
-  );
-}
-
 // ── Режим риска ───────────────────────────────────────────────────────────────
 
 /** Ключ пресета риска, совпадающего с настройками; undefined — свои настройки. */
@@ -245,7 +225,7 @@ function useDebouncedPatch<T>(server: T, key: string, toServer: (v: T) => unknow
   return [local, set];
 }
 
-function TuneCard() {
+export function TuneCard() {
   const c = useStore((s) => s.config);
   const paper = useStore((s) => s.bot?.paper ?? true);
   const spot = cfg<string>(c, "MARKET_TYPE", "linear") === "spot";
@@ -342,7 +322,7 @@ const DECISION_QUICK = [
   [120, "2 мин"],
 ] as const;
 
-function ConfirmCard() {
+export function ConfirmCard() {
   const c = useStore((s) => s.config);
   const paper = useStore((s) => s.bot?.paper ?? true);
   const say = useStore((s) => s.say);
@@ -445,11 +425,10 @@ function ConfirmCard() {
 
 // ── Что торговать ─────────────────────────────────────────────────────────────
 
-function WhatCard() {
+export function WhatCard() {
   const c = useStore((s) => s.config);
   const profile = useStore((s) => s.bot?.profile ?? null);
   const seasonAuto = cfg<string>(c, "SEASON_SWITCH_MODE", "alert") === "auto";
-  const mode = cfg<string>(c, "MODE", "ai");
   const chronos = cfg(c, "CHRONOS_ENABLED", false);
   return (
     <article className="card">
@@ -488,23 +467,6 @@ function WhatCard() {
         />
       </div>
       <div className="field">
-        <div className="field-h">
-          <span>
-            Кто принимает решение{" "}
-            <Q tip="Local — только индикаторы. AI — языковая модель. SAC — обученная нейросеть. Hybrid — SAC и AI должны согласиться." />
-          </span>
-        </div>
-        <Seg
-          className="full"
-          value={mode}
-          options={[
-            ["local", "Local"],
-            ["ai", "AI"],
-            ["dqn", "SAC"],
-            ["hybrid", "Hybrid"],
-          ]}
-          onChange={(v) => void actions.patchConfig({ MODE: v })}
-        />
         <div className="row-tgl">
           <span>
             Прогноз Chronos <Q tip="Модель Amazon Chronos прогнозирует цену и чуть повышает или понижает уверенность сигнала." />
@@ -535,7 +497,7 @@ const MODE_ROLE: Record<string, { title: string; text: string }> = {
   },
 };
 
-function StrategiesCard() {
+export function StrategiesCard() {
   const all0 = useStore((s) => s.strategies);
   const marketSpot = useStore((s) => cfg<string>(s.config, "MARKET_TYPE", "linear") === "spot");
   const mode = useStore((s) => s.bot?.mode ?? "ai");
@@ -722,7 +684,7 @@ function StrategiesCard() {
       </div>
     </>
   );
-  // Когда решают AI или SAC, стратегии вторичны — список свёрнут, чтобы не отвлекать.
+  // У стратегий свой узел в конвейере: кто его открыл, хочет видеть список, поэтому не сворачиваем.
   return (
     <article className="card">
       <div className="card-h">
@@ -731,14 +693,95 @@ function StrategiesCard() {
           включено {on} из {strategies.length}
         </span>
       </div>
-      {mode === "local" ? (
-        body
-      ) : (
-        <details className="more">
-          <summary>Что это и как влияет</summary>
-          {body}
-        </details>
+      {body}
+    </article>
+  );
+}
+
+// ── Выход из сделки ───────────────────────────────────────────────────────────
+
+const TP_AT: readonly (readonly [number, string])[] = [
+  [0.5, "50%"],
+  [0.6, "60%"],
+  [0.75, "75%"],
+];
+const TP_PART: readonly (readonly [number, string])[] = [
+  [0.3, "30%"],
+  [0.5, "50%"],
+  [0.7, "70%"],
+];
+const TRAIL: readonly (readonly [number, string])[] = [
+  [0.5, "0.5 × ATR"],
+  [1, "1 × ATR"],
+  [1.5, "1.5 × ATR"],
+  [2, "2 × ATR"],
+];
+const preset = (v: number, opts: readonly (readonly [number, string])[]) => opts.find(([x]) => Math.abs(x - v) < 1e-9)?.[0] ?? null;
+const pctOf = (v: number) => `${+(v * 100).toFixed(1)}%`;
+
+/** Частичная фиксация прибыли и трейлинг — ровно так, как их делает PositionMonitor. */
+export function TrackCard() {
+  const c = useStore((s) => s.config);
+  const schema = useStore((s) => s.schema);
+  const setTab = useStore((s) => s.setTab);
+  const searchParams = useStore((s) => s.searchParams);
+  const on = cfg(c, "PARTIAL_TP_ENABLED", true);
+  const at = cfg(c, "PARTIAL_TP_TRIGGER", 0.6);
+  const part = cfg(c, "PARTIAL_TP_FRACTION", 0.5);
+  const trail = cfg(c, "TRAILING_STOP_ATR_MULT", 1);
+  // Эти параметры бот читает при запуске — честно говорим, что нужен перезапуск.
+  const restart = schema.some((d) => (d.key.startsWith("PARTIAL_TP_") || d.key === "TRAILING_STOP_ATR_MULT") && !d.hot);
+  return (
+    <article className="card">
+      <div className="card-h">
+        <h2>Выход из сделки</h2>
+        {restart && <span className="tag rst sp">после перезапуска</span>}
+      </div>
+      <div className="row-tgl">
+        <span>
+          Частичная фиксация прибыли{" "}
+          <Q tip="Когда цена проходит заданную часть пути до тейк-профита, бот закрывает часть позиции и переносит стоп-лосс на цену входа." />
+        </span>
+        <Toggle on={on} label="Частичная фиксация прибыли" onChange={(v) => void actions.patchConfig({ PARTIAL_TP_ENABLED: v })} />
+      </div>
+      {on && (
+        <>
+          <div className="field">
+            <div className="field-h">
+              <span>Когда фиксировать — пройдено пути до тейк-профита</span>
+            </div>
+            <Seg className="full" value={preset(at, TP_AT)} options={TP_AT} onChange={(v) => void actions.patchConfig({ PARTIAL_TP_TRIGGER: v })} label="Когда фиксировать" />
+          </div>
+          <div className="field">
+            <div className="field-h">
+              <span>Какую часть позиции закрыть</span>
+            </div>
+            <Seg className="full" value={preset(part, TP_PART)} options={TP_PART} onChange={(v) => void actions.patchConfig({ PARTIAL_TP_FRACTION: v })} label="Какую часть закрыть" />
+          </div>
+          <p className="note-soon">
+            Цена прошла {pctOf(at)} пути до тейк-профита — бот закрывает {pctOf(part)} позиции и переносит стоп-лосс на цену входа (безубыток). Остаток идёт к
+            тейк-профиту, а если цена развернётся — закроется около цены входа.
+          </p>
+        </>
       )}
+      <div className="field">
+        <div className="field-h">
+          <span>
+            Отступ трейлинг-стопа <Q tip="Стоп-лосс подтягивается за ценой на это расстояние в ATR — среднем ходе цены за свечу. Меньше — выход раньше, больше — сделке больше места." />
+          </span>
+          {preset(trail, TRAIL) === null && <span className="pill sp">сейчас {trail} × ATR</span>}
+        </div>
+        <Seg className="full" value={preset(trail, TRAIL)} options={TRAIL} onChange={(v) => void actions.patchConfig({ TRAILING_STOP_ATR_MULT: v })} label="Отступ трейлинг-стопа" />
+      </div>
+      <p className="note-soon">Трейлинг можно выключить у отдельной позиции — тумблером в «Терминале». Точные значения — в «Все параметры».</p>
+      <div className="btn-row">
+        <button className="btn" type="button" onClick={() => setTab("terminal")}>
+          Позиции в Терминале →
+        </button>
+        <button className="btn" type="button" onClick={() => searchParams("PARTIAL_TP")}>
+          Частичный TP в «Все параметры» →
+        </button>
+      </div>
     </article>
   );
 }

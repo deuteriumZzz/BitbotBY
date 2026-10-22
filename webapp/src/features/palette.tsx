@@ -27,12 +27,24 @@ export function Palette() {
       keys: `${label} вкладка перейти открыть`,
       run: () => st.setTab(tab),
     });
+    const node = (label: string, id: Parameters<typeof st.openNode>[0], keys: string): Cmd => ({
+      label: `Бот → ${label}`,
+      keys: `бот конвейер ${label} ${keys}`,
+      run: () => st.openNode(id),
+    });
     return [
       go("Терминал", "terminal", "1"),
       go("Бот", "bots", "2"),
       go("Обучение", "learn", "3"),
       go("Журнал", "journal", "4"),
       go("Настройки", "settings", "5"),
+      node("Сканер", "scan", "что торговать профиль рынок спот фьючерсы сезон chronos"),
+      node("Стратегии", "strat", "запасной путь закрепить"),
+      node("AI-цепочка", "ai", "ai провайдеры цепочка ключ"),
+      node("SAC", "sac", "нейросеть модель откат"),
+      node("Риск", "risk", "риск пресет плечо слоты просадка защиты портфеля"),
+      node("Ордер", "order", "подтверждение открытие сделок таймаут"),
+      node("Сопровождение", "track", "выход частичный tp фиксация прибыли безубыток трейлинг"),
       { label: "Справка", hint: "?", keys: "справка помощь подсказки", run: () => st.openHelp(true) },
       { label: "Уведомления", hint: "N", keys: "уведомления события колокольчик", run: () => st.openNotif(true) },
       paused

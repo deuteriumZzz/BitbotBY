@@ -50,7 +50,6 @@ function Main({ go }: { go: (pane: Pane) => void }) {
       <div className="cols">
         <div className="col">
           <HoursCard />
-          <GuardsCard />
           <SymbolsCard />
           <AlertsCard />
         </div>
@@ -131,7 +130,8 @@ const GUARDS_KEPT = [
   "Живой режим: переключатель в нём не действует вообще",
 ];
 
-function GuardsCard() {
+/** Живёт в узле «Риск» вкладки «Бот». */
+export function GuardsCard() {
   const paper = useStore((s) => s.bot?.paper ?? true);
   const off = useStore((s) => cfg<boolean>(s.config, "PAPER_GUARDS_OFF", false));
   return (
@@ -956,8 +956,10 @@ function AllParams({ go }: { go: (pane: Pane) => void }) {
 function HomeRow({ d, go }: { d: SettingDef; go: (pane: Pane) => void }) {
   const home = OWN_HOME[d.key];
   const setTab = useStore((s) => s.setTab);
+  const openNode = useStore((s) => s.openNode);
   const open = () => {
     if (home.tab === "settings" && home.pane) go(home.pane);
+    else if (home.node) openNode(home.node);
     else setTab(home.tab);
   };
   return (

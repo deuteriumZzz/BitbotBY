@@ -6,7 +6,8 @@ import { isMock } from "./lib/api";
 import { base, fmtN, plural, price, usd } from "./lib/format";
 import * as platform from "./lib/platform";
 import type { Tab } from "./lib/types";
-import { Bots, profileName, stratName } from "./features/bots";
+import { profileName, stratName } from "./features/bots";
+import { Pipeline } from "./features/pipeline";
 import { Learn } from "./features/jobs";
 import { HelpButton, HelpSheet } from "./features/help";
 import { NotifButton, NotifSheet } from "./features/notifications";
@@ -137,7 +138,7 @@ export function App() {
         ) : (
           <>
             {tab === "terminal" && <Terminal />}
-            {tab === "bots" && <Bots />}
+            {tab === "bots" && <Pipeline />}
             {tab === "learn" && <Learn />}
             {tab === "journal" && <Journal />}
             {tab === "settings" && <Settings />}
