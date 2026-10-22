@@ -786,9 +786,9 @@ export const actions = {
     }
   },
   /** Найти свой chat id: кто писал боту. Токен берётся из поля или из сохранённого. */
-  findTelegramChat: async (token: string): Promise<{ id: string; name: string }[] | null> => {
+  findTelegramChat: async (token: string, code: string): Promise<{ id: string; name: string }[] | null> => {
     try {
-      return (await api<{ chats: { id: string; name: string }[] }>("POST", "/api/secrets/telegram/chat", token ? { token } : {})).chats;
+      return (await api<{ chats: { id: string; name: string }[] }>("POST", "/api/secrets/telegram/chat", { code, ...(token ? { token } : {}) })).chats;
     } catch (e) {
       st().say(e instanceof ApiError ? e.message : "Не удалось связаться с Telegram.");
       return null;

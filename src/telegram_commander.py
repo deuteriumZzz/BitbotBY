@@ -33,10 +33,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
+from types import SimpleNamespace
 from typing import Any, Callable, Dict, Optional
 
 from config import Config
-from src import ai_providers
+from src import ai_providers, login_link
 
 logger = logging.getLogger(__name__)
 
@@ -1008,6 +1010,96 @@ def _format_train_result(result: "dict | None") -> str:
     )
 
 
+# ── Управление обычными словами ───────────────────────────────────────────────
+# Только то же, что уже умеют команды: фраза → команда с аргументом. Переключение
+# Paper/Live словами нельзя — для него есть кодовое слово.
+
+_MODE_WORDS = {
+    "ai": "ai",
+    "аи": "ai",
+    "ии": "ai",
+    "local": "local",
+    "локальный": "local",
+    "локально": "local",
+    "hybrid": "hybrid",
+    "гибрид": "hybrid",
+    "гибридный": "hybrid",
+    "sac": "sac",
+}
+_PHRASES: "list[tuple[str, re.Pattern[str]]]" = [
+    ("help", re.compile(r"(помощь|помоги|что умеешь|что ты умеешь|команды|\?)")),
+    (
+        "pause",
+        re.compile(
+            r"(пауза|на паузу|поставь на паузу|приостанови\w*|останови\w*( торговлю)?)"
+        ),
+    ),
+    (
+        "resume",
+        re.compile(r"(продолжи\w*|возобнови\w*|запусти\w*|сними с паузы)( торговлю)?"),
+    ),
+    (
+        "status",
+        re.compile(r"(статус|как дела|что делаешь|что ты делаешь|что происходит)"),
+    ),
+    ("pnl", re.compile(r"(pnl|прибыль|результат|результаты|сколько заработал\w*)")),
+    ("pos", re.compile(r"(позиции|открытые позиции|сделки|что открыто)")),
+    ("closeall", re.compile(r"(закрой|закрыть) (все|всё)( позиции| сделки)?")),
+    ("mode", re.compile(r"(режим|mode) (?P<arg>\w+)")),
+    (
+        "risk",
+        re.compile(
+            r"((поставь|установи|сделай) )?риск( на сделку)? "
+            r"(?P<arg>\d+(?:[.,]\d+)?) ?%?"
+        ),
+    ),
+    (
+        "slots",
+        re.compile(
+            r"((поставь|установи|сделай) )?(сделок|позиций)"
+            r"( сразу| одновременно)? (?P<arg>\d+)"
+        ),
+    ),
+    ("add", re.compile(r"(добавь|следи за) (?P<arg>[a-z0-9]{2,10})(/usdt)?")),
+    ("remove", re.compile(r"(убери|удали|исключи) (?P<arg>[a-z0-9]{2,10})(/usdt)?")),
+    ("strat_on", re.compile(r"включи стратеги\w* (?P<arg>.+)")),
+    ("strat_off", re.compile(r"(выключи|отключи) стратеги\w* (?P<arg>.+)")),
+]
+_PHRASE_HELP = (
+    "Можно писать словами:\n"
+    "• статус · прибыль · позиции\n"
+    "• пауза · продолжи · закрой все\n"
+    "• режим hybrid · риск 1.5% · сделок 3\n"
+    "• добавь PEPE · убери PEPE\n"
+    "• включи стратегию rsi · выключи стратегию bb\n"
+    "Или команды: /help"
+)
+
+
+def parse_phrase(text: str) -> "Optional[tuple[str, str]]":
+    """Фраза владельца → (действие, аргумент); None — не поняли."""
+    t = text.lower().replace("ё", "е").strip()
+    t = re.sub(r"[.,!]+$", "", t)
+    t = re.sub(r"^(бот|пожалуйста)[ ,]+|[ ,]+пожалуйста$", "", t)
+    t = re.sub(r"\s+", " ", t).strip()
+    for intent, rx in _PHRASES:
+        m = rx.fullmatch(t)
+        if m:
+            return intent, (m.groupdict().get("arg") or "").strip()
+    return None
+
+
+def find_strategy(word: str, names: "list[str]") -> "list[str]":
+    """Стратегия по имени, началу имени или короткой метке из меню (rsi, bb, fvg)."""
+    w = word.strip().lower().replace(" ", "_")
+    exact = [
+        n
+        for n in names
+        if n == w or _STRAT_SHORT.get(n, "").lower().rstrip("🔴🟢↕↩") == w
+    ]
+    return exact or [n for n in names if n.startswith(w)]
+
+
 class TelegramCommander:
     """
     Telegram-панель управления BitbotBY.
@@ -1069,6 +1161,7 @@ class TelegramCommander:
             ("lev", self._cmd_lev),
             ("provider", self._cmd_provider),
             ("alerts", self._cmd_alerts),
+            ("app", self._cmd_app),
         ]
         for name, handler in commands:
             app.add_handler(CommandHandler(name, handler))
@@ -1096,6 +1189,7 @@ class TelegramCommander:
             ("remove", "Удалить символ"),
             ("strategies", "Стратегии"),
             ("alerts", "Управление уведомлениями"),
+            ("app", "Ссылка входа в приложение"),
             ("trainn", "Переобучить SAC"),
             ("help", "Справка"),
         ]
@@ -1513,8 +1607,36 @@ class TelegramCommander:
         if not self._authorized(update):
             return
         text, kb = self._build_status()
-        intro = "👋 *Добро пожаловать в BitbotBY!*\n\n" + text
+        intro = (
+            "👋 *Добро пожаловать в BitbotBY!*\n"
+            "Можно писать словами: «статус», «пауза», «риск 1%» — список по «?».\n\n"
+            + text
+        )
         await self._reply(update, intro, _kb_main())
+
+    async def _cmd_app(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """Одноразовая ссылка входа в приложение — только на компьютере с ботом."""
+        if not self._authorized(update):
+            return
+        port = os.getenv("APP_PORT", "")
+        if not port.isdigit():
+            await self._reply(
+                update,
+                "Ссылка входа работает только при запуске бота на своём компьютере "
+                "(ярлык BitbotBY или launcher/launch.py).",
+            )
+            return
+        token = login_link.issue(self._rc._r.redis_client)
+        await self._reply(
+            update,
+            "🔐 Ссылка входа в приложение — откройте её на компьютере, где запущен "
+            "бот (нажмите, чтобы скопировать):\n\n"
+            f"`http://localhost:{port}/app/#local={token}`\n\n"
+            f"Работает {login_link.TTL // 60} минут и только один раз. "
+            "Если вы её не запрашивали — просто не открывайте.",
+        )
 
     async def _cmd_settings(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -2399,6 +2521,7 @@ class TelegramCommander:
             return
 
         if not self._rc.is_awaiting_mode_pin():
+            await self._handle_phrase(update, text)
             return
         self._rc.clear_awaiting_mode_pin()
         if text != Config.TRADING_MODE_PIN:
@@ -2427,6 +2550,61 @@ class TelegramCommander:
             f"Изменение сохранено и восстановится после перезапуска.",
             parse_mode="Markdown",
         )
+
+    async def _handle_phrase(self, update: Update, text: str) -> None:
+        """Обычные слова владельца → существующие команды (см. parse_phrase)."""
+        parsed = parse_phrase(text)
+        if parsed is None:
+            await self._reply(update, "Не понял. " + _PHRASE_HELP)
+            return
+        intent, arg = parsed
+        ctx: Any = SimpleNamespace(args=[arg] if arg else [])
+        simple = {
+            "pause": self._cmd_pause,
+            "resume": self._cmd_resume,
+            "status": self._cmd_status,
+            "pnl": self._cmd_pnl,
+            "pos": self._cmd_pos,
+            "closeall": self._cmd_closeall,  # спросит подтверждение кнопкой
+            "add": self._cmd_add,
+            "remove": self._cmd_remove,
+        }
+        if intent in simple:
+            await simple[intent](update, ctx)
+        elif intent == "help":
+            await self._reply(update, _PHRASE_HELP)
+        elif intent == "mode":
+            ctx.args = [_MODE_WORDS.get(arg, arg)]
+            await self._cmd_mode(update, ctx)
+        elif intent == "risk":
+            pct = float(arg.replace(",", "."))
+            if 0.1 <= pct <= 10 and self._rc.set_risk_per_trade(round(pct / 100, 4)):
+                await self._reply(update, f"✅ Риск на сделку: *{pct:g}%*")
+            else:
+                await self._reply(update, "❌ Риск на сделку — от 0.1% до 10%.")
+        elif intent == "slots":
+            if self._rc.set_max_positions(int(arg)):
+                await self._reply(update, f"✅ Сделок одновременно: *{int(arg)}*")
+            else:
+                await self._reply(update, "❌ Сделок одновременно — от 1 до 20.")
+        else:
+            await self._phrase_strategy(update, arg, on=intent == "strat_on")
+
+    async def _phrase_strategy(self, update: Update, word: str, on: bool) -> None:
+        from src.strategies import STRATEGY_REGISTRY  # noqa: PLC0415
+
+        found = find_strategy(word, list(STRATEGY_REGISTRY))
+        if len(found) != 1:
+            hint = ", ".join(f"`{n}`" for n in found[:6]) or "нет такой"
+            await self._reply(update, f"Какую стратегию? {hint}. Список: /strategies")
+            return
+        name = found[0]
+        if on:
+            self._rc.enable_strategy(name)
+        else:
+            self._rc.disable_strategy(name)
+        state = "включена" if on else "отключена"
+        await self._reply(update, f"{'✅' if on else '❌'} Стратегия `{name}` {state}.")
 
     async def _handle_callback(
         self, update: Update, _context: ContextTypes.DEFAULT_TYPE

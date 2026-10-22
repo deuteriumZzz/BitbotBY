@@ -9,6 +9,7 @@ import { AiPane } from "./ai";
 import { ConfirmCard, RiskCard, StrategiesCard, TrackCard, TuneCard, WhatCard, cfg, presetName, presetOf, profileName } from "./bots";
 import { STATUS, chosenId } from "./chainops";
 import { ModelCard } from "./jobs";
+import { RulesCard } from "./rules";
 import { GuardsCard } from "./settings";
 import { mark } from "./trace";
 
@@ -430,6 +431,7 @@ export function Pipeline() {
               <TuneCard />
             </div>
             <div className="col">
+              <RulesCard />
               <GuardsCard />
             </div>
           </div>

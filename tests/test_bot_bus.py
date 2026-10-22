@@ -40,7 +40,7 @@ class FakeRedis:
         return self.kv.get(key)
 
     def delete(self, key):
-        self.kv.pop(key, None)
+        return int(self.kv.pop(key, None) is not None)
 
     def incr(self, key):
         self.kv[key] = str(int(self.kv.get(key) or 0) + 1)

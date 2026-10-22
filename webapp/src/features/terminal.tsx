@@ -5,6 +5,7 @@ import {
   type IChartApi,
   type IPriceLine,
   type ISeriesApi,
+  type SeriesMarker,
   type UTCTimestamp,
 } from "lightweight-charts";
 import {
@@ -30,7 +31,7 @@ import {
   usd,
 } from "../lib/format";
 import { reducedMotion } from "../lib/platform";
-import type { Candle, Position } from "../lib/types";
+import type { Candle, Journal, JournalTrade, Position } from "../lib/types";
 import { actions, positionPnl, useStore, type Store } from "../store";
 import { cfg, profileName, stratName } from "./bots";
 import { MarketPulse } from "./market";
@@ -1344,6 +1345,44 @@ function Chart() {
     );
   };
 
+  // Прошлые сделки по монете, как во FreqUI: вход — стрелка, выход — кружок с итогом.
+  const markTrades = (list: JournalTrade[]) => {
+    const ch = chart.current;
+    const all = bars.current;
+    if (!ch || !all.length) return;
+    const [first, last] = [all[0].time, all[all.length - 1].time];
+    const out: SeriesMarker<UTCTimestamp>[] = [];
+    const add = (sec: number, m: Omit<SeriesMarker<UTCTimestamp>, "time">) => {
+      const t = Math.floor(sec / BAR) * BAR + TZ;
+      if (Number.isFinite(t) && t >= first && t <= last) out.push({ ...m, time: t as UTCTimestamp });
+    };
+    for (const t of list) {
+      const long = t.side === "long";
+      add(Date.parse(t.opened) / 1000, {
+        position: long ? "belowBar" : "aboveBar",
+        shape: long ? "arrowUp" : "arrowDown",
+        color: tok("--cyan"),
+        text: long ? "LONG" : "SHORT",
+      });
+      const win = t.pnl >= 0;
+      add(Date.parse(t.closed) / 1000, {
+        position: long ? "aboveBar" : "belowBar",
+        shape: "circle",
+        color: tok(win ? "--up" : "--down"),
+        text: `${win ? "▲" : "▼"} ${(t.pnl_pct * 100).toFixed(1)}%`,
+      });
+    }
+    const p = posRef.current;
+    if (p?.opened_at)
+      add(p.opened_at, {
+        position: p.side === "long" ? "belowBar" : "aboveBar",
+        shape: p.side === "long" ? "arrowUp" : "arrowDown",
+        color: tok("--brand"),
+        text: "открыта",
+      });
+    ch.s.setMarkers(out.sort((a, b) => a.time - b.time));
+  };
+
   useEffect(() => {
     if (!box.current) return;
     const c = createChart(box.current, {
@@ -1408,6 +1447,9 @@ function Chart() {
         paintFill();
         chart.current.c.timeScale().fitContent();
         setEmpty(!data.length);
+        void api<Journal>("GET", "/api/journal?period=7d")
+          .then((j) => !stale && markTrades(j.trades.filter((t) => t.symbol === sym)))
+          .catch(() => undefined);
       })
       .catch(() => !stale && setEmpty(true));
     return () => {
@@ -1514,6 +1556,10 @@ function Chart() {
               style={{ borderColor: "var(--brand)", borderTopStyle: "solid" }}
             />
             вход
+          </span>
+          <span title="Прошлые сделки: стрелка — вход, кружок — выход с итогом">
+            <b style={{ color: "var(--cyan)" }}>▲</b>
+            сделки
           </span>
         </div>
       </div>

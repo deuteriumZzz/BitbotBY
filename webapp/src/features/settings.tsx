@@ -56,9 +56,71 @@ function Main({ go }: { go: (pane: Pane) => void }) {
         <div className="col">
           <ConnCard go={go} />
           <AccountCard toKeys={() => go("conn")} />
+          <ComputerCard />
         </div>
       </div>
     </div>
+  );
+}
+
+interface Launcher {
+  local: boolean;
+  autostart: boolean | null;
+  keep_awake: boolean | null;
+  phone: boolean | null;
+  at: number | null;
+}
+
+const MACHINE = [
+  ["autostart", "Запуск при входе в систему", "autostart"],
+  ["keep_awake", "Не давать компьютеру уснуть", "awake"],
+  ["phone", "MiniApp в Telegram (доступ с телефона)", "phone"],
+] as const;
+
+/** Компьютер, на котором работает бот: приложение в Docker видит флаги лаунчера, но менять их не может. */
+function ComputerCard() {
+  const [st, setSt] = useState<Launcher | null>(null);
+  const [copied, setCopied] = useState("");
+  useEffect(() => {
+    void api<Launcher>("GET", "/api/launcher")
+      .then(setSt)
+      .catch(() => undefined);
+  }, []);
+  if (!st?.local) return null;
+  const copy = async (cmd: string) => {
+    try {
+      await navigator.clipboard.writeText(cmd);
+      setCopied(cmd);
+    } catch {
+      setCopied("");
+    }
+  };
+  return (
+    <article className="card">
+      <div className="card-h">
+        <h2>Компьютер</h2>
+        <Q tip="Бот работает в Docker на этом компьютере. Из приложения видно, что включено, но включить или выключить можно только на самом компьютере — командой в Терминале в папке BitbotBY." />
+      </div>
+      {st.at === null && <p className="note-soon">Лаунчер ещё не сообщил о себе — перезапустите ярлыком BitbotBY, и здесь появится состояние.</p>}
+      <ul className="machine">
+        {MACHINE.map(([k, label, cmd]) => {
+          const on = st[k];
+          const next = `python3 launcher/launch.py ${cmd} ${on ? "off" : "on"}`;
+          return (
+            <li key={k}>
+              <span className={`dot${on ? " ok" : ""}`} />
+              <span>
+                {label}: <b>{on === null ? "неизвестно" : on ? "включено" : "выключено"}</b>
+              </span>
+              <button className="btn mono" type="button" title="Скопировать команду" onClick={() => void copy(next)}>
+                {copied === next ? "Скопировано ✓" : next}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      <p className="note-soon">Нет доступа к Терминалу? Ссылку входа присылает бот в Telegram по команде /app.</p>
+    </article>
   );
 }
 
@@ -561,26 +623,31 @@ function checkField(env: string, label: string, secret: boolean, v: string): str
   return "";
 }
 
-/** Подсказка для Telegram: вы пишете боту, мы находим ваш chat id и подставляем его в поле. */
+/** Код привязки: 6 цифр, их видно только здесь. */
+const linkCode = () => String(crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000).padStart(6, "0");
+
+/** Привязка Telegram: вы отправляете боту код из приложения, мы находим ваш chat id и подставляем его в поле. */
 function ChatFinder({ token, hasToken, onFound }: { token: string; hasToken: boolean; onFound: (id: string) => void }) {
   const [busy, setBusy] = useState(false);
+  const [code] = useState(linkCode);
   const [chats, setChats] = useState<{ id: string; name: string }[] | null>(null);
   const [note, setNote] = useState("");
   const find = async () => {
     setBusy(true);
-    const found = await actions.findTelegramChat(token.trim());
+    const found = await actions.findTelegramChat(token.trim(), code);
     setBusy(false);
     if (!found) return;
     setChats(found);
     if (found.length === 1) {
       onFound(found[0].id);
       setNote(`Нашёл: ${found[0].name || "ваш чат"} (${found[0].id}). Он подставлен в поле, осталось сохранить.`);
-    } else setNote(found.length ? "Писало несколько человек — выберите себя:" : "Пока ничего не пришло: откройте своего бота в Telegram, отправьте ему /start и нажмите ещё раз.");
+    } else setNote(found.length ? "Код прислали из нескольких чатов — выберите свой:" : `Код пока не пришёл: отправьте боту ${code} и нажмите ещё раз.`);
   };
   return (
     <div className="chatfind">
       <p className="kf-h">
-        1. Вставьте токен бота (@BotFather). 2. Откройте своего бота в Telegram и отправьте ему <code>/start</code>. 3. Нажмите кнопку, и chat id найдётся сам.
+        1. Вставьте токен бота (@BotFather). 2. Откройте своего бота в Telegram и отправьте ему код <b className="num">{code}</b>. 3. Нажмите кнопку — бот
+        привяжется к чату, приславшему этот код.
       </p>
       <button className="btn" type="button" disabled={busy || (!token.trim() && !hasToken)} onClick={() => void find()}>
         {busy ? (
@@ -744,7 +811,7 @@ export function KeyCard({ item }: { item: SecretItem }) {
 // ══ Все параметры ════════════════════════════════════════════════════════════
 
 const NUMERIC = ["int", "float", "pct"];
-const shown = (d: SettingDef, v: unknown) => (d.type === "pct" ? +(Number(v) * 100).toFixed(4) : v);
+export const shown = (d: SettingDef, v: unknown) => (d.type === "pct" ? +(Number(v) * 100).toFixed(4) : v);
 const unitOf = (d: SettingDef) => (d.type === "pct" ? "%" : d.unit);
 
 function fmtVal(d: SettingDef, v: unknown): string {
@@ -1037,7 +1104,7 @@ function ParamRow(props: { d: SettingDef; value: unknown; source: string; change
 }
 
 /** Число редактируется как текст: промежуточное «0.» или пустое поле не сбрасывается. */
-function NumField({ id, d, value, disabled, onChange }: { id: string; d: SettingDef; value: number; disabled: boolean; onChange: (v: string) => void }) {
+export function NumField({ id, d, value, disabled, onChange }: { id: string; d: SettingDef; value: number; disabled: boolean; onChange: (v: string) => void }) {
   const [text, setText] = useState(String(value));
   useEffect(() => {
     if (parseFloat(text.replace(",", ".")) !== value) setText(String(value));

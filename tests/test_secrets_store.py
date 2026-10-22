@@ -256,3 +256,12 @@ def test_telegram_chats_only_private_and_deduplicated():
         {"id": "7", "name": "bob"},
     ]
     assert ss.telegram_chats({}) == []
+
+
+def test_telegram_chats_by_link_code_only_the_sender_of_the_code():
+    def msg(chat_id, text):
+        return {"message": {"chat": {"id": chat_id, "type": "private"}, "text": text}}
+
+    payload = {"result": [msg(7, "/start"), msg(42, " 123456 "), msg(9, "123457")]}
+    assert [c["id"] for c in ss.telegram_chats(payload, "123456")] == ["42"]
+    assert ss.telegram_chats(payload, "000000") == []

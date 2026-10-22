@@ -22,7 +22,7 @@ import urllib.parse
 import urllib.request
 from typing import Any, Dict, Optional, Tuple
 
-from src import secrets_store
+from src import login_link, secrets_store
 
 SESSION_TTL = 12 * 3600
 INIT_DATA_MAX_AGE = 24 * 3600
@@ -196,6 +196,8 @@ def check_local_login(r: Any, token: str, host_header: str) -> str:
     fails = r.get(_LOCAL_FAIL_KEY)
     if int(fails or 0) >= LOCAL_MAX_FAILS:
         return "locked"
+    if login_link.consume(r, token):  # ссылка из Telegram (/app)
+        return "ok"
     if not hmac.compare_digest(str(token).encode(), expected.encode()):
         if r.incr(_LOCAL_FAIL_KEY) == 1:
             r.expire(_LOCAL_FAIL_KEY, LOCAL_LOCK_SEC)

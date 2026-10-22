@@ -563,13 +563,19 @@ async def _check_http(client: Any, service_id: str, values: Dict[str, str]) -> R
     return "warn", _NOT_SUPPORTED
 
 
-def telegram_chats(payload: Dict[str, Any]) -> List[Dict[str, str]]:
-    """Личные чаты из ответа getUpdates: те, кто писал боту (без групп и каналов)."""
+def telegram_chats(payload: Dict[str, Any], code: str = "") -> List[Dict[str, str]]:
+    """Личные чаты из ответа getUpdates: те, кто писал боту (без групп и каналов).
+
+    С кодом — только чат, приславший ровно этот код: его видно лишь в приложении,
+    так что посторонний, написавший боту, в владельцы не попадёт.
+    """
     seen: Dict[str, str] = {}
     for update in payload.get("result") or []:
         msg = update.get("message") or update.get("edited_message") or {}
         chat = msg.get("chat") or {}
         if chat.get("type") != "private" or "id" not in chat:
+            continue
+        if code and str(msg.get("text") or "").strip() != code:
             continue
         name = " ".join(
             x for x in (chat.get("first_name"), chat.get("last_name")) if x

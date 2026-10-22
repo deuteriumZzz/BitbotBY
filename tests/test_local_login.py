@@ -99,3 +99,16 @@ def test_denied_message_on_a_server_is_unchanged(monkeypatch, client):
     with patch.object(data, "get_redis", return_value=FakeRedis()):
         resp = client.post("/api/bot/pause", json={"request_id": "12345678"})
     assert "DASHBOARD_API_KEY" in resp.json()["error"]["message"]
+
+
+def test_telegram_link_is_one_time_and_local_only(local):
+    from src import login_link
+
+    r = FakeRedis()
+    token = login_link.issue(r)
+    assert all(token not in k for k in r.kv)  # в Redis только хеш
+    assert auth.check_local_login(r, token, "evil.example:8080") == "host"
+    assert auth.check_local_login(r, token, "localhost:8080") == "ok"
+    assert auth.check_local_login(r, token, "localhost:8080") == "wrong"
+    # Токен лаунчера по-прежнему работает отдельно от ссылок из Telegram.
+    assert auth.check_local_login(r, TOKEN, "localhost:8080") == "ok"

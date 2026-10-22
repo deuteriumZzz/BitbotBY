@@ -13,6 +13,8 @@ x-bot-env: &bot-env
   # а AI включается в приложении после ввода ключа (Бот → Кто принимает решение).
   MODE: local
   BITBOT_SECRETS_KEY: ${BITBOT_SECRETS_KEY:?запустите через лаунчер}
+  # Порт приложения на этом компьютере — для ссылки входа из Telegram (/app).
+  APP_PORT: ${BITBOT_PORT:-8080}
 
 services:
   redis:

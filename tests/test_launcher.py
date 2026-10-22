@@ -1,6 +1,7 @@
 """Лаунчер (launcher/launch.py): ключи, токен, окружение compose."""
 
 import importlib.util
+import json
 import os
 import stat
 from pathlib import Path
@@ -137,3 +138,16 @@ def test_stale_tunnel_file_is_not_alive(tmp_path):
 def test_env_for_import_drops_comments_and_empty_values():
     text = "# c\nGROQ_API_KEY=abc\nEMPTY=\n  # x=1\nMODE=ai\n"
     assert launch.env_for_import(text) == "GROQ_API_KEY=abc\nMODE=ai\n"
+
+
+def test_status_for_the_app_has_flags_only(tmp_path, monkeypatch):
+    data = tmp_path / "data"
+    (tmp_path / "compose.env").write_text(f"BITBOT_DATA={data}\n")
+    state = launch.load_state(tmp_path)
+    launch.save_state({**state, "keep_awake": "1"}, tmp_path)
+    monkeypatch.setattr(launch, "autostart_file", lambda: tmp_path / "nope.plist")
+    launch.publish_status(tmp_path)
+    text = (data / "launcher.json").read_text()
+    assert state["secrets_key"] not in text
+    got = json.loads(text)
+    assert (got["autostart"], got["keep_awake"], got["phone"]) == (False, True, False)

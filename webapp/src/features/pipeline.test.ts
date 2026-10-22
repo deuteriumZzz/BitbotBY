@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { OWN_HOME } from "../lib/where";
 import type { SettingDef } from "../lib/types";
 import { formatSetting, takesPart } from "./pipeline";
+import { RULES, templateOf, templateValues } from "./rules";
 
 const def = (over: Partial<SettingDef>): SettingDef => ({
   key: "X",
@@ -47,5 +48,32 @@ describe("конвейер решений", () => {
     expect(formatSetting(def({ type: "choice", options: [{ value: "volatility", label: "По волатильности" }] }), "volatility")).toBe("По волатильности");
     expect(formatSetting(def({ unit: "× ATR" }), 1)).toBe("1 × ATR");
     expect(formatSetting(undefined, "")).toBe("—");
+  });
+});
+
+describe("шаблоны порогов защиты", () => {
+  const schema = [
+    def({ key: "DAILY_LOSS_LIMIT", default: 0.05 }),
+    def({ key: "CIRCUIT_BREAKER_LOSSES", default: 3 }),
+    def({ key: "MAX_DRAWDOWN_PERCENT", default: 0.2 }),
+    def({ key: "SYMBOL_COOLDOWN_HOURS", default: 3 }),
+    def({ key: "DRAWDOWN_SCALE_THRESHOLD", default: 0.1 }),
+  ];
+  const conf = (v: Record<string, unknown>) => Object.fromEntries(Object.entries(v).map(([k, x]) => [k, { value: x, source: "live" }]));
+
+  it("«Как задумано» — значения по умолчанию из схемы", () => {
+    const base = templateValues("base", schema);
+    expect(base.DAILY_LOSS_LIMIT).toBe(0.05);
+    expect(templateOf(conf(base), schema)).toBe("base");
+  });
+
+  it("узнаёт шаблон по текущим порогам и «свои» при расхождении", () => {
+    const strict = templateValues("strict", schema);
+    expect(templateOf(conf(strict), schema)).toBe("strict");
+    expect(templateOf(conf({ ...strict, DAILY_LOSS_LIMIT: 0.04 }), schema)).toBeNull();
+  });
+
+  it("каждое правило с порогом или тумблером ссылается на ключ", () => {
+    for (const r of RULES) expect(Boolean(r.key || r.on || r.alert)).toBe(true);
   });
 });

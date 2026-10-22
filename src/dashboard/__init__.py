@@ -3,9 +3,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import hmac
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import AsyncIterator
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,12 +17,21 @@ from fastapi.staticfiles import StaticFiles
 
 from src.dashboard import auth as _auth
 from src.dashboard import data as _data
+from src.dashboard import watchdog as _watchdog
 from src.dashboard.routers import api as _api
 from src.dashboard.routers import control as _control
 from src.dashboard.routers import frontend as _frontend
 from src.dashboard.routers import ops as _ops
 
-app = FastAPI(title="BitbotBY Dashboard", docs_url=None)
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    watchdog = asyncio.create_task(_watchdog.run())
+    yield
+    watchdog.cancel()
+
+
+app = FastAPI(title="BitbotBY Dashboard", docs_url=None, lifespan=_lifespan)
 
 _NO_AUTH_PATHS = {"/health", "/metrics", "/app"}
 # Вход в приложение — до выдачи сессии; /app/ — статика фронтенда без данных,

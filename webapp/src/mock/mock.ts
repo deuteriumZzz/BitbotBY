@@ -971,6 +971,7 @@ function route(method: string, path: string, body: unknown): unknown {
     if (b.cooldown_min !== undefined) a.cooldown_min = Number(b.cooldown_min);
     return a;
   }
+  if (method === "GET" && p === "/api/launcher") return { local: true, autostart: true, keep_awake: false, phone: false, at: Date.now() / 1000 };
   if (method === "POST" && p === "/api/secrets/twitter/accounts") return xAccount(b);
   if (method === "DELETE" && (m = p.match(/^\/api\/secrets\/twitter\/accounts\/(.+)$/))) {
     const tw = secrets.find((x) => x.service === "twitter")!;

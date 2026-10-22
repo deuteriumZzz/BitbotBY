@@ -64,7 +64,8 @@ def _signin_hint(default: str) -> str:
         return (
             "Вы не вошли в приложение. Откройте его ярлыком BitbotBY "
             "(BitbotBY.command или BitbotBY.bat) — он войдёт сам. "
-            "Или в Терминале: python3 launcher/launch.py url"
+            "Или в Терминале: python3 launcher/launch.py url, "
+            "или пришлите боту /app в Telegram."
         )
     return default
 
@@ -735,6 +736,21 @@ async def get_candles(symbol: str, tf: str = "15m", limit: int = 200) -> JSONRes
     return JSONResponse(out)
 
 
+@router.get("/api/launcher")
+async def get_launcher() -> JSONResponse:
+    """Флаги лаунчера (data/launcher.json): панель в Docker сама их не видит."""
+    try:
+        flags = json.loads(Path("data/launcher.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        flags = {}
+    return JSONResponse(
+        {
+            "local": os.getenv("BITBOT_LOCAL_MODE") == "1",
+            **{k: flags.get(k) for k in ("autostart", "keep_awake", "phone", "at")},
+        }
+    )
+
+
 # ── AI-провайдеры (src/ai_providers.py) ───────────────────────────────────────
 
 
@@ -954,7 +970,8 @@ async def telegram_find_chat(request: Request) -> JSONResponse:
         )
     if resp.status_code != 200:
         return _err(502, "telegram_error", f"Telegram ответил {resp.status_code}.")
-    return JSONResponse({"chats": secrets_store.telegram_chats(resp.json())})
+    code = str(body.get("code") or "").strip()
+    return JSONResponse({"chats": secrets_store.telegram_chats(resp.json(), code)})
 
 
 @router.get("/api/secrets")
@@ -1187,7 +1204,8 @@ async def auth_local(request: Request) -> JSONResponse:
         "disabled": "Локальный вход выключен.",
         "host": "Локальный вход работает только по адресу localhost.",
         "locked": "Слишком много неверных попыток. Запустите лаунчер заново.",
-        "wrong": "Ссылка входа не подошла. Запустите лаунчер заново.",
+        "wrong": "Ссылка входа не подошла или устарела. Запустите лаунчер заново "
+        "или пришлите боту /app в Telegram.",
         "used": "Эта ссылка уже использована. Запустите лаунчер заново.",
     }
     return _err(

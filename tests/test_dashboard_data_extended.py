@@ -255,3 +255,12 @@ class TestCheckHealthcheck:
             result = check_healthcheck()
 
         assert result is False
+
+
+def test_journal_times_carry_the_server_timezone():
+    from src.dashboard.data import _aware
+
+    naive = _aware("2026-10-22T10:00:00")
+    assert datetime.fromisoformat(naive).utcoffset() is not None
+    assert _aware("2026-10-22T10:00:00+00:00") == "2026-10-22T10:00:00+00:00"
+    assert _aware("") == "" and _aware(None) is None and _aware("bad") == "bad"

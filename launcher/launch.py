@@ -680,7 +680,43 @@ def cmd_awake(action: str) -> int:
     return 2
 
 
+def status_path(state_dir: Path = STATE_DIR) -> Path:
+    """Папка data, которую видит панель в Docker (как в compose.env)."""
+    env = state_dir / "compose.env"
+    if env.exists():
+        for line in env.read_text(encoding="utf-8").splitlines():
+            if line.startswith("BITBOT_DATA="):
+                return Path(line.split("=", 1)[1]) / "launcher.json"
+    return ROOT / "data" / "launcher.json"
+
+
+def publish_status(state_dir: Path = STATE_DIR) -> None:
+    """Флаги для приложения: из Docker их не видно. Без ключей и адресов."""
+    state = load_state(state_dir)
+    status = {
+        "autostart": autostart_file().exists(),
+        "keep_awake": state.get("keep_awake") == "1",
+        "phone": state.get("phone") == "1",
+        "at": int(time.time()),
+    }
+    path = status_path(state_dir)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(status), encoding="utf-8")
+    except OSError:
+        pass  # приложение просто не покажет флаги
+
+
 def main(argv: List[str]) -> int:
+    try:
+        return _run(argv)
+    finally:
+        args = [a for a in argv if not a.startswith("--")]
+        if (args[0] if args else "start") in ("start", "autostart", "awake", "phone"):
+            publish_status()
+
+
+def _run(argv: List[str]) -> int:
     args = [a for a in argv if not a.startswith("--")]
     flags = {
         a.split("=", 1)[0]: a.split("=", 1)[1]

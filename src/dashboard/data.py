@@ -205,6 +205,21 @@ def get_open_positions() -> List[dict]:
     return out
 
 
+def _aware(iso: Optional[str]) -> Optional[str]:
+    """Время сделки с часовым поясом сервера.
+
+    В базе оно без пояса (datetime.now() бота), а браузер прочитал бы его как
+    своё местное — в Docker (UTC) это сдвиг на разницу поясов.
+    """
+    if not iso:
+        return iso
+    try:
+        dt = datetime.fromisoformat(iso)
+    except ValueError:
+        return iso
+    return (dt if dt.tzinfo else dt.astimezone()).isoformat()
+
+
 def _steps(raw: object) -> List[dict]:
     """Шаги решения из колонки trace (JSON); у старых сделок — пусто."""
     try:
@@ -278,8 +293,8 @@ def get_journal(since: Optional[datetime] = None, limit: int = 1000) -> List[dic
             "pnl": r["pnl"],  # уже за вычетом комиссий
             "pnl_pct": r["pnl_pct"],  # от маржи
             "fees": r["commission"],
-            "opened": r["entry_time"],
-            "closed": r["exit_time"],
+            "opened": _aware(r["entry_time"]),
+            "closed": _aware(r["exit_time"]),
             "reason": r.get("exit_reason") or "",
             "reasoning": r.get("reasoning") or "",
             "trace": _steps(r.get("trace")),
