@@ -13,6 +13,7 @@ import hmac
 import json
 import os
 import re
+import secrets
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -736,19 +737,59 @@ async def get_candles(symbol: str, tf: str = "15m", limit: int = 200) -> JSONRes
     return JSONResponse(out)
 
 
+# Переключатели компьютера: панель кладёт запрос в общую папку data, помощник
+# лаунчера на компьютере выполняет только разрешённое (launcher/launch.py, ALLOWED).
+# Включить доступ с телефона отсюда нельзя — только командой на компьютере.
+_LAUNCHER_DIR = Path("data")
+_LAUNCHER_ALLOWED = {
+    "autostart": (True, False),
+    "keep_awake": (True, False),
+    "phone": (False,),
+}
+_HELPER_FRESH = 90
+
+
+def _read_json(path: Path) -> Dict[str, Any]:
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return raw if isinstance(raw, dict) else {}
+
+
 @router.get("/api/launcher")
 async def get_launcher() -> JSONResponse:
     """Флаги лаунчера (data/launcher.json): панель в Docker сама их не видит."""
-    try:
-        flags = json.loads(Path("data/launcher.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        flags = {}
+    flags = _read_json(_LAUNCHER_DIR / "launcher.json")
+    fresh = time.time() - float(flags.get("at") or 0) < _HELPER_FRESH
     return JSONResponse(
         {
             "local": os.getenv("BITBOT_LOCAL_MODE") == "1",
             **{k: flags.get(k) for k in ("autostart", "keep_awake", "phone", "at")},
+            "helper": bool(flags.get("helper")) and fresh,
+            "result": _read_json(_LAUNCHER_DIR / "launcher_result.json") or None,
         }
     )
+
+
+@router.post("/api/launcher")
+async def post_launcher(request: Request) -> JSONResponse:
+    denied = _control_denied(request)
+    if denied is not None:
+        return denied
+    if os.getenv("BITBOT_LOCAL_MODE") != "1":
+        return _err(404, "not_local", "Бот запущен не лаунчером на этом компьютере.")
+    body = await _body(request)
+    setting, on = body.get("setting"), body.get("on")
+    if not isinstance(on, bool) or on not in _LAUNCHER_ALLOWED.get(str(setting), ()):
+        return _err(
+            400, "not_allowed", "Это можно сделать только командой на компьютере."
+        )
+    req = {"id": secrets.token_hex(4), "setting": setting, "on": on, "at": time.time()}
+    tmp = _LAUNCHER_DIR / ".launcher_request.tmp"
+    tmp.write_text(json.dumps(req), encoding="utf-8")
+    tmp.replace(_LAUNCHER_DIR / "launcher_request.json")  # помощник не увидит обрезок
+    return JSONResponse({"id": req["id"]})
 
 
 # ── AI-провайдеры (src/ai_providers.py) ───────────────────────────────────────

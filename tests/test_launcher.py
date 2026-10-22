@@ -151,3 +151,30 @@ def test_status_for_the_app_has_flags_only(tmp_path, monkeypatch):
     assert state["secrets_key"] not in text
     got = json.loads(text)
     assert (got["autostart"], got["keep_awake"], got["phone"]) == (False, True, False)
+
+
+def test_helper_runs_only_whitelisted_fresh_requests(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        launch, "cmd_autostart", lambda a: calls.append(("auto", a)) or 0
+    )
+    monkeypatch.setattr(launch, "cmd_awake", lambda a: calls.append(("awake", a)) or 0)
+    monkeypatch.setattr(
+        launch, "cmd_phone", lambda a, p, f: calls.append(("phone", a)) or 0
+    )
+    now = 1_000_000.0
+
+    def req(setting, on, at=now):
+        return launch.handle_request(
+            {"setting": setting, "on": on, "at": at}, 8080, now
+        )
+
+    assert req("autostart", True)[0] and req("keep_awake", False)[0]
+    assert req("phone", False)[0]
+    assert calls == [("auto", "on"), ("awake", "off"), ("phone", "off")]
+    # Включить телефон, чужое действие, не bool и старый запрос — отказ без вызовов.
+    assert not req("phone", True)[0]
+    assert not req("rm -rf /", True)[0]
+    assert not req("autostart", 1)[0]
+    assert "устарел" in req("autostart", True, at=now - 600)[1]
+    assert len(calls) == 3

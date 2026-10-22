@@ -815,6 +815,8 @@ async function request(method: string, path: string, body: unknown): Promise<unk
   return structuredClone(route(method, path, body));
 }
 
+let launcher: Record<string, unknown> = { local: true, autostart: true, keep_awake: false, phone: true, helper: true, result: null };
+
 function route(method: string, path: string, body: unknown): unknown {
   const b = (body ?? {}) as Body;
   const url = new URL(path, "http://mock");
@@ -971,7 +973,15 @@ function route(method: string, path: string, body: unknown): unknown {
     if (b.cooldown_min !== undefined) a.cooldown_min = Number(b.cooldown_min);
     return a;
   }
-  if (method === "GET" && p === "/api/launcher") return { local: true, autostart: true, keep_awake: false, phone: false, at: Date.now() / 1000 };
+  if (method === "GET" && p === "/api/launcher") return { ...launcher, at: Date.now() / 1000 };
+  if (method === "POST" && p === "/api/launcher") {
+    const key = String(b.setting) as "autostart" | "keep_awake" | "phone";
+    if (!["autostart", "keep_awake", "phone"].includes(key) || typeof b.on !== "boolean" || (key === "phone" && b.on))
+      fail(400, "not_allowed", "Это можно сделать только командой на компьютере.");
+    const id = Math.random().toString(16).slice(2, 10);
+    launcher = { ...launcher, [key]: b.on, result: { id, ok: true, message: b.on ? "Включено." : "Выключено.", at: Date.now() / 1000 } };
+    return { id };
+  }
   if (method === "POST" && p === "/api/secrets/twitter/accounts") return xAccount(b);
   if (method === "DELETE" && (m = p.match(/^\/api\/secrets\/twitter\/accounts\/(.+)$/))) {
     const tw = secrets.find((x) => x.service === "twitter")!;

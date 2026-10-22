@@ -18,11 +18,14 @@
 """
 
 import base64
+import contextlib
+import io
 import json
 import os
 import re
 import secrets
 import shutil
+import signal
 import socket
 import subprocess
 import sys
@@ -30,7 +33,7 @@ import time
 import urllib.request
 import webbrowser
 from pathlib import Path
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional, Tuple
 
 ROOT = Path(__file__).resolve().parent.parent
 STATE_DIR = ROOT / ".launcher"
@@ -279,6 +282,7 @@ def cmd_start(port: int, data_dir: Optional[Path], open_browser: bool = True) ->
     say("Остановить: python launcher/launch.py stop")
     if load_state().get("keep_awake") == "1":
         spawn_awake()
+    spawn_helper(port)
     if open_browser:
         webbrowser.open(url)
     else:
@@ -619,6 +623,9 @@ def bot_running() -> bool:
 
 
 def cmd_awake_run() -> int:
+    # «awake off» шлёт SIGTERM: без обработчика Python не выполнит finally,
+    # и caffeinate останется работать сиротой.
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     write_private(STATE_DIR / AWAKE_PID, str(os.getpid()))
     guard: Optional[subprocess.Popen] = None  # type: ignore[type-arg]
     try:
@@ -645,6 +652,117 @@ def cmd_awake_run() -> int:
         if guard is not None:
             guard.terminate()
         (STATE_DIR / AWAKE_PID).unlink(missing_ok=True)
+    return 0
+
+
+# ── Помощник: переключатели компьютера из приложения ──────────────────────────
+#
+# Приложение в Docker компьютером не управляет. Оно кладёт запрос в общую папку
+# data (launcher_request.json), помощник на компьютере его забирает и выполняет
+# только действия из ALLOWED — никаких произвольных команд. Новых портов нет:
+# запрос проходит через вход приложения, как остальные кнопки управления.
+# Включить доступ с телефона из приложения нельзя: это открывает приложение
+# в интернет, поэтому только командой на самом компьютере.
+
+HELPER_PID = "helper.pid"
+REQUEST_FILE = "launcher_request.json"
+RESULT_FILE = "launcher_result.json"
+REQUEST_MAX_AGE = 120
+ALLOWED = {
+    ("autostart", True),
+    ("autostart", False),
+    ("keep_awake", True),
+    ("keep_awake", False),
+    ("phone", False),
+}
+
+
+def helper_running(state_dir: Path = STATE_DIR) -> bool:
+    try:
+        os.kill(int((state_dir / HELPER_PID).read_text().strip()), 0)
+        return True
+    except (OSError, ValueError):
+        return False
+
+
+def spawn_helper(port: int) -> None:
+    if helper_running():
+        return
+    kw: Dict[str, object] = {
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.DEVNULL,
+        "stdin": subprocess.DEVNULL,
+        "env": {**os.environ, "BITBOT_PORT": str(port)},
+    }
+    if sys.platform.startswith("win"):
+        kw["creationflags"] = 0x00000008  # DETACHED_PROCESS
+    else:
+        kw["start_new_session"] = True
+    me = str(Path(__file__).resolve())
+    subprocess.Popen([sys.executable, me, "helper"], **kw)  # type: ignore[call-overload]
+
+
+def handle_request(
+    req: Dict[str, object], port: int, now: Optional[float] = None
+) -> Tuple[bool, str]:
+    """Один запрос приложения → (получилось, что сказать человеку)."""
+    setting, on = req.get("setting"), req.get("on")
+    if not isinstance(on, bool) or (setting, on) not in ALLOWED:
+        return False, "Это можно сделать только командой на компьютере."
+    try:
+        at = float(str(req.get("at")))
+    except ValueError:
+        return False, "Непонятный запрос."
+    if (time.time() if now is None else now) - at > REQUEST_MAX_AGE:
+        return False, "Запрос устарел — нажмите ещё раз."
+    action = "on" if on else "off"
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        if setting == "autostart":
+            code = cmd_autostart(action)
+        elif setting == "keep_awake":
+            code = cmd_awake(action)
+        else:
+            code = cmd_phone("off", port, {})
+    return code == 0, out.getvalue().strip()
+
+
+def cmd_helper(port: int) -> int:
+    """Работает, пока работает бот: забирает запросы приложения из папки data."""
+    write_private(STATE_DIR / HELPER_PID, str(os.getpid()))
+    data = status_path().parent
+    request, result = data / REQUEST_FILE, data / RESULT_FILE
+    checked, misses = 0.0, 0
+    try:
+        # Бот пропал из docker ps два раза подряд — его остановили.
+        while misses < 2:
+            if time.time() - checked >= 30:
+                checked = time.time()
+                misses = 0 if bot_running() else misses + 1
+                publish_status()
+            if request.exists():
+                try:
+                    req = json.loads(request.read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    req = {}
+                request.unlink(missing_ok=True)
+                req = req if isinstance(req, dict) else {}
+                ok, message = handle_request(req, port)
+                result.write_text(
+                    json.dumps(
+                        {
+                            "id": str(req.get("id", ""))[:32],
+                            "ok": ok,
+                            "message": message,
+                            "at": int(time.time()),
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                publish_status()
+            time.sleep(2)
+    finally:
+        (STATE_DIR / HELPER_PID).unlink(missing_ok=True)
     return 0
 
 
@@ -697,6 +815,7 @@ def publish_status(state_dir: Path = STATE_DIR) -> None:
         "autostart": autostart_file().exists(),
         "keep_awake": state.get("keep_awake") == "1",
         "phone": state.get("phone") == "1",
+        "helper": helper_running(state_dir),
         "at": int(time.time()),
     }
     path = status_path(state_dir)
@@ -745,6 +864,8 @@ def _run(argv: List[str]) -> int:
         return cmd_awake(args[1] if len(args) > 1 else "status")
     if action == "awake-run":
         return cmd_awake_run()
+    if action == "helper":
+        return cmd_helper(port)
     if action == "phone":
         return cmd_phone(args[1] if len(args) > 1 else "status", port, flags)
     if action == "stop":

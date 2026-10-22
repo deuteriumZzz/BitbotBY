@@ -579,3 +579,30 @@ def test_find_telegram_chat_needs_token_and_control(client):
     assert client.post(
         "/api/secrets/telegram/chat", json={"token": "x"}
     ).status_code in (401, 403)
+
+
+def test_launcher_toggle_request_is_whitelisted(keyed, monkeypatch, tmp_path):
+    monkeypatch.setattr(control, "_LAUNCHER_DIR", tmp_path)
+    h = {"X-API-Key": "secret"}
+    with patch.object(data, "get_redis", return_value=FakeRedis()):
+        off = keyed.post(
+            "/api/launcher", json={"setting": "autostart", "on": True}, headers=h
+        )
+        assert off.status_code == 404  # не лаунчер — переключать нечего
+
+        monkeypatch.setenv("BITBOT_LOCAL_MODE", "1")
+        ok = keyed.post(
+            "/api/launcher", json={"setting": "autostart", "on": True}, headers=h
+        )
+        req = json.loads((tmp_path / "launcher_request.json").read_text())
+        assert req["id"] == ok.json()["id"] and req["setting"] == "autostart"
+
+        for bad in ({"setting": "phone", "on": True}, {"setting": "x", "on": True}):
+            assert keyed.post("/api/launcher", json=bad, headers=h).status_code == 400
+        phone_off = {"setting": "phone", "on": False}
+        assert keyed.post("/api/launcher", json=phone_off, headers=h).is_success
+
+        (tmp_path / "launcher.json").write_text(json.dumps({"helper": True, "at": 0}))
+        assert (
+            keyed.get("/api/launcher", headers=h).json()["helper"] is False
+        )  # устарело
