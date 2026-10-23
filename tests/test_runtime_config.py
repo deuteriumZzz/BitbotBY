@@ -253,8 +253,11 @@ class TestRuntimeConfigRisk:
         redis_mock.redis_client.set.assert_called_once()
 
     def test_apply_risk_preset_conservative(self, rc_bundle):
-        rc, _, _ = rc_bundle
+        rc, redis_mock, _ = rc_bundle
         assert rc.apply_risk_preset("conservative") is True
+        # Плечо — часть пресета, как в приложении: «Консервативный» = фикс.
+        sets = [c.args for c in redis_mock.redis_client.set.call_args_list]
+        assert ("bot:leverage_mode", "fixed") in sets
 
     def test_apply_risk_preset_unknown(self, rc_bundle):
         rc, _, _ = rc_bundle

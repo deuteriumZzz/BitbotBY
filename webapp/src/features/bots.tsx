@@ -5,7 +5,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { fmtN, plural, tone } from "../lib/format";
 import { reducedMotion } from "../lib/platform";
-import type { ConfigValues, Strategy } from "../lib/types";
+import type { ConfigValues, RiskPreset, Strategy } from "../lib/types";
 import { actions, useStore } from "../store";
 import { Icon, Q, Seg, Toggle } from "../ui";
 
@@ -88,47 +88,27 @@ export const stratName = (k: string): string => STRATEGY_NAME[k] ?? k;
 
 export const cfg = <T,>(c: ConfigValues, key: string, fallback: T): T => (c[key]?.value as T) ?? fallback;
 
-type LevMode = "fixed" | "volatility" | "full";
-interface Preset {
-  name: string;
-  d: string;
-  slots: number;
-  risk: number; // доля баланса
-  dd: boolean;
-  lev: LevMode;
-  icon: JSX.Element;
-}
+type LevMode = RiskPreset["LEVERAGE_MODE"];
 const ico = (d: string) => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d={d} />
   </svg>
 );
-const PRESETS: Record<string, Preset> = {
+/** Подписи пресетов. Сами значения — из бота (GET /api/risk/presets), одни на приложение и Telegram. */
+const PRESET_META: Record<string, { name: string; d: string; icon: JSX.Element }> = {
   conservative: {
     name: "Консервативный",
     d: "Редкие сделки, маленький риск, строгая защита",
-    slots: 2,
-    risk: 0.01,
-    dd: true,
-    lev: "fixed",
     icon: ico("M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"),
   },
   moderate: {
     name: "Умеренный",
     d: "Баланс между частотой сделок и риском",
-    slots: 3,
-    risk: 0.02,
-    dd: true,
-    lev: "volatility",
     icon: ico("M12 3v18M7 21h10M3 7h18M6 7l-3 7a3 3 0 0 0 6 0zM18 7l-3 7a3 3 0 0 0 6 0z"),
   },
   aggressive: {
     name: "Агрессивный",
     d: "Больше сделок и риска, без защиты от просадки",
-    slots: 5,
-    risk: 0.04,
-    dd: false,
-    lev: "full",
     icon: ico(
       "M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09zM12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2zM9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5",
     ),
@@ -147,69 +127,26 @@ const PROFILE_NOTE: Record<string, string> = {
   meme: "Мем-монеты и сигналы из Twitter и памп-каналов Telegram. Самый рискованный.",
 };
 
-// ── Режим риска ───────────────────────────────────────────────────────────────
+// ── Как рискуем: пресеты + ручная настройка ───────────────────────────────────
 
 /** Ключ пресета риска, совпадающего с настройками; undefined — свои настройки. */
-export function presetOf(c: ConfigValues): string | undefined {
-  const slots = cfg(c, "MAX_POSITIONS", 3);
-  const risk = cfg(c, "RISK_PER_TRADE", 0.02);
-  const dd = cfg(c, "DRAWDOWN_SCALE_ENABLED", true);
-  const lev = cfg<LevMode>(c, "LEVERAGE_MODE", "volatility");
-  return Object.entries(PRESETS).find(([, p]) => p.slots === slots && Math.abs(p.risk - risk) < 1e-9 && p.dd === dd && p.lev === lev)?.[0];
-}
-
-export const presetName = (k: string | undefined): string => (k ? PRESETS[k].name : "свои настройки");
-
-export function RiskCard() {
-  const c = useStore((s) => s.config);
-  const balance = useStore((s) => s.balance);
-  const slots = cfg(c, "MAX_POSITIONS", 3);
-  const risk = cfg(c, "RISK_PER_TRADE", 0.02);
-  const active = presetOf(c);
-  const one = balance * risk;
-  const apply = async (k: string) => {
-    const p = PRESETS[k];
-    await actions.patchConfig({ MAX_POSITIONS: p.slots, RISK_PER_TRADE: p.risk, DRAWDOWN_SCALE_ENABLED: p.dd, LEVERAGE_MODE: p.lev });
+export function presetOf(c: ConfigValues, presets: Record<string, RiskPreset>): string | undefined {
+  const now: RiskPreset = {
+    MAX_POSITIONS: cfg(c, "MAX_POSITIONS", 3),
+    RISK_PER_TRADE: cfg(c, "RISK_PER_TRADE", 0.02),
+    DRAWDOWN_SCALE_ENABLED: cfg(c, "DRAWDOWN_SCALE_ENABLED", true),
+    LEVERAGE_MODE: cfg<LevMode>(c, "LEVERAGE_MODE", "volatility"),
   };
-  return (
-    <article className="card">
-      <div className="card-h">
-        <h2>Режим риска</h2>
-        <span className="pill sp">{active ? PRESETS[active].name : "Свои настройки"}</span>
-      </div>
-      <div className="presets">
-        {Object.entries(PRESETS).map(([k, p]) => (
-          <button key={k} className="preset" type="button" aria-pressed={k === active} onClick={() => k !== active && void apply(k)}>
-            <span className="pi">{p.icon}</span>
-            <b>{p.name}</b>
-            <span className="pd">{p.d}</span>
-            <dl>
-              <div>
-                <dt>Сделок сразу</dt>
-                <dd>{p.slots}</dd>
-              </div>
-              <div>
-                <dt>Риск на сделку</dt>
-                <dd>{p.risk * 100}%</dd>
-              </div>
-              <div>
-                <dt>Защита просадки</dt>
-                <dd>{p.dd ? "вкл" : "выкл"}</dd>
-              </div>
-            </dl>
-            {Icon.check}
-          </button>
-        ))}
-      </div>
-      <p className="preview">
-        При балансе <b>${fmtN(balance, 0)}</b> одна сделка рискует до <b>${fmtN(one, 0)}</b>. Открыто может быть до <b>{slots}</b>{" "}
-        {plural(slots, ["сделки", "сделок", "сделок"])} сразу — в худшем случае до <b>${fmtN(one * slots, 0)}</b>.
-      </p>
-    </article>
-  );
+  return Object.entries(presets).find(
+    ([, p]) =>
+      p.MAX_POSITIONS === now.MAX_POSITIONS &&
+      Math.abs(p.RISK_PER_TRADE - now.RISK_PER_TRADE) < 1e-9 &&
+      p.DRAWDOWN_SCALE_ENABLED === now.DRAWDOWN_SCALE_ENABLED &&
+      p.LEVERAGE_MODE === now.LEVERAGE_MODE,
+  )?.[0];
 }
 
-// ── Тонкая настройка ──────────────────────────────────────────────────────────
+export const presetName = (k: string | undefined): string => (k ? (PRESET_META[k]?.name ?? k) : "свои настройки");
 
 /** Значение слайдера меняется сразу, а на сервер уходит через полсекунды после последнего движения. */
 function useDebouncedPatch<T>(server: T, key: string, toServer: (v: T) => unknown = (v) => v): [T, (v: T) => void] {
@@ -225,88 +162,131 @@ function useDebouncedPatch<T>(server: T, key: string, toServer: (v: T) => unknow
   return [local, set];
 }
 
-export function TuneCard() {
+/**
+ * Единственное место, где меняются сделки одновременно, риск на сделку и плечо.
+ * «Уменьшать при просадке» — в «Правилах защиты» (пресет ставит и его).
+ */
+export function RiskCard() {
   const c = useStore((s) => s.config);
+  const presets = useStore((s) => s.riskPresets);
+  const balance = useStore((s) => s.balance);
   const paper = useStore((s) => s.bot?.paper ?? true);
+  const active = presetOf(c, presets);
+  const [open, setOpen] = useState(false);
+  const manual = open || (active === undefined && Object.keys(presets).length > 0);
   const spot = cfg<string>(c, "MARKET_TYPE", "linear") === "spot";
   const lev = cfg<LevMode>(c, "LEVERAGE_MODE", "volatility");
   const levText = spot ? "1×" : lev === "fixed" ? `${cfg(c, "LEVERAGE", 3)}×` : `до ${cfg(c, "LEVERAGE_MAX", 5)}×`;
   const [risk, setRisk] = useDebouncedPatch(+(cfg(c, "RISK_PER_TRADE", 0.02) * 100).toFixed(2), "RISK_PER_TRADE", (v) => +(v / 100).toFixed(4));
   const [slots, setSlots] = useDebouncedPatch(cfg(c, "MAX_POSITIONS", 3), "MAX_POSITIONS");
-  const dd = cfg(c, "DRAWDOWN_SCALE_ENABLED", true);
+  const one = (balance * risk) / 100;
   return (
     <article className="card">
       <div className="card-h">
-        <h2>Тонкая настройка</h2>
+        <h2>Как рискуем</h2>
+        <span className="pill sp">{active ? presetName(active) : "Свои настройки"}</span>
       </div>
-      <div className="field">
-        <div className="field-h">
-          <span>
-            Риск на сделку <Q tip="Какую долю баланса бот готов потерять, если сделка закроется по стоп-лоссу. Размер позиции бот считает сам." />
-          </span>
-          <output className="num">{risk}%</output>
-        </div>
-        <input type="range" min="0.5" max="5" step="0.5" value={risk} aria-label="Риск на сделку, %" onChange={(e) => setRisk(+e.target.value)} />
-        <div className="quick">
-          {[1, 2, 4].map((v) => (
-            <button key={v} className="btn" type="button" aria-pressed={risk === v} onClick={() => setRisk(v)}>
-              {v}%
+      <div className="presets">
+        {Object.entries(PRESET_META).map(([k, m]) => {
+          const p = presets[k];
+          return (
+            <button key={k} className="preset" type="button" aria-pressed={k === active} disabled={!p} onClick={() => p && k !== active && void actions.patchConfig({ ...p })}>
+              <span className="pi">{m.icon}</span>
+              <b>{m.name}</b>
+              <span className="pd">{m.d}</span>
+              {p && (
+                <dl>
+                  <div>
+                    <dt>Сделок сразу</dt>
+                    <dd>{p.MAX_POSITIONS}</dd>
+                  </div>
+                  <div>
+                    <dt>Риск на сделку</dt>
+                    <dd>{+(p.RISK_PER_TRADE * 100).toFixed(2)}%</dd>
+                  </div>
+                  <div>
+                    <dt>Защита просадки</dt>
+                    <dd>{p.DRAWDOWN_SCALE_ENABLED ? "вкл" : "выкл"}</dd>
+                  </div>
+                </dl>
+              )}
+              {Icon.check}
             </button>
-          ))}
-        </div>
+          );
+        })}
       </div>
-      <div className="field">
-        <div className="field-h">
-          <span>
-            Сделок одновременно{" "}
-            <Q tip="Когда все места заняты, бот перестаёт искать новые сделки и только следит за открытыми. Так он экономит AI-запросы." />
-          </span>
-          <span className="stepper">
-            <button className="btn" type="button" aria-label="Меньше" disabled={slots <= 1} onClick={() => setSlots(slots - 1)}>
-              −
-            </button>
-            <output>{slots}</output>
-            <button className="btn" type="button" aria-label="Больше" disabled={slots >= 20} onClick={() => setSlots(slots + 1)}>
-              +
-            </button>
-          </span>
-        </div>
-        {paper && (
-          <div className="quick">
-            <button className="btn" type="button" aria-pressed={slots === 15} onClick={() => setSlots(15)}>
-              15 — больше статистики в Paper
-            </button>
+      <p className="preview">
+        При балансе <b>${fmtN(balance, 0)}</b> одна сделка рискует до <b>${fmtN(one, 0)}</b>. Открыто может быть до <b>{slots}</b>{" "}
+        {plural(slots, ["сделки", "сделок", "сделок"])} сразу — в худшем случае до <b>${fmtN(one * slots, 0)}</b>.
+      </p>
+      <button className="btn disclose" type="button" aria-expanded={manual} onClick={() => setOpen(!manual)}>
+        {manual ? "Скрыть ручную настройку ▴" : "Настроить вручную ▾"}
+      </button>
+      {manual && (
+        <div className="manual">
+          <div className="field">
+            <div className="field-h">
+              <span>
+                Риск на сделку <Q tip="Какую долю баланса бот готов потерять, если сделка закроется по стоп-лоссу. Размер позиции бот считает сам." />
+              </span>
+              <output className="num">{risk}%</output>
+            </div>
+            <input type="range" min="0.5" max="5" step="0.5" value={risk} aria-label="Риск на сделку, %" onChange={(e) => setRisk(+e.target.value)} />
+            <div className="quick">
+              {[1, 2, 4].map((v) => (
+                <button key={v} className="btn" type="button" aria-pressed={risk === v} onClick={() => setRisk(v)}>
+                  {v}%
+                </button>
+              ))}
+            </div>
           </div>
-        )}
-      </div>
-      <div className="field">
-        <div className="field-h">
-          <span>
-            Плечо <Q tip="Фикс — всегда одно плечо. По волатильности — меньше плеча на резких монетах. Макс — максимальное плечо из настроек." />
-          </span>
-          <output className="num">{levText}</output>
+          <div className="field">
+            <div className="field-h">
+              <span>
+                Сделок одновременно{" "}
+                <Q tip="Когда все места заняты, бот перестаёт искать новые сделки и только следит за открытыми. Так он экономит AI-запросы." />
+              </span>
+              <span className="stepper">
+                <button className="btn" type="button" aria-label="Меньше" disabled={slots <= 1} onClick={() => setSlots(slots - 1)}>
+                  −
+                </button>
+                <output>{slots}</output>
+                <button className="btn" type="button" aria-label="Больше" disabled={slots >= 20} onClick={() => setSlots(slots + 1)}>
+                  +
+                </button>
+              </span>
+            </div>
+            {paper && (
+              <div className="quick">
+                <button className="btn" type="button" aria-pressed={slots === 15} onClick={() => setSlots(15)}>
+                  15 — больше статистики в Paper
+                </button>
+              </div>
+            )}
+          </div>
+          <div className="field">
+            <div className="field-h">
+              <span>
+                Плечо <Q tip="Фикс — всегда одно плечо. По волатильности — меньше плеча на резких монетах. Макс — максимальное плечо из настроек." />
+              </span>
+              <output className="num">{levText}</output>
+            </div>
+            <Seg
+              className="full"
+              value={lev}
+              disabled={spot}
+              options={[
+                ["fixed", "Фикс"],
+                ["volatility", "По волатильности"],
+                ["full", "Макс"],
+              ]}
+              onChange={(v) => void actions.patchConfig({ LEVERAGE_MODE: v })}
+            />
+            {spot && <p>На споте плеча и шортов нет.</p>}
+          </div>
+          <p className="note-soon">Поменяли вручную — вверху «Свои настройки». Пресет можно выбрать снова в любой момент. Уменьшение сделок при просадке — в «Правилах защиты».</p>
         </div>
-        <Seg
-          className="full"
-          value={lev}
-          disabled={spot}
-          options={[
-            ["fixed", "Фикс"],
-            ["volatility", "По волатильности"],
-            ["full", "Макс"],
-          ]}
-          onChange={(v) => void actions.patchConfig({ LEVERAGE_MODE: v })}
-        />
-        {spot && <p>На споте плеча и шортов нет.</p>}
-      </div>
-      <div className="field">
-        <div className="row-tgl">
-          <span>
-            Защита при просадке <Q tip="Во время просадки бот уменьшает размер новых сделок, а при сильной — останавливает входы." />
-          </span>
-          <Toggle on={dd} label="Защита при просадке" onChange={(on) => void actions.patchConfig({ DRAWDOWN_SCALE_ENABLED: on })} />
-        </div>
-      </div>
+      )}
     </article>
   );
 }

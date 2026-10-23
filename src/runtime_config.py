@@ -93,21 +93,27 @@ def confirm_policy(timeout: Any, on_timeout: Any) -> "tuple[int, str]":
 
 _MARKET_TYPES = frozenset({"spot", "linear"})
 
-_RISK_PRESETS = {
+# Пресеты риска — одно определение для Telegram (/risk) и приложения
+# (GET /api/risk/presets). Ключи — как в настройках (settings_registry): приложение
+# пишет их обычным PATCH /api/config, Telegram — через apply_risk_preset.
+RISK_PRESETS: Dict[str, Dict[str, Any]] = {
     "conservative": {
-        "max_positions": 2,
-        "risk_per_trade": 0.01,
-        "drawdown_scale": True,
+        "MAX_POSITIONS": 2,
+        "RISK_PER_TRADE": 0.01,
+        "DRAWDOWN_SCALE_ENABLED": True,
+        "LEVERAGE_MODE": "fixed",
     },
     "moderate": {
-        "max_positions": 3,
-        "risk_per_trade": 0.02,
-        "drawdown_scale": True,
+        "MAX_POSITIONS": 3,
+        "RISK_PER_TRADE": 0.02,
+        "DRAWDOWN_SCALE_ENABLED": True,
+        "LEVERAGE_MODE": "volatility",
     },
     "aggressive": {
-        "max_positions": 5,
-        "risk_per_trade": 0.04,
-        "drawdown_scale": False,
+        "MAX_POSITIONS": 5,
+        "RISK_PER_TRADE": 0.04,
+        "DRAWDOWN_SCALE_ENABLED": False,
+        "LEVERAGE_MODE": "full",
     },
 }
 
@@ -417,12 +423,13 @@ class RuntimeConfig:
 
     def apply_risk_preset(self, name: str) -> bool:
         """Применяет пресет риск-профиля. Возвращает False если имя неизвестно."""
-        preset = _RISK_PRESETS.get(name)
+        preset = RISK_PRESETS.get(name)
         if not preset:
             return False
-        self.set_max_positions(int(preset["max_positions"]))
-        self.set_risk_per_trade(float(preset["risk_per_trade"]))
-        self.set_drawdown_scale_enabled(bool(preset["drawdown_scale"]))
+        self.set_max_positions(int(preset["MAX_POSITIONS"]))
+        self.set_risk_per_trade(float(preset["RISK_PER_TRADE"]))
+        self.set_drawdown_scale_enabled(bool(preset["DRAWDOWN_SCALE_ENABLED"]))
+        self.set_leverage_mode(str(preset["LEVERAGE_MODE"]))
         logger.info("Runtime: применён риск-профиль '%s'", name)
         return True
 

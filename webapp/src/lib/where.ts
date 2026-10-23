@@ -3,7 +3,7 @@
 
 import type { BotNode, Tab } from "./types";
 
-export type SettingsPane = "main" | "ai" | "conn" | "all";
+export type SettingsPane = "main" | "conn" | "all";
 
 export interface Home {
   tab: Tab;
@@ -14,14 +14,15 @@ export interface Home {
   where: string;
 }
 
-const RISK: Home = { tab: "bots", node: "risk", where: "Бот → Риск → Режим риска" };
+const RISK: Home = { tab: "bots", node: "risk", where: "Бот → Риск → Как рискуем" };
+const RULES: Home = { tab: "bots", node: "risk", where: "Бот → Риск → Правила защиты" };
 const CONFIRM: Home = { tab: "bots", node: "order", where: "Бот → Ордер → Открытие сделок" };
 const WHAT: Home = { tab: "bots", node: "scan", where: "Бот → Сканер → Что торговать" };
 
 export const OWN_HOME: Record<string, Home> = {
   RISK_PER_TRADE: RISK,
   MAX_POSITIONS: RISK,
-  DRAWDOWN_SCALE_ENABLED: RISK,
+  DRAWDOWN_SCALE_ENABLED: RULES,
   LEVERAGE_MODE: RISK,
   AUTO_EXECUTE: CONFIRM,
   TELEGRAM_CONFIRM_TIMEOUT: CONFIRM,
@@ -30,9 +31,9 @@ export const OWN_HOME: Record<string, Home> = {
   CHRONOS_ENABLED: WHAT,
   MARKET_TYPE: WHAT,
   SEASON_SWITCH_MODE: WHAT,
-  PAPER_GUARDS_OFF: { tab: "bots", node: "risk", where: "Бот → Риск → Защиты портфеля" },
+  PAPER_GUARDS_OFF: RULES,
   LOCAL_FALLBACK: { tab: "bots", node: "strat", where: "Бот → Стратегии" },
-  TRADING_HOURS: { tab: "settings", pane: "main", where: "Настройки → Основное → Часы торговли" },
+  TRADING_HOURS: { tab: "bots", node: "scan", where: "Бот → Сканер → Часы торговли" },
   TESTNET: { tab: "settings", pane: "conn", where: "Настройки → Подключения → Bybit" },
-  AI_PROVIDER: { tab: "settings", pane: "ai", where: "Настройки → AI" },
+  AI_PROVIDER: { tab: "bots", node: "ai", where: "Бот → AI-цепочка" },
 };

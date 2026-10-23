@@ -6,11 +6,11 @@ import type { BotNode, SecretItem, SettingDef } from "../lib/types";
 import { actions, useStore } from "../store";
 import { Q, Seg } from "../ui";
 import { AiPane } from "./ai";
-import { ConfirmCard, RiskCard, StrategiesCard, TrackCard, TuneCard, WhatCard, cfg, presetName, presetOf, profileName } from "./bots";
+import { ConfirmCard, RiskCard, StrategiesCard, TrackCard, WhatCard, cfg, presetName, presetOf, profileName } from "./bots";
 import { STATUS, chosenId } from "./chainops";
 import { ModelCard } from "./jobs";
 import { RulesCard } from "./rules";
-import { GuardsCard } from "./settings";
+import { HoursCard, SymbolsCard } from "./settings";
 import { mark } from "./trace";
 
 const svg = (body: JSX.Element) => (
@@ -104,6 +104,7 @@ interface Info {
 /** Строка состояния под узлом и сводка полей для каждого узла — только из того, что бот уже отдаёт. */
 function usePipeline(mode: string): { status: Record<BotNode, string>; info: Record<BotNode, Info> } {
   const c = useStore((s) => s.config);
+  const presets = useStore((s) => s.riskPresets);
   const schema = useStore((s) => s.schema);
   const bot = useStore((s) => s.bot);
   const strategies = useStore((s) => s.strategies);
@@ -138,7 +139,7 @@ function usePipeline(mode: string): { status: Record<BotNode, string>; info: Rec
     strat: `включено ${strategies.filter((s) => s.enabled).length}`,
     ai: !ai ? "цепочка" : ai.single ? "один провайдер" : `${ai.chain.length} в цепочке`,
     sac: mode === "dqn" ? "решает сам" : "вместе с AI",
-    risk: `${presetName(presetOf(c))}${guardsOff ? " · без защит" : ""}`,
+    risk: `${presetName(presetOf(c, presets))}${guardsOff ? " · без защит" : ""}`,
     order: `Bybit ${bybit?.status === "ok" ? "▲" : bybit?.status === "bad" ? "▼" : "·"} ${paper ? "Paper" : "Live"} · ${auto ? "авто" : "с подтверждением"}`,
     track: partial ? `${pct(cfg(c, "PARTIAL_TP_FRACTION", 0.5))} на ${pct(cfg(c, "PARTIAL_TP_TRIGGER", 0.6))} · безубыток` : "без частичной фиксации",
   };
@@ -205,7 +206,7 @@ function usePipeline(mode: string): { status: Record<BotNode, string>; info: Rec
     risk: {
       desc: "Последний фильтр перед ордером: размер позиции, плечо, лимиты и защиты портфеля.",
       fields: [
-        ["Режим риска", presetName(presetOf(c))],
+        ["Как рискуем", presetName(presetOf(c, presets))],
         ["Риск на сделку", show("RISK_PER_TRADE")],
         ["Позиций сразу", show("MAX_POSITIONS")],
         ["Плечо", spot ? "1× на споте" : show("LEVERAGE_MODE")],
@@ -243,7 +244,7 @@ function usePipeline(mode: string): { status: Record<BotNode, string>; info: Rec
   return { status, info };
 }
 
-/** Мини-цепочка провайдеров на полотне: порядок и статусы — те же, что в схеме в Настройки → AI. */
+/** Мини-цепочка провайдеров на полотне: порядок и статусы — те же, что в схеме узла AI. */
 function AiStrip({ part }: { part: boolean }) {
   const ai = useStore((s) => s.ai);
   const openNode = useStore((s) => s.openNode);
@@ -402,6 +403,10 @@ export function Pipeline() {
             <div className="col">
               <WhatCard />
             </div>
+            <div className="col">
+              <HoursCard />
+              <SymbolsCard />
+            </div>
           </div>
         )}
         {cur.id === "strat" && (
@@ -428,11 +433,9 @@ export function Pipeline() {
           <div className="cols">
             <div className="col">
               <RiskCard />
-              <TuneCard />
             </div>
             <div className="col">
               <RulesCard />
-              <GuardsCard />
             </div>
           </div>
         )}

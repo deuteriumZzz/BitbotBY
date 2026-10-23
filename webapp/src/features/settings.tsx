@@ -8,7 +8,6 @@ import { fmtN, plural } from "../lib/format";
 import type { ConfigHistoryItem, ConfigValues, SecretItem, SettingDef } from "../lib/types";
 import { actions, useStore, type PatchResult } from "../store";
 import { Icon, Q, Seg, Toggle, useArm } from "../ui";
-import { AiPane } from "./ai";
 import { cfg } from "./bots";
 
 type Pane = SettingsPane;
@@ -27,7 +26,6 @@ export function Settings() {
         value={pane}
         options={[
           ["main", "Основное"],
-          ["ai", "AI"],
           ["conn", "Подключения"],
           ["all", "Параметры"],
         ]}
@@ -35,7 +33,6 @@ export function Settings() {
         label="Раздел настроек"
       />
       {pane === "main" && <Main go={setPane} />}
-      {pane === "ai" && <AiPane />}
       {pane === "conn" && <Keys />}
       {pane === "all" && <AllParams go={setPane} />}
     </section>
@@ -49,9 +46,13 @@ function Main({ go }: { go: (pane: Pane) => void }) {
     <div className="set-pane view enter">
       <div className="cols">
         <div className="col">
-          <HoursCard />
-          <SymbolsCard />
           <AlertsCard />
+          <p className="note-soon moved">
+            Часы торговли и монеты теперь в узле «Сканер».{" "}
+            <button className="btn" type="button" onClick={() => useStore.getState().openNode("scan")}>
+              Бот → Сканер
+            </button>
+          </p>
         </div>
         <div className="col">
           <ConnCard go={go} />
@@ -172,7 +173,8 @@ const HOURS = [
   ["22-6", "Ночь"],
 ] as const;
 
-function HoursCard() {
+/** Живёт в узле «Сканер» вкладки «Бот». */
+export function HoursCard() {
   const hours = useStore((s) => cfg<string>(s.config, "TRADING_HOURS", ""));
   const [now, setNow] = useState(new Date());
   useEffect(() => {
@@ -216,59 +218,6 @@ function HoursCard() {
   );
 }
 
-const GUARDS_OFF = [
-  "Пауза по монете после сделки",
-  "Пауза и закрытие позиций при всплеске волатильности",
-  "Пауза вокруг макро-новостей",
-  "Фильтр корреляции с открытыми позициями",
-  "Лимит общей нагрузки портфеля",
-  "Kill-switch убыточных стратегий",
-  "Предупреждения о просадке, дневном лимите и серии убытков (в Paper они и так ничего не останавливают)",
-];
-const GUARDS_KEPT = [
-  "Стоп-лосс и тейк-профит на бирже",
-  "Проверка ликвидности (спред и объём)",
-  "Риск на сделку, лимит позиций, масштабирование при просадке",
-  "Живой режим: переключатель в нём не действует вообще",
-];
-
-/** Живёт в узле «Риск» вкладки «Бот». */
-export function GuardsCard() {
-  const paper = useStore((s) => s.bot?.paper ?? true);
-  const off = useStore((s) => cfg<boolean>(s.config, "PAPER_GUARDS_OFF", false));
-  return (
-    <article className="card">
-      <div className="card-h">
-        <h2>Защиты портфеля</h2>
-        <Q tip="Только для Paper: чтобы быстрее накопить много сделок для обучения, можно отключить паузы и лимиты портфеля. В Live переключатель игнорируется." />
-      </div>
-      <div className="row-tgl">
-        <span>Paper: торговать без защит портфеля</span>
-        <Toggle on={off} disabled={!paper} label="Paper без защит портфеля" onChange={(v) => void actions.patchConfig({ PAPER_GUARDS_OFF: v })} />
-      </div>
-      <p className="note-soon" style={{ marginTop: 8 }}>
-        {paper
-          ? "Бот будет входить чаще и держать больше позиций подряд, в том числе во время обвалов. Результаты Paper перестанут показывать, как бот справился бы с защитами."
-          : "Сейчас включён Live, здесь переключатель недоступен: защиты работают всегда."}
-      </p>
-      <div className="note-soon" style={{ marginTop: 8 }}>
-        <b>Отключается в Paper</b>
-        <ul>
-          {GUARDS_OFF.map((t) => (
-            <li key={t}>{t}</li>
-          ))}
-        </ul>
-        <b>Остаётся всегда</b>
-        <ul>
-          {GUARDS_KEPT.map((t) => (
-            <li key={t}>{t}</li>
-          ))}
-        </ul>
-      </div>
-    </article>
-  );
-}
-
 const STATUS: Record<SecretItem["status"], [string, string]> = {
   ok: ["ok", "работает"],
   warn: ["warn", "есть проблема"],
@@ -279,7 +228,8 @@ const STATUS: Record<SecretItem["status"], [string, string]> = {
 
 const LIST_NAME = { forced: "Всегда сканировать", excluded: "Исключить из скана" } as const;
 
-function SymbolsCard() {
+/** Живёт в узле «Сканер» вкладки «Бот». */
+export function SymbolsCard() {
   const symbols = useStore((s) => s.symbols);
   return (
     <article className="card">
@@ -459,7 +409,7 @@ function ConnCard({ go }: { go: (pane: Pane) => void }) {
         )}
       </div>
       <div className="btn-row" style={{ marginTop: 12 }}>
-        <button className="btn" type="button" onClick={() => go("ai")}>
+        <button className="btn" type="button" onClick={() => useStore.getState().openNode("ai")}>
           AI-провайдеры
         </button>
         <button className="btn" type="button" onClick={() => go("conn")}>
@@ -611,7 +561,7 @@ const KEY_INFO: Record<string, [string, string?]> = {
 function Keys() {
   const secrets = useStore((s) => s.secrets);
   const note = useStore((s) => s.secretsNote);
-  // Ключи AI-провайдеров — в разделе «AI», здесь биржа, Telegram, данные и доступ.
+  // Ключи AI-провайдеров — в узле AI вкладки «Бот», здесь биржа, Telegram, данные и доступ.
   const groups = useMemo(() => [...new Set((secrets ?? []).map((s) => s.group))].filter((g) => g !== "AI-модели"), [secrets]);
   return (
     <div className="set-pane view enter">
@@ -623,6 +573,12 @@ function Keys() {
           перезапуска бота.
         </div>
       </div>
+      <p className="note-soon moved">
+        Ключи AI-провайдеров — вместе с цепочкой.{" "}
+        <button className="btn" type="button" onClick={() => useStore.getState().openNode("ai")}>
+          Бот → AI-цепочка
+        </button>
+      </p>
       {!secrets && <p className="empty">{note || "Ключи недоступны."}</p>}
       {groups.map((g) => (
         <section className="kgroup" key={g}>
@@ -854,7 +810,7 @@ const NUMERIC = ["int", "float", "pct"];
 export const shown = (d: SettingDef, v: unknown) => (d.type === "pct" ? +(Number(v) * 100).toFixed(4) : v);
 const unitOf = (d: SettingDef) => (d.type === "pct" ? "%" : d.unit);
 
-function fmtVal(d: SettingDef, v: unknown): string {
+export function fmtVal(d: SettingDef, v: unknown): string {
   if (d.type === "bool") return v ? "вкл" : "выкл";
   if (d.type === "choice") return d.options.find((o) => o.value === v)?.label ?? String(v);
   if (d.type === "str") return v ? String(v) : "пусто";
@@ -969,7 +925,7 @@ function AllParams({ go }: { go: (pane: Pane) => void }) {
       </div>
       <p className="cfg-legend">
         <span className="tag hot">сразу</span> применяется без перезапуска · <span className="tag rst">перезапуск</span> вступит в силу после
-        перезапуска бота. Ключи — в «Подключения» и «AI», Paper/Live — в «Основное».
+        перезапуска бота. Ключи — в «Подключения», ключи AI — в Бот → AI-цепочка, Paper/Live — в «Основное».
       </p>
       {!needle && elsewhere > 0 && (
         <p className="cfg-legend">

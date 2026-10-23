@@ -35,7 +35,7 @@ from config import Config
 from src import ai_providers, background_jobs, bot_bus, secrets_store
 from src import settings_registry as registry
 from src.dashboard import auth, data
-from src.runtime_config import RuntimeConfig
+from src.runtime_config import RISK_PRESETS, RuntimeConfig
 
 
 async def _owner_only(conn: HTTPConnection) -> None:
@@ -468,6 +468,12 @@ async def get_command(request_id: str) -> JSONResponse:
 def _runtime_config(r: Any) -> Optional[RuntimeConfig]:
     # RuntimeConfig ждёт обёртку с .redis_client, как RedisClient бота.
     return RuntimeConfig(redis_client=SimpleNamespace(redis_client=r)) if r else None
+
+
+@router.get("/api/risk/presets")
+async def get_risk_presets() -> JSONResponse:
+    """Пресеты риска — те же, что у Telegram /risk (src/runtime_config.py)."""
+    return JSONResponse(RISK_PRESETS)
 
 
 @router.get("/api/config/schema")

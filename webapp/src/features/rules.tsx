@@ -7,7 +7,7 @@ import type { ConfigValues, SettingDef } from "../lib/types";
 import { actions, useStore } from "../store";
 import { Q, Seg, Toggle } from "../ui";
 import { cfg } from "./bots";
-import { NumField, shown } from "./settings";
+import { NumField, fmtVal, shown } from "./settings";
 
 export interface Rule {
   id: string;
@@ -28,6 +28,8 @@ export interface Rule {
   guardsOff?: boolean;
   /** 0 в пороге — правило выключено. */
   zeroOff?: boolean;
+  /** Порог правится в другом месте — здесь только значение и ссылка туда. */
+  elsewhere?: string;
 }
 
 export const RULES: Rule[] = [
@@ -83,6 +85,7 @@ export const RULES: Rule[] = [
     id: "slots",
     cat: "Позиция",
     key: "MAX_POSITIONS",
+    elsewhere: "меняется в «Как рискуем»",
     ifm: "Открыто сделок",
     cmp: "≥",
     then: () => "новые не открывать, только сопровождать открытые",
@@ -145,6 +148,23 @@ export const RULES: Rule[] = [
   },
 ];
 
+// «Paper без защит» — общий тумблер в шапке карточки (раньше была отдельная карточка).
+export const GUARDS_OFF = [
+  "Пауза по монете после сделки",
+  "Пауза и закрытие позиций при всплеске волатильности",
+  "Пауза вокруг макро-новостей",
+  "Фильтр корреляции с открытыми позициями",
+  "Лимит общей нагрузки портфеля",
+  "Kill-switch убыточных стратегий",
+  "Предупреждения о просадке, дневном лимите и серии убытков (в Paper они и так ничего не останавливают)",
+];
+export const GUARDS_KEPT = [
+  "Стоп-лосс и тейк-профит на бирже",
+  "Проверка ликвидности (спред и объём)",
+  "Риск на сделку, лимит позиций, масштабирование при просадке",
+  "Живой режим: переключатель в нём не действует вообще",
+];
+
 /** Наборы порогов. «Как задумано» — значения по умолчанию из схемы настроек. */
 const TEMPLATES = {
   strict: { DAILY_LOSS_LIMIT: 0.03, CIRCUIT_BREAKER_LOSSES: 2, MAX_DRAWDOWN_PERCENT: 0.1, SYMBOL_COOLDOWN_HOURS: 6, DRAWDOWN_SCALE_THRESHOLD: 0.05 },
@@ -176,14 +196,47 @@ export function RulesCard() {
   const alerts = useStore((s) => s.alerts);
   const paper = useStore((s) => s.bot?.paper ?? true);
   const guardsOff = paper && cfg(c, "PAPER_GUARDS_OFF", false);
-  const restart = RULES.some((r) => r.key && schema.find((d) => d.key === r.key)?.hot === false);
+  const restart = RULES.some((r) => r.key && !r.elsewhere && schema.find((d) => d.key === r.key)?.hot === false);
   return (
     <article className="card">
       <div className="card-h">
         <h2>Правила защиты</h2>
         <Q tip="Каждое правило — «если → то»: бот проверяет их перед ордером и в каждом цикле. Пороги — те же параметры, что в «Все параметры». Своих правил добавить нельзя: бот выполняет только эти." />
-        {restart && <span className="tag rst sp">после перезапуска</span>}
+        {restart && <span className="tag rst">после перезапуска</span>}
+        <span className="rules-master sp">
+          {paper ? (
+            <>
+              <span>Все защиты</span>
+              <Toggle on={!guardsOff} label="Все защиты" onChange={(on) => void actions.patchConfig({ PAPER_GUARDS_OFF: !on })} />
+            </>
+          ) : (
+            <span className="tag">в Live всегда вкл</span>
+          )}
+        </span>
       </div>
+      {guardsOff && (
+        <div className="guards-off">
+          <p>
+            <b>Paper без защит.</b> Бот входит чаще и держит больше позиций подряд, в том числе во время обвалов, — чтобы быстрее набрать опыт для
+            обучения. Результаты Paper перестают показывать, как бот справился бы с защитами. В Live этот тумблер не действует.
+          </p>
+          <details>
+            <summary>Что именно отключается</summary>
+            <b>Отключается в Paper</b>
+            <ul>
+              {GUARDS_OFF.map((t) => (
+                <li key={t}>{t}</li>
+              ))}
+            </ul>
+            <b>Остаётся всегда</b>
+            <ul>
+              {GUARDS_KEPT.map((t) => (
+                <li key={t}>{t}</li>
+              ))}
+            </ul>
+          </details>
+        </div>
+      )}
       <div className="field">
         <div className="field-h">
           <span>Шаблон порогов</span>
@@ -209,6 +262,7 @@ export function RulesCard() {
 
 function RuleRow({ r, c, schema, paper, guardsOff, alertOn }: { r: Rule; c: ConfigValues; schema: SettingDef[]; paper: boolean; guardsOff: boolean; alertOn?: boolean }) {
   const d = schema.find((s) => s.key === r.key);
+  const setTab = useStore((s) => s.setTab);
   const enabled = r.on ? cfg(c, r.on, true) : r.alert ? alertOn !== false : true;
   const zero = r.zeroOff && Number(cfg(c, r.key ?? "", 1)) === 0;
   const skipped = guardsOff && r.guardsOff;
@@ -217,27 +271,31 @@ function RuleRow({ r, c, schema, paper, guardsOff, alertOn }: { r: Rule; c: Conf
     ? "не проверяется: Paper без защит"
     : zero
       ? "выключено: порог 0"
-      : paper && r.paperNotify
-        ? "в Paper — только сообщение в Telegram"
-        : "";
+      : r.alert && !enabled
+        ? "тревога выключена"
+        : paper && r.paperNotify
+          ? "в Paper — только сообщение в Telegram"
+          : (r.elsewhere ?? "");
   return (
     <li className={`rule${active ? "" : " off"}`}>
       <span className="rule-cat">{r.cat}</span>
       <div className="rule-if">
-        <b>Если</b> {r.ifm} <span className="rule-cmp">{r.cmp}</span> {d ? <Threshold d={d} value={c[d.key]?.value} /> : <span className="rule-val">{r.fixed}</span>}
+        <b>Если</b> {r.ifm} <span className="rule-cmp">{r.cmp}</span>{" "}
+        {d && !r.elsewhere ? <Threshold d={d} value={c[d.key]?.value} /> : <span className="rule-val ro">{d ? fmtVal(d, c[d.key]?.value ?? d.default) : r.fixed}</span>}
       </div>
       <div className="rule-then">
         <b>то</b> {r.then(c)}
       </div>
       {note && <p className="rule-note">{note}</p>}
-      {(r.on || r.alert) && (
+      {r.on && (
         <span className="rule-tgl">
-          <Toggle
-            on={enabled}
-            label={`Правило: ${r.ifm}`}
-            onChange={(v) => void (r.on ? actions.patchConfig({ [r.on]: v }) : actions.patchAlert(r.alert ?? "", { enabled: v }))}
-          />
+          <Toggle on={enabled} label={`Правило: ${r.ifm}`} onChange={(v) => void actions.patchConfig({ [r.on as string]: v })} />
         </span>
+      )}
+      {r.alert && (
+        <button className="btn rule-link" type="button" onClick={() => setTab("settings")}>
+          Уведомления →
+        </button>
       )}
     </li>
   );

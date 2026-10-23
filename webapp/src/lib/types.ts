@@ -158,6 +158,14 @@ export interface SettingDef {
 
 export type ConfigValues = Record<string, { value: unknown; source: string }>;
 
+/** Пресет риска из бота (GET /api/risk/presets) — те же значения, что у Telegram /risk. */
+export interface RiskPreset {
+  MAX_POSITIONS: number;
+  RISK_PER_TRADE: number;
+  DRAWDOWN_SCALE_ENABLED: boolean;
+  LEVERAGE_MODE: "fixed" | "volatility" | "full";
+}
+
 /** Фоновая задача бота. Прогресс приходит событиями job.progress, итог — job.done. */
 export type JobId = "backtest" | "train" | "tune" | "alpha_report" | "live_divergence" | "ai_isolation";
 

@@ -109,3 +109,21 @@ async def test_unknown_phrase_gets_examples():
     c = _commander()
     await _say(c, "привет")
     assert "Можно писать словами" in c._reply.await_args.args[1]
+
+
+async def test_sac_means_dqn_in_mode_command_and_words():
+    c = _commander()
+    c._rc.set_mode.return_value = True
+    await c._cmd_mode(_update(), SimpleNamespace(args=["sac"]))
+    c._rc.set_mode.assert_called_with("dqn")
+    await _say(c, "режим sac")
+    c._rc.set_mode.assert_called_with("dqn")
+
+
+def test_telegram_preset_lines_come_from_the_shared_presets():
+    from src.runtime_config import RISK_PRESETS
+
+    text = tc._presets_text()
+    for p in RISK_PRESETS.values():
+        assert f"{p['MAX_POSITIONS']} поз, {p['RISK_PER_TRADE'] * 100:g}%" in text
+    assert "плечо фикс" in text

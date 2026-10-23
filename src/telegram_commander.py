@@ -39,6 +39,7 @@ from typing import Any, Callable, Dict, Optional
 
 from config import Config
 from src import ai_providers, login_link
+from src.runtime_config import RISK_PRESETS
 
 logger = logging.getLogger(__name__)
 
@@ -1100,6 +1101,31 @@ def find_strategy(word: str, names: "list[str]") -> "list[str]":
     return exact or [n for n in names if n.startswith(w)]
 
 
+_PRESET_LABEL = {
+    "conservative": "🟢 Конс.",
+    "moderate": "🟡 Умер.",
+    "aggressive": "🔴 Агр.",
+}
+_LEV_LABEL = {
+    "fixed": "плечо фикс",
+    "volatility": "плечо по волатильности",
+    "full": "плечо макс",
+}
+
+
+def _presets_text() -> str:
+    """Строки пресетов из RISK_PRESETS — те же значения, что в приложении."""
+    rows = []
+    for name, p in RISK_PRESETS.items():
+        dd = "ВКЛ" if p["DRAWDOWN_SCALE_ENABLED"] else "ВЫКЛ"
+        rows.append(
+            f"{_PRESET_LABEL.get(name, name)} — {p['MAX_POSITIONS']} поз, "
+            f"{p['RISK_PER_TRADE'] * 100:g}%, защита {dd}, "
+            f"{_LEV_LABEL.get(p['LEVERAGE_MODE'], p['LEVERAGE_MODE'])}\n"
+        )
+    return "".join(rows)
+
+
 class TelegramCommander:
     """
     Telegram-панель управления BitbotBY.
@@ -1466,10 +1492,7 @@ class TelegramCommander:
             f"Защита просадки: {dd_icon}\n"
             f"Flash-защита (циклов): `{confirm}` × 30с = `{confirm * 30}с`\n"
             f"Порог сигнала — Live: `{cl:.2f}` / Paper: `{cp:.2f}`\n\n"
-            f"_Пресеты:_\n"
-            f"🟢 Конс. — 2 поз, 1%, защита ВКЛ\n"
-            f"🟡 Умер. — 3 поз, 2%, защита ВКЛ\n"
-            f"🔴 Агр. — 5 поз, 4%, защита ВЫКЛ\n"
+            f"_Пресеты:_\n" + _presets_text()
         )
         paper_off = self._rc.get_paper_guards_off() if Config.PAPER_TRADING else None
         if paper_off:
@@ -1708,7 +1731,8 @@ class TelegramCommander:
                 _kb_mode_menu(),
             )
             return
-        mode = args[0].lower()
+        # В боте режим SAC называется dqn; «sac» пишут люди и подсказка ниже.
+        mode = {"sac": "dqn"}.get(args[0].lower(), args[0].lower())
         if self._rc.set_mode(mode):
             await self._reply(
                 update,

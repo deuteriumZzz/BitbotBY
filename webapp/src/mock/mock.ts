@@ -843,6 +843,12 @@ function route(method: string, path: string, body: unknown): unknown {
       return daily(Number(q.get("days") ?? 35));
     case "GET /api/strategies":
       return strategies;
+    case "GET /api/risk/presets":
+      return {
+        conservative: { MAX_POSITIONS: 2, RISK_PER_TRADE: 0.01, DRAWDOWN_SCALE_ENABLED: true, LEVERAGE_MODE: "fixed" },
+        moderate: { MAX_POSITIONS: 3, RISK_PER_TRADE: 0.02, DRAWDOWN_SCALE_ENABLED: true, LEVERAGE_MODE: "volatility" },
+        aggressive: { MAX_POSITIONS: 5, RISK_PER_TRADE: 0.04, DRAWDOWN_SCALE_ENABLED: false, LEVERAGE_MODE: "full" },
+      };
     case "GET /api/config/schema":
       return schema;
     case "GET /api/config":

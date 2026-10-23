@@ -26,6 +26,7 @@ import type {
   Position,
   ProfileInfo,
   SecretItem,
+  RiskPreset,
   SettingDef,
   SetupInfo,
   SetupStep,
@@ -111,6 +112,7 @@ export interface Store {
   daily: DailyRow[];
   strategies: Strategy[];
   schema: SettingDef[];
+  riskPresets: Record<string, RiskPreset>;
   config: ConfigValues;
   alerts: Alert[];
   symbols: Symbols;
@@ -249,6 +251,7 @@ export const useStore = create<Store>((set, get) => {
     daily: [],
     strategies: [],
     schema: [],
+    riskPresets: {},
     config: {},
     alerts: [],
     symbols: { forced: [], excluded: [] },
@@ -585,11 +588,13 @@ export const useStore = create<Store>((set, get) => {
       set({ strategies: await api<Strategy[]>("GET", "/api/strategies") });
     },
     async loadConfig() {
-      const [schema, config] = await Promise.all([
+      const have = get().riskPresets;
+      const [schema, config, riskPresets] = await Promise.all([
         get().schema.length ? get().schema : api<SettingDef[]>("GET", "/api/config/schema"),
         api<ConfigValues>("GET", "/api/config"),
+        Object.keys(have).length ? have : api<Record<string, RiskPreset>>("GET", "/api/risk/presets").catch(() => have),
       ]);
-      set({ schema, config });
+      set({ schema, config, riskPresets });
     },
     async loadAlerts() {
       set({ alerts: await api<Alert[]>("GET", "/api/alerts") });

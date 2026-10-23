@@ -606,3 +606,17 @@ def test_launcher_toggle_request_is_whitelisted(keyed, monkeypatch, tmp_path):
         assert (
             keyed.get("/api/launcher", headers=h).json()["helper"] is False
         )  # устарело
+
+
+def test_risk_presets_api_is_the_telegram_source(client):
+    from src.runtime_config import RISK_PRESETS
+
+    with patch.object(data, "get_redis", return_value=FakeRedis()):
+        got = client.get("/api/risk/presets").json()
+    assert got == RISK_PRESETS
+    assert set(got["moderate"]) == {
+        "MAX_POSITIONS",
+        "RISK_PER_TRADE",
+        "DRAWDOWN_SCALE_ENABLED",
+        "LEVERAGE_MODE",
+    }

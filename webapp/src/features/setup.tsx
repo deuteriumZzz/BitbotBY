@@ -65,7 +65,8 @@ function useChecks(): Check[] {
   const config = useStore((s) => s.config);
   const paper = useStore((s) => s.bot?.paper ?? true);
   const mode = useStore((s) => s.bot?.mode ?? "ai");
-  return readiness(info, ai, presetName(presetOf(config)), paper, mode);
+  const presets = useStore((s) => s.riskPresets);
+  return readiness(info, ai, presetName(presetOf(config, presets)), paper, mode);
 }
 
 // Флаги только для этого устройства: без хранилища считаем, что мастер уже видели,
@@ -259,7 +260,7 @@ function StepBody({ step }: { step: SetupStep }) {
         );
       if (!ai) return <Skel label="Загружаю список провайдеров" />;
       // Первым — LLM7: работает без ключа, один клик. Ollama требует своего сервера —
-      // это в Настройки → AI. Без хранилища ключей — только то, что не требует ключа.
+      // это в Бот → AI-цепочка. Без хранилища ключей — только то, что не требует ключа.
       const free = ai.providers
         .filter((p) => p.free_tier && !p.usable && p.id !== "ollama" && (info?.keys_in_app || p.key_optional))
         .sort((a, b) => Number(b.key_optional) - Number(a.key_optional))
@@ -268,7 +269,7 @@ function StepBody({ step }: { step: SetupStep }) {
         <>
           <p className="setup-p">
             Перед сделкой бот спрашивает языковую модель. Хватит одного бесплатного ключа; чем их больше, тем реже бот остаётся без AI из-за
-            дневных лимитов. Порядок и режим — в Настройки → AI.
+            дневных лимитов. Порядок и режим — в Бот → AI-цепочка.
           </p>
           <button className="btn" type="button" onClick={() => void actions.patchConfig({ MODE: "local" })}>
             Работать без AI: только локальные стратегии
