@@ -1,0 +1,87 @@
+# Запуск на удалённом сервере (VPS): бот, дашборд и Caddy с HTTPS. Инструкция — docs/DEPLOY_SERVER.md.
+#   python3 launcher/launch.py server --domain=bot.example.com   # всё сам: ключи, запуск, Telegram
+# Ключи сервисов (Bybit, AI, Telegram) — только в зашифрованном хранилище data/, не в .env:
+# здесь лишь мастер-ключ хранилища, ключ панели и домен из .server/server.env (права 600).
+# Локальный запуск этим файлом не затрагивается: он живёт в docker-compose.local.yml.
+name: bitbotby-server
+
+x-bot-env: &bot-env
+  REDIS_HOST: redis
+  PYTHONPATH: /app
+  PAPER_TRADING: "true"
+  MODE: local
+  # MiniApp в Telegram открывается по https-адресу этого сервера.
+  WEBAPP_URL: ${WEBAPP_URL:?запустите python3 launcher/launch.py server --domain=ваш-домен}
+  BITBOT_SECRETS_KEY: ${BITBOT_SECRETS_KEY:?запустите python3 launcher/launch.py server --domain=ваш-домен}
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --appendfsync everysec
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  bot:
+    build: .
+    restart: unless-stopped
+    command: python supervisor.py
+    environment:
+      <<: *bot-env
+      HEALTH_PORT: "8080"
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./logs:/app/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  dashboard:
+    build: .
+    restart: unless-stopped
+    command: python dashboard.py
+    # Наружу порт не открыт: снаружи только Caddy (80/443).
+    environment:
+      <<: *bot-env
+      REDIS_URL: redis://redis:6379/0
+      # Обязателен: без него данные приложения читались бы без входа, пока не настроен Telegram.
+      DASHBOARD_API_KEY: ${DASHBOARD_API_KEY:?запустите python3 launcher/launch.py server --domain=ваш-домен}
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
+  caddy:
+    image: caddy:2.8.4-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:?запустите python3 launcher/launch.py server --domain=ваш-домен}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      dashboard:
+        condition: service_healthy
+
+volumes:
+  redis_data:
+  caddy_data:
+  caddy_config:

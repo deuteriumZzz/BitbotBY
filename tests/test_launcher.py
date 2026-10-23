@@ -178,3 +178,46 @@ def test_helper_runs_only_whitelisted_fresh_requests(monkeypatch):
     assert not req("autostart", 1)[0]
     assert "устарел" in req("autostart", True, at=now - 600)[1]
     assert len(calls) == 3
+
+
+def test_server_env_keeps_master_key_and_panel_key(tmp_path):
+    first = launch.read_env_file(launch.prepare_server("bot.example.com", tmp_path))
+    assert first["WEBAPP_URL"] == "https://bot.example.com/app/"
+    Fernet(first["BITBOT_SECRETS_KEY"].encode())
+    again = launch.read_env_file(launch.prepare_server("new.example.com", tmp_path))
+    # Новый мастер-ключ сделал бы зашифрованные ключи нечитаемыми.
+    assert again["BITBOT_SECRETS_KEY"] == first["BITBOT_SECRETS_KEY"]
+    assert again["DASHBOARD_API_KEY"] == first["DASHBOARD_API_KEY"]
+    assert again["DOMAIN"] == "new.example.com"
+    if os.name != "nt":
+        assert stat.S_IMODE(os.stat(tmp_path / "server.env").st_mode) == 0o600
+
+
+def test_server_finds_chat_by_code_only():
+    def msg(chat_id, text, kind="private"):
+        return {"message": {"chat": {"id": chat_id, "type": kind}, "text": text}}
+
+    payload = {
+        "result": [msg(7, "/start"), msg(-1, "482913", "group"), msg(42, " 482913 ")]
+    }
+    assert launch.chat_by_code(payload, "482913") == "42"
+    assert launch.chat_by_code(payload, "000000") is None
+
+
+def test_server_compose_has_no_env_file_and_hides_the_panel():
+    root = Path(__file__).resolve().parent.parent
+    text = (root / "docker-compose.server.yml").read_text()
+    assert "env_file" not in text and ".env\n" not in text
+    assert (
+        "BITBOT_LOCAL_MODE" not in text
+    )  # одноразовый локальный вход на сервере выключен
+    assert "DASHBOARD_API_KEY: ${DASHBOARD_API_KEY:?" in text  # без ключа не стартует
+    assert '"443:443"' in text and '"8080:8080"' not in text
+    assert 'PAPER_TRADING: "true"' in text
+    caddy = (root / "deploy" / "Caddyfile").read_text()
+    assert (
+        "@internal path /metrics /webhook/*" in caddy
+        and "respond @internal 404" in caddy
+    )
+    assert ".server/" in (root / ".gitignore").read_text()
+    assert ".server/" in (root / ".dockerignore").read_text()

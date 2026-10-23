@@ -10,6 +10,7 @@
     python launcher/launch.py awake on|off|status       # не давать компьютеру уснуть
     python launcher/launch.py import-env [--env=путь] [--overwrite]   # ключи из .env → хранилище
     python launcher/launch.py phone on|off|status       # MiniApp в Telegram: адрес до компьютера
+    python3 launcher/launch.py server --domain=bot.example.com   # на сервере (VPS), см. docs/DEPLOY_SERVER.md
 
 Нужны только Docker и Python 3 (стандартная библиотека, ничего ставить не надо).
 Бот стартует в Paper. Ключи API вводятся в самом приложении и хранятся зашифрованными.
@@ -19,6 +20,7 @@
 
 import base64
 import contextlib
+import getpass
 import io
 import json
 import os
@@ -30,6 +32,7 @@ import socket
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.request
 import webbrowser
 from pathlib import Path
@@ -469,6 +472,190 @@ def cmd_import_env(env_path: Path, overwrite: bool) -> int:
     return 0
 
 
+# ── Сервер (VPS): docker-compose.server.yml + Caddy с HTTPS ───────────────────
+#
+# Одна команда на сервере: готовит .server/server.env (мастер-ключ хранилища и ключ
+# панели — один раз и навсегда), запускает всё и, если Telegram ещё не подключён,
+# спрашивает токен бота и находит ваш чат по коду. Ключи уходят в зашифрованное
+# хранилище тем же src.secrets_import, что и import-env; .env не нужен.
+
+SERVER_DIR = ROOT / ".server"
+SERVER_COMPOSE = ROOT / "docker-compose.server.yml"
+_DOMAIN = re.compile(
+    r"(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}"
+)
+
+
+def read_env_file(path: Path) -> Dict[str, str]:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return {}
+    return dict(ln.split("=", 1) for ln in lines if "=" in ln)
+
+
+def server_env_text(domain: str, secrets_key: str, api_key: str) -> str:
+    return (
+        "\n".join(
+            [
+                f"DOMAIN={domain}",
+                f"WEBAPP_URL=https://{domain}/app/",
+                f"BITBOT_SECRETS_KEY={secrets_key}",
+                f"DASHBOARD_API_KEY={api_key}",
+            ]
+        )
+        + "\n"
+    )
+
+
+def prepare_server(domain: str, server_dir: Path = SERVER_DIR) -> Path:
+    """Пишет server.env; ключи прошлого запуска сохраняются — иначе хранилище не прочитать."""
+    path = server_dir / "server.env"
+    old = read_env_file(path)
+    write_private(
+        path,
+        server_env_text(
+            domain,
+            old.get("BITBOT_SECRETS_KEY") or new_master_key(),
+            old.get("DASHBOARD_API_KEY") or secrets.token_urlsafe(32),
+        ),
+    )
+    return path
+
+
+def server_compose(args: List[str], server_dir: Path = SERVER_DIR) -> List[str]:
+    return [
+        "docker",
+        "compose",
+        "-f",
+        str(SERVER_COMPOSE),
+        "--env-file",
+        str(server_dir / "server.env"),
+        *args,
+    ]
+
+
+def chat_by_code(payload: Dict[str, object], code: str) -> Optional[str]:
+    """Личный чат, приславший боту ровно этот код (ответ getUpdates)."""
+    for upd in payload.get("result") or []:  # type: ignore[union-attr]
+        msg = upd.get("message") or {}
+        chat = msg.get("chat") or {}
+        if chat.get("type") == "private" and str(msg.get("text") or "").strip() == code:
+            return str(chat["id"])
+    return None
+
+
+def wait_chat(token: str, code: str, timeout: int = 300) -> Optional[str]:
+    """Ждёт код в личке бота. Токен живёт только в памяти и нигде не печатается."""
+    url = f"https://api.telegram.org/bot{token}/getUpdates?timeout=0"
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            with urllib.request.urlopen(url, timeout=15) as r:
+                chat = chat_by_code(json.loads(r.read().decode()), code)
+            if chat:
+                return chat
+        except urllib.error.HTTPError as e:
+            if e.code in (401, 404):
+                say("Токен не подошёл: проверьте его в @BotFather.")
+                return None
+            if e.code == 409:
+                say("Этого бота уже опрашивает другая программа — остановите её.")
+                return None
+        except (OSError, ValueError):
+            pass
+        time.sleep(3)
+    return None
+
+
+def server_telegram_ready() -> bool:
+    check = (
+        "from src import secrets_store as s;"
+        "print(bool(s.get_value('TELEGRAM_BOT_TOKEN') and s.get_value('TELEGRAM_CHAT_ID')))"
+    )
+    proc = run(
+        server_compose(["exec", "-T", "dashboard", "python", "-c", check]),
+        capture_output=True,
+        text=True,
+    )
+    return proc.stdout.strip() == "True"
+
+
+def setup_server_telegram() -> bool:
+    say(
+        "\nПодключим Telegram — через него вы входите в приложение и получаете уведомления."
+    )
+    say("1. В Telegram откройте @BotFather, команда /newbot, скопируйте токен бота.")
+    token = getpass.getpass("2. Вставьте токен (ввод не показывается): ").strip()
+    if not token:
+        say("Токен пустой. Подключите позже: эта же команда спросит снова.")
+        return False
+    code = f"{secrets.randbelow(10**6):06d}"
+    say(f"3. Откройте своего бота в Telegram и отправьте ему: {code}")
+    say("   Жду до 5 минут…")
+    chat = wait_chat(token, code)
+    if not chat:
+        say("Код не пришёл. Запустите команду ещё раз.")
+        return False
+    proc = run(
+        server_compose(
+            [
+                "exec",
+                "-T",
+                "dashboard",
+                "python",
+                "-m",
+                "src.secrets_import",
+                "--overwrite",
+            ]
+        ),
+        input=f"TELEGRAM_BOT_TOKEN={token}\nTELEGRAM_CHAT_ID={chat}\n",
+        text=True,
+        capture_output=True,
+    )
+    if proc.returncode != 0:
+        say("Не получилось сохранить ключ. Логи: docker compose … logs dashboard")
+        return False
+    run(server_compose(["restart", "bot"]), capture_output=True)
+    say("Telegram подключён: токен и чат — в зашифрованном хранилище.")
+    return True
+
+
+def cmd_server(flags: Dict[str, str]) -> int:
+    domain = (
+        (
+            (
+                flags.get("--domain")
+                or read_env_file(SERVER_DIR / "server.env").get("DOMAIN")
+            )
+            or ""
+        )
+        .strip()
+        .lower()
+    )
+    if not _DOMAIN.fullmatch(domain):
+        say(
+            "Укажите домен сервера: python3 launcher/launch.py server --domain=bot.example.com"
+        )
+        return 2
+    if not docker_ready():
+        say("Docker не найден или не запущен: https://docs.docker.com/engine/install/")
+        return 1
+    prepare_server(domain)
+    say(f"Запускаю BitbotBY на {domain} (Paper: сделки виртуальные).")
+    say("Первая сборка занимает 5–15 минут, сертификат HTTPS Caddy получит сам.")
+    if run(server_compose(["up", "-d", "--build", "--wait"])).returncode != 0:
+        say("Не получилось запустить. Логи: python3 launcher/launch.py server-logs")
+        return 1
+    if not server_telegram_ready() and not setup_server_telegram():
+        return 1
+    say(f"\nГотово. Приложение: https://{domain}/app/ — вход по коду из вашего бота.")
+    say("В самом боте появится кнопка «Терминал» (MiniApp).")
+    say("Ключи Bybit и AI вводите в приложении: Настройки → Подключения.")
+    say("Сохраните копию .server/server.env: без мастер-ключа ключи не прочитать.")
+    return 0
+
+
 # ── Автозапуск при входе в систему и «не засыпать» ───────────────────────────
 # Оба режима включаются явной командой: это изменение настроек вашей системы.
 
@@ -843,6 +1030,12 @@ def _run(argv: List[str]) -> int:
         if a.startswith("--") and "=" in a
     }
     action = args[0] if args else "start"
+    if action == "server":
+        return cmd_server(flags)
+    if action == "server-logs":
+        return run(server_compose(["logs", "--tail", "80"])).returncode
+    if action == "server-stop":
+        return run(server_compose(["down"])).returncode
     port = int(os.getenv("BITBOT_PORT", str(DEFAULT_PORT)))
     data_dir = Path(flags["--data-dir"]).resolve() if "--data-dir" in flags else None
     if (

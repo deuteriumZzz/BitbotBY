@@ -339,7 +339,16 @@ Python 3.11 · Docker + Docker Compose (рекомендуется) · API-кл�
   `awake on` (пока бот работает, компьютер не уснёт сам). Оба включаются только вашей командой.
 - Свои данные в другом месте: `python launcher/launch.py start --data-dir=/путь` (внутри `data/`, `models/`, `logs/`).
 
-Для сервера по-прежнему используйте `docker compose` и nginx (раздел ниже).
+### На сервере (VPS) — одна команда
+
+Нужны сервер с Docker, домен и бот в Telegram. На сервере:
+
+```bash
+python3 launcher/launch.py server --domain=bot.example.com
+```
+
+Команда сама готовит ключи, запускает всё за Caddy с HTTPS и подключает Telegram (спросит токен и попросит отправить
+боту код). Ключи — только в зашифрованном хранилище, `.env` не нужен. Подробно: [docs/DEPLOY_SERVER.md](docs/DEPLOY_SERVER.md).
 
 ### Запуск через Docker (рекомендуется)
 

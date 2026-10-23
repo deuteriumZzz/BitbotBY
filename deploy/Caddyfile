@@ -1,0 +1,19 @@
+# HTTPS для серверного запуска (docker-compose.server.yml). Сертификат Let's Encrypt
+# Caddy получает и продлевает сам: нужен домен, указывающий на сервер, и открытые 80/443.
+{$DOMAIN} {
+	encode gzip
+
+	# /metrics (баланс, P&L) и вебхук Alertmanager — только для служб внутри сервера.
+	@internal path /metrics /webhook/*
+	respond @internal 404
+
+	# Окна MiniApp Telegram (в том числе web.telegram.org во фрейме) — поэтому без X-Frame-Options.
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		-Server
+	}
+
+	reverse_proxy dashboard:8080
+}
