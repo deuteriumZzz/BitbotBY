@@ -190,3 +190,18 @@ def test_settings_with_their_own_section_exist_in_the_registry():
     keys = set(re.findall(r"^\s{2}([A-Z][A-Z_]+):", text, flags=re.M))
     assert len(keys) >= 15
     assert keys <= set(reg.BY_KEY), keys - set(reg.BY_KEY)
+
+
+def test_old_config_problem_does_not_block_unrelated_changes(monkeypatch, tmp_path):
+    # Бот уже в Hybrid без обученной SAC: Config.validate() падает и без правки.
+    monkeypatch.setattr(Config, "MODE", "hybrid")
+    monkeypatch.setattr(Config, "SAC_MODEL_PATH", str(tmp_path / "нет.zip"))
+    current = _current()
+    current["MODE"] = {"value": "hybrid"}
+    _, errors = reg.validate_patch(Config, {"QUIET_HOURS": "15-0"}, current)
+    assert errors == {}
+    # А перейти в Hybrid без модели из рабочего режима по-прежнему нельзя.
+    current["MODE"] = {"value": "local"}
+    monkeypatch.setattr(Config, "MODE", "local")
+    _, errors = reg.validate_patch(Config, {"MODE": "hybrid"}, current)
+    assert "SAC model not found" in errors.get("_config", "")

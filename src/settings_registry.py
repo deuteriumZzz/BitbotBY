@@ -1237,23 +1237,34 @@ def validate_patch(
     # ключей: у дашборда их в env может не быть, и тогда любой PATCH падал бы.
     from src.secrets_store import SERVICES  # noqa: PLC0415
 
-    attrs: Dict[str, Any] = {
+    secrets_set: Dict[str, Any] = {
         f.env: "configured-elsewhere"
         for svc in SERVICES
         for f in svc.fields
         if f.secret and hasattr(config_cls, f.env)
     }
-    attrs.update(
-        {
-            BY_KEY[k].config_attr: v
-            for k, v in merged.items()
-            if k in BY_KEY and hasattr(config_cls, BY_KEY[k].config_attr)
-        }
-    )
-    try:
-        effective_config(config_cls, attrs).validate()
-    except ValueError as e:
-        errors["_config"] = str(e)
+
+    def problem(vals: Dict[str, Any]) -> Optional[str]:
+        attrs = dict(secrets_set)
+        attrs.update(
+            {
+                BY_KEY[k].config_attr: v
+                for k, v in vals.items()
+                if k in BY_KEY and hasattr(config_cls, BY_KEY[k].config_attr)
+            }
+        )
+        try:
+            effective_config(config_cls, attrs).validate()
+        except ValueError as e:
+            return str(e)
+        return None
+
+    # Отказываем только в том, что ломает сама правка. Если конфигурация не проходит
+    # проверку и без неё (например, Hybrid без обученной SAC), иначе застревала бы
+    # любая правка — даже тихих часов.
+    after = problem(merged)
+    if after and after != problem({k: v["value"] for k, v in current.items()}):
+        errors["_config"] = after
     return values, errors
 
 
