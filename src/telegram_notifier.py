@@ -54,6 +54,8 @@ class TelegramNotifier:
         self._emit: "Callable[[str, dict], None] | None" = None
         self._enabled = bool(_TG_AVAILABLE and token and chat_id)
         self._live_msg_ids: dict = {}  # key → message_id for edit_notify
+        # Пускать ли уведомление вида kind (тумблер + тихие часы); задаёт TradingBot.
+        self.gate: "Callable[[str], bool] | None" = None
 
     async def start(self) -> None:
         """Инициализирует и запускает polling Telegram в фоновом режиме."""
@@ -411,6 +413,7 @@ class TelegramNotifier:
         text: str,
         reply_markup=None,
         parse_mode: str = "Markdown",
+        kind: str = "",
     ) -> None:
         """
         Отправляет текстовое уведомление в Telegram-чат.
@@ -418,9 +421,17 @@ class TelegramNotifier:
         :param text: Текст уведомления.
         :param reply_markup: Опциональная InlineKeyboardMarkup.
         :param parse_mode: Режим разметки (по умолчанию MarkdownV2).
+        :param kind: Вид уведомления (position_open, new_signal…) — для тумблеров
+            и тихих часов. Без вида — приходит всегда (например, «позиция без SL»).
         """
         if not self._enabled:
             return
+        if kind and self.gate is not None:
+            try:
+                if not self.gate(kind):
+                    return
+            except Exception as e:  # не смогли спросить — лучше отправить
+                logger.debug("notify gate failed for %s: %s", kind, e)
         try:
             await self._app.bot.send_message(
                 chat_id=self._chat_id,

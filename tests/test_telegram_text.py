@@ -127,3 +127,27 @@ def test_telegram_preset_lines_come_from_the_shared_presets():
     for p in RISK_PRESETS.values():
         assert f"{p['MAX_POSITIONS']} поз, {p['RISK_PER_TRADE'] * 100:g}%" in text
     assert "плечо фикс" in text
+
+
+async def test_notify_respects_gate_for_marked_messages_only():
+    from src.telegram_notifier import TelegramNotifier
+
+    n = TelegramNotifier("", "")
+    n._enabled = True
+    n._app = MagicMock()
+    n._app.bot.send_message = AsyncMock()
+    n.gate = lambda kind: kind != "position_open"
+    await n.notify("открыта", kind="position_open")
+    n._app.bot.send_message.assert_not_awaited()
+    await n.notify("позиция без SL")  # без вида — приходит всегда
+    await n.notify("закрыта", kind="position_close")
+    assert n._app.bot.send_message.await_count == 2
+
+
+def test_settings_menu_offers_the_miniapp_only_with_https(monkeypatch):
+    monkeypatch.setenv("WEBAPP_URL", "https://example.test/app/")
+    first = tc._kb_settings(paused=False, auto_exec=False).inline_keyboard[0][0]
+    assert first.web_app is not None and "приложении" in first.text
+    monkeypatch.setenv("WEBAPP_URL", "")
+    first = tc._kb_settings(paused=False, auto_exec=False).inline_keyboard[0][0]
+    assert first.web_app is None

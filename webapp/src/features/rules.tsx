@@ -189,6 +189,27 @@ export function templateOf(c: ConfigValues, schema: SettingDef[]): Tpl | null {
   return (Object.keys(TEMPLATES) as Tpl[]).find((t) => Object.entries(templateValues(t, schema)).every(([k, v]) => same(cfg(c, k, NaN), v))) ?? null;
 }
 
+/** Шаблон порогов — одно место для набора порогов; в «Простом» это вопрос «Защита». */
+export function TemplateSeg() {
+  const c = useStore((s) => s.config);
+  const schema = useStore((s) => s.schema);
+  return (
+    <Seg
+      className="full"
+      value={templateOf(c, schema)}
+      options={TPL_OPTS}
+      label="Шаблон порогов"
+      onChange={(t) => void actions.patchConfig(templateValues(t, schema))}
+    />
+  );
+}
+
+/** Одна строка о текущих порогах — для «Простого». */
+export function templateLine(c: ConfigValues): string {
+  const pct = (k: string, d: number) => `${+(cfg(c, k, d) * 100).toFixed(1)}%`;
+  return `Дневной лимит ${pct("DAILY_LOSS_LIMIT", 0.05)} · стоп после ${cfg(c, "CIRCUIT_BREAKER_LOSSES", 3)} убытков подряд · предельная просадка ${pct("MAX_DRAWDOWN_PERCENT", 0.2)}`;
+}
+
 /** Живёт в узле «Риск» вкладки «Бот». */
 export function RulesCard() {
   const c = useStore((s) => s.config);
@@ -242,13 +263,7 @@ export function RulesCard() {
           <span>Шаблон порогов</span>
           {templateOf(c, schema) === null && <span className="pill sp">свои пороги</span>}
         </div>
-        <Seg
-          className="full"
-          value={templateOf(c, schema)}
-          options={TPL_OPTS}
-          label="Шаблон порогов"
-          onChange={(t) => void actions.patchConfig(templateValues(t, schema))}
-        />
+        <TemplateSeg />
         <p className="note-soon">Меняет дневной лимит, серию убытков, предельную просадку, паузу по монете и порог уменьшения сделок.</p>
       </div>
       <ul className="rules">

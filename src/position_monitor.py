@@ -601,7 +601,8 @@ class PositionMonitor:
         if not remaining_unprotected:
             await self._telegram.notify(
                 f"Partial TP *{sym}*: closed {fraction:.0%},"
-                f" SL → breakeven ${entry:.4f}"
+                f" SL → breakeven ${entry:.4f}",
+                kind="position_close",
             )
         return {**updated, "partial_tp_triggered": True}  # type: ignore[return-value]
 
@@ -948,7 +949,8 @@ class PositionMonitor:
         await self._telegram.notify(
             f"{'📈' if pnl_pct >= 0 else '📉'} Force-closed *{sym}* @ ${price:.4f}"
             f" ({pnl_sign}{pnl_pct*100:.2f}%) — {reason}\n"
-            f"Win Rate: {stats['win_rate']:.0%}  Total PnL: ${stats['total_pnl']:+.2f}"
+            f"Win Rate: {stats['win_rate']:.0%}  Total PnL: ${stats['total_pnl']:+.2f}",
+            kind="position_close",
         )
         self._update_circuit_breaker(side, price, entry)
 
@@ -1137,7 +1139,8 @@ class PositionMonitor:
             f"Trades: {stats['closed_trades']}  "
             f"Win Rate: {stats['win_rate']:.0%}  "
             f"Total PnL: ${stats['total_pnl']:+.2f}"
-            f"{bal_line}"
+            f"{bal_line}",
+            kind="position_close",
         )
 
         self._update_circuit_breaker(side, price, pos.get("entry", price))

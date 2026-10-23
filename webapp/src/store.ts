@@ -136,6 +136,8 @@ export interface Store {
   /** Открытый шаг мастера первого запуска; null — мастер закрыт. */
   setup: SetupStep | null;
   tab: Tab;
+  /** Режим интерфейса на этом устройстве: «Простой» прячет детали, ничего не меняя в настройках. */
+  ui: Ui;
   /** Выбранный узел конвейера во вкладке «Бот». */
   node: BotNode;
   /** Поиск параметра по Cmd/Ctrl+K: null — не запрошен, строка — что подставить. */
@@ -144,6 +146,9 @@ export interface Store {
 
   boot(): Promise<void>;
   setTab(tab: Tab): void;
+  setUi(ui: Ui): void;
+  /** Из «Простого» в «Профи», когда человек идёт туда, чего в «Простом» нет. */
+  needPro(): void;
   /** Открыть вкладку «Бот» на нужном узле конвейера. */
   openNode(node: BotNode): void;
   openSetup(step: SetupStep | null): void;
@@ -187,6 +192,17 @@ let refreshTimer: ReturnType<typeof setTimeout> | undefined;
 const MAX_FEED = 60;
 
 const sideOf = (s: unknown): Side => (s === "sell" || s === "short" ? "short" : "long");
+
+export type Ui = "simple" | "pro";
+const UI_KEY = "bitbot.ui";
+/** По умолчанию «Профи»: у тех, кто уже работал с приложением, ничего не меняется само. */
+const savedUi = (): Ui => {
+  try {
+    return localStorage.getItem(UI_KEY) === "simple" ? "simple" : "pro";
+  } catch {
+    return "pro";
+  }
+};
 
 export const useStore = create<Store>((set, get) => {
   const feed = (kind: FeedKind, text: string): void =>
@@ -273,6 +289,7 @@ export const useStore = create<Store>((set, get) => {
     seenFeed: 0,
     paramSearch: null,
     tab: "terminal",
+    ui: savedUi(),
     node: "scan",
     toast: null,
 
@@ -340,13 +357,35 @@ export const useStore = create<Store>((set, get) => {
       );
     },
 
-    setTab: (tab) => set({ tab, setup: null }),
-    openNode: (node) => set({ tab: "bots", node, setup: null }),
+    setTab: (tab) => {
+      if (tab === "learn") get().needPro();
+      set({ tab, setup: null });
+    },
+    setUi: (ui) => {
+      try {
+        localStorage.setItem(UI_KEY, ui);
+      } catch {
+        /* нет хранилища — режим живёт до перезагрузки */
+      }
+      set({ ui });
+    },
+    needPro: () => {
+      if (get().ui !== "simple") return;
+      get().setUi("pro");
+      get().say("Открыто в режиме «Профи» — здесь все настройки");
+    },
+    openNode: (node) => {
+      get().needPro();
+      set({ tab: "bots", node, setup: null });
+    },
     openSetup: (setup) => set({ setup }),
     openHelp: (helpOpen) => set({ helpOpen }),
     openPalette: (paletteOpen) => set({ paletteOpen }),
     openNotif: (notifOpen) => set((s) => (notifOpen ? { notifOpen, seenFeed: s.feed[0]?.id ?? s.seenFeed } : { notifOpen })),
-    searchParams: (q = "") => set({ tab: "settings", setup: null, paramSearch: q }),
+    searchParams: (q = "") => {
+      get().needPro();
+      set({ tab: "settings", setup: null, paramSearch: q });
+    },
     clearParamSearch: () => set({ paramSearch: null }),
     setPeriod(period) {
       set({ period });

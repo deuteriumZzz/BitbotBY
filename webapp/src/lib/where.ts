@@ -35,5 +35,6 @@ export const OWN_HOME: Record<string, Home> = {
   LOCAL_FALLBACK: { tab: "bots", node: "strat", where: "Бот → Стратегии" },
   TRADING_HOURS: { tab: "bots", node: "scan", where: "Бот → Сканер → Часы торговли" },
   TESTNET: { tab: "settings", pane: "conn", where: "Настройки → Подключения → Bybit" },
+  QUIET_HOURS: { tab: "settings", pane: "main", where: "Настройки → Основное → Уведомления" },
   AI_PROVIDER: { tab: "bots", node: "ai", where: "Бот → AI-цепочка" },
 };

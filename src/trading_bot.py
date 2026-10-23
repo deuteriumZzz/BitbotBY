@@ -160,6 +160,7 @@ class TradingBot:
             Config.TELEGRAM_BOT_TOKEN,
             Config.TELEGRAM_CHAT_ID,
         )
+        self.telegram.gate = self._runtime_config.should_notify
         self.ai._telegram = self.telegram
         self.ai._emit = self._publish_event  # статусы AI-провайдеров для приложения
         self._paper_balance: float = Config.INITIAL_BALANCE

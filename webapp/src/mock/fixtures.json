@@ -1446,6 +1446,22 @@
    "basic": false
   },
   {
+   "key": "QUIET_HOURS",
+   "group": "Мониторинг и логи",
+   "label": "Тихие часы уведомлений (UTC)",
+   "type": "str",
+   "default": "",
+   "min": null,
+   "max": null,
+   "step": null,
+   "unit": "",
+   "options": [],
+   "hint": "В эти часы приходят только критичные: бот не отвечает, просадка, дневной лимит, всплеск волатильности. Например 15-0. Пусто — без тишины.",
+   "readonly": false,
+   "hot": true,
+   "basic": false
+  },
+  {
    "key": "SILENT_DEATH_HOURS",
    "group": "Мониторинг и логи",
    "label": "Тревога «бот молчит» через",
@@ -1930,6 +1946,10 @@
   },
   "PAPER_GUARDS_OFF": {
    "value": false,
+   "source": "default"
+  },
+  "QUIET_HOURS": {
+   "value": "",
    "source": "default"
   }
  },

@@ -700,3 +700,29 @@ def test_reset_keeps_experimental_strategies_off(rc_bundle):
         if c.args[0] == "bot:disabled_strategies"
     }
     assert {"supertrend", "bear_hedge"} <= disabled
+
+
+class TestNotifyGate:
+    """Тумблеры уведомлений и тихие часы: критичные приходят всегда."""
+
+    def _rc(self, store):
+        from src.runtime_config import RuntimeConfig
+
+        rm = MagicMock()
+        rm.redis_client.get.side_effect = lambda k: store.get(k)
+        rm.redis_client.set.side_effect = lambda k, v: store.__setitem__(k, v)
+        return RuntimeConfig(redis_client=rm)
+
+    def test_quiet_hours_mute_trades_but_not_critical(self):
+        rc = self._rc({})
+        assert rc.set_quiet_hours("22-6") is True
+        assert rc.should_notify("position_open", hour=23) is False
+        assert rc.should_notify("new_signal", hour=3) is False
+        assert rc.should_notify("position_open", hour=12) is True
+        assert rc.should_notify("drawdown", hour=23) is True
+
+    def test_switch_off_wins_and_bad_format_is_refused(self):
+        rc = self._rc({"bot:alert:enabled:position_close": "0"})
+        assert rc.should_notify("position_close", hour=12) is False
+        assert rc.set_quiet_hours("25-3") is False
+        assert rc.set_quiet_hours("") is True

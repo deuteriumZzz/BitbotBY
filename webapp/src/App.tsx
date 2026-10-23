@@ -8,6 +8,8 @@ import * as platform from "./lib/platform";
 import type { Tab } from "./lib/types";
 import { profileName, stratName } from "./features/bots";
 import { Pipeline } from "./features/pipeline";
+import { BotSimple } from "./features/simple";
+import { UiSwitch } from "./features/uimode";
 import { Learn } from "./features/jobs";
 import { HelpButton, HelpSheet } from "./features/help";
 import { NotifButton, NotifSheet } from "./features/notifications";
@@ -16,13 +18,14 @@ import { Journal } from "./features/journal";
 import { Settings } from "./features/settings";
 import { Setup } from "./features/setup";
 import { Terminal, cycleKind } from "./features/terminal";
-import { GUARD_TEXT, actions, useStore } from "./store";
+import { GUARD_TEXT, actions, useStore, type Ui } from "./store";
 import { Icon, TipLayer, Toggle, hideTip } from "./ui";
 
 export function App() {
   const ready = useStore((s) => s.ready);
   const needLogin = useStore((s) => s.needLogin);
   const tab = useStore((s) => s.tab);
+  const ui = useStore((s) => s.ui);
   const setup = useStore((s) => s.setup);
   const views = useRef<HTMLElement>(null);
   // Новая вкладка въезжает с той стороны, где стоит в меню.
@@ -72,7 +75,8 @@ export function App() {
       const st = useStore.getState();
       if (!st.ready || st.needLogin || st.helpOpen || st.notifOpen) return;
       const n = Number(e.key);
-      if (n >= 1 && n <= TABS.length) st.setTab(TABS[n - 1][0]);
+      const tabs = tabsFor(st.ui);
+      if (n >= 1 && n <= tabs.length) st.setTab(tabs[n - 1][0]);
       else if (e.key === "?") st.openHelp(true);
       else if (e.key.toLowerCase() === "n") st.openNotif(true);
       else return;
@@ -138,7 +142,7 @@ export function App() {
         ) : (
           <>
             {tab === "terminal" && <Terminal />}
-            {tab === "bots" && <Pipeline />}
+            {tab === "bots" && (ui === "simple" ? <BotSimple /> : <Pipeline />)}
             {tab === "learn" && <Learn />}
             {tab === "journal" && <Journal />}
             {tab === "settings" && <Settings />}
@@ -211,6 +215,7 @@ function TopBar({ onPanic }: { onPanic: () => void }) {
         <span className={`dot ${wsUp && alive ? "ok live" : wsUp ? "warn" : "bad"}`} />
         <span className="lat-t">{wsUp ? (alive ? "онлайн" : "бот молчит") : "нет связи"}</span>
       </span>
+      <UiSwitch />
       <NotifButton />
       <HelpButton />
       <span className="break" />
@@ -351,9 +356,12 @@ const TABS: [Tab, string, JSX.Element][] = [
   ["journal", "Журнал", Icon.journal],
   ["settings", "Настройки", Icon.settings],
 ];
+/** В «Простом» обучения нет: оно для тех, кто настраивает модель. */
+const tabsFor = (ui: Ui) => (ui === "simple" ? TABS.filter(([id]) => id !== "learn") : TABS);
 
 function Nav() {
   const tab = useStore((s) => s.tab);
+  const ui = useStore((s) => s.ui);
   const setTab = useStore((s) => s.setTab);
   const pending = useStore((s) => s.pending.length);
   const nav = useRef<HTMLElement>(null);
@@ -367,11 +375,11 @@ function Nav() {
     const ro = new ResizeObserver(move);
     if (nav.current) ro.observe(nav.current);
     return () => ro.disconnect();
-  }, [tab]);
+  }, [tab, ui]);
   return (
     <nav className="nav" ref={nav} aria-label="Разделы">
       <span className="nav-ind" style={ind} aria-hidden="true" />
-      {TABS.map(([id, label, icon]) => (
+      {tabsFor(ui).map(([id, label, icon]) => (
         <button
           key={id}
           type="button"

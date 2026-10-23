@@ -669,7 +669,8 @@ class OrderExecutor:
             await self._telegram.notify(
                 f"Opened *{sym}*\n"
                 f"{action.upper()} {quantity:.6f} @ ${entry:.4f}\n"
-                f"SL: ${sl_price:.4f}  TP: ${tp_price:.4f}"
+                f"SL: ${sl_price:.4f}  TP: ${tp_price:.4f}",
+                kind="position_open",
             )
             logger.info(
                 "Position opened: %s %s %.6f @ %.4f", sym, action, quantity, entry

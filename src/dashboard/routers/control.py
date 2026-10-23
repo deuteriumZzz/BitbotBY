@@ -682,6 +682,8 @@ async def get_alerts() -> JSONResponse:
                 "label": label,
                 "enabled": rc.get_alert_enabled(kind) if rc else True,
                 "cooldown_min": rc.get_alert_cooldown_mins(kind) if rc else 0,
+                # critical — приходит всегда, даже в тихие часы (QUIET_HOURS).
+                "level": rc.get_alert_level(kind) if rc else "info",
             }
         )
     return JSONResponse(out)

@@ -10,6 +10,7 @@ import { ConfirmCard, RiskCard, StrategiesCard, TrackCard, WhatCard, cfg, preset
 import { STATUS, chosenId } from "./chainops";
 import { ModelCard } from "./jobs";
 import { RulesCard } from "./rules";
+import { UiSwitchRow } from "./uimode";
 import { HoursCard, SymbolsCard } from "./settings";
 import { mark } from "./trace";
 
@@ -19,7 +20,7 @@ const svg = (body: JSX.Element) => (
   </svg>
 );
 
-const NODES: readonly { id: BotNode; title: string; icon: JSX.Element }[] = [
+export const NODES: readonly { id: BotNode; title: string; icon: JSX.Element }[] = [
   {
     id: "scan",
     title: "Сканер",
@@ -62,6 +63,29 @@ const MODES = [
   ["dqn", "SAC"],
   ["hybrid", "Hybrid"],
 ] as const;
+
+const SIMPLE_MODES = [
+  ["local", "Только стратегии"],
+  ["ai", "Стратегии + AI"],
+] as const;
+
+/** «Кто принимает решение» — одно место для MODE; в «Простом» два понятных варианта. */
+export function ModeSeg({ simple = false }: { simple?: boolean }) {
+  const mode = useStore((s) => cfg<string>(s.config, "MODE", "ai"));
+  const own = simple && mode !== "local" && mode !== "ai";
+  return (
+    <>
+      <Seg
+        className={simple ? "full" : undefined}
+        value={own ? null : mode}
+        options={simple ? SIMPLE_MODES : MODES}
+        onChange={(v) => void actions.patchConfig({ MODE: v })}
+        label="Кто принимает решение"
+      />
+      {own && <p className="note-soon">Сейчас своё, из «Профи»: {MODES.find(([m]) => m === mode)?.[1] ?? mode}. Выберите вариант выше, чтобы сменить.</p>}
+    </>
+  );
+}
 
 const AI_MODE: Record<string, string> = { free: "бесплатные", auto: "смешанный", paid: "платные" };
 
@@ -307,6 +331,7 @@ export function Pipeline() {
   const [curGlyph, curCls] = mark(curRes?.ok);
   return (
     <section className="view enter" aria-label="Бот">
+      <UiSwitchRow />
       <div className="pipe-canvas">
         <div className="pipe-top">
           <div className="pipe-mode">
@@ -314,7 +339,7 @@ export function Pipeline() {
               Кто принимает решение{" "}
               <Q tip="Local — только индикаторы. AI — языковая модель. SAC — обученная нейросеть. Hybrid — SAC и AI должны согласиться. Узлы, которые в этом режиме не участвуют, погаснут." />
             </span>
-            <Seg value={mode} options={MODES} onChange={(v) => void actions.patchConfig({ MODE: v })} label="Кто принимает решение" />
+            <ModeSeg />
           </div>
           <ul className="pipe-legend" aria-label="Обозначения">
             <li>

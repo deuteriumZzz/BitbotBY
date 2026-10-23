@@ -29,6 +29,7 @@ _KEY_DISABLED_STRATS = "bot:disabled_strategies"
 _KEY_EXPERIMENTAL_SEEN = "bot:experimental_strategies_seen"
 _KEY_JOB = "bot:job:"
 _KEY_TRADING_HOURS = "bot:trading_hours"
+_KEY_QUIET_HOURS = "bot:quiet_hours"
 _KEY_MAX_POSITIONS = "bot:max_positions"
 _KEY_RISK_PER_TRADE = "bot:risk_per_trade"
 _KEY_DRAWDOWN_SCALE = "bot:drawdown_scale_enabled"
@@ -92,6 +93,21 @@ def confirm_policy(timeout: Any, on_timeout: Any) -> "tuple[int, str]":
 
 
 _MARKET_TYPES = frozenset({"spot", "linear"})
+
+
+def _hour_in(hours: str, hour: int) -> Optional[bool]:
+    """Попадает ли час в диапазон «HH-HH» (с переносом через полночь: «22-6»).
+
+    None — диапазон пустой или в неверном формате.
+    """
+    try:
+        start, end = (int(x) for x in hours.split("-"))
+    except (ValueError, AttributeError):
+        return None
+    if not (0 <= start <= 23 and 0 <= end <= 23 and start != end):
+        return None
+    return start <= hour < end if start < end else hour >= start or hour < end
+
 
 # Пресеты риска — одно определение для Telegram (/risk) и приложения
 # (GET /api/risk/presets). Ключи — как в настройках (settings_registry): приложение
@@ -719,15 +735,8 @@ class RuntimeConfig:
         hours = self.get_trading_hours()
         if not hours:
             return True
-        try:
-            start_h, end_h = map(int, hours.split("-"))
-            hour = dt.datetime.utcnow().hour
-            if start_h < end_h:
-                return start_h <= hour < end_h
-            # Перенос через полночь: "22-6"
-            return hour >= start_h or hour < end_h
-        except (ValueError, AttributeError):
-            return True
+        inside = _hour_in(hours, dt.datetime.utcnow().hour)
+        return True if inside is None else inside
 
     # ── Strategies ────────────────────────────────────────────────────────────
 
@@ -1379,14 +1388,47 @@ class RuntimeConfig:
     # ── Alert settings ────────────────────────────────────────────────────────
 
     _ALERT_DEFAULTS: dict = {
-        "atr_spike": {"label": "⚡ ATR Spike", "cooldown": 10},
-        "drawdown": {"label": "📉 Drawdown", "cooldown": 5},
-        "daily_limit": {"label": "🔒 Daily limit", "cooldown": 60},
-        "bot_stalled": {"label": "🔇 BotStalled", "cooldown": 20},
-        "new_signal": {"label": "📊 Новые сигналы", "cooldown": 0},
-        "position_open": {"label": "📈 Открытие позиции", "cooldown": 0},
-        "position_close": {"label": "💰 Закрытие позиции", "cooldown": 0},
+        # level: critical — приходит всегда, даже в тихие часы; trade и info — нет.
+        "atr_spike": {"label": "⚡ ATR Spike", "cooldown": 10, "level": "critical"},
+        "drawdown": {"label": "📉 Drawdown", "cooldown": 5, "level": "critical"},
+        "daily_limit": {"label": "🔒 Daily limit", "cooldown": 60, "level": "critical"},
+        "bot_stalled": {"label": "🔇 BotStalled", "cooldown": 20, "level": "critical"},
+        "new_signal": {"label": "📊 Новые сигналы", "cooldown": 0, "level": "info"},
+        "position_open": {
+            "label": "📈 Открытие позиции",
+            "cooldown": 0,
+            "level": "trade",
+        },
+        "position_close": {
+            "label": "💰 Закрытие позиции",
+            "cooldown": 0,
+            "level": "trade",
+        },
     }
+
+    def get_alert_level(self, name: str) -> str:
+        return str(self._ALERT_DEFAULTS.get(name, {}).get("level", "info"))
+
+    def get_quiet_hours(self) -> str:
+        """Тихие часы «HH-HH» UTC: только критичные уведомления. Пусто — нет."""
+        return self._get(_KEY_QUIET_HOURS) or ""
+
+    def set_quiet_hours(self, hours: str) -> bool:
+        if hours not in ("", "0") and _hour_in(hours, 0) is None:
+            return False
+        self._set(_KEY_QUIET_HOURS, "" if hours == "0" else hours)
+        return True
+
+    def should_notify(self, name: str, hour: Optional[int] = None) -> bool:
+        """Отправлять ли уведомление этого вида сейчас: тумблер, потом тихие часы."""
+        if not self.get_alert_enabled(name):
+            return False
+        if self.get_alert_level(name) == "critical":
+            return True
+        import datetime as dt
+
+        hour = dt.datetime.utcnow().hour if hour is None else hour
+        return not _hour_in(self.get_quiet_hours(), hour)
 
     def get_alert_enabled(self, name: str) -> bool:
         val = self._get(f"bot:alert:enabled:{name}")

@@ -150,3 +150,20 @@ describe("ссылка лаунчера", () => {
     expect(parseLocalHash("")).toBeNull();
   });
 });
+
+describe("режим «Простой / Профи»", () => {
+  it("«Простой» не трогает обычные вкладки, а узлы, обучение и параметры открывает в «Профи»", () => {
+    const st = useStore.getState();
+    st.setUi("simple");
+    st.setTab("journal");
+    expect(useStore.getState().ui).toBe("simple");
+    st.openNode("risk");
+    expect(useStore.getState()).toMatchObject({ ui: "pro", tab: "bots", node: "risk" });
+    st.setUi("simple");
+    st.setTab("learn");
+    expect(useStore.getState().ui).toBe("pro");
+    st.setUi("simple");
+    st.searchParams("риск");
+    expect(useStore.getState()).toMatchObject({ ui: "pro", tab: "settings" });
+  });
+});

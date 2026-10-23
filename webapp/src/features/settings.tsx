@@ -14,6 +14,7 @@ type Pane = SettingsPane;
 
 export function Settings() {
   const [pane, setPane] = useState<Pane>("main");
+  const simple = useStore((s) => s.ui === "simple");
   const jump = useStore((s) => s.paramSearch);
   // Cmd/Ctrl+K: сразу в «Параметры» с курсором в поиске.
   useEffect(() => {
@@ -23,18 +24,25 @@ export function Settings() {
     <section className="view enter" aria-label="Настройки">
       <Seg
         className="full"
-        value={pane}
-        options={[
-          ["main", "Основное"],
-          ["conn", "Подключения"],
-          ["all", "Параметры"],
-        ]}
+        value={simple && pane === "all" ? "main" : pane}
+        options={
+          simple
+            ? [
+                ["main", "Основное"],
+                ["conn", "Подключения"],
+              ]
+            : [
+                ["main", "Основное"],
+                ["conn", "Подключения"],
+                ["all", "Параметры"],
+              ]
+        }
         onChange={setPane}
         label="Раздел настроек"
       />
-      {pane === "main" && <Main go={setPane} />}
+      {(pane === "main" || (simple && pane === "all")) && <Main go={setPane} />}
       {pane === "conn" && <Keys />}
-      {pane === "all" && <AllParams go={setPane} />}
+      {pane === "all" && !simple && <AllParams go={setPane} />}
     </section>
   );
 }
@@ -301,19 +309,45 @@ function SymbolList({ list, items }: { list: "forced" | "excluded"; items: strin
   );
 }
 
+// Тихие часы выбираются по местному времени, а бот хранит их в UTC (QUIET_HOURS).
+const TZ = Math.round(-new Date().getTimezoneOffset() / 60);
+const shiftHour = (h: number, by: number) => (((h + by) % 24) + 24) % 24;
+const shiftRange = (r: string, by: number) => (r ? r.split("-").map((h) => shiftHour(Number(h), by)).join("-") : "");
+const QUIET = [
+  ["", "Без тишины"],
+  ["23-8", "23–08"],
+  ["0-7", "00–07"],
+  ["22-9", "22–09"],
+] as const;
+const LEVEL: Record<string, string> = { critical: "приходит всегда", trade: "сделки", info: "сведения" };
+
 function AlertsCard() {
   const alerts = useStore((s) => s.alerts);
+  const quietUtc = useStore((s) => cfg<string>(s.config, "QUIET_HOURS", ""));
+  const quietLocal = shiftRange(quietUtc, TZ);
+  const preset = QUIET.find(([v]) => v === quietLocal)?.[0] ?? null;
   return (
     <article className="card">
       <div className="card-h">
         <h2>Уведомления в Telegram</h2>
         <Q tip="Те же виды, что в меню /alerts. Пауза не даёт одному и тому же уведомлению сыпаться чаще, чем раз в N минут." />
       </div>
+      <div className="field">
+        <div className="field-h">
+          <span>
+            Тихие часы, по вашему времени{" "}
+            <Q tip="В эти часы приходят только уведомления с пометкой «приходит всегда»: бот не отвечает, просадка, дневной лимит, всплеск волатильности, позиция без защиты. Сделки и сигналы — утром." />
+          </span>
+          {quietUtc && <span className="pill sp">{preset === null ? `свои: ${quietLocal.replace("-", "–")}` : `UTC ${quietUtc.replace("-", "–")}`}</span>}
+        </div>
+        <Seg className="full" value={preset} options={QUIET} label="Тихие часы" onChange={(v) => void actions.patchConfig({ QUIET_HOURS: shiftRange(v, -TZ) })} />
+      </div>
       <div className="list-tgl">
         {alerts.map((a) => (
           <div className={`alert-row${a.enabled ? "" : " off"}`} key={a.kind}>
             <div>
               <b>{a.label}</b>
+              {a.level && <span className={`lvl ${a.level}`}>{LEVEL[a.level]}</span>}
             </div>
             <Toggle on={a.enabled} label={a.label} onChange={(on) => void actions.patchAlert(a.kind, { enabled: on })} />
             <label className="cool">

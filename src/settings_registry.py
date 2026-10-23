@@ -953,6 +953,19 @@ SETTINGS: Tuple[Setting, ...] = (
     Setting("SAC_MODEL_PATH", _G_SAC, "Файл модели SAC", "str", "models/sac_model.zip"),
     # ── Мониторинг ──
     Setting(
+        "QUIET_HOURS",
+        _G_MON,
+        "Тихие часы уведомлений (UTC)",
+        "str",
+        "",
+        hint="В эти часы приходят только критичные: бот не отвечает, просадка, "
+        "дневной лимит, всплеск волатильности. Например 15-0. Пусто — без тишины.",
+        check=lambda v: (
+            None if v == "" or _hours_ok(v) else "Формат: 15-0, часы от 0 до 23."
+        ),
+        **_rc("set_quiet_hours", "get_quiet_hours"),
+    ),
+    Setting(
         "SILENT_DEATH_HOURS",
         _G_MON,
         "Тревога «бот молчит» через",

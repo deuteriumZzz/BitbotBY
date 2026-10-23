@@ -161,7 +161,13 @@ const alerts: Alert[] = [
   ["new_signal", "Новые сигналы"],
   ["position_open", "Открытие позиции"],
   ["position_close", "Закрытие позиции"],
-].map(([kind, label]) => ({ kind, label, enabled: kind !== "new_signal", cooldown_min: kind === "atr_spike" ? 30 : 0 }));
+].map(([kind, label]) => ({
+  kind,
+  label,
+  enabled: kind !== "new_signal",
+  cooldown_min: kind === "atr_spike" ? 30 : 0,
+  level: kind === "new_signal" ? "info" : kind.startsWith("position") ? "trade" : "critical",
+}));
 const lists = { forced: ["SOL/USDT"], excluded: ["PUMP/USDT"] };
 
 const bot = { paused: false, paper: true, mode: "ai", profile: "altcoin" as string | null };

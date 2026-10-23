@@ -214,6 +214,8 @@ export interface Alert {
   label: string;
   enabled: boolean;
   cooldown_min: number;
+  /** critical — приходит всегда, даже в тихие часы. */
+  level?: "critical" | "trade" | "info";
 }
 
 export interface Symbols {

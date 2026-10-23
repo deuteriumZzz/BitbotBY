@@ -188,7 +188,7 @@ class CycleRunner:
 
         ts = datetime.now().strftime("%H:%M:%S")
         header = f"📊 Цикл \\#{cycle} | {ts} | Баланс: ${balance:.2f}\n\n"
-        await self._telegram.notify(header + "\n\n".join(new_lines))
+        await self._telegram.notify(header + "\n\n".join(new_lines), kind="new_signal")
 
     # ── Console output ────────────────────────────────────────────────────────
 

@@ -158,7 +158,20 @@ def _kb_settings(
     mode_switch_label = (
         "📄 Режим: PAPER  →  Live" if paper else "💰 Режим: LIVE  →  Paper"
     )
-    rows = [
+    url = _webapp_url()
+    # Есть MiniApp — все настройки удобнее там; меню ниже остаются запасным путём.
+    app_row = (
+        [
+            [
+                InlineKeyboardButton(
+                    "📱 Настройки в приложении", web_app=WebAppInfo(url=url)
+                )
+            ]
+        ]
+        if url
+        else []
+    )
+    rows = app_row + [
         [InlineKeyboardButton(exec_label, callback_data="toggle_auto_exec")],
         [pause_btn],
         [

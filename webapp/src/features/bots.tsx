@@ -166,14 +166,15 @@ function useDebouncedPatch<T>(server: T, key: string, toServer: (v: T) => unknow
  * Единственное место, где меняются сделки одновременно, риск на сделку и плечо.
  * «Уменьшать при просадке» — в «Правилах защиты» (пресет ставит и его).
  */
-export function RiskCard() {
+/** simple — режим «Простой»: только пресеты, без ручной настройки. */
+export function RiskCard({ simple = false }: { simple?: boolean }) {
   const c = useStore((s) => s.config);
   const presets = useStore((s) => s.riskPresets);
   const balance = useStore((s) => s.balance);
   const paper = useStore((s) => s.bot?.paper ?? true);
   const active = presetOf(c, presets);
   const [open, setOpen] = useState(false);
-  const manual = open || (active === undefined && Object.keys(presets).length > 0);
+  const manual = !simple && (open || (active === undefined && Object.keys(presets).length > 0));
   const spot = cfg<string>(c, "MARKET_TYPE", "linear") === "spot";
   const lev = cfg<LevMode>(c, "LEVERAGE_MODE", "volatility");
   const levText = spot ? "1×" : lev === "fixed" ? `${cfg(c, "LEVERAGE", 3)}×` : `до ${cfg(c, "LEVERAGE_MAX", 5)}×`;
@@ -184,7 +185,7 @@ export function RiskCard() {
     <article className="card">
       <div className="card-h">
         <h2>Как рискуем</h2>
-        <span className="pill sp">{active ? presetName(active) : "Свои настройки"}</span>
+        <span className="pill sp">{active ? presetName(active) : simple ? "Свои настройки (Профи)" : "Свои настройки"}</span>
       </div>
       <div className="presets">
         {Object.entries(PRESET_META).map(([k, m]) => {
@@ -219,9 +220,11 @@ export function RiskCard() {
         При балансе <b>${fmtN(balance, 0)}</b> одна сделка рискует до <b>${fmtN(one, 0)}</b>. Открыто может быть до <b>{slots}</b>{" "}
         {plural(slots, ["сделки", "сделок", "сделок"])} сразу — в худшем случае до <b>${fmtN(one * slots, 0)}</b>.
       </p>
-      <button className="btn disclose" type="button" aria-expanded={manual} onClick={() => setOpen(!manual)}>
-        {manual ? "Скрыть ручную настройку ▴" : "Настроить вручную ▾"}
-      </button>
+      {!simple && (
+        <button className="btn disclose" type="button" aria-expanded={manual} onClick={() => setOpen(!manual)}>
+          {manual ? "Скрыть ручную настройку ▴" : "Настроить вручную ▾"}
+        </button>
+      )}
       {manual && (
         <div className="manual">
           <div className="field">
@@ -405,7 +408,8 @@ export function ConfirmCard() {
 
 // ── Что торговать ─────────────────────────────────────────────────────────────
 
-export function WhatCard() {
+/** simple — режим «Простой»: только профиль и авто-сезон. */
+export function WhatCard({ simple = false }: { simple?: boolean }) {
   const c = useStore((s) => s.config);
   const profile = useStore((s) => s.bot?.profile ?? null);
   const seasonAuto = cfg<string>(c, "SEASON_SWITCH_MODE", "alert") === "auto";
@@ -432,6 +436,8 @@ export function WhatCard() {
           <Toggle brand on={seasonAuto} label="Авто-сезон" onChange={(on) => void actions.patchConfig({ SEASON_SWITCH_MODE: on ? "auto" : "alert" })} />
         </div>
       </div>
+      {!simple && (
+        <>
       <div className="field">
         <div className="field-h">
           <span>Рынок</span>
@@ -454,6 +460,8 @@ export function WhatCard() {
           <Toggle brand on={chronos} label="Chronos" onChange={(on) => void actions.patchConfig({ CHRONOS_ENABLED: on })} />
         </div>
       </div>
+        </>
+      )}
     </article>
   );
 }

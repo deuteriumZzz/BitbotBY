@@ -101,7 +101,11 @@ export function ReadinessCard() {
   useEffect(() => {
     if (!info || !ai || flag(SEEN)) return;
     setFlag(SEEN);
-    if (!info.bybit && !info.telegram && !ai.chain.length) open("bybit");
+    if (!info.bybit && !info.telegram && !ai.chain.length) {
+      // Совсем новый человек — начинает в «Простом»; «Профи» в шапке, одним нажатием.
+      useStore.getState().setUi("simple");
+      open("bybit");
+    }
   }, [info, ai, open]);
 
   // Скрыть можно, только когда остались необязательные пункты.
