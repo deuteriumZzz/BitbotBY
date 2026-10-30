@@ -432,7 +432,7 @@ function ChainList({ ai, list }: { ai: AiState; list: AiProvider[] }) {
             onPick={() => setPicked((s) => (s.includes(p.id) ? s.filter((x) => x !== p.id) : [...s, p.id]))}
           />
         ))}
-        {drag && !drag.bin && <li className="slot" aria-hidden="true" style={{ transform: `translateY(${drag.tops[drag.id]}px)`, height: drag.h }} />}
+        {drag && !drag.bin && <li className="drop-slot" aria-hidden="true" style={{ transform: `translateY(${drag.tops[drag.id]}px)`, height: drag.h }} />}
       </ol>
       <div className={`chain-bin${drag?.bin ? " over" : ""}`} aria-label="Резерв: выключенные провайдеры">
         <span className="bin-h">

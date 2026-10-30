@@ -373,7 +373,7 @@ export function Pipeline() {
               не участвует в этом режиме
             </li>
             <li className="pipe-legend-res">
-              итог цикла{when ? ` ${when}` : ""}: <b className="ok">▲</b> пройдено · <b>–</b> пропущено · <b className="bad">▼</b> остановил
+              итог цикла{when ? ` ${when}` : ""}: <b className="ok">▲</b>&nbsp;пройдено · <b>–</b>&nbsp;пропущено · <b className="bad">▼</b>&nbsp;остановил
             </li>
           </ul>
         </div>

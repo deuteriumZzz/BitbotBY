@@ -171,7 +171,7 @@ function Idle() {
   const r = wsUp ? idleReason({ alive, paused, cycle, slots, hours, hourUtc }) : null;
   if (!r) return null;
   return (
-    <div className={`idle ${r.tone}`} role="status">
+    <div className={`why ${r.tone}`} role="status">
       <span className={`dot ${r.tone}`} />
       <div>
         <b>{r.title}</b>
