@@ -65,7 +65,7 @@ export function App() {
     };
     platform.setBack(overlay || tab !== "terminal" ? back : null);
   }, [overlay, tab]);
-  // Горячие клавиши без модификаторов: 1–5 — вкладки, ? — справка, N — уведомления.
+  // Горячие клавиши без модификаторов: 1–4 — разделы, ? — справка, N — уведомления.
   // Не срабатывают, пока вы печатаете или открыто окно.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -142,8 +142,15 @@ export function App() {
         ) : (
           <>
             {tab === "terminal" && <Terminal />}
-            {tab === "bots" && (ui === "simple" ? <BotSimple /> : <Pipeline />)}
-            {tab === "learn" && <Learn />}
+            {(tab === "bots" || tab === "learn") &&
+              (ui === "simple" ? (
+                <BotSimple />
+              ) : (
+                <>
+                  <Pipeline />
+                  <Learn />
+                </>
+              ))}
             {tab === "journal" && <Journal />}
             {tab === "settings" && <Settings />}
           </>
@@ -207,6 +214,9 @@ function TopBar({ onPanic }: { onPanic: () => void }) {
         {Icon.logo}
         BitbotBY
       </div>
+      <button type="button" className="top-find" aria-label="Найти раздел, настройку или действие" onClick={() => useStore.getState().openPalette(true)}>
+        {Icon.search}
+      </button>
       <span className={`paper${paper ? "" : " live"}`} title={paper ? "Бумажная торговля: сделки виртуальные" : "Реальная торговля на Bybit"}>
         {paper ? "PAPER" : "LIVE"}
       </span>
@@ -349,15 +359,16 @@ function Banners() {
 
 // ── Нижняя навигация (на десктопе — боковая) ──────────────────────────────────
 
+/** Четыре раздела вместо пяти: «Обучение» живёт внутри «Цепочки» (под конвейером). */
 const TABS: [Tab, string, JSX.Element][] = [
-  ["terminal", "Терминал", Icon.terminal],
-  ["bots", "Бот", Icon.bots],
-  ["learn", "Обучение", Icon.learn],
+  ["terminal", "Обзор", Icon.terminal],
+  ["bots", "Цепочка", Icon.bots],
   ["journal", "Журнал", Icon.journal],
   ["settings", "Настройки", Icon.settings],
 ];
-/** В «Простом» обучения нет: оно для тех, кто настраивает модель. */
-const tabsFor = (ui: Ui) => (ui === "simple" ? TABS.filter(([id]) => id !== "learn") : TABS);
+const tabsFor = (_ui: Ui) => TABS;
+/** Вкладка «learn» из ссылок и палитры подсвечивает «Цепочку». */
+const navTab = (tab: Tab): Tab => (tab === "learn" ? "bots" : tab);
 
 function Nav() {
   const tab = useStore((s) => s.tab);
@@ -379,11 +390,20 @@ function Nav() {
   return (
     <nav className="nav" ref={nav} aria-label="Разделы">
       <span className="nav-ind" style={ind} aria-hidden="true" />
+      <div className="nav-brand">
+        {Icon.logo}
+        BitbotBY
+      </div>
+      <button type="button" className="nav-find" onClick={() => useStore.getState().openPalette(true)}>
+        {Icon.search}
+        <span>Найти</span>
+        <kbd>⌘K</kbd>
+      </button>
       {tabsFor(ui).map(([id, label, icon]) => (
         <button
           key={id}
           type="button"
-          aria-current={tab === id ? "page" : undefined}
+          aria-current={navTab(tab) === id ? "page" : undefined}
           className={id === "terminal" && pending && tab !== "terminal" ? "ping" : ""}
           onClick={() => {
             platform.haptic("tap");
@@ -414,7 +434,7 @@ function SignalSheet() {
     if (!sig) return;
     total.current = Math.max(1, sig.expires_at - Date.now() / 1000);
     setNow(Date.now() / 1000);
-    if (useStore.getState().tab !== "terminal") say("Бот нашёл сделку и ждёт подтверждения — откройте «Терминал»");
+    if (useStore.getState().tab !== "terminal") say("Бот нашёл сделку и ждёт подтверждения — откройте «Обзор»");
     const t = setInterval(() => setNow(Date.now() / 1000), 1000);
     return () => clearInterval(t);
   }, [sig?.id]); // eslint-disable-line react-hooks/exhaustive-deps
