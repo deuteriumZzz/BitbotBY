@@ -12,37 +12,49 @@ import { cfg } from "./bots";
 
 type Pane = SettingsPane;
 
+/** Прокрутка к разделу страницы настроек (вместо переключения «папок»). */
+const goTo = (pane: Pane | "map") => {
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  document.getElementById(`set-${pane}`)?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+};
+
+/** Одна страница вместо разделов-папок: карта подключений, основное, ключи и (в «Профи») все параметры. */
 export function Settings() {
-  const [pane, setPane] = useState<Pane>("main");
   const simple = useStore((s) => s.ui === "simple");
   const jump = useStore((s) => s.paramSearch);
-  // Cmd/Ctrl+K: сразу в «Параметры» с курсором в поиске.
+  // Cmd/Ctrl+K: сразу к «Все параметры» с курсором в поиске.
   useEffect(() => {
-    if (jump !== null) setPane("all");
+    if (jump !== null) setTimeout(() => goTo("all"), 0);
   }, [jump]);
+  const chips: [Pane | "map", string][] = [
+    ["map", "Карта"],
+    ["main", "Уведомления и аккаунт"],
+    ["conn", "Ключи и доступ"],
+    ...(simple ? [] : ([["all", "Все параметры"]] as [Pane, string][])),
+  ];
   return (
     <section className="view enter" aria-label="Настройки">
-      <Seg
-        className="full"
-        value={simple && pane === "all" ? "main" : pane}
-        options={
-          simple
-            ? [
-                ["main", "Основное"],
-                ["conn", "Подключения"],
-              ]
-            : [
-                ["main", "Основное"],
-                ["conn", "Подключения"],
-                ["all", "Параметры"],
-              ]
-        }
-        onChange={setPane}
-        label="Раздел настроек"
-      />
-      {(pane === "main" || (simple && pane === "all")) && <Main go={setPane} />}
-      {pane === "conn" && <Keys />}
-      {pane === "all" && !simple && <AllParams go={setPane} />}
+      <nav className="set-jump" aria-label="Разделы настроек">
+        {chips.map(([id, label]) => (
+          <button key={id} type="button" className="btn" onClick={() => goTo(id)}>
+            {label}
+          </button>
+        ))}
+      </nav>
+      <ConnMap go={goTo} />
+      <div id="set-main" className="set-sec">
+        <Main go={goTo} />
+      </div>
+      <div id="set-conn" className="set-sec">
+        <h2 className="set-h">Ключи и доступ</h2>
+        <Keys />
+      </div>
+      {!simple && (
+        <div id="set-all" className="set-sec">
+          <h2 className="set-h">Все параметры</h2>
+          <AllParams go={goTo} />
+        </div>
+      )}
     </section>
   );
 }
@@ -58,12 +70,11 @@ function Main({ go }: { go: (pane: Pane) => void }) {
           <p className="note-soon moved">
             Часы торговли и монеты теперь в узле «Сканер».{" "}
             <button className="btn" type="button" onClick={() => useStore.getState().openNode("scan")}>
-              Бот → Сканер
+              Цепочка → Сканер
             </button>
           </p>
         </div>
         <div className="col">
-          <ConnCard go={go} />
           <AccountCard toKeys={() => go("conn")} />
           <ComputerCard />
         </div>
@@ -380,76 +391,120 @@ function AlertsCard() {
   );
 }
 
-function ConnCard({ go }: { go: (pane: Pane) => void }) {
+type Link = "ok" | "warn" | "bad" | "off";
+interface MapNode {
+  id: string;
+  label: string;
+  sub: string;
+  st: Link;
+  act?: () => void;
+}
+
+/** Карта подключений: что питает бота слева, бот в центре, что он отдаёт справа. По живым связям бегут точки. */
+function ConnMap({ go }: { go: (pane: Pane | "map") => void }) {
   const secrets = useStore((s) => s.secrets);
   const ai = useStore((s) => s.ai);
-  const lastAi = ai?.providers.find((p) => p.id === ai.last);
   const note = useStore((s) => s.secretsNote);
   const wsUp = useStore((s) => s.wsUp);
   const alive = useStore((s) => s.alive);
+  const paper = useStore((s) => s.bot?.paper ?? true);
+  const lastAi = ai?.providers.find((p) => p.id === ai.last);
   const by = (id: string) => secrets?.find((s) => s.service === id);
-  const okIn = (group: string) => {
-    const g = (secrets ?? []).filter((s) => s.group === group);
-    return [g.filter((s) => s.status === "ok").length, g.length];
+  const link = (item?: SecretItem): Link => {
+    const c = item ? STATUS[item.status][0] : "";
+    return c === "ok" ? "ok" : c === "bad" ? "bad" : c === "warn" ? "warn" : "off";
   };
-  const row = (label: string, item?: SecretItem) => {
-    const [c, t] = item ? STATUS[item.status] : ["", "—"];
-    const last4 = item?.fields.find((f) => f.secret && f.last4)?.last4;
+  const sub = (item?: SecretItem) => {
+    if (!item) return "не подключено";
+    const last4 = item.fields.find((f) => f.secret && f.last4)?.last4;
+    return `${STATUS[item.status][1]}${last4 ? ` · ключ ••••${last4}` : ""}`;
+  };
+  const toKey = (service: string) => () => {
+    const card = document.getElementById(`key-${service}`);
+    if (!card) return go("conn");
+    const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    card.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "center" });
+  };
+  const data = (secrets ?? []).filter((s) => s.group === "Данные и соцсети");
+  const dOk = data.filter((s) => s.status === "ok").length;
+  const tg = link(by("telegram"));
+  const server: Link = wsUp && alive ? "ok" : wsUp ? "warn" : "bad";
+  const src: MapNode[] = [
+    { id: "bybit", label: "Bybit", sub: sub(by("bybit")), st: link(by("bybit")), act: toKey("bybit") },
+    {
+      id: "ai",
+      label: "AI-провайдеры",
+      sub: ai?.chain.length ? `в цепочке ${ai.chain.length}${lastAi ? ` · отвечает ${lastAi.name}` : ""}` : "цепочка пуста",
+      st: ai?.chain.length ? "ok" : "bad",
+      act: () => useStore.getState().openNode("ai"),
+    },
+    { id: "telegram", label: "Telegram-бот", sub: sub(by("telegram")), st: tg, act: toKey("telegram") },
+    { id: "data", label: "Данные и соцсети", sub: `подключено ${dOk} из ${data.length}`, st: dOk ? "ok" : "off", act: () => go("conn") },
+  ];
+  const out: MapNode[] = [
+    {
+      id: "trades",
+      label: paper ? "Сделки · Paper" : "Сделки · Live",
+      sub: paper ? "виртуальные, без реальных денег" : "реальные деньги на Bybit",
+      st: server === "ok" ? (paper ? "ok" : "warn") : "off",
+      act: () => useStore.getState().setTab("journal"),
+    },
+    { id: "notify", label: "Уведомления", sub: tg === "ok" ? "сделки и защиты — в Telegram" : "подключите Telegram", st: tg === "ok" ? "ok" : "off", act: () => go("main") },
+    { id: "app", label: "Приложение", sub: "MiniApp, браузер, десктоп", st: server === "ok" ? "ok" : "warn" },
+  ];
+  const lines = (nodes: MapNode[], dir: "in" | "out") =>
+    nodes.map((n, i) => {
+      const y = ((i + 0.5) / nodes.length) * 100;
+      const d = dir === "in" ? `M0 ${y} C 55 ${y}, 45 50, 100 50` : `M0 50 C 55 50, 45 ${y}, 100 ${y}`;
+      return (
+        <g key={n.id}>
+          <path className={`cm-base ${n.st}`} d={d} />
+          <path className={`cm-dots ${n.st}`} d={d} pathLength={100} />
+        </g>
+      );
+    });
+  const node = (n: MapNode) => {
+    const body = (
+      <>
+        <span className={`dot ${n.st === "ok" ? "ok live" : n.st === "off" ? "" : n.st}`} />
+        <b>{n.label}</b>
+        <small>{n.sub}</small>
+      </>
+    );
     return (
-      <div key={label}>
-        <span className={`dot ${c}`} />
-        {label}
-        <small>
-          {t}
-          {last4 ? ` · ключ ••••${last4}` : ""}
-        </small>
-      </div>
+      <li key={n.id}>
+        {n.act ? (
+          <button type="button" className={`cm-node ${n.st}`} onClick={n.act}>
+            {body}
+          </button>
+        ) : (
+          <div className={`cm-node ${n.st}`}>{body}</div>
+        )}
+      </li>
     );
   };
-  const [dOk, dN] = okIn("Данные и соцсети");
   return (
-    <article className="card">
+    <article className="card cmap" id="set-map">
       <div className="card-h">
-        <h2>Подключения</h2>
+        <h2>Карта подключений</h2>
+        <span className="label sp">что питает бота → бот → что он отдаёт; нажмите на узел, чтобы настроить</span>
       </div>
-      <div className="conn">
-        <div>
-          <span className={`dot ${wsUp && alive ? "ok" : "bad"}`} />
-          Сервер бота
-          <small>{wsUp ? (alive ? "работает" : "бот не отвечает") : "нет связи"}</small>
+      <div className="cm">
+        <ul className="cm-col">{src.map(node)}</ul>
+        <svg className="cm-links" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+          {lines(src, "in")}
+        </svg>
+        <div className={`cm-hub ${server}`}>
+          <span className="cm-hub-ring">{Icon.logo}</span>
+          <b>BitbotBY</b>
+          <small>{wsUp ? (alive ? "работает" : "бот не отвечает") : "нет связи с сервером"}</small>
         </div>
-        {secrets ? (
-          <>
-            {row("Bybit API", by("bybit"))}
-            {row("Telegram-бот", by("telegram"))}
-            <div>
-              <span className={`dot ${ai?.chain.length ? "ok" : "bad"}`} />
-              AI-провайдеры
-              <small>
-                в цепочке {ai?.chain.length ?? 0}
-                {lastAi ? ` · отвечает ${lastAi.name}` : ""}
-              </small>
-            </div>
-            <div>
-              <span className={`dot ${dOk ? "ok" : ""}`} />
-              Источники данных
-              <small>
-                подключено {dOk} из {dN}
-              </small>
-            </div>
-          </>
-        ) : (
-          <p className="note-soon">{note || "Статус ключей недоступен."}</p>
-        )}
+        <svg className="cm-links" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+          {lines(out, "out")}
+        </svg>
+        <ul className="cm-col">{out.map(node)}</ul>
       </div>
-      <div className="btn-row" style={{ marginTop: 12 }}>
-        <button className="btn" type="button" onClick={() => useStore.getState().openNode("ai")}>
-          AI-провайдеры
-        </button>
-        <button className="btn" type="button" onClick={() => go("conn")}>
-          Ключи и доступ
-        </button>
-      </div>
+      {!secrets && <p className="note-soon">{note || "Статус ключей недоступен."}</p>}
     </article>
   );
 }
@@ -610,7 +665,7 @@ function Keys() {
       <p className="note-soon moved">
         Ключи AI-провайдеров — вместе с цепочкой.{" "}
         <button className="btn" type="button" onClick={() => useStore.getState().openNode("ai")}>
-          Бот → AI-цепочка
+          Цепочка → AI-цепочка
         </button>
       </p>
       {!secrets && <p className="empty">{note || "Ключи недоступны."}</p>}
@@ -735,7 +790,7 @@ export function KeyCard({ item }: { item: SecretItem }) {
   };
 
   return (
-    <article className="kcard">
+    <article className="kcard" id={`key-${item.service}`}>
       <div className="kc-h">
         <b>{item.name}</b>
         <span className={`pill ${c}`}>
