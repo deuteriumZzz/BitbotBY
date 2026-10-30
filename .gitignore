@@ -39,3 +39,6 @@ data/
 
 # Обёртка Tauri — пока вне репозитория
 desktop/
+
+# Скриншоты и логи Playwright MCP
+.playwright-mcp/
