@@ -375,6 +375,26 @@ class TestAnalyze:
         assert data["model"] == "openai/gpt-oss-120b"
 
     @pytest.mark.asyncio
+    async def test_unavailable_only_when_no_provider_answered(self):
+        """Запасной путь смотрит на флаг: «никто не ответил» ≠ «ответил, но входа нет»."""
+        ai = self._make_ai([("groq", "m"), ("gemini", "m")])
+        ai._telegram = MagicMock(notify=AsyncMock())
+        ai._runtime_config.get_local_fallback.return_value = False
+        down = {"groq": _http_error(401), "gemini": _http_error(402)}
+        assert await self._run(ai, down) == []
+        assert ai.unavailable is True
+        texts = [c.args[0] for c in ai._telegram.notify.call_args_list]
+        # Запасной путь выключен — честно: новых сделок нет, а не «работаю на стратегиях».
+        assert any("Новые сделки не открываются" in t for t in texts)
+        assert not any("Работаю на локальных" in t for t in texts)
+
+        ai._provider_retry_after = {}
+        assert await self._run(ai, {"groq": "[]", "gemini": "[]"}) == []
+        assert ai.unavailable is False  # ответил, но входа нет — это решение AI
+        texts = [c.args[0] for c in ai._telegram.notify.call_args_list]
+        assert sum("AI снова отвечает" in t for t in texts) == 1
+
+    @pytest.mark.asyncio
     async def test_json_error_goes_to_next_provider(self):
         ai = self._make_ai([("groq", "m"), ("gemini", "m")])
         result = await self._run(

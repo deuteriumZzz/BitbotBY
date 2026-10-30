@@ -316,7 +316,7 @@ docs/            — CONFIGURATION, DEPLOY_SERVER, STRATEGIES, RUNBOOK, design/,
 - **20 встроенных стратегий**: EMA crossover, RSI, MACD, Bollinger Bands, Scalping, Swing, Breakout, Mean Reversion, Trend Following, Volume Spike, ICT/SMC (Fair Value Gap, Liquidity Sweep, AMD и др.), профильные `momentum_burst`, `pump_exit`, `sentiment`
 - **49 экспериментальных стратегий** из [Argent-Systems](https://github.com/deuteriumZzz/Argent-Systems) (SuperTrend, Ichimoku, Parabolic SAR, VWAP и др.): выключены по умолчанию, с меткой «эксперимент»; **бэктест не показал у них преимущества** — см. [docs/STRATEGIES.md](docs/STRATEGIES.md)
 - **Рынок спот / фьючерсы:** у каждой стратегии свой признак; на споте нет шортов, поэтому стратегии «только фьючерсы» там скрыты
-- **Роль стратегий зависит от режима:** в Local они решают сами; в AI — подсказка для модели; в SAC не используются; в AI/SAC/Hybrid их можно включить как запасной путь (`LOCAL_FALLBACK`, по умолчанию выключен)
+- **Роль стратегий зависит от режима:** в Local они решают сами; в AI — подсказка для модели; в SAC не используются; в AI/SAC/Hybrid их можно включить как запасной путь на время недоступности модели — не ответил ни один AI-провайдер или SAC не загружен (`LOCAL_FALLBACK`, по умолчанию выключен)
 - **AI-анализ**: цепочка из 16 провайдеров (см. [AI-провайдеры и цепочка](#-ai-провайдеры-и-цепочка))
 - **SAC (Soft Actor-Critic)** — RL-модель, обучается на истории, дообучается онлайн после каждой сделки
 - **Amazon Chronos** — предобученная time-series модель, мягкий модификатор confidence в hybrid-режиме

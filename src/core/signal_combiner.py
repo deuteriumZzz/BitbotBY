@@ -97,6 +97,9 @@ class SignalCombiner:
         :return: Список рекомендаций.
         """
         mode = self._rc.get_mode() if self._rc else Config.MODE
+        # Флаг прошлого цикла не должен дожить до этого:
+        # AI в этом цикле может и не вызываться.
+        self.ai.unavailable = False
 
         if mode == "local":
             return []
@@ -130,6 +133,21 @@ class SignalCombiner:
                 return self._merge_with_context(recs, context_recs)
 
         return recs
+
+    def decider_unavailable(self, mode: str) -> bool:
+        """
+        Модель, которая решает в этом режиме, не смогла решить в последнем combine():
+        AI-цепочка не ответила целиком (или пуста), либо модель SAC не загружена.
+        «Ответила, но входа нет» — это решение модели, а не недоступность.
+        """
+        sac_down = not getattr(self.sac, "loaded", False)
+        if mode == "ai":
+            return self.ai.unavailable
+        if mode == "dqn":
+            return sac_down
+        if mode == "hybrid":
+            return self.ai.unavailable or sac_down
+        return False
 
     def _drop_invalid_for_market(
         self, recs: List[Dict[str, Any]]

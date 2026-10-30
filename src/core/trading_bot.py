@@ -1338,10 +1338,15 @@ class TradingBot:
             "swing_trading",
         }
 
-        # Local — основной путь; в остальных режимах запасной путь можно выключить.
+        # Local — основной путь. В остальных режимах запасной путь (если включён) берёт
+        # цикл, только когда решающая модель недоступна: AI-цепочка не ответила целиком
+        # или SAC не загружен. «Модель ответила, но входа нет» стратегии не перебивают.
         _mode = self._runtime_config.get_mode()
-        if not recs and (_mode == "local" or self._runtime_config.get_local_fallback()):
-            logger.info("MODE=%s, no signals — local fallback", _mode)
+        _down = _mode != "local" and self.combiner.decider_unavailable(_mode)
+        if not recs and (
+            _mode == "local" or (_down and self._runtime_config.get_local_fallback())
+        ):
+            logger.info("MODE=%s, decider unavailable — local fallback", _mode)
             for snap in snapshots:
                 sym = snap["symbol"]
                 sym_regime = regimes.get(sym, self._current_regime)

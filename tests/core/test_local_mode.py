@@ -48,17 +48,41 @@ async def test_below_min_confidence_makes_no_trade():
 
 
 @pytest.mark.parametrize(
-    "mode, fallback, trades",
+    "mode, fallback, down, trades",
     [
-        ("local", False, True),  # Local — основной путь, переключатель не влияет
-        ("ai", True, True),  # AI молчит, запасной путь включён
-        ("ai", False, False),  # запасной путь выключен: нет сигнала — нет сделки
-        ("dqn", False, False),
-        ("hybrid", True, True),
+        ("local", False, False, True),  # Local — основной путь, переключатель не влияет
+        ("ai", True, True, True),  # AI-цепочка не ответила целиком — решают стратегии
+        (
+            "ai",
+            True,
+            False,
+            False,
+        ),  # AI ответил «входа нет» — стратегии его не перебивают
+        ("ai", False, True, False),  # запасной путь выключен: AI лёг — сделок нет
+        ("dqn", True, True, True),  # модель SAC не загружена
+        ("dqn", True, False, False),  # SAC решил, что входа нет
+        ("hybrid", True, True, True),
+        ("hybrid", True, False, False),
     ],
 )
-async def test_local_fallback_switch(mode, fallback, trades):
+async def test_local_fallback_only_when_decider_is_down(mode, fallback, down, trades):
     bot = _bot()
     bot._runtime_config.get_mode.return_value = mode
     bot._runtime_config.get_local_fallback.return_value = fallback
+    bot.combiner.decider_unavailable.return_value = down
     assert bool(await _run(bot)) is trades
+
+
+def test_decider_unavailable_by_mode():
+    from types import SimpleNamespace
+
+    from src.core.signal_combiner import SignalCombiner
+
+    c = SignalCombiner.__new__(SignalCombiner)
+    c.ai = SimpleNamespace(unavailable=True)
+    c.sac = SimpleNamespace(loaded=True)
+    assert c.decider_unavailable("ai") and c.decider_unavailable("hybrid")
+    assert not c.decider_unavailable("dqn") and not c.decider_unavailable("local")
+    c.ai.unavailable, c.sac.loaded = False, False
+    assert c.decider_unavailable("dqn") and c.decider_unavailable("hybrid")
+    assert not c.decider_unavailable("ai")

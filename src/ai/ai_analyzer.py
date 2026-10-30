@@ -100,6 +100,12 @@ class AIAnalyzer:
         # События для приложения (ai.status); TradingBot подставляет свой emit
         self._emit: Optional[Callable[[str, Dict[str, Any]], None]] = None
 
+        # True — в последнем analyze() не ответил ни один провайдер (или цепочка пуста):
+        # только тогда запасной путь отдаёт цикл локальным стратегиям.
+        self.unavailable = False
+        # Когда цепочка перестала отвечать — чтобы один раз сказать о возврате.
+        self._down_since: Optional[float] = None
+
         self._provider_order: List[str] = [pid for pid, _ in self._chain()]
         self.enabled = bool(self._provider_order)
         if self._provider_order:
@@ -444,6 +450,7 @@ class AIAnalyzer:
             return []
         chain = self._chain()
         self.enabled = bool(chain)
+        self.unavailable = not chain
         if not chain:
             return []
 
@@ -500,9 +507,15 @@ class AIAnalyzer:
                 len(snapshots),
             )
             self._mark(provider, model, "ok")
+            if getattr(self, "_down_since", None) is not None:
+                self._down_since = None
+                await self._notify_recovered(provider)
             return valid
 
         self.logger.error("All AI providers exhausted")
+        self.unavailable = True
+        if getattr(self, "_down_since", None) is None:
+            self._down_since = time.time()
         if self._runtime_config is not None:
             try:
                 self._runtime_config.set_last_ai_provider("local")
@@ -572,11 +585,35 @@ class AIAnalyzer:
             86400 - utc_now.hour * 3600 - utc_now.minute * 60 - utc_now.second
         )
         h, m = divmod(secs_to_reset // 60, 60)
+        _rc = getattr(self, "_runtime_config", None)
+        fallback = (
+            _rc.get_local_fallback() if _rc is not None else Config.LOCAL_FALLBACK
+        )
+        now_what = (
+            "Пока AI молчит, решают включённые стратегии (запасной путь)."
+            if fallback
+            else "Новые сделки не открываются, пока не ответит хотя бы один провайдер. "
+            "Запасной путь — «Цепочка → Стратегии»."
+        )
         try:
             await self._telegram.notify(
                 f"🔴 *Все AI провайдеры недоступны.*\n"
-                f"Работаю на локальных стратегиях — качество сигналов снижено.\n"
-                f"Провайдеры восстановятся через {h}ч {m}мин (полночь UTC)."
+                f"{now_what} Открытые позиции сопровождаются.\n"
+                f"Дневные лимиты бесплатных провайдеров обычно обнуляются "
+                f"в полночь UTC — через {h}ч {m}мин."
+            )
+        except Exception:
+            pass
+
+    async def _notify_recovered(self, provider: str) -> None:
+        """Цепочка снова отвечает — одно сообщение на каждый сбой."""
+        if getattr(self, "_telegram", None) is None:
+            return
+        spec = catalog.BY_ID.get(provider)
+        try:
+            await self._telegram.notify(
+                f"🟢 *AI снова отвечает* ({spec.name if spec else provider}) — "
+                "решает AI."
             )
         except Exception:
             pass
