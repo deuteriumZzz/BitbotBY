@@ -24,7 +24,9 @@
   --g-ctl:linear-gradient(180deg,#22272D 0%,#181B20 100%);
   --g-accent:linear-gradient(180deg,#6BEFA4 0%,#2FBF6C 100%);
   --g-danger:linear-gradient(180deg,#FF7B7F 0%,#E2464B 100%);
-  --c-hi:rgba(255,255,255,.55); --c-hi-dark:rgba(255,255,255,.06);
+  --c-hi:rgba(255,255,255,.55); --c-hi-mid:rgba(255,255,255,.3); --c-hi-dark:rgba(255,255,255,.06);
+  --c-glint:rgba(255,255,255,.12); --c-glint-hi:rgba(255,255,255,.7);
+  --c-shadow:rgba(0,0,0,.9); --c-shadow-soft:rgba(0,0,0,.5); --c-scrim:rgba(4,5,7,.5);
   --shadow-lift:0 10px 24px -12px rgba(0,0,0,.8);
   --glow-card:radial-gradient(460px 220px at 100% 0%,color-mix(in oklab,var(--c-accent) 10%,transparent),transparent 70%);
 

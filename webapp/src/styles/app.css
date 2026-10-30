@@ -1204,16 +1204,16 @@ select.sel{border-radius:var(--r-ctl);background:var(--c-inset);box-shadow:none}
 /* ---------- Движение и фактура: кнопки, карточки, навигация, тумблеры (prefers-reduced-motion — выключено) ---------- */
 /* Кнопки: градиент, внутренний блик, подъём на 1px с тенью, блик-пробег при наведении, нажатие 0.97. */
 .btn{position:relative;overflow:hidden;isolation:isolate;background:var(--g-ctl);box-shadow:inset 0 1px 0 var(--c-hi-dark);transition:transform var(--dur-fast) var(--ease-out),box-shadow var(--dur-norm) var(--ease-out),border-color var(--dur-norm) var(--ease-out),color var(--dur-fast) var(--ease-out)}
-.btn::after{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(105deg,transparent 30%,rgba(255,255,255,.12) 50%,transparent 70%);transform:translateX(-120%);pointer-events:none}
+.btn::after{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(105deg,transparent 30%,var(--c-glint) 50%,transparent 70%);transform:translateX(-120%);pointer-events:none}
 .btn:hover:not(:disabled){transform:translateY(-1px);box-shadow:inset 0 1px 0 var(--c-hi-dark),var(--shadow-lift)}
 .btn:hover:not(:disabled)::after{transform:translateX(120%);transition:transform .7s var(--ease-out)}
 .btn:active:not(:disabled){transform:translateY(0) scale(.97);transition-duration:60ms}
 .btn.primary,.btn[aria-pressed="true"]{background:var(--g-primary);border-color:transparent;box-shadow:inset 0 1px 0 var(--c-hi)}
-.btn.primary:hover:not(:disabled){background:var(--g-primary);box-shadow:inset 0 1px 0 var(--c-hi),0 10px 26px -12px rgba(230,234,239,.45)}
-.btn.primary::after,.btn[aria-pressed="true"]::after{background:linear-gradient(105deg,transparent 30%,rgba(255,255,255,.7) 50%,transparent 70%)}
+.btn.primary:hover:not(:disabled){background:var(--g-primary);box-shadow:inset 0 1px 0 var(--c-hi),0 10px 26px -12px color-mix(in oklab,var(--c-ink) 45%,transparent)}
+.btn.primary::after,.btn[aria-pressed="true"]::after{background:linear-gradient(105deg,transparent 30%,var(--c-glint-hi) 50%,transparent 70%)}
 .btn.danger{background:var(--g-ctl)}
 .btn.danger:hover:not(:disabled){border-color:var(--c-down);box-shadow:inset 0 1px 0 var(--c-hi-dark),0 10px 24px -12px color-mix(in oklab,var(--c-down) 55%,transparent)}
-.btn.danger.armed,.btn.armed{background:var(--g-danger);border-color:transparent;box-shadow:inset 0 1px 0 rgba(255,255,255,.3)}
+.btn.danger.armed,.btn.armed{background:var(--g-danger);border-color:transparent;box-shadow:inset 0 1px 0 var(--c-hi-mid)}
 .panic::before{background:var(--g-danger)}
 
 /* Сегменты: бегунок — светлая пилюля с бликом. */
@@ -1222,8 +1222,8 @@ select.sel{border-radius:var(--r-ctl);background:var(--c-inset);box-shadow:none}
 .seg button{transition:color var(--dur-norm) var(--ease-out)}
 
 /* Тумблер: дорожка-пилюля, круглая ручка; «вкл» — зелёный градиент с мягким свечением. Метки «|»/«○» остаются. */
-.tgl .tr{border-radius:var(--r-pill);background:var(--c-inset);box-shadow:inset 0 1px 2px rgba(0,0,0,.5)}
-.tgl .kn{border-radius:50%;background-image:none;background:var(--g-primary);box-shadow:0 1px 3px rgba(0,0,0,.5)}
+.tgl .tr{border-radius:var(--r-pill);background:var(--c-inset);box-shadow:inset 0 1px 2px var(--c-shadow-soft)}
+.tgl .kn{border-radius:50%;background-image:none;background:var(--g-primary);box-shadow:0 1px 3px var(--c-shadow-soft)}
 .tgl[aria-checked="true"] .tr{background:var(--g-accent);border-color:transparent;box-shadow:0 0 14px -3px color-mix(in oklab,var(--c-accent) 60%,transparent)}
 
 /* Карточки: кромочный свет у курсора (--mx/--my ставит lib/motion.ts), подсветка главной карточки. */
@@ -1281,9 +1281,9 @@ select.sel{border-radius:var(--r-ctl);background:var(--c-inset);box-shadow:none}
 .pipe-ai-chip:hover{border-color:var(--c-ctl);transform:translateY(-1px)}
 
 /* Панель шага: выезжает справа поверх затемнения; на телефоне — во весь экран. */
-.pipe-scrim{all:unset;position:fixed;inset:0;z-index:40;background:rgba(4,5,7,.5);opacity:0;pointer-events:none;transition:opacity var(--dur-norm) var(--ease-out)}
+.pipe-scrim{all:unset;position:fixed;inset:0;z-index:40;background:var(--c-scrim);opacity:0;pointer-events:none;transition:opacity var(--dur-norm) var(--ease-out)}
 .pipe-scrim.open{opacity:1;pointer-events:auto}
-.pipe-panel{position:fixed;top:0;right:0;bottom:0;z-index:41;width:min(580px,100%);display:flex;flex-direction:column;background:var(--c-bg);border-left:1px solid var(--c-line2);box-shadow:-30px 0 70px -24px rgba(0,0,0,.9);transform:translateX(104%);visibility:hidden;transition:transform .44s var(--ease-mech),visibility 0s linear .44s}
+.pipe-panel{position:fixed;top:0;right:0;bottom:0;z-index:41;width:min(580px,100%);display:flex;flex-direction:column;background:var(--c-bg);border-left:1px solid var(--c-line2);box-shadow:-30px 0 70px -24px var(--c-shadow);transform:translateX(104%);visibility:hidden;transition:transform .44s var(--ease-mech),visibility 0s linear .44s}
 .pipe-panel.open{transform:none;visibility:visible;transition:transform .44s var(--ease-mech),visibility 0s}
 .pipe-panel-h{display:flex;align-items:center;gap:10px;padding:14px 16px 14px 18px;border-bottom:1px solid var(--c-line);background:linear-gradient(180deg,var(--c-sheen),transparent),var(--c-s1)}
 .pipe-panel-h b{font:600 16px/1.2 var(--font-text)}
@@ -1348,7 +1348,7 @@ select.sel{border-radius:var(--r-ctl);background:var(--c-inset);box-shadow:none}
 .pipe-scrim.open{backdrop-filter:blur(6px) saturate(120%);-webkit-backdrop-filter:blur(6px) saturate(120%)}
 .pipe-panel{background:var(--glass-strong);backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);border-left-color:var(--glass-edge)}
 .pipe-panel-h{background:var(--glass)}
-.sheet,.toast,.tip,.pal,.help-sheet{background:var(--glass-strong);backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);border-color:var(--glass-edge);box-shadow:inset 0 1px 0 var(--c-hi-dark),0 24px 60px -24px rgba(0,0,0,.9)}
+.sheet,.toast,.tip,.pal,.help-sheet{background:var(--glass-strong);backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);border-color:var(--glass-edge);box-shadow:inset 0 1px 0 var(--c-hi-dark),0 24px 60px -24px var(--c-shadow)}
 @container dev (max-width:899px){
   /* Нижняя панель разделов — как вкладки iOS: содержимое прокручивается под стеклом. */
   .nav{position:absolute;left:0;right:0;bottom:0;background:var(--glass);backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);border-top-color:var(--glass-edge)}
@@ -1362,7 +1362,7 @@ select.sel{border-radius:var(--r-ctl);background:var(--c-inset);box-shadow:none}
   .pipe-panel,.sheet,.toast,.tip,.pal,.help-sheet,.nav{background:var(--c-s1);backdrop-filter:none;-webkit-backdrop-filter:none}
 }
 @media (prefers-reduced-motion:reduce){ .blk,.chip2{transition:none;animation:none} .blk:hover{transform:none} }
-.pal-back,.help-back{background:rgba(4,5,7,.42);backdrop-filter:blur(8px) saturate(120%);-webkit-backdrop-filter:blur(8px) saturate(120%)}
+.pal-back,.help-back{background:var(--c-scrim);backdrop-filter:blur(8px) saturate(120%);-webkit-backdrop-filter:blur(8px) saturate(120%)}
 .pal{border-radius:var(--r-card)}
 .help-sheet{border-radius:var(--r-card) var(--r-card) 0 0}
 .sheet{border-radius:var(--r-card)}
