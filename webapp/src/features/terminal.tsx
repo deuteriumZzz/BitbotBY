@@ -210,12 +210,19 @@ function Hero() {
   // Баланс коротко вспыхивает цветом сделки, когда закрытая позиция «приземляется» в него.
   const prevBal = useRef(balance);
   const [balFx, setBalFx] = useState("");
+  // Рядом всплывает сумма, на которую он изменился, — видно, сколько принесла сделка.
+  const [delta, setDelta] = useState(0);
   useEffect(() => {
     if (balance === prevBal.current) return;
     setBalFx(balance > prevBal.current ? "fl-up" : "fl-down");
+    setDelta(balance - prevBal.current);
     prevBal.current = balance;
     const t = setTimeout(() => setBalFx(""), 900);
-    return () => clearTimeout(t);
+    const d = setTimeout(() => setDelta(0), 1800);
+    return () => {
+      clearTimeout(t);
+      clearTimeout(d);
+    };
   }, [balance]);
   const paper = useStore((s) => s.bot?.paper ?? true);
   const period = useStore((s) => s.period);
@@ -238,6 +245,11 @@ function Hero() {
       </div>
       <div className={`bal ${balFx}`}>
         <Tween value={balance} fmt={(v) => `$${fmtN(v)}`} />
+        {delta !== 0 && (
+          <span key={balance} className={`bal-d ${tone(delta)}`} aria-hidden="true">
+            {arrow(delta)} {usd(delta)}
+          </span>
+        )}
       </div>
       <div className="hero-stats">
         <div>
