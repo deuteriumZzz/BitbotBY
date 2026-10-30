@@ -1,16 +1,16 @@
 # BitbotBY Terminal — паритет функций и контракт API
 
-Фаза 1 из `UI_PROMPT.md`. Источник правды по функциям — `src/telegram_commander.py` (21 команда, ~70 обработчиков кнопок, 2 текстовых ввода) и `src/telegram_notifier.py` (подтверждение сделки). Прототип — `docs/design/prototype.html`.
+Фаза 1 из `UI_PROMPT.md`. Источник правды по функциям — `src/telegram_bot/commander.py` (21 команда, ~70 обработчиков кнопок, 2 текстовых ввода) и `src/telegram_bot/notifier.py` (подтверждение сделки). Прототип — `docs/design/prototype.html`.
 
 Статус в прототипе: ✓ есть · ◐ частично · ✗ нет. «Новое» — в UI есть, в боте нет: нужна доработка бэкенда.
 
 ## 1. Как устроено сейчас (важно для контракта)
 
 - **Бот и дашборд — разные процессы.** `TradingBot` (внутри него `TelegramCommander`) и FastAPI-дашборд `src/dashboard` общаются только через Redis и SQLite.
-- **Настройки** живут в Redis под ключами `bot:*` (`src/runtime_config.py`, ~40 ключей). Дашборд может менять их напрямую через тот же `RuntimeConfig`, бот подхватит на следующем цикле.
+- **Настройки** живут в Redis под ключами `bot:*` (`src/settings/runtime_config.py`, ~40 ключей). Дашборд может менять их напрямую через тот же `RuntimeConfig`, бот подхватит на следующем цикле.
 - **Действия** (закрыть всё, Paper↔Live, перезапуск, обучение) Telegram выполняет внутри процесса бота. Из дашборда их нужно доставлять **очередью команд** в процесс бота.
 - **Состояние портфеля** — Redis `portfolio_state_{paper|live}`; **сделки** — SQLite `data/trades_{paper|live}.db` (WAL, дашборд читает параллельно).
-- **Событий для живого UI нет.** Есть только `redis.publish("trading_signals")` в `src/redis_client.py`. Радар, тики, открытия и закрытия придётся публиковать.
+- **Событий для живого UI нет.** Есть только `redis.publish("trading_signals")` в `src/infra/redis_client.py`. Радар, тики, открытия и закрытия придётся публиковать.
 
 ## 2. Паритет Telegram → UI → API
 
@@ -182,7 +182,7 @@
 
 ## 6. Транспорт между дашбордом и ботом
 
-- **События:** бот публикует в Redis pub/sub `bot:events`; дашборд подписан и раздаёт по WS. Один хелпер `emit(type, data)` в `src/redis_client.py`, вызовы — в местах из таблицы раздела 5.
+- **События:** бот публикует в Redis pub/sub `bot:events`; дашборд подписан и раздаёт по WS. Один хелпер `emit(type, data)` в `src/infra/redis_client.py`, вызовы — в местах из таблицы раздела 5.
 - **Команды:** дашборд делает `LPUSH bot:commands {request_id, type, args, source}`; в боте отдельная asyncio-задача `BRPOP` → выполняет тем же кодом, что и Telegram-кнопки → `SET bot:cmdres:{request_id}` (TTL 10 мин) + событие в `bot:events`. Идемпотентность — `SET NX bot:cmd:{request_id}`.
 - **Общий сервисный слой:** логику кнопок `telegram_commander.py` вынести в `src/bot_service.py` (pause, panic, apply_profile, switch_mode, toggle_strategy…), чтобы её вызывали и Telegram, и очередь команд. Telegram остаётся полноценным пультом.
 - **Ожидающие подтверждения сделки** переезжают из памяти `TelegramNotifier` в Redis `bot:pending_signal:{id}` — тогда ответить можно и из Telegram, и из UI, первый ответ выигрывает.
@@ -190,13 +190,13 @@
 ## 7. Порядок реализации (фаза 2)
 
 **Статус (2026-10-16):**
-- ✓ 1–2. Отдельный `bot_service.py` не понадобился: `TelegramCommander` уже работает через колбэки бота (`_handle_close_all`, `_handle_restart`, `_handle_mode_switch`) и `RuntimeConfig`. Команды приложения вызывают те же методы — `src/bot_commands.py`. Шина — `src/bot_bus.py` (`emit`, `enqueue`, `CommandConsumer`), потребитель запущен в `TradingBot.trading_loop`. Переключение Paper/Live вынесено в `RuntimeConfig.apply_paper_trading` и используется и Telegram, и приложением.
+- ✓ 1–2. Отдельный `bot_service.py` не понадобился: `TelegramCommander` уже работает через колбэки бота (`_handle_close_all`, `_handle_restart`, `_handle_mode_switch`) и `RuntimeConfig`. Команды приложения вызывают те же методы — `src/core/bot_commands.py`. Шина — `src/infra/bot_bus.py` (`emit`, `enqueue`, `CommandConsumer`), потребитель запущен в `TradingBot.trading_loop`. Переключение Paper/Live вынесено в `RuntimeConfig.apply_paper_trading` и используется и Telegram, и приложением.
 - ✓ 3. `src/dashboard/routers/control.py`: `/api/state`, `/api/positions`, `/api/metrics`, `/api/pnl/daily`, `/api/strategies`, команды `pause` · `resume` · `panic` · `restart` · `positions/{trade_id}/close` · `account/mode`, `/api/commands/{id}`, WebSocket `/ws` (события + heartbeat). Команды работают только при заданном `DASHBOARD_API_KEY`.
 - ✓ Исправлено попутно: дашборд читал `portfolio_state`, а бот пишет `portfolio_state_{paper|live}` — `/api/status` и `/metrics` всегда показывали стартовый баланс.
 - События: все из раздела 5, кроме `job.progress` и `season.changed` (нет API фоновых задач и события сезона).
 - Ограничения: PANIC в Paper очищает позиции без записи результата в историю — это существующее поведение `/closeall`.
-- ✓ 4. Реестр настроек `src/settings_registry.py` — 79 параметров с подписями, типами, границами и способом применения (≈30 «сразу» через `RuntimeConfig`, остальные — в Redis-хэше `bot:config_overrides`, бот применяет их при старте). `GET /api/config/schema`, `GET /api/config`, `PATCH /api/config` (проверка пакета целиком через `Config.validate()`; `null` возвращает значение из .env).
-- ✓ 5. Хранилище ключей `src/secrets_store.py`: 17 сервисов, Fernet-шифрование, файл `data/secrets.enc.json` (права 600), мастер-ключ `BITBOT_SECRETS_KEY` в env. Проверка у сервиса перед сохранением: неверный ключ (401/403) не сохраняется, ключ Bybit с правом вывода средств отклоняется. `GET /api/secrets` (без значений), `PUT`/`DELETE /api/secrets/{service}`. Все секретные поля маскируются в логах.
+- ✓ 4. Реестр настроек `src/settings/settings_registry.py` — 79 параметров с подписями, типами, границами и способом применения (≈30 «сразу» через `RuntimeConfig`, остальные — в Redis-хэше `bot:config_overrides`, бот применяет их при старте). `GET /api/config/schema`, `GET /api/config`, `PATCH /api/config` (проверка пакета целиком через `Config.validate()`; `null` возвращает значение из .env).
+- ✓ 5. Хранилище ключей `src/settings/secrets_store.py`: 17 сервисов, Fernet-шифрование, файл `data/secrets.enc.json` (права 600), мастер-ключ `BITBOT_SECRETS_KEY` в env. Проверка у сервиса перед сохранением: неверный ключ (401/403) не сохраняется, ключ Bybit с правом вывода средств отклоняется. `GET /api/secrets` (без значений), `PUT`/`DELETE /api/secrets/{service}`. Все секретные поля маскируются в логах.
 - ✓ 6. Вход: `POST /api/auth/telegram` (initData), `POST /api/auth/desktop/request` + `/verify` (6-значный код в Telegram), `POST /api/auth/logout`. Сессия — Bearer-токен на 12 ч, в Redis только его SHA-256. Команды, настройки и ключи принимают сессию или `X-API-Key`; без настроенного входа управление выключено.
 - Найдено попутно: `Config` — dataclass, и `Config().validate()` проверял значения из .env на момент импорта, не видя ключей и настроек, подставленных позже (и Paper/Live из Telegram). Бот и `supervisor.py` теперь проверяют действующие значения (`effective_config`).
 - Найдено попутно: `DQN_WEIGHT`, `AI_WEIGHT`, `DQN_SOLO_CONFIDENCE`, `AI_STRATEGY_SELECTION` из `.env.example` код не читает (веса Hybrid зашиты по режиму рынка в `signal_combiner.py`) — в реестр не включены, в прототипе их нужно убрать.
@@ -222,7 +222,7 @@
     2. HTTPS перед nginx (certbot, Caddy или Cloudflare Tunnel): Telegram открывает MiniApp только по https.
     3. `docker compose up -d --build`: фронтенд собирается в стадии Dockerfile, nginx пропускает `/app/`, `/api/`, `/ws` без basic auth (доступ проверяет дашборд), старый дашборд на `/` остаётся за basic auth.
     4. Десктоп (`desktop/`): адрес сервера — тот же домен; CORS для `tauri://localhost` и `http(s)://tauri.localhost` включён в дашборде.
-  - ✓ AI-провайдеры: каталог `src/ai_providers.py` — 16 провайдеров (13 с бесплатным доступом), цепочка с режимом `free` (по умолчанию) | `auto` | `paid`, своим порядком, моделями и провайдерами без ключа (LLM7, своя Ollama — только если включены). API: `GET /api/ai`, `PUT /api/ai/chain {mode?, order?, disabled?, keyless?, models?}`, `GET /api/ai/providers/{id}/models` (живой список по сохранённому ключу); событие `ai.status {provider, model, status, until}`; `bot.ai` в `/api/state`. В приложении — «Настройки → AI»; настройки разнесены на «Основное · AI · Подключения · Параметры», в «Параметрах» сначала 25 основных. `/provider` в Telegram строится из того же каталога.
+  - ✓ AI-провайдеры: каталог `src/ai/ai_providers.py` — 16 провайдеров (13 с бесплатным доступом), цепочка с режимом `free` (по умолчанию) | `auto` | `paid`, своим порядком, моделями и провайдерами без ключа (LLM7, своя Ollama — только если включены). API: `GET /api/ai`, `PUT /api/ai/chain {mode?, order?, disabled?, keyless?, models?}`, `GET /api/ai/providers/{id}/models` (живой список по сохранённому ключу); событие `ai.status {provider, model, status, until}`; `bot.ai` в `/api/state`. В приложении — «Настройки → AI»; настройки разнесены на «Основное · AI · Подключения · Параметры», в «Параметрах» сначала 25 основных. `/provider` в Telegram строится из того же каталога.
   - WebSocket закрывается с кодом 4401, если сессия не принята — приложение не переподключается, а показывает вход.
   - Пока только в Telegram (нет API): обучение/тюнинг/откат SAC, бэктест, значимость альфы, live vs бэктест, проверка AI; баннер смены сезона; задержка и проскальзывание исполнения. В приложении на их месте — честная пометка.
 

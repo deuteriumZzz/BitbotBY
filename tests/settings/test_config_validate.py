@@ -1,0 +1,215 @@
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+from config import Config
+
+
+def _paper(**kwargs) -> Config:
+    """Минимально валидная конфигурация paper trading."""
+    defaults = dict(
+        PAPER_TRADING=True,
+        INITIAL_BALANCE=1000.0,
+        RISK_PER_TRADE=0.02,
+        MAX_POSITION_SIZE=0.1,
+        COMMISSION_RATE=0.001,
+        TRADING_INTERVAL=30,
+        SYMBOL="BTC/USDT",
+        MODE="local",
+        AI_PROVIDER="auto",
+        ANTHROPIC_API_KEY="",
+        DEEPSEEK_API_KEY="",
+        OPENAI_API_KEY="",
+    )
+    defaults.update(kwargs)
+    return Config(**defaults)
+
+
+class TestConfigValidate:
+    def test_valid_paper_trading_passes(self):
+        _paper().validate()
+
+    def test_stablecoin_symbol_rejected(self):
+        with pytest.raises(ValueError, match="stablecoin"):
+            _paper(SYMBOL="USDC/USDT").validate()
+
+    def test_busd_symbol_rejected(self):
+        with pytest.raises(ValueError, match="stablecoin"):
+            _paper(SYMBOL="BUSD/USDT").validate()
+
+    def test_zero_initial_balance_rejected(self):
+        with pytest.raises(ValueError, match="INITIAL_BALANCE"):
+            _paper(INITIAL_BALANCE=0.0).validate()
+
+    def test_negative_initial_balance_rejected(self):
+        with pytest.raises(ValueError, match="INITIAL_BALANCE"):
+            _paper(INITIAL_BALANCE=-500.0).validate()
+
+    def test_risk_above_1_rejected(self):
+        with pytest.raises(ValueError, match="RISK_PER_TRADE"):
+            _paper(RISK_PER_TRADE=1.5).validate()
+
+    def test_risk_zero_rejected(self):
+        with pytest.raises(ValueError, match="RISK_PER_TRADE"):
+            _paper(RISK_PER_TRADE=0.0).validate()
+
+    def test_invalid_ai_provider_rejected(self):
+        with pytest.raises(ValueError, match="AI_PROVIDER"):
+            _paper(MODE="ai", AI_PROVIDER="mistral", ANTHROPIC_API_KEY="key").validate()
+
+    def test_gemini_provider_is_valid(self):
+        _paper(MODE="ai", AI_PROVIDER="gemini", GEMINI_API_KEY="g-key").validate()
+
+    def test_openrouter_provider_is_valid(self):
+        _paper(
+            MODE="ai", AI_PROVIDER="openrouter", OPENROUTER_API_KEY="or-key"
+        ).validate()
+
+    def test_nvidia_provider_is_valid(self):
+        _paper(MODE="ai", AI_PROVIDER="nvidia", NVIDIA_API_KEY="nv-key").validate()
+
+    def test_openrouter_provider_without_key_rejected(self):
+        with pytest.raises(ValueError, match="ключ не задан"):
+            _paper(
+                MODE="ai",
+                AI_PROVIDER="openrouter",
+                OPENROUTER_API_KEY="",
+            ).validate()
+
+    def test_ai_mode_with_only_openrouter_key_passes(self):
+        _paper(
+            MODE="ai",
+            AI_PROVIDER="auto",
+            OPENROUTER_API_KEY="or-key",
+        ).validate()
+
+    def test_missing_bybit_keys_in_live_mode(self):
+        with pytest.raises(ValueError, match="BYBIT_API_KEY"):
+            _paper(
+                PAPER_TRADING=False,
+                BYBIT_API_KEY="",
+                BYBIT_API_SECRET="",
+            ).validate()
+
+    def test_ai_mode_no_keys_rejected(self):
+        with pytest.raises(ValueError, match="нужен хотя бы один ключ"):
+            _paper(
+                MODE="ai",
+                AI_PROVIDER="auto",
+                ANTHROPIC_API_KEY="",
+                DEEPSEEK_API_KEY="",
+                OPENAI_API_KEY="",
+            ).validate()
+
+    def test_anthropic_provider_without_key_rejected(self):
+        with pytest.raises(ValueError, match="ключ не задан"):
+            _paper(
+                MODE="ai",
+                AI_PROVIDER="anthropic",
+                ANTHROPIC_API_KEY="",
+            ).validate()
+
+    def test_deepseek_provider_without_key_rejected(self):
+        with pytest.raises(ValueError, match="ключ не задан"):
+            _paper(
+                MODE="ai",
+                AI_PROVIDER="deepseek",
+                DEEPSEEK_API_KEY="",
+            ).validate()
+
+    def test_ai_mode_with_any_key_passes(self):
+        _paper(
+            MODE="ai",
+            AI_PROVIDER="auto",
+            DEEPSEEK_API_KEY="sk-test",
+        ).validate()
+
+    def test_local_mode_no_keys_needed(self):
+        _paper(MODE="local").validate()
+
+    # ── MAX_PORTFOLIO_EXPOSURE (Gap 2) ──────────────────────────────────────
+
+    def test_negative_max_portfolio_exposure_rejected(self):
+        with pytest.raises(ValueError, match="MAX_PORTFOLIO_EXPOSURE"):
+            _paper(MAX_PORTFOLIO_EXPOSURE=-1.0).validate()
+
+    def test_zero_max_portfolio_exposure_disables_cap_and_passes(self):
+        _paper(MAX_PORTFOLIO_EXPOSURE=0.0).validate()
+
+    def test_default_max_portfolio_exposure_passes(self):
+        _paper().validate()
+
+    # ── LEVERAGE_MAX / DAILY_LOSS_LIMIT / MAX_DRAWDOWN_PERCENT (Gap D) ──────
+
+    def test_leverage_max_too_high_rejected(self):
+        with pytest.raises(ValueError, match="LEVERAGE_MAX"):
+            _paper(LEVERAGE_MAX=100).validate()
+
+    def test_leverage_max_zero_rejected(self):
+        with pytest.raises(ValueError, match="LEVERAGE_MAX"):
+            _paper(LEVERAGE_MAX=0).validate()
+
+    def test_leverage_max_default_passes(self):
+        _paper().validate()  # LEVERAGE_MAX default=5 must still pass
+
+    def test_daily_loss_limit_as_percent_typo_rejected(self):
+        with pytest.raises(ValueError, match="DAILY_LOSS_LIMIT"):
+            _paper(DAILY_LOSS_LIMIT=5.0).validate()
+
+    def test_daily_loss_limit_zero_rejected(self):
+        with pytest.raises(ValueError, match="DAILY_LOSS_LIMIT"):
+            _paper(DAILY_LOSS_LIMIT=0.0).validate()
+
+    def test_max_drawdown_percent_as_percent_typo_rejected(self):
+        with pytest.raises(ValueError, match="MAX_DRAWDOWN_PERCENT"):
+            _paper(MAX_DRAWDOWN_PERCENT=20.0).validate()
+
+    def test_daily_loss_limit_exceeding_max_drawdown_rejected(self):
+        with pytest.raises(ValueError, match="MAX_DRAWDOWN_PERCENT"):
+            _paper(DAILY_LOSS_LIMIT=0.4, MAX_DRAWDOWN_PERCENT=0.2).validate()
+
+    def test_leverage_dd_threshold_as_percent_typo_rejected(self):
+        with pytest.raises(ValueError, match="LEVERAGE_DD_THRESHOLD"):
+            _paper(LEVERAGE_DD_THRESHOLD=15.0).validate()
+
+
+def _load_dd_thresholds(**env: str) -> tuple[float, float]:
+    """Импортирует config в чистом процессе с заданным env (без утечки в другие тесты)."""
+    clean = {
+        k: v
+        for k, v in os.environ.items()
+        if k not in ("LEVERAGE_DD_THRESHOLD", "MAX_DRAWDOWN_PERCENT")
+    }
+    out = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from config import Config as C;"
+            "print(C.LEVERAGE_DD_THRESHOLD, C.MAX_DRAWDOWN_PERCENT)",
+        ],
+        env={**clean, **env},
+        cwd=Path(__file__).resolve().parents[2],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()
+    return float(out[0]), float(out[1])
+
+
+class TestDrawdownThresholdsSplit:
+    """Плечо (LEVERAGE_DD_THRESHOLD) и hard halt (MAX_DRAWDOWN_PERCENT) — разные пороги."""
+
+    def test_both_set_are_independent(self):
+        assert _load_dd_thresholds(
+            LEVERAGE_DD_THRESHOLD="0.15", MAX_DRAWDOWN_PERCENT="0.20"
+        ) == (0.15, 0.20)
+
+    def test_legacy_env_falls_back_to_max_drawdown(self):
+        # Старый .env без нового ключа: плечо ведёт себя как раньше
+        assert _load_dd_thresholds(MAX_DRAWDOWN_PERCENT="0.25") == (0.25, 0.25)
+
+    def test_defaults(self):
+        assert _load_dd_thresholds() == (0.15, 0.2)

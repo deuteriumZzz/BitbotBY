@@ -17,7 +17,7 @@ claude/
 .hypothesis/
 .pytest_cache/
 *.egg-info/
-nginx/htpasswd
+deploy/legacy/nginx/htpasswd
 
 # Ключи API из приложения (зашифрованы, но всё равно не для git)
 data/secrets.enc.json
@@ -26,3 +26,8 @@ data/.secrets.*
 # Лаунчер: мастер-ключ и токен входа (никогда не в git и не в образ)
 .launcher/
 .server/
+
+# Мусор ОС и инструментов
+.DS_Store
+.coverage
+.mypy_cache/

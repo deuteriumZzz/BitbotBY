@@ -22,7 +22,7 @@ import urllib.parse
 import urllib.request
 from typing import Any, Dict, Optional, Tuple
 
-from src import login_link, secrets_store
+from src.settings import login_link, secrets_store
 
 SESSION_TTL = 12 * 3600
 INIT_DATA_MAX_AGE = 24 * 3600

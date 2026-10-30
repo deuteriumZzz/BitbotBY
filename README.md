@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/bitbot_banner.svg" alt="BitbotBY — AI-гибридный торговый бот для Bybit Futures" width="100%">
+<img src="docs/assets/bitbot_banner.svg" alt="BitbotBY — AI-гибридный торговый бот для Bybit Futures" width="100%">
 
 # 🤖 BitbotBY
 
@@ -15,7 +15,7 @@
 [![Bybit](https://img.shields.io/badge/exchange-Bybit%20Futures-F7A600)](https://www.bybit.com/)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-🌐 **Русский** · [English](README.en.md) · [中文](README.zh.md) · [Español](README.es.md) · [Deutsch](README.de.md)
+🌐 **Русский** · [English](docs/README.en.md) · [中文](docs/README.zh.md) · [Español](docs/README.es.md) · [Deutsch](docs/README.de.md)
 
 </div>
 
@@ -94,16 +94,16 @@ flowchart LR
 
 | # | Шаг | Что делает |
 |---|---|---|
-| 1 | **Снэпшоты** ([cycle.py](src/cycle.py)) | OHLCV → индикаторы (RSI/MACD/BB/ATR/тренд) + новостной сентимент на монету |
+| 1 | **Снэпшоты** ([cycle.py](src/core/cycle.py)) | OHLCV → индикаторы (RSI/MACD/BB/ATR/тренд) + новостной сентимент на монету |
 | 2 | **Prescore** | `score = vol×0.35 + rsi×0.30 + atr×0.20 + regime_bonus×0.15` → топ-30 в AI |
-| 3 | **Рыночный контекст** ([market_context.py](src/market_context.py)) | 13 сигналов: funding, OI+ликвидации, F&G, basis, orderbook, Deribit PCR/IV, Google Trends, Glassnode, ETF flows, Reddit (CryptoBERT), stablecoin supply |
-| 4 | **SignalCombiner** ([signal_combiner.py](src/signal_combiner.py)) | `local` / `ai` / `dqn` / **`hybrid`** (SAC+AI согласие, вес зависит от режима: trending 50/50, ranging 40/60) / **`hybrid+Chronos`** (±0.05…0.15 модификатор) |
+| 3 | **Рыночный контекст** ([market_context.py](src/market/market_context.py)) | 13 сигналов: funding, OI+ликвидации, F&G, basis, orderbook, Deribit PCR/IV, Google Trends, Glassnode, ETF flows, Reddit (CryptoBERT), stablecoin supply |
+| 4 | **SignalCombiner** ([signal_combiner.py](src/core/signal_combiner.py)) | `local` / `ai` / `dqn` / **`hybrid`** (SAC+AI согласие, вес зависит от режима: trending 50/50, ranging 40/60) / **`hybrid+Chronos`** (±0.05…0.15 модификатор) |
 | 5 | **Контекстный фильтр** | Каждый из 13 сигналов двигает confidence на ±0.05…0.15 (напр. F&G ≤15 + каскад ликвидаций → confidence = 0) |
 | 6 | **Прямые контекстные сигналы** | Экстремумы (funding overheated, squeeze, imbalance >0.4, F&G ≤10/≥92) генерируют отдельные сигналы |
 | 7 | **Локальный fallback** | Если сигналов нет — индикаторная стратегия, TP шире в тренде, уже в боковике |
 | 8 | **Приоритизация** | `composite_score = confidence × (1+tp_bonus) × (1+volume_bonus) × regime_mult` |
-| 9 | **Portfolio allocation** | CVaR/Markowitz ([portfolio_optimizer.py](src/portfolio_optimizer.py)) при ≥2 сигналах, cap ×3 |
-| 10 | **Execution guards** ([order_executor.py](src/order_executor.py)) | macro blackout → слоты/cooldown → торговые часы → дубликат символа → **correlation guard** → подтверждение в Telegram → **liquidity filter** → валидация SL/TP → **Kelly sizing** → drawdown scaling → **Almgren-Chriss** → dynamic leverage → ордер |
+| 9 | **Portfolio allocation** | CVaR/Markowitz ([portfolio_optimizer.py](src/research/portfolio_optimizer.py)) при ≥2 сигналах, cap ×3 |
+| 10 | **Execution guards** ([order_executor.py](src/core/order_executor.py)) | macro blackout → слоты/cooldown → торговые часы → дубликат символа → **correlation guard** → подтверждение в Telegram → **liquidity filter** → валидация SL/TP → **Kelly sizing** → drawdown scaling → **Almgren-Chriss** → dynamic leverage → ордер |
 | 11 | **После открытия** | PositionMonitor каждые 5с: те же 13 сигналов контекста управляют выходом (force_close / tighten_sl) |
 
 **Что реально отличается по профилям** (не только параметры): Meme — единственный профиль с
@@ -172,19 +172,31 @@ flowchart TB
     style OUT fill:#3a1414,stroke:#e74c3c,color:#fff
 ```
 
-**RL / бэктест:**
+**Структура проекта:**
 
 ```
-reinforcement_learning/
-  ├── rl_env.py      — TradingEnv (Gymnasium), OBS_DIM=21, exec по open[i+1]
-  ├── train_sac.py   — SAC: 80/20 split, Optuna, walk-forward, online finetune
-  └── tune_sac.py     — Optuna hyperparameter search
+BitbotBY.command / .bat / bitbotby.sh   — запуск на своём компьютере одной кнопкой (+ -stop, -phone)
+config.py · supervisor.py · dashboard.py — настройки по умолчанию и точки входа (бот, панель)
+docker-compose.local.yml / .server.yml  — свой компьютер (лаунчер) и сервер (Caddy + HTTPS)
 
-backtest.py    — walk-forward с holdout 20%, overfit ratio
-dashboard.py   — FastAPI :8080 (приложение /app/, API, WebSocket, старая панель /legacy)
-webapp/        — приложение (React + Vite + TypeScript), собирается в образ Docker и отдаётся по /app/
-launcher/      — запуск на своём компьютере одной кнопкой (BitbotBY.command / .bat, bitbotby.sh)
-docs/          — STRATEGIES.md (инвентаризация и бэктесты), design/ (дизайн-система, контракт API)
+src/
+  core/          — торговый цикл: TradingBot, решение, ордер, сопровождение, риск, история, след решения
+  strategies/    — стратегии, базовый класс, портированные наборы
+  ai/            — AI-провайдеры и анализ, Chronos, SAC-сигнал, онлайн-обучение
+  market/        — свечи, сканер, режим и сезон рынка, корреляции, макро-календарь, индикаторы
+  sentiment/     — новости, Twitter, Telegram-каналы, CryptoBERT
+  exchange/      — Bybit (ccxt)
+  telegram_bot/  — команды и уведомления в Telegram
+  settings/      — настройки во время работы, реестр параметров, шифрованное хранилище ключей, вход
+  infra/         — Redis, шина событий, логи, health, фоновые задачи
+  dashboard/     — FastAPI: API, WebSocket, приложение /app/
+  research/      — бэктесты и отчёты: python -m src.research.backtest и др.
+reinforcement_learning/ — SAC: среда, обучение, подбор гиперпараметров
+webapp/          — приложение (React + Vite + TypeScript), собирается в образ Docker
+launcher/        — лаунчер: локальный запуск, автозапуск, телефон, сервер
+tests/           — тесты по тем же папкам, что и src/ (+ integration/ для testnet)
+deploy/          — Caddyfile, monitoring (Prometheus/Grafana), legacy/ — старый запуск с .env
+docs/            — DEPLOY_SERVER, STRATEGIES, RUNBOOK, design/, переводы README
 ```
 
 ---

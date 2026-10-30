@@ -229,8 +229,8 @@ def _finetune_on_experiences(model: Any, norm_stats: Dict[str, Any]) -> None:
     добавляет в replay buffer модели и запускает gradient steps.
     Пропускается если файл пуст или содержит < 50 записей.
     """
-    from src.experience_buffer import filter_by_market_type as _filter_mtype
-    from src.experience_buffer import load_ai_only as _load_exp
+    from src.ai.experience_buffer import filter_by_market_type as _filter_mtype
+    from src.ai.experience_buffer import load_ai_only as _load_exp
 
     _profile = os.getenv("SAC_PROFILE", "")
     exp_path = (
@@ -564,11 +564,11 @@ if __name__ == "__main__":
         format="%(asctime)s %(levelname)-8s %(name)s — %(message)s",
     )
 
-    from src.data_loader import DataLoader
+    from src.market.data_loader import DataLoader
 
     async def _run() -> None:
-        from src.bybit_api import BybitAPI
-        from src.market_scanner import MarketScanner
+        from src.exchange.bybit_api import BybitAPI
+        from src.market.market_scanner import MarketScanner
 
         months = int(os.getenv("BT_MONTHS", "6"))
         timeframe = os.getenv("BT_TIMEFRAME", "15m")
@@ -598,7 +598,7 @@ if __name__ == "__main__":
                     continue
                 # Считаем индикаторы (RSI, MACD, BB, ATR) на сырых ценах.
                 # TradingEnv нормализует всё относительно текущего close сам.
-                from src.indicators import add_indicators
+                from src.market.indicators import add_indicators
 
                 df_sym = add_indicators(df_sym)
                 frames.append(df_sym)

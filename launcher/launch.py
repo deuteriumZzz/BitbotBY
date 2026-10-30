@@ -452,7 +452,7 @@ def cmd_import_env(env_path: Path, overwrite: bool) -> int:
         say("Сначала запустите BitbotBY (BitbotBY.command), потом повторите.")
         return 2
     say("Переношу ключи из .env в зашифрованное хранилище (значения не показываются)…")
-    cmd = compose_cmd(["exec", "-T", "dashboard", "python", "-m", "src.secrets_import"])
+    cmd = compose_cmd(["exec", "-T", "dashboard", "python", "-m", "src.settings.secrets_import"])
     if overwrite:
         cmd.append("--overwrite")
     proc = run(
@@ -477,7 +477,7 @@ def cmd_import_env(env_path: Path, overwrite: bool) -> int:
 # Одна команда на сервере: готовит .server/server.env (мастер-ключ хранилища и ключ
 # панели — один раз и навсегда), запускает всё и, если Telegram ещё не подключён,
 # спрашивает токен бота и находит ваш чат по коду. Ключи уходят в зашифрованное
-# хранилище тем же src.secrets_import, что и import-env; .env не нужен.
+# хранилище тем же src.settings.secrets_import, что и import-env; .env не нужен.
 
 SERVER_DIR = ROOT / ".server"
 SERVER_COMPOSE = ROOT / "docker-compose.server.yml"
@@ -570,7 +570,7 @@ def wait_chat(token: str, code: str, timeout: int = 300) -> Optional[str]:
 
 def server_telegram_ready() -> bool:
     check = (
-        "from src import secrets_store as s;"
+        "from src.settings import secrets_store as s;"
         "print(bool(s.get_value('TELEGRAM_BOT_TOKEN') and s.get_value('TELEGRAM_CHAT_ID')))"
     )
     proc = run(
@@ -605,7 +605,7 @@ def setup_server_telegram() -> bool:
                 "dashboard",
                 "python",
                 "-m",
-                "src.secrets_import",
+                "src.settings.secrets_import",
                 "--overwrite",
             ]
         ),

@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 _ROOT = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(_ROOT, ".env"))
 
-from src.logger import setup_logging  # noqa: E402
+from src.infra.logger import setup_logging  # noqa: E402
 
 setup_logging(
     level=os.getenv("LOG_LEVEL", "INFO"),
@@ -27,10 +27,10 @@ import logging  # noqa: E402
 import signal  # noqa: E402
 
 from config import Config  # noqa: E402
-from src.health_server import heartbeat_loop, start_health_server  # noqa: E402
-from src.secrets_store import apply_secrets  # noqa: E402
-from src.settings_registry import effective_config  # noqa: E402
-from src.trading_bot import TradingBot  # noqa: E402
+from src.core.trading_bot import TradingBot  # noqa: E402
+from src.infra.health_server import heartbeat_loop, start_health_server  # noqa: E402
+from src.settings.secrets_store import apply_secrets  # noqa: E402
+from src.settings.settings_registry import effective_config  # noqa: E402
 
 logger = logging.getLogger(__name__)
 

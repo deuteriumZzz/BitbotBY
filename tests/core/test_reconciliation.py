@@ -1,0 +1,327 @@
+"""
+Тесты для TradingBot._reconcile_positions.
+
+Покрывают: удаление устаревших позиций, восстановление потерянных позиций,
+пропуск нулевых объёмов, нормализацию символов,
+обработку сбоев API, обход при paper-trading.
+"""
+
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _exchange_pos(
+    symbol: str,
+    side: str = "buy",
+    contracts: float = 1.0,
+    entry: float = 50000.0,
+) -> dict:
+    return {"symbol": symbol, "side": side, "contracts": contracts, "entryPrice": entry}
+
+
+_PATCH_KEYS = [
+    "RedisClient",
+    "BybitAPI",
+    "DataLoader",
+    "PortfolioManager",
+    "RiskManager",
+    "MarketScanner",
+    "NewsAnalyzer",
+    "AIAnalyzer",
+    "SignalCombiner",
+    "RegimeDetector",
+    "PortfolioOptimizer",
+    "CorrelationFilter",
+    "TradeHistory",
+    "TelegramNotifier",
+    "TradingStrategy",
+]
+
+
+def _make_patches() -> dict:
+    # Используем экземпляры MagicMock() (не класс), чтобы вызовы вроде
+    # MarketScanner(api, loader) не передавали Mock как spec= аргументы,
+    # что вызывает InvalidSpecError в Python 3.11+.
+    return {k: MagicMock() for k in _PATCH_KEYS}
+
+
+def _cfg_defaults(cfg):
+    cfg.PAPER_TRADING = False
+    cfg.INITIAL_BALANCE = 1000.0
+    cfg.RISK_PER_TRADE = 0.02
+    cfg.CORRELATION_WINDOW = 50
+    cfg.MAX_CORRELATION = 0.7
+    cfg.MODE = "local"
+    cfg.BYBIT_API_KEY = cfg.BYBIT_API_SECRET = ""
+    cfg.ANTHROPIC_API_KEY = cfg.DEEPSEEK_API_KEY = ""
+    cfg.OPENAI_API_KEY = ""
+    cfg.TELEGRAM_BOT_TOKEN = ""
+    cfg.SILENT_DEATH_HOURS = 6.0
+    cfg.REGIME_CACHE_TTL = "300"
+    cfg.STOP_LOSS_PERCENT = 0.05
+
+
+def make_bot(paper: bool = False):
+    with patch.multiple("src.core.trading_bot", **_make_patches()):
+        with patch("src.core.trading_bot.Config") as cfg:
+            _cfg_defaults(cfg)
+            cfg.PAPER_TRADING = paper
+            from src.core.trading_bot import TradingBot
+
+            bot = TradingBot()
+            bot.api.fetch_positions = AsyncMock(  # type: ignore[method-assign]
+                return_value=[]
+            )
+            return bot
+
+
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
+
+
+class TestReconcilePositions:
+
+    @pytest.mark.asyncio
+    async def test_paper_trading_skips_fetch(self):
+        """В режиме PAPER_TRADING reconcile не должен вызывать fetch_positions."""
+        bot = make_bot()
+        with patch("src.core.trading_bot.Config") as cfg:
+            cfg.PAPER_TRADING = True
+            await bot._reconcile_positions()
+        bot.api.fetch_positions.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_removes_stale_position(self):
+        """Позиция в _monitored, отсутствующая на бирже, должна быть удалена."""
+        bot = make_bot()
+        bot._monitored["BTC/USDT"] = {"qty": 0.01, "entry": 50000.0, "side": "buy"}
+        bot.api.fetch_positions = AsyncMock(return_value=[])
+
+        await bot._reconcile_positions()
+
+        assert "BTC/USDT" not in bot._monitored
+
+    @pytest.mark.asyncio
+    async def test_recovers_lost_position(self):
+        """Позиция на бирже, отсутствующая в _monitored, должна быть восстановлена."""
+        bot = make_bot()
+        bot.api.fetch_positions = AsyncMock(
+            return_value=[
+                _exchange_pos("BTC/USDT", side="buy", contracts=0.5, entry=45000.0)
+            ]
+        )
+
+        await bot._reconcile_positions()
+
+        assert "BTC/USDT" in bot._monitored
+        pos = bot._monitored["BTC/USDT"]
+        assert pos["qty"] == 0.5
+        assert pos["entry"] == 45000.0
+        assert pos["side"] == "buy"
+        assert pos["trade_id"] is None
+
+    @pytest.mark.asyncio
+    async def test_skips_zero_qty_position(self):
+        """Позиция на бирже с contracts=0 не должна добавляться в _monitored."""
+        bot = make_bot()
+        bot.api.fetch_positions = AsyncMock(
+            return_value=[_exchange_pos("ETH/USDT", contracts=0.0)]
+        )
+
+        await bot._reconcile_positions()
+
+        assert "ETH/USDT" not in bot._monitored
+
+    @pytest.mark.asyncio
+    async def test_normalises_colon_symbol(self):
+        """ccxt может вернуть 'BTC/USDT:USDT' — должно нормализоваться до 'BTC/USDT'."""
+        bot = make_bot()
+        bot.api.fetch_positions = AsyncMock(
+            return_value=[_exchange_pos("BTC/USDT:USDT", contracts=1.0, entry=60000.0)]
+        )
+
+        await bot._reconcile_positions()
+
+        assert "BTC/USDT" in bot._monitored
+        assert "BTC/USDT:USDT" not in bot._monitored
+
+    @pytest.mark.asyncio
+    async def test_api_failure_leaves_monitored_unchanged(self):
+        """При исключении в fetch_positions _monitored должен остаться нетронутым."""
+        bot = make_bot()
+        bot._monitored["SOL/USDT"] = {"qty": 10.0, "entry": 150.0, "side": "buy"}
+        bot.api.fetch_positions = AsyncMock(side_effect=Exception("network error"))
+        bot.telegram.notify = AsyncMock()
+
+        await bot._reconcile_positions()
+
+        assert "SOL/USDT" in bot._monitored
+        # Оператор должен узнать, что сверка провалилась — позиции могли
+        # потеряться и остаться без мониторинга SL/TP.
+        bot.telegram.notify.assert_awaited_once()
+        assert "БЕЗ" in bot.telegram.notify.await_args.args[0]
+
+    @pytest.mark.asyncio
+    async def test_stale_and_recovered_in_same_call(self):
+        """Удаляет один символ и восстанавливает другой одновременно."""
+        bot = make_bot()
+        bot._monitored["OLD/USDT"] = {"qty": 1.0, "entry": 100.0, "side": "buy"}
+        bot.api.fetch_positions = AsyncMock(
+            return_value=[_exchange_pos("NEW/USDT", contracts=2.0, entry=200.0)]
+        )
+
+        await bot._reconcile_positions()
+
+        assert "OLD/USDT" not in bot._monitored
+        assert "NEW/USDT" in bot._monitored
+
+    @pytest.mark.asyncio
+    async def test_existing_monitored_not_overwritten(self):
+        """Позиция в _monitored и на бирже одновременно не должна перезаписываться."""
+        bot = make_bot()
+        bot._monitored["BTC/USDT"] = {
+            "qty": 1.0,
+            "entry": 50000.0,
+            "side": "buy",
+            "stop_loss": 48000.0,
+        }
+        bot.api.fetch_positions = AsyncMock(
+            return_value=[_exchange_pos("BTC/USDT", contracts=1.0, entry=51000.0)]
+        )
+
+        await bot._reconcile_positions()
+
+        assert bot._monitored["BTC/USDT"]["entry"] == 50000.0
+        assert bot._monitored["BTC/USDT"]["stop_loss"] == 48000.0
+
+    @pytest.mark.asyncio
+    async def test_negative_qty_skipped(self):
+        """Отрицательное значение contracts должно считаться нулевым и пропускаться."""
+        bot = make_bot()
+        bot.api.fetch_positions = AsyncMock(
+            return_value=[_exchange_pos("ADA/USDT", contracts=-0.5)]
+        )
+
+        await bot._reconcile_positions()
+
+        assert "ADA/USDT" not in bot._monitored
+
+
+def _open_trade(
+    trade_id: int,
+    symbol: str,
+    entry_time: str,
+    action: str = "buy",
+    entry_price: float = 100.0,
+    quantity: float = 1.0,
+) -> dict:
+    return {
+        "id": trade_id,
+        "symbol": symbol,
+        "action": action,
+        "entry_price": entry_price,
+        "quantity": quantity,
+        "confidence": 0.7,
+        "entry_time": entry_time,
+    }
+
+
+class TestReconcilePaperPositions:
+    """Тесты для TradingBot._reconcile_paper_positions (paper-режим)."""
+
+    @pytest.mark.asyncio
+    async def test_no_open_trades_is_noop(self):
+        """Пустой список открытых сделок в БД ничего не меняет."""
+        bot = make_bot(paper=True)
+        bot.trade_history.get_open_trades = AsyncMock(return_value=[])
+        bot.trade_history.mark_orphaned = AsyncMock()
+
+        await bot._reconcile_paper_positions()
+
+        assert bot._monitored == {}
+        bot.trade_history.mark_orphaned.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_restores_lost_position_from_db(self):
+        """Открытая в БД сделка без записи в _monitored должна восстановиться."""
+        bot = make_bot(paper=True)
+        bot.trade_history.get_open_trades = AsyncMock(
+            return_value=[
+                _open_trade(1, "BTC/USDT", "2026-06-29T06:00:00", entry_price=50000.0)
+            ]
+        )
+        bot.trade_history.mark_orphaned = AsyncMock()
+
+        await bot._reconcile_paper_positions()
+
+        assert "BTC/USDT" in bot._monitored
+        pos = bot._monitored["BTC/USDT"]
+        assert pos["trade_id"] == 1
+        assert pos["entry"] == 50000.0
+        assert pos["side"] == "buy"
+        assert pos["stop_loss"] == pytest.approx(50000.0 * 0.95)
+        bot.trade_history.mark_orphaned.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_duplicate_symbol_keeps_latest_orphans_rest(self):
+        """Несколько open-строк на один символ: остаётся самая свежая, остальные orphaned."""
+        bot = make_bot(paper=True)
+        bot.trade_history.get_open_trades = AsyncMock(
+            return_value=[
+                _open_trade(1, "HYPE/USDT", "2026-06-29T06:00:00", entry_price=60.0),
+                _open_trade(2, "HYPE/USDT", "2026-07-01T10:00:00", entry_price=63.0),
+                _open_trade(3, "HYPE/USDT", "2026-07-02T12:00:00", entry_price=62.5),
+            ]
+        )
+        bot.trade_history.mark_orphaned = AsyncMock()
+
+        await bot._reconcile_paper_positions()
+
+        assert bot._monitored["HYPE/USDT"]["trade_id"] == 3
+        assert bot._monitored["HYPE/USDT"]["entry"] == 62.5
+        orphaned_ids = {
+            c.args[0] for c in bot.trade_history.mark_orphaned.call_args_list
+        }
+        assert orphaned_ids == {1, 2}
+
+    @pytest.mark.asyncio
+    async def test_symbol_already_monitored_orphans_all_db_rows(self):
+        """Если символ уже восстановлен из Redis — все DB-строки по нему лишние."""
+        bot = make_bot(paper=True)
+        bot._monitored["ETH/USDT"] = {
+            "qty": 1.0,
+            "entry": 3000.0,
+            "side": "buy",
+            "trade_id": 99,
+        }
+        bot.trade_history.get_open_trades = AsyncMock(
+            return_value=[
+                _open_trade(5, "ETH/USDT", "2026-07-01T00:00:00", entry_price=2900.0)
+            ]
+        )
+        bot.trade_history.mark_orphaned = AsyncMock()
+
+        await bot._reconcile_paper_positions()
+
+        assert bot._monitored["ETH/USDT"]["trade_id"] == 99
+        assert bot._monitored["ETH/USDT"]["entry"] == 3000.0
+        bot.trade_history.mark_orphaned.assert_awaited_once_with(5)
+
+    @pytest.mark.asyncio
+    async def test_db_error_leaves_monitored_unchanged(self):
+        """Сбой чтения БД не должен ронять инициализацию бота."""
+        bot = make_bot(paper=True)
+        bot._monitored["SOL/USDT"] = {"qty": 1.0, "entry": 150.0, "side": "buy"}
+        bot.trade_history.get_open_trades = AsyncMock(
+            side_effect=Exception("db locked")
+        )
+
+        await bot._reconcile_paper_positions()
+
+        assert "SOL/USDT" in bot._monitored

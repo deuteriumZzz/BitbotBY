@@ -12,7 +12,7 @@ train-long:
 
 train-docker:
 	@echo ">>> Starting SAC trainer in Docker (runs once, ~60 min)..."
-	docker compose --profile training up trainer --build
+	$(LEGACY_COMPOSE) --profile training up trainer --build
 	@echo ">>> Trainer done. Model saved to models/sac_model.zip"
 
 tune:
@@ -35,7 +35,7 @@ tune-altcoin:
 retrain:
 	@echo ">>> Walk-forward retraining (4-month windows, 1-month step)..."
 	PYTHONPATH=. python3 -c "import asyncio, os; \
-from src.data_loader import DataLoader; \
+from src.market.data_loader import DataLoader; \
 from reinforcement_learning.train_sac import train_walk_forward; \
 async def r(): \
     l = DataLoader(); \
@@ -47,22 +47,22 @@ asyncio.run(r())"
 # ── Backtesting ────────────────────────────────────────────────────────────────
 backtest:
 	@echo ">>> Running walk-forward backtest..."
-	PYTHONPATH=. python3 backtest.py
+	PYTHONPATH=. python3 -m src.research.backtest
 
 backtest-eth:
-	PYTHONPATH=. BT_SYMBOL=ETH/USDT python3 backtest.py
+	PYTHONPATH=. BT_SYMBOL=ETH/USDT python3 -m src.research.backtest
 
 alpha-report:
 	@echo ">>> Checking statistical significance of real paper/live trades..."
-	PYTHONPATH=. python3 paper_alpha_report.py
+	PYTHONPATH=. python3 -m src.research.paper_alpha_report
 
 live-divergence:
 	@echo ">>> Comparing live execution price vs backtest impact model..."
-	PYTHONPATH=. python3 backtest_live_divergence.py
+	PYTHONPATH=. python3 -m src.research.backtest_live_divergence
 
 ai-isolation:
 	@echo ">>> Isolating AI(LLM) signal contribution (uses real AI provider calls)..."
-	PYTHONPATH=. python3 ai_signal_isolation_backtest.py
+	PYTHONPATH=. python3 -m src.research.ai_signal_isolation_backtest
 
 # ── Paper trading (no real orders) ────────────────────────────────────────────
 paper:
@@ -98,37 +98,40 @@ fmt:
 	python3 -m black src/ tests/ reinforcement_learning/ config.py dashboard.py supervisor.py
 	python3 -m isort --profile black src/ tests/ reinforcement_learning/ config.py dashboard.py supervisor.py
 
-# ── Docker ─────────────────────────────────────────────────────────────────────
+# ── Docker: старый вариант с .env (deploy/legacy) ───────────────────────────────
+# Обычный запуск — ярлык BitbotBY (launcher/launch.py), на сервере — launch.py server.
+LEGACY_COMPOSE := docker compose -f deploy/legacy/docker-compose.yml
+
 up:
-	docker compose up -d --build
+	$(LEGACY_COMPOSE) up -d --build
 
 down:
-	docker compose down
+	$(LEGACY_COMPOSE) down
 
 rebuild:
 	@echo ">>> Full reset: removing containers, volumes and images..."
-	docker compose down -v
+	$(LEGACY_COMPOSE) down -v
 	docker image rm bitbotby-bot bitbotby-dashboard 2>/dev/null || true
 	docker builder prune -f
 	@echo ">>> Rebuilding from scratch..."
-	docker compose build --no-cache
-	docker compose up -d
+	$(LEGACY_COMPOSE) build --no-cache
+	$(LEGACY_COMPOSE) up -d
 	@echo ">>> Done. Run 'make logs' to watch startup."
 
 logs:
-	docker compose logs -f bot
+	$(LEGACY_COMPOSE) logs -f bot
 
 htpasswd:
 	$(eval DASHBOARD_USER := $(shell grep '^DASHBOARD_USER=' .env | cut -d= -f2))
 	$(eval DASHBOARD_PASSWORD := $(shell grep '^DASHBOARD_PASSWORD=' .env | cut -d= -f2))
-	@docker run --rm httpd:alpine htpasswd -nb "$(DASHBOARD_USER)" "$(DASHBOARD_PASSWORD)" > nginx/htpasswd
-	@echo ">>> nginx/htpasswd создан."
+	@docker run --rm httpd:alpine htpasswd -nb "$(DASHBOARD_USER)" "$(DASHBOARD_PASSWORD)" > deploy/legacy/nginx/htpasswd
+	@echo ">>> deploy/legacy/nginx/htpasswd создан."
 
 setup:
 	@echo ">>> [1/3] Генерирую htpasswd..."
 	@$(MAKE) htpasswd
 	@echo ">>> [2/3] Останавливаю старые контейнеры..."
-	@docker compose down
+	@$(LEGACY_COMPOSE) down
 	@echo ">>> [3/3] Собираю и запускаю всё..."
-	@docker compose up -d --build
+	@$(LEGACY_COMPOSE) up -d --build
 	@echo ">>> Готово! Dashboard: http://localhost:8080"

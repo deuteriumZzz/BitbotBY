@@ -1,0 +1,136 @@
+"""
+Управление портфелем: отслеживание баланса, позиций и ребалансировка.
+
+Менеджер портфеля отслеживает баланс USDT, открытые позиции,
+рассчитывает стоимость портфеля и выполняет ребалансировку.
+"""
+
+from __future__ import annotations
+
+import logging
+from datetime import datetime
+from typing import Dict
+
+from config import Config
+from src.infra.redis_client import RedisClient
+
+
+class PortfolioManager:
+    """
+    Менеджер портфеля криптовалютного трейдинга.
+
+    Отвечает за отслеживание баланса, позиций, обновление портфеля
+    на основе торговых операций, расчёт стоимости и ребалансировку.
+    Использует Redis для сохранения состояния между запусками.
+    """
+
+    def __init__(self, initial_balance: float, redis_client=None) -> None:
+        """
+        Инициализирует менеджер портфеля.
+
+        :param initial_balance: Начальный баланс в USDT.
+        :param redis_client: Внешний RedisClient (если None — создаётся новый).
+        """
+        self.initial_balance = initial_balance
+        self.current_balance = initial_balance
+        self.positions: Dict[str, float] = {}
+        self.commission_rate: float = Config.COMMISSION_RATE
+        self.total_commissions: float = 0.0
+        if redis_client is not None:
+            self.redis = redis_client
+        else:
+            self.redis = RedisClient()
+        self.logger = logging.getLogger(__name__)
+
+    async def update_portfolio(
+        self,
+        symbol: str,
+        action: str,
+        quantity: float,
+        price: float,
+    ) -> bool:
+        """
+        Обновляет портфель на основе торговой операции.
+
+        Для покупки проверяет достаточность баланса, для продажи —
+        наличие позиции. Сохраняет новое состояние в Redis.
+
+        :param symbol: Символ актива (например, "BTC").
+        :param action: Действие ("buy" или "sell").
+        :param quantity: Количество актива.
+        :param price: Цена актива.
+        :return: True если операция выполнена, False иначе.
+        """
+        try:
+            if action == "buy":
+                commission = quantity * price * self.commission_rate
+                cost = quantity * price + commission
+                if cost <= self.current_balance:
+                    self.current_balance -= cost
+                    self.total_commissions += commission
+                    self.positions[symbol] = self.positions.get(symbol, 0) + quantity
+                    await self._save_portfolio_state()
+                    return True
+
+            elif action == "sell":
+                held = self.positions.get(symbol, 0.0)
+                # В paper-режиме позиция не регистрировалась через update_portfolio
+                # при открытии (OrderExecutor использует _set_paper_balance напрямую),
+                # поэтому пропускаем проверку holdings и доверяем вызывающему коду.
+                if Config.PAPER_TRADING or held >= quantity:
+                    commission = quantity * price * self.commission_rate
+                    revenue = quantity * price - commission
+                    self.current_balance += revenue
+                    self.total_commissions += commission
+                    if held > 0:
+                        self.positions[symbol] = held - quantity
+                        if self.positions[symbol] <= 0:
+                            del self.positions[symbol]
+                    await self._save_portfolio_state()
+                    return True
+
+            return False
+
+        except Exception as e:
+            self.logger.error("Ошибка обновления портфеля: %s", e, exc_info=True)
+            return False
+
+    async def get_portfolio_value(self, current_prices: Dict[str, float]) -> float:
+        """
+        Рассчитывает общую стоимость портфеля.
+
+        Суммирует текущий баланс и стоимость всех открытых позиций.
+        Позиции без цены в словаре игнорируются.
+
+        :param current_prices: Текущие цены активов по символу.
+        :return: Общая стоимость портфеля в USDT.
+        """
+        total_value = self.current_balance
+        for symbol, quantity in self.positions.items():
+            if symbol in current_prices:
+                total_value += quantity * current_prices[symbol]
+        return total_value
+
+    async def _save_portfolio_state(self) -> None:
+        """
+        Сохраняет текущее состояние портфеля в Redis.
+
+        Записывает timestamp, баланс, позиции и накопленные комиссии
+        под ключом "portfolio_state".
+        """
+        state = {
+            "timestamp": datetime.now().isoformat(),
+            "balance": self.current_balance,
+            "positions": self.positions,
+            "total_commissions": self.total_commissions,
+        }
+        _mode = "paper" if Config.PAPER_TRADING else "live"
+        self.redis.save_trading_state(f"portfolio_state_{_mode}", state)
+
+    def get_positions(self) -> Dict[str, float]:
+        """
+        Возвращает копию текущих открытых позиций.
+
+        :return: Словарь {символ: количество}.
+        """
+        return self.positions.copy()

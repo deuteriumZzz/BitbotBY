@@ -32,10 +32,12 @@ from fastapi.responses import JSONResponse
 from starlette.requests import HTTPConnection
 
 from config import Config
-from src import ai_providers, background_jobs, bot_bus, secrets_store
-from src import settings_registry as registry
+from src.ai import ai_providers
 from src.dashboard import auth, data
-from src.runtime_config import RISK_PRESETS, RuntimeConfig
+from src.infra import background_jobs, bot_bus
+from src.settings import secrets_store
+from src.settings import settings_registry as registry
+from src.settings.runtime_config import RISK_PRESETS, RuntimeConfig
 
 
 async def _owner_only(conn: HTTPConnection) -> None:
@@ -128,7 +130,7 @@ def build_state() -> Dict[str, Any]:
             "season": _redis_json(r, "bot:season_index"),
             "fear_greed": _redis_json(r, "bot:fear_greed"),
         },
-        # Итог последнего цикла по узлам конвейера (src/decision_trace.py).
+        # Итог последнего цикла по узлам конвейера (src/core/decision_trace.py).
         "cycle": _redis_json(r, "bot:last_cycle"),
         "balance": portfolio.get("balance", Config.INITIAL_BALANCE),
         "slots": {"used": len(positions), "max": max_pos},
@@ -462,7 +464,7 @@ async def get_command(request_id: str) -> JSONResponse:
     return JSONResponse({"request_id": request_id, "status": "done", "result": res})
 
 
-# ── Настройки (реестр src/settings_registry.py) ───────────────────────────────
+# ── Настройки (реестр src/settings/settings_registry.py) ────────────────────
 
 
 def _runtime_config(r: Any) -> Optional[RuntimeConfig]:
@@ -472,7 +474,7 @@ def _runtime_config(r: Any) -> Optional[RuntimeConfig]:
 
 @router.get("/api/risk/presets")
 async def get_risk_presets() -> JSONResponse:
-    """Пресеты риска — те же, что у Telegram /risk (src/runtime_config.py)."""
+    """Пресеты риска — те же, что у Telegram /risk (src/settings/runtime_config.py)."""
     return JSONResponse(RISK_PRESETS)
 
 
@@ -800,7 +802,7 @@ async def post_launcher(request: Request) -> JSONResponse:
     return JSONResponse({"id": req["id"]})
 
 
-# ── AI-провайдеры (src/ai_providers.py) ───────────────────────────────────────
+# ── AI-провайдеры (src/ai/ai_providers.py) ───────────────────────────────────────
 
 
 def _model_env(p: ai_providers.Provider) -> str:
@@ -966,7 +968,7 @@ async def get_ai_models(provider_id: str, request: Request) -> JSONResponse:
     return JSONResponse({"provider": p.id, "models": ids})
 
 
-# ── Ключи API (src/secrets_store.py) ──────────────────────────────────────────
+# ── Ключи API (src/settings/secrets_store.py) ──────────────────────────────
 
 
 def _secrets_unavailable(request: Request) -> Optional[JSONResponse]:

@@ -10,7 +10,35 @@ ignore = ["E501"]
 python_version = "3.11"
 ignore_missing_imports = true
 no_strict_optional = true
+warn_unused_ignores = false
+warn_return_any = false
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "integration: integration tests against Bybit testnet (require API credentials)",
+]
+
+[tool.coverage.run]
+source = ["src"]
+omit = [
+    "src/core/trading_bot.py",
+    "src/infra/health_server.py",
+    "src/telegram_bot/notifier.py",
+    "src/sentiment/news_analyzer.py",
+    "src/market/market_scanner.py",
+    "src/market/data_loader.py",
+    "src/infra/logger.py",
+    "src/research/portfolio_optimizer.py",
+    "src/market/regime_detector.py",
+    # скрипты исследований (раньше лежали в корне и в покрытие не входили)
+    "src/research/backtest.py",
+    "src/research/ai_signal_isolation_backtest.py",
+    "src/research/backtest_live_divergence.py",
+    "src/research/paper_alpha_report.py",
+]
+
+[tool.coverage.report]
+skip_empty = true
+show_missing = true

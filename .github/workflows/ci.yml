@@ -43,9 +43,8 @@ jobs:
 
       - name: Syntax check
         run: |
-          python -m py_compile src/*.py
-          python -m py_compile reinforcement_learning/*.py
-          python -m py_compile dashboard.py supervisor.py backtest.py
+          python -m compileall -q src reinforcement_learning launcher
+          python -m py_compile config.py dashboard.py supervisor.py
 
       - name: Run tests with coverage
         run: pytest tests/ --ignore=tests/integration -v --tb=short --cov=src --cov-report=term-missing --cov-fail-under=50
@@ -108,12 +107,12 @@ jobs:
       - name: Backtest import and structure check
         run: |
           python -c "
-          import backtest
+          from src.research import backtest
           assert callable(backtest.run_strategy), 'run_strategy missing'
           assert callable(backtest.load_data), 'load_data missing'
           assert callable(backtest.aggregate_results), 'aggregate_results missing'
           assert callable(backtest.print_report), 'print_report missing'
-          print('backtest.py structure OK')
+          print('src/research/backtest.py structure OK')
           "
 
       - name: Backtest live smoke (BTC/USDT, 1 month, 4h)
@@ -124,4 +123,4 @@ jobs:
           BT_MONTHS: "1"
           BT_TIMEFRAME: 4h
           PAPER_TRADING: "true"
-        run: python backtest.py
+        run: python -m src.research.backtest

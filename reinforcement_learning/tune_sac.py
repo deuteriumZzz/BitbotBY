@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 _SAC_PROFILE = os.getenv("SAC_PROFILE", "")
 
-from src.runtime_config import BLUECHIP_BASES  # noqa: E402
+from src.settings.runtime_config import BLUECHIP_BASES  # noqa: E402
 
 _ALTCOIN_EXCLUDE: frozenset = BLUECHIP_BASES | {"USDC", "USDT", "BUSD", "TUSD", "DAI"}
 _TUNE_TOP_N = int(os.getenv("TUNE_TOP_N", "5"))  # символов для тюнинга
@@ -219,7 +219,7 @@ async def _get_tune_symbols(api: "Any", loader: "Any") -> List[str]:
         logger.info("TUNE_SYMBOLS override: %s", symbols)
         return symbols
 
-    from src.market_scanner import MarketScanner
+    from src.market.market_scanner import MarketScanner
 
     scanner = MarketScanner(api, loader)
 
@@ -257,8 +257,8 @@ if __name__ == "__main__":
         format="%(asctime)s %(levelname)-8s %(name)s — %(message)s",
     )
 
-    from src.bybit_api import BybitAPI
-    from src.data_loader import DataLoader
+    from src.exchange.bybit_api import BybitAPI
+    from src.market.data_loader import DataLoader
 
     async def _run() -> None:
         api = BybitAPI()

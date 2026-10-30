@@ -55,10 +55,10 @@ def testnet_creds() -> dict:
 async def bybit_api(testnet_creds):
     from unittest.mock import patch
 
-    from src.bybit_api import BybitAPI
+    from src.exchange.bybit_api import BybitAPI
 
     redis_mock = _make_redis_client_mock()
-    with patch("src.bybit_api.RedisClient", return_value=redis_mock):
+    with patch("src.exchange.bybit_api.RedisClient", return_value=redis_mock):
         api = BybitAPI()
         await api.initialize(
             api_key=testnet_creds["key"],
