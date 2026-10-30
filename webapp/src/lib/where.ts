@@ -14,10 +14,10 @@ export interface Home {
   where: string;
 }
 
-const RISK: Home = { tab: "bots", node: "risk", where: "Бот → Риск → Как рискуем" };
-const RULES: Home = { tab: "bots", node: "risk", where: "Бот → Риск → Правила защиты" };
-const CONFIRM: Home = { tab: "bots", node: "order", where: "Бот → Ордер → Открытие сделок" };
-const WHAT: Home = { tab: "bots", node: "scan", where: "Бот → Сканер → Что торговать" };
+const RISK: Home = { tab: "bots", node: "risk", where: "Цепочка → Риск → Как рискуем" };
+const RULES: Home = { tab: "bots", node: "risk", where: "Цепочка → Риск → Правила защиты" };
+const CONFIRM: Home = { tab: "bots", node: "order", where: "Цепочка → Ордер → Открытие сделок" };
+const WHAT: Home = { tab: "bots", node: "scan", where: "Цепочка → Сканер → Что торговать" };
 
 export const OWN_HOME: Record<string, Home> = {
   RISK_PER_TRADE: RISK,
@@ -27,14 +27,14 @@ export const OWN_HOME: Record<string, Home> = {
   AUTO_EXECUTE: CONFIRM,
   TELEGRAM_CONFIRM_TIMEOUT: CONFIRM,
   CONFIRM_ON_TIMEOUT: CONFIRM,
-  MODE: { tab: "bots", where: "Бот → Кто принимает решение" },
+  MODE: { tab: "bots", where: "Цепочка → Кто принимает решение" },
   CHRONOS_ENABLED: WHAT,
   MARKET_TYPE: WHAT,
   SEASON_SWITCH_MODE: WHAT,
   PAPER_GUARDS_OFF: RULES,
-  LOCAL_FALLBACK: { tab: "bots", node: "strat", where: "Бот → Стратегии" },
-  TRADING_HOURS: { tab: "bots", node: "scan", where: "Бот → Сканер → Часы торговли" },
+  LOCAL_FALLBACK: { tab: "bots", node: "strat", where: "Цепочка → Стратегии" },
+  TRADING_HOURS: { tab: "bots", node: "scan", where: "Цепочка → Сканер → Часы торговли" },
   TESTNET: { tab: "settings", pane: "conn", where: "Настройки → Подключения → Bybit" },
   QUIET_HOURS: { tab: "settings", pane: "main", where: "Настройки → Основное → Уведомления" },
-  AI_PROVIDER: { tab: "bots", node: "ai", where: "Бот → AI-цепочка" },
+  AI_PROVIDER: { tab: "bots", node: "ai", where: "Цепочка → AI-цепочка" },
 };
