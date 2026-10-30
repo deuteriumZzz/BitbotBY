@@ -64,6 +64,9 @@ function HealthStrip() {
     const id = s.ai?.last || s.bot?.ai;
     return id ? (s.ai?.providers.find((p) => p.id === id)?.name ?? id) : "";
   });
+  const secrets = useStore((s) => s.secrets);
+  const aiOk = useStore((s) => Boolean(s.ai?.chain.length));
+  const setTab = useStore((s) => s.setTab);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 5000);
@@ -110,6 +113,16 @@ function HealthStrip() {
         ]
       : []),
   ];
+  // Огни подключений: биржа, AI и Telegram; нажатие ведёт к карте в «Настройках».
+  const light = (id: string) => {
+    const st = secrets?.find((x) => x.service === id)?.status;
+    return st === "ok" ? "ok" : st === "bad" ? "bad" : "warn";
+  };
+  const links: [string, string][] = [
+    ["Bybit", light("bybit")],
+    ["AI", aiOk ? "ok" : "bad"],
+    ["Telegram", light("telegram")],
+  ];
   return (
     <ul className="health" aria-label="Состояние системы">
       {items.map(([k, v, c]) => (
@@ -119,6 +132,23 @@ function HealthStrip() {
           <b>{v}</b>
         </li>
       ))}
+      {secrets && (
+        <li className="health-links">
+          <small>Связи</small>
+          <button
+            type="button"
+            aria-label={`Подключения: ${links.map(([n, c]) => `${n} ${c === "ok" ? "работает" : "не работает"}`).join(", ")}. Открыть карту`}
+            onClick={() => setTab("settings")}
+          >
+            {links.map(([n, c]) => (
+              <span key={n}>
+                <span className={`dot ${c}`} />
+                {n}
+              </span>
+            ))}
+          </button>
+        </li>
+      )}
     </ul>
   );
 }

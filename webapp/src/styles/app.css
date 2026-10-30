@@ -1571,3 +1571,10 @@ button.kl-chip:focus-visible{outline:2px solid var(--c-ink);outline-offset:2px}
 @container dev (max-width:899px){ .term>.idle{order:0} }
 @container dev (max-width:599px){ .idle{grid-template-columns:10px minmax(0,1fr)} .idle .btn{grid-column:2;justify-self:start} }
 @media (prefers-reduced-motion:reduce){ .idle{animation:none} }
+
+/* ---------- Огни подключений в строке здоровья ---------- */
+.health-links button{all:unset;box-sizing:border-box;cursor:pointer;display:inline-flex;align-items:center;gap:12px;padding:2px 8px;margin:-2px -8px;border-radius:var(--r-pill);transition:background var(--dur-norm) var(--ease-out)}
+.health-links button:hover{background:var(--c-s2)}
+.health-links button:focus-visible{outline:2px solid var(--c-ink);outline-offset:1px}
+.health-links button>span{display:inline-flex;align-items:center;gap:6px;font-weight:500;color:var(--c-ink)}
+.cm-hub .cm-where{color:var(--c-ink2)}

@@ -443,6 +443,13 @@ function ConnMap({ go, openKey }: { go: (pane: Pane | "map") => void; openKey: (
   const wsUp = useStore((s) => s.wsUp);
   const alive = useStore((s) => s.alive);
   const paper = useStore((s) => s.bot?.paper ?? true);
+  // Где работает бот: лаунчер на компьютере отвечает local=true, на сервере его нет.
+  const [local, setLocal] = useState<boolean | null>(null);
+  useEffect(() => {
+    api<{ local: boolean }>("GET", "/api/launcher")
+      .then((v) => setLocal(v.local))
+      .catch(() => setLocal(false));
+  }, []);
   const lastAi = ai?.providers.find((p) => p.id === ai.last);
   const by = (id: string) => secrets?.find((s) => s.service === id);
   const link = (item?: SecretItem): Link => {
@@ -547,6 +554,7 @@ function ConnMap({ go, openKey }: { go: (pane: Pane | "map") => void; openKey: (
           <span className="cm-hub-ring">{Icon.logo}</span>
           <b>BitbotBY</b>
           <small>{wsUp ? (alive ? "работает" : "бот не отвечает") : "нет связи с сервером"}</small>
+          {local !== null && <small className="cm-where">{local ? "на этом компьютере" : "на сервере"}</small>}
         </div>
         <svg className="cm-links" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
           {lines(out, "out")}
