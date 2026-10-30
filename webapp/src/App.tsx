@@ -1,24 +1,26 @@
 // Оболочка приложения: верхняя панель, баннеры защиты, вкладки, предложение сделки, вход.
 
-import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
+import { Suspense, lazy, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 
 import { isMock } from "./lib/api";
 import { base, fmtN, plural, price, usd } from "./lib/format";
 import * as platform from "./lib/platform";
 import type { Tab } from "./lib/types";
 import { profileName, stratName } from "./features/bots";
-import { Pipeline } from "./features/pipeline";
 import { UiSwitch } from "./features/uimode";
-import { Learn } from "./features/jobs";
 import { HelpButton, HelpSheet } from "./features/help";
 import { NotifButton, NotifSheet } from "./features/notifications";
 import { Palette } from "./features/palette";
-import { Journal } from "./features/journal";
 import { Settings } from "./features/settings";
 import { Setup } from "./features/setup";
 import { Terminal, cycleKind } from "./features/terminal";
 import { GUARD_TEXT, actions, useStore, type Ui } from "./store";
-import { Icon, TipLayer, Toggle, hideTip } from "./ui";
+import { Icon, Skel, TipLayer, Toggle, hideTip } from "./ui";
+
+// «Цепочка», «Обучение» и «Журнал» грузятся при первом открытии — первый экран легче.
+const Pipeline = lazy(() => import("./features/pipeline").then((m) => ({ default: m.Pipeline })));
+const Learn = lazy(() => import("./features/jobs").then((m) => ({ default: m.Learn })));
+const Journal = lazy(() => import("./features/journal").then((m) => ({ default: m.Journal })));
 
 export function App() {
   const ready = useStore((s) => s.ready);
@@ -138,13 +140,13 @@ export function App() {
         {setup ? (
           <Setup />
         ) : (
-          <>
+          <Suspense fallback={<Skel rows={6} label="Загружаю раздел" />}>
             {tab === "terminal" && <Terminal />}
             {tab === "bots" && <Pipeline />}
             {tab === "learn" && <Learn />}
             {tab === "journal" && <Journal />}
             {tab === "settings" && <Settings />}
-          </>
+          </Suspense>
         )}
       </main>
       <div className="ptr" style={{ transform: `translate(-50%, ${pull - 40}px) rotate(${pull * 5}deg)`, opacity: pull / 70 }} aria-hidden="true">
