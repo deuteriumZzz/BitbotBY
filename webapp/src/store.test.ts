@@ -152,16 +152,15 @@ describe("ссылка лаунчера", () => {
 });
 
 describe("режим «Простой / Профи»", () => {
-  it("«Простой» не трогает обычные вкладки, а узлы, обучение и параметры открывает в «Профи»", () => {
+  it("«Простой» оставляет цепочку и обучение в простом режиме, а «Все параметры» открывает в «Профи»", () => {
     const st = useStore.getState();
     st.setUi("simple");
     st.setTab("journal");
     expect(useStore.getState().ui).toBe("simple");
     st.openNode("risk");
-    expect(useStore.getState()).toMatchObject({ ui: "pro", tab: "bots", node: "risk" });
-    st.setUi("simple");
+    expect(useStore.getState()).toMatchObject({ ui: "simple", tab: "bots", node: "risk" });
     st.setTab("learn");
-    expect(useStore.getState().ui).toBe("pro");
+    expect(useStore.getState()).toMatchObject({ ui: "simple", tab: "learn" });
     st.setUi("simple");
     st.searchParams("риск");
     expect(useStore.getState()).toMatchObject({ ui: "pro", tab: "settings" });

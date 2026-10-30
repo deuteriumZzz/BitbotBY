@@ -8,6 +8,7 @@ import type { BotNode, SecretItem, SettingDef } from "../lib/types";
 import { actions, useStore } from "../store";
 import { Q, Seg } from "../ui";
 import { AiPane } from "./ai";
+import { BlockLibrary, Lane, isStep, useBlocks, type Drag } from "./blocks";
 import { ConfirmCard, RiskCard, StrategiesCard, TrackCard, WhatCard, cfg, presetName, presetOf, profileName } from "./bots";
 import { STATUS, chosenId } from "./chainops";
 import { ModelCard } from "./jobs";
@@ -334,6 +335,13 @@ export function Pipeline() {
   // Настройки узла выезжают панелью справа, полотно остаётся на виду. Переход к узлу из поиска (⌘K) тоже открывает.
   const [open, setOpen] = useState(false);
   const closeBtn = useRef<HTMLButtonElement>(null);
+  // Настройка перетаскиванием: блоки из библиотеки на шаги и обратно.
+  const blocks = useBlocks();
+  const [drag, setDrag] = useState<Drag | null>(null);
+  const toLearn = () => {
+    const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    document.querySelector('[aria-label="Обучение"]')?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+  };
   const seen = useRef(node);
   useEffect(() => {
     if (seen.current === node) return;
@@ -358,6 +366,9 @@ export function Pipeline() {
               <Q tip="Local — только индикаторы. AI — языковая модель. SAC — обученная нейросеть. Hybrid — SAC и AI должны согласиться. Узлы, которые в этом режиме не участвуют, погаснут." />
             </span>
             <ModeSeg />
+            <button type="button" className="btn pipe-learn" onClick={toLearn}>
+              Обучение и проверки ↓
+            </button>
           </div>
           <ul className="pipe-legend" aria-label="Обозначения">
             <li>
@@ -377,6 +388,7 @@ export function Pipeline() {
             </li>
           </ul>
         </div>
+        <BlockLibrary blocks={blocks} drag={drag} setDrag={setDrag} />
         <ol className="pipe" aria-label="Конвейер решений">
           {NODES.map(({ id, title, icon }, i) => {
             const on = takesPart(mode, id);
@@ -390,6 +402,7 @@ export function Pipeline() {
                     <path className="hd" d="M15 1l6 4-6 4z" />
                   </svg>
                 )}
+                <div className="pipe-col">
                 <button
                   type="button"
                   className={`pipe-node${node === id ? " on" : ""}${on ? "" : " idle"}`}
@@ -412,6 +425,12 @@ export function Pipeline() {
                     </span>
                   )}
                 </button>
+                  {isStep(id) ? (
+                    <Lane step={id} blocks={blocks} drag={drag} setDrag={setDrag} onMore={() => { openNode(id); setOpen(true); }} />
+                  ) : (
+                    <div className="lane2 none" aria-hidden="true" />
+                  )}
+                </div>
               </li>
             );
           })}

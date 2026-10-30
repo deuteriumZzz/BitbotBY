@@ -28,6 +28,10 @@
   --shadow-lift:0 10px 24px -12px rgba(0,0,0,.8);
   --glow-card:radial-gradient(460px 220px at 100% 0%,color-mix(in oklab,var(--c-accent) 10%,transparent),transparent 70%);
 
+  /* Стекло (Apple-материалы) — только для плавающих слоёв: панель шага, листы, палитра, тосты, нижние вкладки. */
+  --glass:rgba(14,16,19,.62); --glass-strong:rgba(12,14,17,.78);
+  --glass-blur:saturate(170%) blur(22px); --glass-edge:rgba(255,255,255,.09);
+
   /* Геометрия. */
   --r-card:16px; --r-inner:12px; --r-ctl:10px; --r-pill:999px;
 

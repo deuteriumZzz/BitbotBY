@@ -8,7 +8,6 @@ import * as platform from "./lib/platform";
 import type { Tab } from "./lib/types";
 import { profileName, stratName } from "./features/bots";
 import { Pipeline } from "./features/pipeline";
-import { BotSimple } from "./features/simple";
 import { UiSwitch } from "./features/uimode";
 import { Learn } from "./features/jobs";
 import { HelpButton, HelpSheet } from "./features/help";
@@ -25,7 +24,6 @@ export function App() {
   const ready = useStore((s) => s.ready);
   const needLogin = useStore((s) => s.needLogin);
   const tab = useStore((s) => s.tab);
-  const ui = useStore((s) => s.ui);
   const setup = useStore((s) => s.setup);
   const views = useRef<HTMLElement>(null);
   // Новая вкладка въезжает с той стороны, где стоит в меню.
@@ -142,15 +140,12 @@ export function App() {
         ) : (
           <>
             {tab === "terminal" && <Terminal />}
-            {(tab === "bots" || tab === "learn") &&
-              (ui === "simple" ? (
-                <BotSimple />
-              ) : (
-                <>
-                  <Pipeline />
-                  <Learn />
-                </>
-              ))}
+            {(tab === "bots" || tab === "learn") && (
+              <>
+                <Pipeline />
+                <Learn />
+              </>
+            )}
             {tab === "journal" && <Journal />}
             {tab === "settings" && <Settings />}
           </>

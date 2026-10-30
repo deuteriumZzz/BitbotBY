@@ -1299,3 +1299,76 @@ select.sel{border-radius:var(--r-ctl);background:var(--c-inset);box-shadow:none}
   .pipe-panel,.pipe-scrim{transition:none}
   .pipe-node:hover:not(.idle){transform:none}
 }
+
+/* ---------- Блоки цепочки: библиотека над конвейером, полосы под шагами ---------- */
+.pipe-learn{margin-left:8px}
+.blk-lib{margin:0 0 14px;padding:12px;border-radius:var(--r-inner);border:1px solid var(--c-line2);background:color-mix(in oklab,var(--c-s1) 82%,transparent);transition:border-color var(--dur-norm) var(--ease-out),background var(--dur-norm) var(--ease-out)}
+.blk-lib.back{border-style:dashed;border-color:var(--c-down);background:color-mix(in oklab,var(--c-down) 6%,var(--c-s1))}
+.blk-lib-h{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin-bottom:10px}
+.blk-lib-h b{font:600 14px/1.2 var(--font-text)}
+.blk-lib-h .sp{margin-left:auto}
+.blk-find{all:unset;box-sizing:border-box;width:100%;max-width:320px;height:34px;margin-bottom:10px;padding:0 12px;border-radius:var(--r-pill);background:var(--c-inset);border:1px solid var(--c-line2);font:13px var(--font-text);color:var(--c-ink)}
+.blk-find:focus-visible{outline:2px solid var(--c-ink);outline-offset:2px}
+.blk-list{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 6px;scrollbar-width:thin;scrollbar-color:var(--c-line2) transparent}
+.blk{all:unset;box-sizing:border-box;cursor:grab;flex:0 0 auto;display:flex;align-items:center;gap:8px;min-height:46px;max-width:240px;padding:6px 10px 6px 8px;border-radius:var(--r-ctl);background:var(--g-ctl);border:1px solid var(--c-line2);box-shadow:inset 0 1px 0 var(--c-hi-dark);transition:transform var(--dur-fast) var(--ease-out),border-color var(--dur-norm) var(--ease-out),box-shadow var(--dur-norm) var(--ease-out)}
+.blk:hover{transform:translateY(-2px);border-color:var(--c-ctl);box-shadow:inset 0 1px 0 var(--c-hi-dark),var(--shadow-lift)}
+.blk:active{cursor:grabbing;transform:scale(.97)}
+.blk:focus-visible{outline:2px solid var(--c-ink);outline-offset:2px}
+.blk .grip{color:var(--c-ink3);font-size:11px;letter-spacing:-2px}
+.blk-t{display:flex;flex-direction:column;min-width:0}
+.blk-t b{font:500 13px/1.25 var(--font-text);color:var(--c-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.blk-t small{font:11px/1.25 var(--font-text);color:var(--c-ink3);white-space:nowrap}
+.blk-tag{font-style:normal;font:500 10px/1 var(--font-text);padding:3px 6px;border-radius:var(--r-pill);color:var(--c-warn);background:color-mix(in oklab,var(--c-warn) 12%,transparent)}
+.blk-plus{display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--c-s3);color:var(--c-ink2);font:600 14px/1 var(--font-text);transition:background var(--dur-norm),color var(--dur-norm)}
+.blk:hover .blk-plus{background:var(--c-accent);color:var(--c-bg)}
+.blk-empty{margin:6px 2px;font:12px var(--font-text);color:var(--c-ink3)}
+.pipe li{align-items:flex-start}
+.pipe-arrow{margin-top:46px}
+.pipe-col{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px;align-self:stretch}
+.lane2{display:flex;flex-wrap:wrap;align-content:flex-start;gap:5px;min-height:64px;padding:7px;border-radius:var(--r-ctl);border:1px dashed var(--c-line2);background:color-mix(in oklab,var(--c-bg) 55%,transparent);transition:border-color var(--dur-norm) var(--ease-out),background var(--dur-norm) var(--ease-out),opacity var(--dur-norm) var(--ease-out)}
+.lane2.none{border-color:transparent;background:transparent}
+.lane2.can{border-color:var(--c-accent);background:color-mix(in oklab,var(--c-accent) 6%,transparent)}
+.lane2.over{border-style:solid;background:color-mix(in oklab,var(--c-accent) 12%,transparent);box-shadow:0 0 0 3px color-mix(in oklab,var(--c-accent) 18%,transparent)}
+.lane2.dim{opacity:.4}
+.lane2-hint{flex-basis:100%;text-align:center;font:500 11px var(--font-text);color:var(--c-accent)}
+.lane2-empty{font:11px var(--font-text);color:var(--c-ink3)}
+.chip2{display:inline-flex;align-items:center;gap:4px;max-width:100%;height:26px;padding:0 4px 0 9px;border-radius:var(--r-pill);background:var(--c-s3);border:1px solid var(--c-line2);font:500 11.5px/1 var(--font-text);color:var(--c-ink);cursor:grab;animation:chip-in .32s var(--ease-mech) backwards;transition:border-color var(--dur-norm),transform var(--dur-fast)}
+.chip2:hover{border-color:var(--c-ctl);transform:translateY(-1px)}
+.chip2.locked{cursor:default;padding-right:8px}
+.chip2-t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px}
+.chip2 button{all:unset;cursor:pointer;display:grid;place-items:center;width:20px;height:20px;border-radius:50%;color:var(--c-ink3);font-size:13px}
+.chip2 button:hover{background:color-mix(in oklab,var(--c-down) 22%,transparent);color:var(--c-down)}
+.chip2 button:focus-visible{outline:2px solid var(--c-ink);outline-offset:1px}
+.chip2-lock{font-style:normal;font-size:10px;color:var(--c-ink3)}
+.chip2.more{all:unset;cursor:pointer;height:26px;padding:0 10px;border-radius:var(--r-pill);font:500 11.5px var(--font-text);color:var(--c-ink2);border:1px dashed var(--c-line2)}
+.chip2.more:hover{color:var(--c-ink);border-color:var(--c-ctl)}
+@keyframes chip-in{from{opacity:0;transform:translateY(-6px) scale(.94)}}
+
+/* ---------- Стекло (Apple-материалы): только плавающие слои поверх содержимого ---------- */
+.pipe-scrim.open{backdrop-filter:blur(6px) saturate(120%);-webkit-backdrop-filter:blur(6px) saturate(120%)}
+.pipe-panel{background:var(--glass-strong);backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);border-left-color:var(--glass-edge)}
+.pipe-panel-h{background:var(--glass)}
+.sheet,.toast,.tip,.pal,.help-sheet{background:var(--glass-strong);backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);border-color:var(--glass-edge);box-shadow:inset 0 1px 0 var(--c-hi-dark),0 24px 60px -24px rgba(0,0,0,.9)}
+@container dev (max-width:899px){
+  /* Нижняя панель разделов — как вкладки iOS: содержимое прокручивается под стеклом. */
+  .nav{position:absolute;left:0;right:0;bottom:0;background:var(--glass);backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);border-top-color:var(--glass-edge)}
+  .views{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
+}
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  .pipe-panel,.sheet,.toast,.tip,.pal,.help-sheet{background:var(--c-s1)}
+  .nav{background:var(--c-s1)}
+}
+@media (prefers-reduced-transparency:reduce){
+  .pipe-panel,.sheet,.toast,.tip,.pal,.help-sheet,.nav{background:var(--c-s1);backdrop-filter:none;-webkit-backdrop-filter:none}
+}
+@media (prefers-reduced-motion:reduce){ .blk,.chip2{transition:none;animation:none} .blk:hover{transform:none} }
+.pal-back,.help-back{background:rgba(4,5,7,.42);backdrop-filter:blur(8px) saturate(120%);-webkit-backdrop-filter:blur(8px) saturate(120%)}
+.pal{border-radius:var(--r-card)}
+.help-sheet{border-radius:var(--r-card) var(--r-card) 0 0}
+.sheet{border-radius:var(--r-card)}
+.toast{border-radius:var(--r-pill)}
+.tip{border-radius:var(--r-ctl)}
+@media (prefers-reduced-transparency:reduce){ .pal-back,.help-back,.pipe-scrim.open{backdrop-filter:none;-webkit-backdrop-filter:none} }
+.pipe li{flex:1 0 128px}
+.pipe li:first-child{flex-basis:104px}
+.pipe-node{padding:11px 12px}

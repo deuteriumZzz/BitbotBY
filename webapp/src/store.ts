@@ -357,10 +357,7 @@ export const useStore = create<Store>((set, get) => {
       );
     },
 
-    setTab: (tab) => {
-      if (tab === "learn") get().needPro();
-      set({ tab, setup: null });
-    },
+    setTab: (tab) => set({ tab, setup: null }),
     setUi: (ui) => {
       try {
         localStorage.setItem(UI_KEY, ui);
@@ -374,10 +371,8 @@ export const useStore = create<Store>((set, get) => {
       get().setUi("pro");
       get().say("Открыто в режиме «Профи» — здесь все настройки");
     },
-    openNode: (node) => {
-      get().needPro();
-      set({ tab: "bots", node, setup: null });
-    },
+    // Цепочка и обучение одинаковы в обоих режимах: «Простой» только сворачивает тонкие настройки.
+    openNode: (node) => set({ tab: "bots", node, setup: null }),
     openSetup: (setup) => set({ setup }),
     openHelp: (helpOpen) => set({ helpOpen }),
     openPalette: (paletteOpen) => set({ paletteOpen }),
