@@ -140,6 +140,8 @@ export interface Store {
   ui: Ui;
   /** Выбранный узел конвейера во вкладке «Бот». */
   node: BotNode;
+  /** Открыта ли панель настроек узла. Её открывает любой переход к узлу, в том числе из другой вкладки. */
+  nodeOpen: boolean;
   /** Поиск параметра по Cmd/Ctrl+K: null — не запрошен, строка — что подставить. */
   paramSearch: string | null;
   toast: { id: number; text: string; undo?: () => void } | null;
@@ -149,8 +151,9 @@ export interface Store {
   setUi(ui: Ui): void;
   /** Из «Простого» в «Профи», когда человек идёт туда, чего в «Простом» нет. */
   needPro(): void;
-  /** Открыть вкладку «Бот» на нужном узле конвейера. */
+  /** Открыть вкладку «Бот» на нужном узле конвейера с его панелью настроек. */
   openNode(node: BotNode): void;
+  closeNode(): void;
   openSetup(step: SetupStep | null): void;
   openHelp(open: boolean): void;
   openNotif(open: boolean): void;
@@ -291,6 +294,7 @@ export const useStore = create<Store>((set, get) => {
     tab: "terminal",
     ui: savedUi(),
     node: "scan",
+    nodeOpen: false,
     toast: null,
 
     async boot() {
@@ -357,7 +361,7 @@ export const useStore = create<Store>((set, get) => {
       );
     },
 
-    setTab: (tab) => set({ tab, setup: null }),
+    setTab: (tab) => set({ tab, setup: null, nodeOpen: false }),
     setUi: (ui) => {
       try {
         localStorage.setItem(UI_KEY, ui);
@@ -372,7 +376,8 @@ export const useStore = create<Store>((set, get) => {
       get().say("Открыто в режиме «Профи» — здесь все настройки");
     },
     // Цепочка и обучение одинаковы в обоих режимах: «Простой» только сворачивает тонкие настройки.
-    openNode: (node) => set({ tab: "bots", node, setup: null }),
+    openNode: (node) => set({ tab: "bots", node, nodeOpen: true, setup: null }),
+    closeNode: () => set({ nodeOpen: false }),
     openSetup: (setup) => set({ setup }),
     openHelp: (helpOpen) => set({ helpOpen }),
     openPalette: (paletteOpen) => set({ paletteOpen }),

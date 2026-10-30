@@ -333,25 +333,17 @@ export function Pipeline() {
   const curRes = cycle?.nodes[cur.id];
   const [curGlyph, curCls] = mark(curRes?.ok);
   // Настройки узла выезжают панелью справа, полотно остаётся на виду. Переход к узлу из поиска (⌘K) тоже открывает.
-  const [open, setOpen] = useState(false);
+  const open = useStore((s) => s.nodeOpen);
+  const closeNode = useStore((s) => s.closeNode);
   const closeBtn = useRef<HTMLButtonElement>(null);
   // Настройка перетаскиванием: блоки из библиотеки на шаги и обратно.
   const blocks = useBlocks();
   const [drag, setDrag] = useState<Drag | null>(null);
-  const toLearn = () => {
-    setOpen(false);
-    setTab("learn");
-  };
-  const seen = useRef(node);
-  useEffect(() => {
-    if (seen.current === node) return;
-    seen.current = node;
-    setOpen(true);
-  }, [node]);
+  const toLearn = () => setTab("learn");
   useEffect(() => {
     if (!open) return;
     closeBtn.current?.focus({ preventScroll: true });
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && closeNode();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
@@ -407,7 +399,6 @@ export function Pipeline() {
                   aria-haspopup="dialog"
                   onClick={() => {
                     openNode(id);
-                    setOpen(true);
                   }}
                 >
                   <span className="hd">
@@ -423,7 +414,7 @@ export function Pipeline() {
                   )}
                 </button>
                   {isStep(id) ? (
-                    <Lane step={id} blocks={blocks} drag={drag} setDrag={setDrag} onMore={() => { openNode(id); setOpen(true); }} />
+                    <Lane step={id} blocks={blocks} drag={drag} setDrag={setDrag} onMore={() => openNode(id)} />
                   ) : (
                     <div className="lane2 none" aria-hidden="true" />
                   )}
@@ -435,7 +426,7 @@ export function Pipeline() {
         <AiStrip part={takesPart(mode, "ai")} />
         <p className="pipe-hint">Нажмите на шаг — его настройки откроются справа, конвейер останется на виду.</p>
       </div>
-      <button type="button" className={`pipe-scrim${open ? " open" : ""}`} tabIndex={-1} aria-hidden="true" onClick={() => setOpen(false)} />
+      <button type="button" className={`pipe-scrim${open ? " open" : ""}`} tabIndex={-1} aria-hidden="true" onClick={closeNode} />
       <aside className={`pipe-panel${open ? " open" : ""}`} role="dialog" aria-label={`Шаг «${cur.title}»`} aria-hidden={!open}>
         <div className="pipe-panel-h">
           <span className="pipe-sum-ico">{cur.icon}</span>
@@ -443,7 +434,7 @@ export function Pipeline() {
           <span className="label">
             шаг {String(at + 1).padStart(2, "0")} из {String(NODES.length).padStart(2, "0")}
           </span>
-          <button ref={closeBtn} type="button" className="btn pipe-close" aria-label="Закрыть настройки шага" onClick={() => setOpen(false)}>
+          <button ref={closeBtn} type="button" className="btn pipe-close" aria-label="Закрыть настройки шага" onClick={closeNode}>
             ✕
           </button>
         </div>

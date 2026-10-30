@@ -1,11 +1,11 @@
 // Вкладка «Настройки»: основное, AI-провайдеры, подключения (ключи), все параметры.
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 import { api } from "../lib/api";
 import { OWN_HOME, type SettingsPane } from "../lib/where";
 import { fmtN, plural } from "../lib/format";
-import type { ConfigHistoryItem, ConfigValues, SecretItem, SettingDef } from "../lib/types";
+import type { BotNode, ConfigHistoryItem, ConfigValues, SecretItem, SettingDef } from "../lib/types";
 import { actions, useStore, type PatchResult } from "../store";
 import { Icon, Q, Seg, Toggle, useArm } from "../ui";
 import { cfg } from "./bots";
@@ -18,6 +18,19 @@ const goTo = (pane: Pane | "map") => {
   document.getElementById(`set-${pane}`)?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
 };
 
+/** Заголовок раздела страницы настроек: номер, название, одна фраза о том, что внутри. */
+function SecHead({ n, title, sub }: { n: string; title: string; sub: string }) {
+  return (
+    <div className="set-h">
+      <span className="set-n">{n}</span>
+      <div>
+        <h2>{title}</h2>
+        <p>{sub}</p>
+      </div>
+    </div>
+  );
+}
+
 /** Одна страница вместо разделов-папок: карта подключений, основное, ключи и (в «Профи») все параметры. */
 export function Settings() {
   const simple = useStore((s) => s.ui === "simple");
@@ -26,6 +39,27 @@ export function Settings() {
   useEffect(() => {
     if (jump !== null) setTimeout(() => goTo("all"), 0);
   }, [jump]);
+  // Подсвечиваем пилюлю раздела, который сейчас на экране.
+  const [active, setActive] = useState<Pane | "map">("map");
+  // Ключ, открытый в боковой панели: с карты или из списка связок.
+  const [key, setKey] = useState<string | null>(null);
+  useEffect(() => {
+    const root = document.querySelector("main.views");
+    const seen = new Map<string, number>();
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) seen.set(e.target.id.replace("set-", ""), e.isIntersecting ? e.intersectionRatio : 0);
+        const top = [...seen.entries()].sort((a, b) => b[1] - a[1])[0];
+        if (top && top[1] > 0) setActive(top[0] as Pane | "map");
+      },
+      { root, threshold: [0, 0.25, 0.5, 0.75, 1] },
+    );
+    for (const id of ["map", "main", "conn", "all"]) {
+      const el = document.getElementById(`set-${id}`);
+      if (el) io.observe(el);
+    }
+    return () => io.disconnect();
+  }, [simple]);
   const chips: [Pane | "map", string][] = [
     ["map", "Карта"],
     ["main", "Уведомления и аккаунт"],
@@ -36,22 +70,23 @@ export function Settings() {
     <section className="view enter" aria-label="Настройки">
       <nav className="set-jump" aria-label="Разделы настроек">
         {chips.map(([id, label]) => (
-          <button key={id} type="button" className="btn" onClick={() => goTo(id)}>
+          <button key={id} type="button" className={`btn${active === id ? " on" : ""}`} aria-current={active === id ? "true" : undefined} onClick={() => goTo(id)}>
             {label}
           </button>
         ))}
       </nav>
-      <ConnMap go={goTo} />
+      <ConnMap go={goTo} openKey={setKey} />
       <div id="set-main" className="set-sec">
+        <SecHead n="01" title="Уведомления и аккаунт" sub="Что присылать в Telegram и когда молчать, счёт, перезапуск и компьютер с ботом" />
         <Main go={goTo} />
       </div>
       <div id="set-conn" className="set-sec">
-        <h2 className="set-h">Ключи и доступ</h2>
-        <Keys />
+        <SecHead n="02" title="Ключи и доступ" sub="Ключи хранятся на сервере бота зашифрованными — приложение видит только последние 4 символа" />
+        <Keys open={key} setOpen={setKey} />
       </div>
       {!simple && (
         <div id="set-all" className="set-sec">
-          <h2 className="set-h">Все параметры</h2>
+          <SecHead n="03" title="Все параметры" sub="Любой параметр бота: поиск, история изменений, копирование и сброс" />
           <AllParams go={goTo} />
         </div>
       )}
@@ -401,7 +436,7 @@ interface MapNode {
 }
 
 /** Карта подключений: что питает бота слева, бот в центре, что он отдаёт справа. По живым связям бегут точки. */
-function ConnMap({ go }: { go: (pane: Pane | "map") => void }) {
+function ConnMap({ go, openKey }: { go: (pane: Pane | "map") => void; openKey: (service: string) => void }) {
   const secrets = useStore((s) => s.secrets);
   const ai = useStore((s) => s.ai);
   const note = useStore((s) => s.secretsNote);
@@ -419,12 +454,7 @@ function ConnMap({ go }: { go: (pane: Pane | "map") => void }) {
     const last4 = item.fields.find((f) => f.secret && f.last4)?.last4;
     return `${STATUS[item.status][1]}${last4 ? ` · ключ ••••${last4}` : ""}`;
   };
-  const toKey = (service: string) => () => {
-    const card = document.getElementById(`key-${service}`);
-    if (!card) return go("conn");
-    const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-    card.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "center" });
-  };
+  const toKey = (service: string) => () => (by(service) ? openKey(service) : go("conn"));
   const data = (secrets ?? []).filter((s) => s.group === "Данные и соцсети");
   const dOk = data.filter((s) => s.status === "ok").length;
   const tg = link(by("telegram"));
@@ -452,6 +482,15 @@ function ConnMap({ go }: { go: (pane: Pane | "map") => void }) {
     { id: "notify", label: "Уведомления", sub: tg === "ok" ? "сделки и защиты — в Telegram" : "подключите Telegram", st: tg === "ok" ? "ok" : "off", act: () => go("main") },
     { id: "app", label: "Приложение", sub: "MiniApp, браузер, десктоп", st: server === "ok" ? "ok" : "warn" },
   ];
+  // Обязательное для работы: бот на связи, биржа, AI и Telegram; источники данных — по желанию.
+  const need = [
+    { label: "бот", ok: server === "ok" },
+    { label: "Bybit", ok: src[0].st === "ok" },
+    { label: "AI", ok: src[1].st === "ok" },
+    { label: "Telegram", ok: src[2].st === "ok" },
+  ];
+  const ready = need.filter((n) => n.ok).length;
+  const missing = need.filter((n) => !n.ok).map((n) => n.label);
   const lines = (nodes: MapNode[], dir: "in" | "out") =>
     nodes.map((n, i) => {
       const y = ((i + 0.5) / nodes.length) * 100;
@@ -485,9 +524,19 @@ function ConnMap({ go }: { go: (pane: Pane | "map") => void }) {
   };
   return (
     <article className="card cmap" id="set-map">
-      <div className="card-h">
-        <h2>Карта подключений</h2>
-        <span className="label sp">что питает бота → бот → что он отдаёт; нажмите на узел, чтобы настроить</span>
+      <div className="cm-head">
+        <div>
+          <span className="label">Система</span>
+          <h2>{missing.length ? `Осталось подключить: ${missing.join(", ")}` : "Всё подключено"}</h2>
+          <p>Что питает бота → бот → что он отдаёт. Нажмите на любой узел карты, чтобы настроить его.</p>
+        </div>
+        <div className="learn-meter" style={{ "--p": Math.round((ready / need.length) * 100) } as React.CSSProperties} role="img" aria-label={`Подключено ${ready} из ${need.length}`}>
+          <b className="num">
+            {ready}
+            <small>/{need.length}</small>
+          </b>
+          <span>подключено</span>
+        </div>
       </div>
       <div className="cm">
         <ul className="cm-col">{src.map(node)}</ul>
@@ -647,40 +696,147 @@ const KEY_INFO: Record<string, [string, string?]> = {
   server: ["PIN для перехода в Live, доступ к Redis и API дашборда, секрет вебхука алертов."],
 };
 
-function Keys() {
+/** Что питает каждый ключ: [что именно, шаг цепочки]. Шаг в панели ключа — переход в «Цепочку». */
+const FEEDS: Record<string, [string, BotNode?][]> = {
+  bybit: [["цены и свечи", "scan"], ["ордера и баланс", "order"]],
+  telegram: [["уведомления"], ["управление из чата"]],
+  news: [["настроение рынка", "scan"]],
+  finnhub: [["макро-пауза: FOMC, CPI, NFP", "risk"]],
+  glassnode: [["on-chain контекст", "scan"]],
+  reddit: [["настроение · CryptoBERT", "scan"]],
+  twitter: [["настроение · Meme", "scan"]],
+  telethon: [["каналы Telegram · Meme", "scan"]],
+  pumpportal: [["детектор мем-сезона", "scan"]],
+  server: [["переход в Live", "order"], ["дашборд и вебхуки"]],
+};
+const STEP: Partial<Record<BotNode, string>> = { scan: "Сканер", ai: "AI-цепочка", risk: "Риск", order: "Ордер" };
+
+/** Ключи как связки: сервис → что он питает в боте. Форма ключа открывается панелью справа, список остаётся на виду. */
+function Keys({ open, setOpen }: { open: string | null; setOpen: (service: string | null) => void }) {
   const secrets = useStore((s) => s.secrets);
   const note = useStore((s) => s.secretsNote);
-  // Ключи AI-провайдеров — в узле AI вкладки «Бот», здесь биржа, Telegram, данные и доступ.
+  const ai = useStore((s) => s.ai);
+  const closeBtn = useRef<HTMLButtonElement>(null);
+  // Ключи AI-провайдеров настраиваются в узле AI цепочки — здесь одна строка-связка.
   const groups = useMemo(() => [...new Set((secrets ?? []).map((s) => s.group))].filter((g) => g !== "AI-модели"), [secrets]);
+  const aiKeys = (secrets ?? []).filter((s) => s.group === "AI-модели");
+  const cur = secrets?.find((s) => s.service === open);
+  // Панель уезжает с прежним содержимым, а не пустой.
+  const last = useRef(cur);
+  if (cur) last.current = cur;
+  const shown = last.current;
+  const isOpen = Boolean(cur);
+  useEffect(() => {
+    if (!isOpen) return;
+    closeBtn.current?.focus({ preventScroll: true });
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(null);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isOpen, setOpen]);
+  const toStep = (step: BotNode) => {
+    setOpen(null);
+    useStore.getState().openNode(step);
+  };
+  const row = (id: string, c: string, name: string, sub: string, feeds: [string, BotNode?][], act: () => void) => (
+    <li key={id}>
+      <button type="button" className={`kl-row ${c}`} onClick={act}>
+        <span className="kl-src">
+          <span className={`dot ${c === "ok" ? "ok live" : c}`} />
+          <b>{name}</b>
+          <small>{sub}</small>
+        </span>
+        <span className="kl-wire" aria-hidden="true" />
+        <span className="kl-to">
+          {feeds.map(([what, step]) => (
+            <span className="kl-chip" key={what}>
+              {step && <em>{STEP[step]}</em>}
+              {what}
+            </span>
+          ))}
+        </span>
+        <span className="kl-go" aria-hidden="true">
+          ›
+        </span>
+      </button>
+    </li>
+  );
+  const keyRow = (s: SecretItem) => {
+    const [c, t] = STATUS[s.status];
+    const last4 = s.fields.find((f) => f.secret && f.last4)?.last4;
+    return row(s.service, c, s.name, `${t}${last4 ? ` · ••••${last4}` : ""}`, FEEDS[s.service] ?? [], () => setOpen(s.service));
+  };
+  const aiOk = aiKeys.filter((s) => s.status === "ok").length;
   return (
     <div className="set-pane view enter">
-      <div className="secnote">
-        {Icon.lock}
-        <div>
-          <b>Как хранятся ключи.</b> Ключ уходит на сервер вашего бота и хранится там зашифрованным. Приложение больше не показывает его
-          целиком — только последние 4 символа. Перед сохранением сервер проверяет ключ запросом к сервису. Новый ключ начнёт работать после
-          перезапуска бота.
-        </div>
-      </div>
-      <p className="note-soon moved">
-        Ключи AI-провайдеров — вместе с цепочкой.{" "}
-        <button className="btn" type="button" onClick={() => useStore.getState().openNode("ai")}>
-          Цепочка → AI-цепочка
-        </button>
-      </p>
       {!secrets && <p className="empty">{note || "Ключи недоступны."}</p>}
-      {groups.map((g) => (
-        <section className="kgroup" key={g}>
-          <h3>{g}</h3>
-          <div className="kgrid">
-            {secrets!
-              .filter((s) => s.group === g)
-              .map((s) => (
-                <KeyCard key={s.service} item={s} />
-              ))}
-          </div>
-        </section>
-      ))}
+      <div className="klist">
+        {secrets && (
+          <section className="kl-g">
+            <h3>AI-модели</h3>
+            <ul>
+              {row(
+                "ai",
+                ai?.chain.length ? "ok" : "bad",
+                "AI-провайдеры",
+                `ключей ${aiOk} из ${aiKeys.length}${ai?.chain.length ? ` · в цепочке ${ai.chain.length}` : ""}`,
+                [["решение о сделке", "ai"]],
+                () => toStep("ai"),
+              )}
+            </ul>
+          </section>
+        )}
+        {groups.map((g) => (
+          <section className="kl-g" key={g}>
+            <h3>{g}</h3>
+            <ul>{secrets!.filter((s) => s.group === g).map(keyRow)}</ul>
+          </section>
+        ))}
+      </div>
+      <button type="button" className={`pipe-scrim${isOpen ? " open" : ""}`} tabIndex={-1} aria-hidden="true" onClick={() => setOpen(null)} />
+      <aside className={`pipe-panel${isOpen ? " open" : ""}`} role="dialog" aria-label={shown ? `Ключ «${shown.name}»` : "Ключ"} aria-hidden={!isOpen}>
+        {shown && (
+          <>
+            <div className="pipe-panel-h">
+              <span className={`dot ${STATUS[shown.status][0]}`} />
+              <b>{shown.name}</b>
+              <span className="label">{shown.group}</span>
+              <button ref={closeBtn} type="button" className="btn pipe-close" aria-label="Закрыть ключ" onClick={() => setOpen(null)}>
+                ✕
+              </button>
+            </div>
+            <div className="pipe-body" key={shown.service}>
+              {(FEEDS[shown.service] ?? []).length > 0 && (
+                <div className="kl-feeds">
+                  <span className="label">Питает в боте</span>
+                  <div>
+                    {FEEDS[shown.service].map(([what, step]) =>
+                      step ? (
+                        <button type="button" className="kl-chip" key={what} onClick={() => toStep(step)}>
+                          <em>{STEP[step]}</em>
+                          {what} →
+                        </button>
+                      ) : (
+                        <span className="kl-chip" key={what}>
+                          {what}
+                        </span>
+                      ),
+                    )}
+                  </div>
+                </div>
+              )}
+              <KeyCard item={shown} />
+              <div className="secnote">
+                {Icon.lock}
+                <div>
+                  <b>Как хранятся ключи.</b> Ключ уходит на сервер вашего бота и хранится там зашифрованным. Приложение больше не показывает
+                  его целиком — только последние 4 символа. Перед сохранением сервер проверяет ключ запросом к сервису. Новый ключ начнёт
+                  работать после перезапуска бота.
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </aside>
     </div>
   );
 }

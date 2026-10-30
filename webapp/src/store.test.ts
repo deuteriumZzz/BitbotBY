@@ -158,9 +158,10 @@ describe("режим «Простой / Профи»", () => {
     st.setTab("journal");
     expect(useStore.getState().ui).toBe("simple");
     st.openNode("risk");
-    expect(useStore.getState()).toMatchObject({ ui: "simple", tab: "bots", node: "risk" });
+    // Переход к узлу из другой вкладки сразу открывает его панель, обычная смена вкладки — закрывает.
+    expect(useStore.getState()).toMatchObject({ ui: "simple", tab: "bots", node: "risk", nodeOpen: true });
     st.setTab("learn");
-    expect(useStore.getState()).toMatchObject({ ui: "simple", tab: "learn" });
+    expect(useStore.getState()).toMatchObject({ ui: "simple", tab: "learn", nodeOpen: false });
     st.setUi("simple");
     st.searchParams("риск");
     expect(useStore.getState()).toMatchObject({ ui: "pro", tab: "settings" });
