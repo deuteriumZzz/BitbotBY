@@ -30,6 +30,7 @@ import {
   tone,
   usd,
 } from "../lib/format";
+import { idleReason } from "../lib/idle";
 import { reducedMotion } from "../lib/platform";
 import type { Candle, Journal, JournalTrade, Position } from "../lib/types";
 import { actions, positionPnl, useStore, type Store } from "../store";
@@ -122,10 +123,44 @@ function HealthStrip() {
   );
 }
 
+/** «Почему бот молчит?»: одна причина простыми словами и переход к шагу, где это настраивается. */
+function Idle() {
+  const wsUp = useStore((s) => s.wsUp);
+  const alive = useStore((s) => s.alive);
+  const paused = useStore((s) => s.bot?.paused ?? false);
+  const cycle = useStore((s) => s.lastCycle);
+  const slots = useStore((s) => s.slots);
+  const hours = useStore((s) => cfg<string>(s.config, "TRADING_HOURS", ""));
+  const openNode = useStore((s) => s.openNode);
+  const [hourUtc, setHour] = useState(() => new Date().getUTCHours());
+  useEffect(() => {
+    const t = setInterval(() => setHour(new Date().getUTCHours()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+  // Нет связи с сервером — об этом уже говорят шапка и строка здоровья.
+  const r = wsUp ? idleReason({ alive, paused, cycle, slots, hours, hourUtc }) : null;
+  if (!r) return null;
+  return (
+    <div className={`idle ${r.tone}`} role="status">
+      <span className={`dot ${r.tone}`} />
+      <div>
+        <b>{r.title}</b>
+        <p>{r.detail}</p>
+      </div>
+      {r.node && (
+        <button type="button" className="btn" onClick={() => openNode(r.node!)}>
+          Где настроить →
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function Terminal() {
   return (
     <section className="view term enter" aria-label="Терминал">
       <HealthStrip />
+      <Idle />
       <ReadinessCard />
       <Hero />
       <MetricsCard />

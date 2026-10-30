@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { api } from "../lib/api";
 import { OWN_HOME, type SettingsPane } from "../lib/where";
 import { fmtN, plural } from "../lib/format";
+import { inHours } from "../lib/idle";
 import type { BotNode, ConfigHistoryItem, ConfigValues, SecretItem, SettingDef } from "../lib/types";
 import { actions, useStore, type PatchResult } from "../store";
 import { Icon, Q, Seg, Toggle, useArm } from "../ui";
@@ -235,8 +236,7 @@ export function HoursCard() {
     const t = setInterval(() => setNow(new Date()), 60_000);
     return () => clearInterval(t);
   }, []);
-  const [a, b] = hours ? hours.split("-").map(Number) : [0, 24];
-  const on = (i: number) => !hours || (a < b ? i >= a && i < b : i >= a || i < b);
+  const on = (i: number) => inHours(hours, i);
   const h = now.getUTCHours();
   const custom = !HOURS.some(([v]) => v === hours);
   return (
