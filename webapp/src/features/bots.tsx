@@ -232,7 +232,9 @@ export function RiskCard({ simple = false }: { simple?: boolean }) {
               <span>
                 Риск на сделку <Q tip="Какую долю баланса бот готов потерять, если сделка закроется по стоп-лоссу. Размер позиции бот считает сам." />
               </span>
-              <output className="num">{risk}%</output>
+              <output className="num">
+                {risk}% · ${fmtN(one, 0)}
+              </output>
             </div>
             <input type="range" min="0.5" max="5" step="0.5" value={risk} aria-label="Риск на сделку, %" onChange={(e) => setRisk(+e.target.value)} />
             <div className="quick">

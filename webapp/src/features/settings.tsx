@@ -79,7 +79,7 @@ export function Settings() {
       <ConnMap go={goTo} openKey={setKey} />
       <div id="set-main" className="set-sec">
         <SecHead n="01" title="Уведомления и аккаунт" sub="Что присылать в Telegram и когда молчать, счёт, перезапуск и компьютер с ботом" />
-        <Main go={goTo} />
+        <Main openKey={setKey} />
       </div>
       <div id="set-conn" className="set-sec">
         <SecHead n="02" title="Ключи и доступ" sub="Ключи хранятся на сервере бота зашифрованными — приложение видит только последние 4 символа" />
@@ -97,7 +97,7 @@ export function Settings() {
 
 // ══ Основное ═════════════════════════════════════════════════════════════════
 
-function Main({ go }: { go: (pane: Pane) => void }) {
+function Main({ openKey }: { openKey: (service: string) => void }) {
   return (
     <div className="set-pane view enter">
       <div className="cols">
@@ -111,7 +111,7 @@ function Main({ go }: { go: (pane: Pane) => void }) {
           </p>
         </div>
         <div className="col">
-          <AccountCard toKeys={() => go("conn")} />
+          <AccountCard openKey={openKey} />
           <ComputerCard />
         </div>
       </div>
@@ -566,7 +566,7 @@ function ConnMap({ go, openKey }: { go: (pane: Pane | "map") => void; openKey: (
   );
 }
 
-function AccountCard({ toKeys }: { toKeys: () => void }) {
+function AccountCard({ openKey }: { openKey: (service: string) => void }) {
   const paper = useStore((s) => s.bot?.paper ?? true);
   const secrets = useStore((s) => s.secrets);
   const risk = useStore((s) => cfg(s.config, "RISK_PER_TRADE", 0.02));
@@ -626,8 +626,8 @@ function AccountCard({ toKeys }: { toKeys: () => void }) {
               <b>Сначала подключите Bybit.</b>
               <span>Ключ Bybit не проверен — бот не сможет выставлять ордера.</span>
               <div className="btn-row">
-                <button className="btn primary" type="button" onClick={toKeys}>
-                  Открыть ключи
+                <button className="btn primary" type="button" onClick={() => openKey("bybit")}>
+                  Открыть ключ Bybit
                 </button>
                 <button className="btn" type="button" onClick={() => setBox(false)}>
                   Отмена
@@ -637,9 +637,9 @@ function AccountCard({ toKeys }: { toKeys: () => void }) {
           ) : !pinSet ? (
             <>
               <b>Сначала задайте PIN.</b>
-              <span>Без PIN переход на реальные деньги невозможен. Задайте его в «Ключи API → Сервер и доступ» — его же спрашивает Telegram-бот.</span>
+              <span>Без PIN переход на реальные деньги невозможен. Он хранится в «Ключи и доступ → Пароли и PIN», его же спрашивает Telegram-бот.</span>
               <div className="btn-row">
-                <button className="btn primary" type="button" onClick={toKeys}>
+                <button className="btn primary" type="button" onClick={() => openKey("server")}>
                   Задать PIN
                 </button>
                 <button className="btn" type="button" onClick={() => setBox(false)}>
