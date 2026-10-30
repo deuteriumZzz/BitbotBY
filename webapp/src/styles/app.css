@@ -1256,3 +1256,46 @@ select.sel{border-radius:var(--r-ctl);background:var(--c-inset);box-shadow:none}
   .btn:hover:not(:disabled){transform:none}
   .dot.live::after{animation:none!important;opacity:0}
 }
+
+/* ---------- «Цепочка»: полотно конвейера, узлы, поток по стрелкам, панель шага справа ---------- */
+.pipe-canvas{border-radius:var(--r-card);border-color:var(--c-line);background-color:var(--c-s1);background-image:radial-gradient(circle,var(--c-line2) 1px,transparent 1.3px);background-size:22px 22px;padding:18px}
+.pipe-hint{margin:12px 2px 0;font:12px/1.4 var(--font-text);color:var(--c-ink3)}
+.pipe li{flex:1 0 156px}
+.pipe-node{border-radius:var(--r-inner);background:linear-gradient(180deg,var(--c-sheen),transparent 60%),var(--c-s2);border-color:var(--c-line2);padding:12px 14px;gap:5px;transition:border-color var(--dur-norm) var(--ease-out),transform var(--dur-fast) var(--ease-out),box-shadow var(--dur-norm) var(--ease-out),opacity var(--dur-norm) var(--ease-out)}
+.pipe-node .hd svg{width:30px;height:30px;padding:7px;border-radius:50%;background:var(--c-s3);border:1px solid var(--c-line2);color:var(--c-ink2);transition:color var(--dur-norm),background var(--dur-norm),border-color var(--dur-norm)}
+.pipe-node:hover:not(.idle){transform:translateY(-2px);border-color:var(--c-ctl);box-shadow:var(--shadow-lift)}
+.pipe-node:active{transform:scale(.98)}
+.pipe-node.on{border-color:var(--c-accent);box-shadow:0 0 0 1px var(--c-accent),0 12px 30px -16px color-mix(in oklab,var(--c-accent) 55%,transparent)}
+.pipe-node.on .hd{color:var(--c-ink)}
+.pipe-node.on .hd svg{background:color-mix(in oklab,var(--c-accent) 16%,var(--c-s3));border-color:color-mix(in oklab,var(--c-accent) 55%,transparent);color:var(--c-accent)}
+.pipe-node .res{border-top-color:var(--c-line)}
+.pipe-legend i{border-radius:4px}
+.pipe-legend i.on{border-color:var(--c-accent);box-shadow:none}
+/* Поток: по стрелке между участвующими шагами бегут штрихи, как по связи в редакторе потоков. */
+.pipe-arrow{flex:0 0 26px}
+.pipe-arrow path:first-child{stroke-dasharray:3 4;animation:pipe-flow .9s linear infinite}
+.pipe li:has(.pipe-node.idle) .pipe-arrow path:first-child{animation:none;stroke-dasharray:none;opacity:.5}
+@keyframes pipe-flow{to{stroke-dashoffset:-7}}
+.pipe-ai{border-radius:var(--r-inner);border-style:solid;border-color:var(--c-line);background:var(--c-s2)}
+.pipe-ai-chip{border-radius:var(--r-ctl);background:var(--c-s3);border-color:var(--c-line2);transition:border-color var(--dur-norm),transform var(--dur-fast)}
+.pipe-ai-chip:hover{border-color:var(--c-ctl);transform:translateY(-1px)}
+
+/* Панель шага: выезжает справа поверх затемнения; на телефоне — во весь экран. */
+.pipe-scrim{all:unset;position:fixed;inset:0;z-index:40;background:rgba(4,5,7,.5);opacity:0;pointer-events:none;transition:opacity var(--dur-norm) var(--ease-out)}
+.pipe-scrim.open{opacity:1;pointer-events:auto}
+.pipe-panel{position:fixed;top:0;right:0;bottom:0;z-index:41;width:min(580px,100%);display:flex;flex-direction:column;background:var(--c-bg);border-left:1px solid var(--c-line2);box-shadow:-30px 0 70px -24px rgba(0,0,0,.9);transform:translateX(104%);visibility:hidden;transition:transform .44s var(--ease-mech),visibility 0s linear .44s}
+.pipe-panel.open{transform:none;visibility:visible;transition:transform .44s var(--ease-mech),visibility 0s}
+.pipe-panel-h{display:flex;align-items:center;gap:10px;padding:14px 16px 14px 18px;border-bottom:1px solid var(--c-line);background:linear-gradient(180deg,var(--c-sheen),transparent),var(--c-s1)}
+.pipe-panel-h b{font:600 16px/1.2 var(--font-text)}
+.pipe-panel-h .pipe-close{margin-left:auto;width:36px;min-width:36px;padding:0}
+.pipe-panel .pipe-body{flex:1;overflow-y:auto;overscroll-behavior:contain;padding:16px;display:flex;flex-direction:column;gap:12px;scrollbar-width:thin;scrollbar-color:var(--c-line2) transparent}
+.pipe-panel .cols{display:flex;flex-direction:column;gap:12px}
+.pipe-panel.open .pipe-body>*{animation:cardin .42s var(--ease-mech) backwards}
+.pipe-panel.open .pipe-body>*:nth-child(2){animation-delay:.06s}
+.pipe-panel.open .pipe-body>*:nth-child(3){animation-delay:.12s}
+.pipe-panel .pipe-sum .card-h{display:none}
+@media (prefers-reduced-motion:reduce){
+  .pipe-arrow path:first-child{animation:none}
+  .pipe-panel,.pipe-scrim{transition:none}
+  .pipe-node:hover:not(.idle){transform:none}
+}

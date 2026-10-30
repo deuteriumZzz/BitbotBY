@@ -2,6 +2,8 @@
 // под ним — сводка выбранного узла и его карточки (те же, что были во вкладке раньше).
 // Итогов последнего цикла на узлах пока нет: бот не сохраняет шаги решения (этап 2).
 
+import { useEffect, useRef, useState } from "react";
+
 import type { BotNode, SecretItem, SettingDef } from "../lib/types";
 import { actions, useStore } from "../store";
 import { Q, Seg } from "../ui";
@@ -329,8 +331,24 @@ export function Pipeline() {
   const when = cycle ? new Date(cycle.at * 1000).toLocaleTimeString("ru-RU") : "";
   const curRes = cycle?.nodes[cur.id];
   const [curGlyph, curCls] = mark(curRes?.ok);
+  // Настройки узла выезжают панелью справа, полотно остаётся на виду. Переход к узлу из поиска (⌘K) тоже открывает.
+  const [open, setOpen] = useState(false);
+  const closeBtn = useRef<HTMLButtonElement>(null);
+  const seen = useRef(node);
+  useEffect(() => {
+    if (seen.current === node) return;
+    seen.current = node;
+    setOpen(true);
+  }, [node]);
+  useEffect(() => {
+    if (!open) return;
+    closeBtn.current?.focus({ preventScroll: true });
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
   return (
-    <section className="view enter" aria-label="Бот">
+    <section className="view enter" aria-label="Цепочка">
       <UiSwitchRow />
       <div className="pipe-canvas">
         <div className="pipe-top">
@@ -376,7 +394,11 @@ export function Pipeline() {
                   type="button"
                   className={`pipe-node${node === id ? " on" : ""}${on ? "" : " idle"}`}
                   aria-pressed={node === id}
-                  onClick={() => openNode(id)}
+                  aria-haspopup="dialog"
+                  onClick={() => {
+                    openNode(id);
+                    setOpen(true);
+                  }}
                 >
                   <span className="hd">
                     {icon}
@@ -395,7 +417,20 @@ export function Pipeline() {
           })}
         </ol>
         <AiStrip part={takesPart(mode, "ai")} />
+        <p className="pipe-hint">Нажмите на шаг — его настройки откроются справа, конвейер останется на виду.</p>
       </div>
+      <button type="button" className={`pipe-scrim${open ? " open" : ""}`} tabIndex={-1} aria-hidden="true" onClick={() => setOpen(false)} />
+      <aside className={`pipe-panel${open ? " open" : ""}`} role="dialog" aria-label={`Шаг «${cur.title}»`} aria-hidden={!open}>
+        <div className="pipe-panel-h">
+          <span className="pipe-sum-ico">{cur.icon}</span>
+          <b>{cur.title}</b>
+          <span className="label">
+            шаг {String(at + 1).padStart(2, "0")} из {String(NODES.length).padStart(2, "0")}
+          </span>
+          <button ref={closeBtn} type="button" className="btn pipe-close" aria-label="Закрыть настройки шага" onClick={() => setOpen(false)}>
+            ✕
+          </button>
+        </div>
       <div className="pipe-body" key={cur.id}>
         <article className="card pipe-sum">
           <div className="card-h">
@@ -447,8 +482,16 @@ export function Pipeline() {
             <div className="col">
               <ModelCard />
               <div className="btn-row">
-                <button className="btn" type="button" onClick={() => setTab("learn")}>
-                  Задачи обучения и проверки →
+                <button
+                  className="btn"
+                  type="button"
+                  onClick={() => {
+                    setOpen(false);
+                    const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+                    document.querySelector('[aria-label="Обучение"]')?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+                  }}
+                >
+                  Задачи обучения и проверки ↓
                 </button>
               </div>
             </div>
@@ -484,6 +527,7 @@ export function Pipeline() {
           </div>
         )}
       </div>
+      </aside>
     </section>
   );
 }
