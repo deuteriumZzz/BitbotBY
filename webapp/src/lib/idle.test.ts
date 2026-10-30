@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { idleReason, inHours, type IdleInput } from "./idle";
+import { bestWindow, idleReason, inHours, type IdleInput } from "./idle";
 import type { CycleTrace } from "./types";
 
 const base: IdleInput = { alive: true, paused: false, cycle: null, slots: { used: 0, max: 3 }, hours: "", hourUtc: 12 };
@@ -19,6 +19,17 @@ describe("«Почему бот молчит?»", () => {
     expect(inHours("22-6", 23)).toBe(true);
     expect(inHours("22-6", 12)).toBe(false);
     expect(inHours("", 3)).toBe(true);
+  });
+
+  it("прибыльное окно часов: подряд, через полночь, без окна в плюсе", () => {
+    const net = Array<number>(24).fill(-1);
+    [net[9], net[10], net[11], net[12], net[13]] = [3, 3, 3, -1, 5];
+    expect(bestWindow(net)).toBe("9-14");
+    const night = Array<number>(24).fill(-1);
+    [night[22], night[23], night[0], night[1]] = [2, 2, 2, 2];
+    expect(bestWindow(night)).toBe("22-2");
+    expect(inHours("22-2", 1)).toBe(true);
+    expect(bestWindow(Array<number>(24).fill(-1))).toBeNull();
   });
 
   it("называет одну причину по старшинству", () => {

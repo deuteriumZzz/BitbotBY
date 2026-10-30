@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { arrow, base, exitReason, fmtN, pct, price, tone, usd } from "../lib/format";
+import { bestWindow, inHours } from "../lib/idle";
 import type { JournalTrade, Period, Side } from "../lib/types";
-import { useStore } from "../store";
-import { Seg, Skel } from "../ui";
-import { stratName } from "./bots";
+import { actions, useStore } from "../store";
+import { Q, Seg, Skel, hideTip, showTip } from "../ui";
+import { cfg, stratName } from "./bots";
 import { Calendar, ExecutionCard } from "./terminal";
 import { TraceSteps } from "./trace";
 
@@ -109,6 +110,7 @@ export function Journal() {
             </div>
           </article>
           {all && <ByStrategy trades={trades} pick={setStrategy} picked={strategy} />}
+          {all && <ByHour trades={trades} />}
           <Calendar />
           <ExecutionCard />
         </div>
@@ -219,6 +221,96 @@ function ByStrategy({ trades, pick, picked }: { trades: JournalTrade[]; pick: (s
           </li>
         ))}
       </ul>
+    </article>
+  );
+}
+
+const hh = (h: number) => `${String(h).padStart(2, "0")}:00`;
+
+/** Результат по часу входа (UTC): где бот зарабатывает и где теряет. Кнопка ставит часы торговли по прибыльному окну. */
+function ByHour({ trades }: { trades: JournalTrade[] }) {
+  const hours = useStore((s) => cfg<string>(s.config, "TRADING_HOURS", ""));
+  const rows = useMemo(() => {
+    const r = Array.from({ length: 24 }, () => ({ net: 0, n: 0 }));
+    for (const t of trades) {
+      const h = new Date(t.opened).getUTCHours();
+      r[h].net += t.pnl;
+      r[h].n += 1;
+    }
+    return r;
+  }, [trades]);
+  // На десятке сделок «лучший час» — случайность; окно для часов торговли — только от 50.
+  if (trades.length < 10) return null;
+  const net = rows.map((r) => r.net);
+  const peak = Math.max(...net.map(Math.abs)) || 1;
+  const best = net.indexOf(Math.max(...net));
+  const worst = net.indexOf(Math.min(...net));
+  const found = trades.length >= 50 ? bestWindow(net) : null;
+  const [a, b] = found ? found.split("-").map(Number) : [0, 0];
+  // Окно, которое срезает час-два, не стоит настройки: предлагаем, только если оно убирает от 4 часов.
+  const win = found && (b - a + 24) % 24 <= 20 ? found : null;
+  const inWin = net.reduce((s, v, h) => (win && inHours(win, h) ? s + v : s), 0);
+  const total = net.reduce((s, v) => s + v, 0);
+  const show = (el: HTMLElement, h: number) =>
+    showTip(
+      <>
+        {hh(h)}–{hh((h + 1) % 24)} UTC
+        <br />
+        {rows[h].n ? (
+          <>
+            <b className={tone(rows[h].net)}>{`${arrow(rows[h].net)} ${usd(rows[h].net)}`}</b> · {rows[h].n} {rows[h].n === 1 ? "сделка" : "сделок"}
+          </>
+        ) : (
+          "входов не было"
+        )}
+      </>,
+      el.getBoundingClientRect(),
+      el,
+    );
+  return (
+    <article className="card jr-hours">
+      <div className="card-h">
+        <h2>По часам входа</h2>
+        <Q tip="Столбик — чистый результат сделок, открытых в этот час (UTC). Вверх — прибыль, вниз — убыток. Бледные часы — вне ваших часов торговли." />
+        <span className="label sp">UTC</span>
+      </div>
+      <div className="hr-bars" onPointerLeave={hideTip} onBlur={hideTip}>
+        {rows.map((r, h) => (
+          <span
+            key={h}
+            role="img"
+            tabIndex={0}
+            className={`${tone(r.net)}${inHours(hours, h) ? "" : " off"}`}
+            style={{ "--v": Math.abs(r.net) / peak } as React.CSSProperties}
+            aria-label={`${hh(h)} UTC: ${r.n ? usd(r.net) : "входов не было"}`}
+            onPointerOver={(e) => show(e.currentTarget, h)}
+            onFocus={(e) => show(e.currentTarget, h)}
+          />
+        ))}
+      </div>
+      <div className="hours-axis">
+        <span>00</span>
+        <span>06</span>
+        <span>12</span>
+        <span>18</span>
+        <span>24</span>
+      </div>
+      <p className="hr-note">
+        Лучший час — <b>{hh(best)}</b> <span>({usd(net[best])})</span>, худший — <b>{hh(worst)}</b> <span>({usd(net[worst])})</span>.
+      </p>
+      {win && win !== hours ? (
+        <div className="hr-act">
+          <button className="btn" type="button" onClick={() => void actions.patchConfig({ TRADING_HOURS: win })}>
+            Торговать с {hh(a)} до {hh(b)} UTC
+          </button>
+          <small>
+            В этих часах {usd(inWin)}, за все сутки {usd(total)}. Это прошлые сделки, не гарантия; действует на новые входы, вернуть — в шаге
+            «Сканер».
+          </small>
+        </div>
+      ) : (
+        trades.length < 50 && <small className="hr-act">Подсказка с часами торговли появится после 50 сделок — на меньшей выборке это случайность.</small>
+      )}
     </article>
   );
 }

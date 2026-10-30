@@ -28,6 +28,22 @@ export function inHours(hours: string, h: number): boolean {
   return a < b ? h >= a && h < b : h >= a || h < b;
 }
 
+/**
+ * Самое прибыльное окно часов подряд (UTC) по чистому результату за каждый час, в формате TRADING_HOURS.
+ * Часы без сделок окно не рвут; null — ни одно окно не в плюсе. Сутки целиком не предлагаем — это и так 24/7.
+ */
+export function bestWindow(net: number[]): string | null {
+  let best = { sum: 0, a: 0, len: 0 };
+  for (let a = 0; a < 24; a++) {
+    let sum = 0;
+    for (let len = 1; len < 24; len++) {
+      sum += net[(a + len - 1) % 24];
+      if (sum > best.sum || (sum > 0 && sum === best.sum && len > best.len)) best = { sum, a, len };
+    }
+  }
+  return best.len ? `${best.a}-${(best.a + best.len) % 24}` : null;
+}
+
 const ORDER: BotNode[] = ["scan", "strat", "ai", "sac", "risk", "order", "track"];
 
 /** null — молчать не о чем: сделка только что открыта. Порядок проверок — от причины, которая перекрывает остальные. */

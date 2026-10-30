@@ -1578,3 +1578,18 @@ button.kl-chip:focus-visible{outline:2px solid var(--c-ink);outline-offset:2px}
 .health-links button:focus-visible{outline:2px solid var(--c-ink);outline-offset:1px}
 .health-links button>span{display:inline-flex;align-items:center;gap:6px;font-weight:500;color:var(--c-ink)}
 .cm-hub .cm-where{color:var(--c-ink2)}
+
+/* ---------- «Журнал»: результат по часу входа — столбики от нулевой линии ---------- */
+.hr-bars{display:grid;grid-template-columns:repeat(24,minmax(0,1fr));gap:2px;height:96px;margin-top:6px;background:linear-gradient(var(--c-line2),var(--c-line2)) 0 50%/100% 1px no-repeat}
+.hr-bars span{position:relative;outline:none;border-radius:4px;cursor:default}
+.hr-bars span:focus-visible{box-shadow:inset 0 0 0 2px var(--c-ink)}
+.hr-bars span::before{content:"";position:absolute;left:1px;right:1px;height:max(1px,calc(var(--v) * 46%));transition:height var(--dur-slow) var(--ease-mech),opacity var(--dur-norm) var(--ease-out)}
+.hr-bars span.up::before{bottom:50%;border-radius:4px 4px 0 0;background:var(--c-up)}
+.hr-bars span.down::before{top:50%;border-radius:0 0 4px 4px;background:var(--c-down)}
+.hr-bars span.off::before{opacity:.35}
+.hr-bars span:hover::before{opacity:1;filter:brightness(1.15)}
+.hr-note{margin:10px 0 0;font-size:13px;color:var(--c-ink2)}
+.hr-note b{color:var(--c-ink);font-weight:600}
+.hr-act{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin-top:10px}
+small.hr-act,.hr-act small{font-size:12px;color:var(--c-ink3);line-height:1.45}
+.hr-note span{white-space:nowrap}
