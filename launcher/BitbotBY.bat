@@ -1,7 +1,8 @@
 @echo off
 rem Двойной щелчок: запускает BitbotBY на этом компьютере и открывает приложение.
 chcp 65001 >nul
-cd /d "%~dp0"
+rem Ярлык лежит в launcher\ — работаем из корня проекта.
+cd /d "%~dp0.."
 where py >nul 2>nul
 if %errorlevel%==0 (
   py -3 launcher\launch.py %*

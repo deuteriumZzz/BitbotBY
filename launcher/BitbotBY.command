@@ -1,6 +1,7 @@
 #!/bin/bash
 # Двойной щелчок в Finder: запускает BitbotBY на этом компьютере и открывает приложение.
-cd "$(dirname "$0")" || exit 1
+# Ярлык лежит в launcher/ — работаем из корня проекта.
+cd "$(dirname "$0")/.." || exit 1
 if command -v python3 >/dev/null 2>&1; then
   python3 launcher/launch.py "$@"
   code=$?

@@ -66,7 +66,7 @@ def _signin_hint(default: str) -> str:
     if os.getenv("BITBOT_LOCAL_MODE") == "1":
         return (
             "Вы не вошли в приложение. Откройте его ярлыком BitbotBY "
-            "(BitbotBY.command или BitbotBY.bat) — он войдёт сам. "
+            "(launcher/BitbotBY.command или launcher/BitbotBY.bat) — он войдёт сам. "
             "Или в Терминале: python3 launcher/launch.py url, "
             "или пришлите боту /app в Telegram."
         )

@@ -449,7 +449,7 @@ def cmd_import_env(env_path: Path, overwrite: bool) -> int:
         say(f"Не нашёл {env_path}. Укажите файл: import-env --env=/путь/к/.env")
         return 2
     if not (STATE_DIR / "compose.env").exists() or not own_dashboard_running():
-        say("Сначала запустите BitbotBY (BitbotBY.command), потом повторите.")
+        say("Сначала запустите BitbotBY (launcher/BitbotBY.command), потом повторите.")
         return 2
     say("Переношу ключи из .env в зашифрованное хранилище (значения не показываются)…")
     cmd = compose_cmd(["exec", "-T", "dashboard", "python", "-m", "src.settings.secrets_import"])
