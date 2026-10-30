@@ -339,8 +339,8 @@ export function Pipeline() {
   const blocks = useBlocks();
   const [drag, setDrag] = useState<Drag | null>(null);
   const toLearn = () => {
-    const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-    document.querySelector('[aria-label="Обучение"]')?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+    setOpen(false);
+    setTab("learn");
   };
   const seen = useRef(node);
   useEffect(() => {
@@ -367,7 +367,7 @@ export function Pipeline() {
             </span>
             <ModeSeg />
             <button type="button" className="btn pipe-learn" onClick={toLearn}>
-              Обучение и проверки ↓
+              Обучение и проверки →
             </button>
           </div>
           <ul className="pipe-legend" aria-label="Обозначения">
@@ -504,13 +504,9 @@ export function Pipeline() {
                 <button
                   className="btn"
                   type="button"
-                  onClick={() => {
-                    setOpen(false);
-                    const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-                    document.querySelector('[aria-label="Обучение"]')?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
-                  }}
+                  onClick={toLearn}
                 >
-                  Задачи обучения и проверки ↓
+                  Обучить модель и проверить →
                 </button>
               </div>
             </div>

@@ -63,7 +63,7 @@ export function App() {
     };
     platform.setBack(overlay || tab !== "terminal" ? back : null);
   }, [overlay, tab]);
-  // Горячие клавиши без модификаторов: 1–4 — разделы, ? — справка, N — уведомления.
+  // Горячие клавиши без модификаторов: 1–5 — разделы, ? — справка, N — уведомления.
   // Не срабатывают, пока вы печатаете или открыто окно.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -140,12 +140,8 @@ export function App() {
         ) : (
           <>
             {tab === "terminal" && <Terminal />}
-            {(tab === "bots" || tab === "learn") && (
-              <>
-                <Pipeline />
-                <Learn />
-              </>
-            )}
+            {tab === "bots" && <Pipeline />}
+            {tab === "learn" && <Learn />}
             {tab === "journal" && <Journal />}
             {tab === "settings" && <Settings />}
           </>
@@ -354,16 +350,15 @@ function Banners() {
 
 // ── Нижняя навигация (на десктопе — боковая) ──────────────────────────────────
 
-/** Четыре раздела вместо пяти: «Обучение» живёт внутри «Цепочки» (под конвейером). */
 const TABS: [Tab, string, JSX.Element][] = [
   ["terminal", "Обзор", Icon.terminal],
   ["bots", "Цепочка", Icon.bots],
+  ["learn", "Обучение", Icon.learn],
   ["journal", "Журнал", Icon.journal],
   ["settings", "Настройки", Icon.settings],
 ];
 const tabsFor = (_ui: Ui) => TABS;
-/** Вкладка «learn» из ссылок и палитры подсвечивает «Цепочку». */
-const navTab = (tab: Tab): Tab => (tab === "learn" ? "bots" : tab);
+const navTab = (tab: Tab): Tab => tab;
 
 function Nav() {
   const tab = useStore((s) => s.tab);
