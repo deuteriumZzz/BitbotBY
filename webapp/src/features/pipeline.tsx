@@ -163,7 +163,15 @@ function usePipeline(mode: string): { status: Record<BotNode, string>; info: Rec
   const guardsOff = paper && cfg<boolean>(c, "PAPER_GUARDS_OFF", false);
   const status: Record<BotNode, string> = {
     scan: `${bot?.profile ? profileName(bot.profile) : "профиль —"} · ${spot ? "спот" : "фьючерсы"}`,
-    strat: `включено ${strategies.filter((s) => s.enabled).length}`,
+    // Роль стратегий зависит от режима: решают сами только в Local, иначе — подсказка для AI или запасной путь.
+    strat:
+      mode === "local"
+        ? `решают · включено ${strategies.filter((s) => s.enabled).length}`
+        : mode === "dqn"
+          ? fallback
+            ? `запасной путь · ${strategies.filter((s) => s.enabled).length}`
+            : "не участвуют"
+          : `подсказка для AI · ${strategies.filter((s) => s.enabled).length}`,
     ai: !ai ? "цепочка" : ai.single ? "один провайдер" : `${ai.chain.length} в цепочке`,
     sac: mode === "dqn" ? "решает сам" : "вместе с AI",
     risk: `${presetName(presetOf(c, presets))}${guardsOff ? " · без защит" : ""}`,
@@ -318,11 +326,22 @@ function AiStrip({ part }: { part: boolean }) {
   );
 }
 
+/** Кто решает и какая роль у стратегий — одной фразой под переключателем (как в src/core/trading_bot.py). */
+const modeNote = (mode: string, fallback: boolean): string =>
+  mode === "local"
+    ? "Решают стратегии: на каждой монете запускаются все включённые, входит самый уверенный сигнал. AI не участвует."
+    : mode === "dqn"
+      ? `Решает нейросеть SAC. Стратегии ${fallback ? "включаются, только когда SAC молчит (запасной путь)" : "не участвуют — запасной путь выключен"}.`
+      : `Решает ${mode === "hybrid" ? "пара SAC и AI: сделка — только если оба согласны" : "AI"}. Включённые стратегии — только подсказка о типах сетапов${
+          fallback ? "; если сигнала нет, решают они (запасной путь)" : ""
+        }. Чтобы решали сами стратегии — выберите Local.`;
+
 export function Pipeline() {
   const node = useStore((s) => s.node);
   const openNode = useStore((s) => s.openNode);
   const setTab = useStore((s) => s.setTab);
   const mode = useStore((s) => cfg<string>(s.config, "MODE", "ai"));
+  const fallback = useStore((s) => cfg<boolean>(s.config, "LOCAL_FALLBACK", false));
   const { status, info } = usePipeline(mode);
   const at = NODES.findIndex((n) => n.id === node);
   const cur = NODES[at] ?? NODES[0];
@@ -358,6 +377,7 @@ export function Pipeline() {
               <Q tip="Local — только индикаторы. AI — языковая модель. SAC — обученная нейросеть. Hybrid — SAC и AI должны согласиться. Узлы, которые в этом режиме не участвуют, погаснут." />
             </span>
             <ModeSeg />
+            <p className="pipe-mode-note">{modeNote(mode, fallback)}</p>
           </div>
           <ul className="pipe-legend" aria-label="Обозначения">
             <li>

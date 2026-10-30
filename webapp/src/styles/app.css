@@ -1607,3 +1607,4 @@ small.hr-act,.hr-act small{font-size:12px;color:var(--c-ink3);line-height:1.45}
 @media (prefers-reduced-motion:reduce){ .bal-d{animation-name:bal-d-fade} .learn-meter{transition:none} }
 @keyframes bal-d-fade{0%,100%{opacity:0}14%,75%{opacity:1}}
 .pipe-legend li.pipe-legend-res{display:block}
+.pipe-mode-note{flex-basis:100%;margin:0;max-width:86ch;font-size:13px;line-height:1.5;color:var(--c-ink2)}
