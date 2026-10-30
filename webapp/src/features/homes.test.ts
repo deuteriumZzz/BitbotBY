@@ -10,7 +10,8 @@ import { RULES } from "./rules";
 const SOURCES = import.meta.glob("./*.tsx", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
 
 // Ярлыки «Кто решает»: мастер первого запуска и «Включить AI» после ввода ключа.
-const SHORTCUTS: Record<string, string[]> = { MODE: ["./ai.tsx", "./setup.tsx"] };
+// Часы торговли: «Торговать с … до …» в «Журнале» применяет окно, найденное по сделкам.
+const SHORTCUTS: Record<string, string[]> = { MODE: ["./ai.tsx", "./setup.tsx"], TRADING_HOURS: ["./journal.tsx"] };
 
 function writers(key: string): string[] {
   const files = new Set<string>();
