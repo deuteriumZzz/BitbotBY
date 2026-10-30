@@ -1,25 +1,5 @@
-:root{
-  /* «Приборная панель»: матовый графит, светящиеся показания, острые формы.
-     Контейнерный запрос на #root переключает оболочку MiniApp (вкладки снизу,
-     одна колонка) на десктопный терминал (боковая панель, сетка 12 колонок). */
-  --bg:#100F0D; --panel:#181714; --panel-2:#201E1A; --line:#38342D; --line-soft:#27241F; --line-ui:#706A5E; --cell0:#2A2722;
-  --ink:#EDE7DA; --ink-2:#B8B1A3; --ink-3:#8E887C;
-  --up:#3DDCB4; --down:#FF5B45; --warn:#F2C744;
-  /* Янтарь показаний и управления (бывший фиолетовый бренд). */
-  --brand:#FFA833; --brand-ink:#FFBA5C; --on-brand:#1C1305;
-  --cyan:#8FB3D9; --tg-link:#8FB3D9;
-  --mark:#5A5448; /* уголки-метки модулей */
-  --glow:0 0 10px color-mix(in oklab,var(--brand) 30%,transparent);
-  --f-brand:'IBM Plex Sans Condensed','Onest',system-ui,sans-serif;
-  --f-label:'IBM Plex Sans Condensed','Onest',system-ui,sans-serif;
-  --f-ui:'Onest',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
-  --f-num:'JetBrains Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
-  --r:3px; --r-s:2px;
-  /* Движение механическое: доводка без отскока. */
-  --ease:cubic-bezier(.2,.8,.2,1); --ease-mech:cubic-bezier(.3,.7,.1,1);
-  --t-fast:.16s; --t-norm:.32s; --t-slow:.6s;
-  color-scheme:dark;
-}
+/* Токены — styles/tokens.css. Контейнерный запрос на #root переключает оболочку MiniApp (вкладки снизу,
+   одна колонка) на десктопный терминал (боковая панель, сетка 12 колонок). */
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html,body{height:100%;margin:0}

@@ -1,0 +1,38 @@
+/* «Пульт» — индустриальный брутализм, палитра «Сталь». Единственный источник вида (ДНК — webapp/DESIGN.md).
+   Цвет — только у состояний; выбор, фокус и основная кнопка — инверсия. Углы 90°, теней и свечения нет. */
+:root{
+  /* Поверхности: фон → отсек → поднятый → утопленный. */
+  --c-bg:#08090B; --c-s1:#0E1013; --c-s2:#14171B; --c-s3:#1B1F24;
+  /* Линии: тонкая (внутри отсека), шов (между отсеками), рамка управления (≥ 3:1 к отсеку). */
+  --c-line:#22272E; --c-line2:#2F353D; --c-ctl:#67707C;
+  /* Текст: основной, вторичный, метки (≥ 4.5:1 даже на поднятом фоне). */
+  --c-ink:#E6EAEF; --c-ink2:#A3ABB6; --c-ink3:#828B97;
+  /* Состояния — единственные цвета: рост, падение, внимание, «идёт». */
+  --c-up:#4BE08A; --c-down:#FF5A5F; --c-warn:#FFC24B; --c-run:#6FA8FF;
+
+  /* Шрифты: Onest — текст и тяжёлые показания (800), JetBrains Mono — метки, ID и цифры. */
+  --font-text:'Onest',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --font-mono:'JetBrains Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  --track-label:.08em; --track-display:-.03em;
+
+  /* Геометрия: прямые углы; круг — только лампы и стрелочные шкалы (50%). */
+  --radius:0;
+
+  /* Движение: механика без отскока, только transform/opacity. */
+  --ease-out:cubic-bezier(.2,.8,.2,1); --ease-mech:cubic-bezier(.3,.7,.1,1);
+  --dur-fast:.12s; --dur-norm:.24s; --dur-slow:.48s;
+
+  /* Совместимость: прежние имена указывают на новые токены, пока секции переезжают. */
+  --bg:var(--c-bg); --panel:var(--c-s1); --panel-2:var(--c-s2); --cell0:var(--c-s3);
+  --line:var(--c-line2); --line-soft:var(--c-line); --line-ui:var(--c-ctl); --mark:var(--c-line2);
+  --ink:var(--c-ink); --ink-2:var(--c-ink2); --ink-3:var(--c-ink3);
+  --up:var(--c-up); --down:var(--c-down); --warn:var(--c-warn);
+  --brand:var(--c-ink); --brand-ink:var(--c-ink); --on-brand:var(--c-bg);
+  --cyan:var(--c-run); --tg-link:var(--c-run);
+  --glow:0 0 0 transparent;
+  --f-brand:var(--font-text); --f-label:var(--font-mono); --f-ui:var(--font-text); --f-num:var(--font-mono);
+  --r:var(--radius); --r-s:var(--radius);
+  --ease:var(--ease-out);
+  --t-fast:var(--dur-fast); --t-norm:var(--dur-norm); --t-slow:var(--dur-slow);
+  color-scheme:dark;
+}
