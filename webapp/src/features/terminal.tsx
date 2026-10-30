@@ -309,6 +309,12 @@ function Equity() {
         role="img"
         aria-label="Баланс за 30 дней"
       >
+        <defs>
+          <linearGradient id="eq-fade" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" className="eq-fade-a" />
+            <stop offset="1" className="eq-fade-b" />
+          </linearGradient>
+        </defs>
         {/* Шкала с делениями по дням — как у самописца. */}
         {pts.map((_, i) => (
           <line

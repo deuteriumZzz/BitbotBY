@@ -1157,3 +1157,102 @@ select.sel{border-radius:var(--r-ctl);background:var(--c-inset);box-shadow:none}
   .topbar .demo{display:none}
   .topbar{gap:8px}
 }
+
+/* ---------- «Обзор»: показатели, график + сканер справа, позиции + лента, рынок и итоги ---------- */
+.hero .bal{font:600 34px/1.1 var(--font-text);letter-spacing:var(--track-display);text-shadow:none}
+.hero-stats b{font:600 15px/1.2 var(--font-text)}
+.metrics{gap:10px;padding:10px}
+.tile{background:var(--c-s2);border:1px solid var(--c-line);border-radius:var(--r-inner);box-shadow:none;padding:14px}
+.tile .t-h span{font:500 12px/1.3 var(--font-text);color:var(--c-ink2)}
+.tile .v{font:600 22px/1.15 var(--font-text);letter-spacing:var(--track-display);text-shadow:none}
+.eq svg{height:96px}
+.eq-area{fill:url(#eq-fade)}
+.eq-fade-a{stop-color:var(--c-accent);stop-opacity:.24}
+.eq-fade-b{stop-color:var(--c-accent);stop-opacity:0}
+.eq-line{stroke:var(--c-accent);filter:drop-shadow(0 0 6px color-mix(in oklab,var(--c-accent) 45%,transparent))}
+.eq-now{fill:var(--c-accent);stroke:var(--c-s1)}
+.eq-tick,.eq-base{stroke:var(--c-line2)}
+.pos{background:var(--c-s2);border-color:var(--c-line);border-radius:var(--r-inner);padding:14px 16px}
+.pos-pnl b{font:600 18px/1.2 var(--font-text);letter-spacing:var(--track-display);text-shadow:none}
+.lane-h{border-bottom-style:solid;border-bottom-color:var(--c-line)}
+.ready-row{border-radius:var(--r-inner);background:var(--c-s2)}
+@container dev (min-width:900px){
+  .term{gap:16px}
+  .term>.metrics{order:1}
+  .term>.chart{grid-column:1/9;order:2}
+  .term>.radar{grid-column:9/13;order:2}
+  .term>.positions{grid-column:1/9;order:3}
+  .term>.feed{grid-column:9/13;order:3}
+  .term>.pulse,.term>.cal,.term>.exec{grid-column:span 4;order:4}
+  /* Сканер в узкой колонке: этапы — строки ленты, монеты едут сверху вниз по этапам. */
+  .term>.radar .lanes{grid-template-columns:minmax(0,1fr);gap:0}
+  .term>.radar .lane{display:grid;grid-template-columns:96px minmax(0,1fr);gap:10px;align-items:start;padding:9px 0;border-top:1px solid var(--c-line)}
+  .term>.radar .lane-h{border-bottom:0;padding:3px 0 0}
+  .term>.radar .lane-body{flex-direction:row;flex-wrap:wrap;min-height:28px;gap:6px;padding-top:0}
+  .term>.radar .slot{flex:1 1 64px}
+  .term>.positions .pos-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px;max-height:none;overflow:visible}
+  .term>.feed ul{max-height:420px}
+}
+.odo,.hero .bal,.tile .v,.pos-pnl b,.hero-stats b{font-variant-numeric:tabular-nums}
+.btn{white-space:nowrap}
+.pos .btn{padding:0 12px}
+.pos .acts{display:flex;flex-wrap:wrap;gap:6px}
+.pos .acts .btn{flex:1 1 auto}
+.pos-swipe{border-radius:var(--r-inner)}
+@container dev (min-width:900px){ .term>.positions .pos-list{align-items:start} }
+
+/* ---------- Движение и фактура: кнопки, карточки, навигация, тумблеры (prefers-reduced-motion — выключено) ---------- */
+/* Кнопки: градиент, внутренний блик, подъём на 1px с тенью, блик-пробег при наведении, нажатие 0.97. */
+.btn{position:relative;overflow:hidden;isolation:isolate;background:var(--g-ctl);box-shadow:inset 0 1px 0 var(--c-hi-dark);transition:transform var(--dur-fast) var(--ease-out),box-shadow var(--dur-norm) var(--ease-out),border-color var(--dur-norm) var(--ease-out),color var(--dur-fast) var(--ease-out)}
+.btn::after{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(105deg,transparent 30%,rgba(255,255,255,.12) 50%,transparent 70%);transform:translateX(-120%);pointer-events:none}
+.btn:hover:not(:disabled){transform:translateY(-1px);box-shadow:inset 0 1px 0 var(--c-hi-dark),var(--shadow-lift)}
+.btn:hover:not(:disabled)::after{transform:translateX(120%);transition:transform .7s var(--ease-out)}
+.btn:active:not(:disabled){transform:translateY(0) scale(.97);transition-duration:60ms}
+.btn.primary,.btn[aria-pressed="true"]{background:var(--g-primary);border-color:transparent;box-shadow:inset 0 1px 0 var(--c-hi)}
+.btn.primary:hover:not(:disabled){background:var(--g-primary);box-shadow:inset 0 1px 0 var(--c-hi),0 10px 26px -12px rgba(230,234,239,.45)}
+.btn.primary::after,.btn[aria-pressed="true"]::after{background:linear-gradient(105deg,transparent 30%,rgba(255,255,255,.7) 50%,transparent 70%)}
+.btn.danger{background:var(--g-ctl)}
+.btn.danger:hover:not(:disabled){border-color:var(--c-down);box-shadow:inset 0 1px 0 var(--c-hi-dark),0 10px 24px -12px color-mix(in oklab,var(--c-down) 55%,transparent)}
+.btn.danger.armed,.btn.armed{background:var(--g-danger);border-color:transparent;box-shadow:inset 0 1px 0 rgba(255,255,255,.3)}
+.panic::before{background:var(--g-danger)}
+
+/* Сегменты: бегунок — светлая пилюля с бликом. */
+.seg-ind{background:var(--g-primary);box-shadow:inset 0 1px 0 var(--c-hi)}
+.seg:not(.has-ind) button[aria-pressed="true"]{background:var(--g-primary)}
+.seg button{transition:color var(--dur-norm) var(--ease-out)}
+
+/* Тумблер: дорожка-пилюля, круглая ручка; «вкл» — зелёный градиент с мягким свечением. Метки «|»/«○» остаются. */
+.tgl .tr{border-radius:var(--r-pill);background:var(--c-inset);box-shadow:inset 0 1px 2px rgba(0,0,0,.5)}
+.tgl .kn{border-radius:50%;background-image:none;background:var(--g-primary);box-shadow:0 1px 3px rgba(0,0,0,.5)}
+.tgl[aria-checked="true"] .tr{background:var(--g-accent);border-color:transparent;box-shadow:0 0 14px -3px color-mix(in oklab,var(--c-accent) 60%,transparent)}
+
+/* Карточки: кромочный свет у курсора (--mx/--my ставит lib/motion.ts), подсветка главной карточки. */
+.card{transition:border-color var(--dur-norm) var(--ease-out)}
+.card::after{display:block;content:"";position:absolute;inset:-1px;border-radius:inherit;padding:1px;background:radial-gradient(260px circle at var(--mx,50%) var(--my,-120px),color-mix(in oklab,var(--c-ink) 30%,transparent),transparent 65%);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;opacity:0;transition:opacity var(--dur-norm) var(--ease-out);pointer-events:none}
+.card:hover::after{opacity:1}
+.card.hero{background:var(--glow-card),linear-gradient(180deg,var(--c-sheen),transparent 96px),var(--c-s1)}
+.tile,.pos{transition:border-color var(--dur-norm) var(--ease-out),background var(--dur-norm) var(--ease-out)}
+.tile:hover{border-color:var(--c-line2);background:var(--c-s3)}
+.pos:hover{border-color:var(--c-line2)}
+
+/* Навигация: тон при наведении, у активного раздела — акцентная черта. */
+.nav button{transition:color var(--dur-norm) var(--ease-out),background var(--dur-norm) var(--ease-out)}
+.nav button:not([aria-current="page"]):hover{background:color-mix(in oklab,var(--c-s3) 55%,transparent)}
+.nav-ind::before{content:"";position:absolute;left:50%;top:0;width:18px;height:2px;margin-left:-9px;border-radius:2px;background:var(--c-accent)}
+@container dev (min-width:900px){ .nav-ind::before{left:0;top:25%;width:3px;height:50%;margin-left:0} }
+
+/* «Живая» лампа: мягкое расходящееся кольцо вместо механического мигания. */
+.dot.live{animation:none;position:relative}
+.dot.live::after{content:"";position:absolute;inset:0;border-radius:50%;background:currentColor;animation:live-ring 2.2s var(--ease-out) infinite}
+@keyframes live-ring{from{transform:scale(1);opacity:.55}to{transform:scale(2.8);opacity:0}}
+
+/* Лента событий и чипы радара: плавный тон. */
+.ev{transition:background var(--dur-norm) var(--ease-out)}
+.ev:hover{background:color-mix(in oklab,var(--c-s2) 70%,transparent)}
+.chip{transition:border-color var(--dur-norm) var(--ease-out),transform var(--dur-fast) var(--ease-out)}
+
+@media (prefers-reduced-motion:reduce){
+  .btn,.btn::after,.card::after,.tile,.pos,.nav button,.ev,.chip{transition:none!important}
+  .btn:hover:not(:disabled){transform:none}
+  .dot.live::after{animation:none!important;opacity:0}
+}

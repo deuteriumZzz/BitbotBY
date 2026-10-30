@@ -13,10 +13,20 @@
   /* Состояния; акцент = рост: активное состояние, ключевая линия графика. */
   --c-up:#4BE08A; --c-down:#FF5A5F; --c-warn:#FFC24B; --c-run:#6FA8FF; --c-accent:var(--c-up);
 
-  /* Шрифты: Onest — текст и крупные показания (600, трекинг −0.02em); JetBrains Mono — ID и колонки цифр. */
-  --font-text:'Onest',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  /* Шрифты: Geist — текст и крупные показания (600, трекинг −0.02em, табличные цифры — барабаны не «гуляют»);
+     JetBrains Mono — ID и колонки цифр. */
+  --font-text:'Geist',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
   --font-mono:'JetBrains Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
   --track-display:-.02em;
+
+  /* Фактура: мягкие вертикальные градиенты кнопок, внутренний блик, тень подъёма, подсветка главной карточки. */
+  --g-primary:linear-gradient(180deg,#F5F7FA 0%,#CBD2DB 100%);
+  --g-ctl:linear-gradient(180deg,#22272D 0%,#181B20 100%);
+  --g-accent:linear-gradient(180deg,#6BEFA4 0%,#2FBF6C 100%);
+  --g-danger:linear-gradient(180deg,#FF7B7F 0%,#E2464B 100%);
+  --c-hi:rgba(255,255,255,.55); --c-hi-dark:rgba(255,255,255,.06);
+  --shadow-lift:0 10px 24px -12px rgba(0,0,0,.8);
+  --glow-card:radial-gradient(460px 220px at 100% 0%,color-mix(in oklab,var(--c-accent) 10%,transparent),transparent 70%);
 
   /* Геометрия. */
   --r-card:16px; --r-inner:12px; --r-ctl:10px; --r-pill:999px;
