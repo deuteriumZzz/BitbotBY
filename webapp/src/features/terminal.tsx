@@ -134,8 +134,6 @@ export function Terminal() {
       <Positions />
       <Chart />
       <Feed />
-      <Calendar />
-      <ExecutionCard />
     </section>
   );
 }
@@ -518,7 +516,8 @@ function MetricsCard() {
 
 // ── Качество исполнения: задержка ордера и проскальзывание ────────────────────
 
-function ExecutionCard() {
+/** Качество исполнения — живёт в «Журнале». */
+export function ExecutionCard() {
   const e = useStore((s) => s.execution[s.period]);
   if (!e) return <article className="card exec" aria-busy="true" />;
   const few = e.latency_ms_avg === null || e.slippage_pct_avg === null;
@@ -1622,7 +1621,8 @@ function Feed() {
 
 const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 
-function Calendar() {
+/** Календарь P&L — живёт в «Журнале». */
+export function Calendar() {
   const daily = useStore((s) => s.daily);
   const days = useMemo(() => {
     const byDate = new Map(daily.map((r) => [r.date, r]));

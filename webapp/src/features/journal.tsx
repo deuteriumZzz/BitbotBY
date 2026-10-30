@@ -1,12 +1,13 @@
 // Журнал сделок: закрытые сделки с причинами входа и выхода, итоги по стратегиям.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { arrow, base, exitReason, fmtN, pct, price, tone, usd } from "../lib/format";
 import type { JournalTrade, Period, Side } from "../lib/types";
 import { useStore } from "../store";
 import { Seg, Skel } from "../ui";
 import { stratName } from "./bots";
+import { Calendar, ExecutionCard } from "./terminal";
 import { TraceSteps } from "./trace";
 
 /** Выгрузка показанных сделок: открывается в Excel и Numbers. */
@@ -88,7 +89,7 @@ export function Journal() {
     <section className="view enter" aria-label="Журнал">
       <div className="cols jr">
         <div className="col">
-          <article className="card">
+          <article className="card jr-sum">
             <div className="card-h">
               <h2>Итоги</h2>
               <Seg className="sm sp" value={period} options={PERIODS} onChange={setPeriod} label="Период" />
@@ -108,9 +109,11 @@ export function Journal() {
             </div>
           </article>
           {all && <ByStrategy trades={trades} pick={setStrategy} picked={strategy} />}
+          <Calendar />
+          <ExecutionCard />
         </div>
         <div className="col">
-          <article className="card">
+          <article className="card jr-trades">
             <div className="card-h">
               <h2>Сделки</h2>
               {all && <span className="pill sp">{trades.length}</span>}
@@ -193,7 +196,7 @@ function ByStrategy({ trades, pick, picked }: { trades: JournalTrade[]; pick: (s
   }, [trades]);
   if (!rows.length) return null;
   return (
-    <article className="card">
+    <article className="card jr-by">
       <div className="card-h">
         <h2>По стратегиям</h2>
       </div>
@@ -220,67 +223,114 @@ function ByStrategy({ trades, pick, picked }: { trades: JournalTrade[]; pick: (s
   );
 }
 
+/** Таблица сделок как в обозревателе блоков: строка — сделка, нажатие открывает её чек сбоку. */
 function TradeList({ trades }: { trades: JournalTrade[] }) {
   const [shown, setShown] = useState(PAGE);
-  const [open, setOpen] = useState<string | null>(null);
+  const [t, setOpen] = useState<JournalTrade | null>(null);
+  const closeBtn = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!t) return;
+    closeBtn.current?.focus({ preventScroll: true });
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(null);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [t]);
   return (
     <>
-      <ul className="jr-list">
-        {trades.slice(0, shown).map((t) => {
-          const key = `${t.id}-${t.closed}`;
-          const isOpen = open === key;
-          return (
-            <li key={key} className={isOpen ? "open" : ""}>
-              <button type="button" className="jr-row" aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : key)}>
-                <span className="coin">{base(t.symbol)}</span>
-                <span className="jr-t">
-                  <b>
-                    {t.symbol}
-                    <span className={`side ${t.side}`}>{t.side === "long" ? "LONG" : "SHORT"}</span>
-                  </b>
-                  <small>
-                    {stratName(t.strategy)}
-                    {t.reason && ` · ${exitReason(t.reason)}`}
-                  </small>
-                </span>
-                <span className="jr-pnl">
-                  <b className={`num ${tone(t.pnl)}`}>{usd(t.pnl)}</b>
-                  <small>{when(t.closed)}</small>
-                </span>
-              </button>
-              {isOpen && (
-                <dl className="jr-more">
-                  <dt>Вход → выход</dt>
-                  <dd className="num">
-                    {price(t.entry)} → {price(t.exit)}
-                  </dd>
-                  <dt>Результат</dt>
-                  <dd className="num">
-                    {usd(t.pnl)} ({pct(t.pnl_pct * 100)} от маржи)
-                  </dd>
-                  <dt>Объём</dt>
-                  <dd className="num">${fmtN(t.entry * t.qty, 0)}</dd>
-                  <dt>Комиссии</dt>
-                  <dd className="num">${fmtN(t.fees)}</dd>
-                  <dt>Длилась</dt>
-                  <dd>
-                    {lasted(t)} · с {when(t.opened)}
-                  </dd>
-                  <dt>Уверенность</dt>
-                  <dd className="num">{t.confidence.toFixed(2)}</dd>
-                  <dt>Почему открыта</dt>
-                  <dd>
-                    {t.reasoning || "бот не записал объяснение"}
-                    {t.trace?.length ? <TraceSteps steps={t.trace} /> : null}
-                  </dd>
-                  <dt>Почему закрыта</dt>
-                  <dd>{t.reason ? exitReason(t.reason) : "причина не записана (сделка до обновления)"}</dd>
-                </dl>
-              )}
-            </li>
-          );
-        })}
+      <div className="jr-head" aria-hidden="true">
+        <span>ID</span>
+        <span>Монета</span>
+        <span>Вход → выход</span>
+        <span>Результат</span>
+        <span>Исход</span>
+        <span>Стратегия</span>
+        <span>Закрыта</span>
+      </div>
+      <ul className="jr-rows">
+        {trades.slice(0, shown).map((x) => (
+          <li key={`${x.id}-${x.closed}`}>
+            <button type="button" className={`jr-tr ${tone(x.pnl)}`} onClick={() => setOpen(x)} aria-label={`Чек сделки ${x.symbol}: ${usd(x.pnl)}`}>
+              <span className="jr-id num">#{x.id}</span>
+              <span className="jr-coin">
+                <span className="coin">{base(x.symbol)}</span>
+                <b>{x.symbol}</b>
+                <span className={`side ${x.side}`}>{x.side === "long" ? "LONG" : "SHORT"}</span>
+              </span>
+              <span className="jr-px num">
+                {price(x.entry)} → {price(x.exit)}
+              </span>
+              <span>
+                <span className={`jr-tag num ${tone(x.pnl)}`}>{usd(x.pnl)}</span>
+              </span>
+              <span className="jr-cell">{x.reason ? exitReason(x.reason) : "—"}</span>
+              <span className="jr-cell">{stratName(x.strategy)}</span>
+              <span className="jr-cell">{when(x.closed)}</span>
+            </button>
+          </li>
+        ))}
       </ul>
+      <button type="button" className={`pipe-scrim${t ? " open" : ""}`} tabIndex={-1} aria-hidden="true" onClick={() => setOpen(null)} />
+      <aside className={`pipe-panel${t ? " open" : ""}`} role="dialog" aria-label="Чек сделки" aria-hidden={!t}>
+        {t && (
+          <>
+            <div className="pipe-panel-h">
+              <span className="coin">{base(t.symbol)}</span>
+              <b>{t.symbol}</b>
+              <span className={`side ${t.side}`}>{t.side === "long" ? "LONG" : "SHORT"}</span>
+              <span className="label">чек сделки</span>
+              <button ref={closeBtn} type="button" className="btn pipe-close" aria-label="Закрыть чек" onClick={() => setOpen(null)}>
+                ✕
+              </button>
+            </div>
+            <div className="pipe-body rc" key={`${t.id}-${t.closed}`}>
+              <dl className="rc-g">
+                <dt>ID сделки</dt>
+                <dd className="num">#{t.id}</dd>
+                <dt>Статус</dt>
+                <dd>
+                  <span className={`jr-tag ${tone(t.pnl)}`}>✓ закрыта{t.reason ? ` · ${exitReason(t.reason)}` : ""}</span>
+                </dd>
+                <dt>Открыта</dt>
+                <dd>{when(t.opened)}</dd>
+                <dt>Закрыта</dt>
+                <dd>
+                  {when(t.closed)} · длилась {lasted(t)}
+                </dd>
+              </dl>
+              <dl className="rc-g">
+                <dt>Направление</dt>
+                <dd>{t.side === "long" ? "▲ LONG — ставка на рост" : "▼ SHORT — ставка на падение"}</dd>
+                <dt>Вход → выход</dt>
+                <dd className="num">
+                  {price(t.entry)} → {price(t.exit)}
+                </dd>
+                <dt>Объём</dt>
+                <dd className="num">${fmtN(t.entry * t.qty, 0)}</dd>
+                <dt>Уверенность</dt>
+                <dd className="num">{t.confidence.toFixed(2)}</dd>
+              </dl>
+              <dl className="rc-g">
+                <dt>Результат</dt>
+                <dd className={`num ${tone(t.pnl)}`}>
+                  {usd(t.pnl)} · {pct(t.pnl_pct * 100)} от маржи
+                </dd>
+                <dt>Комиссии</dt>
+                <dd className="num">${fmtN(t.fees)}</dd>
+                <dt>Стратегия</dt>
+                <dd>{stratName(t.strategy)}</dd>
+                <dt>Почему открыта</dt>
+                <dd>{t.reasoning || "бот не записал объяснение"}</dd>
+                <dt>Почему закрыта</dt>
+                <dd>{t.reason ? exitReason(t.reason) : "причина не записана (сделка до обновления)"}</dd>
+              </dl>
+              <div className="rc-steps">
+                <h3>Как бот решил</h3>
+                {t.trace?.length ? <TraceSteps steps={t.trace} /> : <p className="label">Шагов нет — сделка закрыта до обновления.</p>}
+              </div>
+            </div>
+          </>
+        )}
+      </aside>
       {trades.length > shown && (
         <button className="btn jr-more-btn" type="button" onClick={() => setShown(shown + PAGE)}>
           Показать ещё {Math.min(PAGE, trades.length - shown)}
