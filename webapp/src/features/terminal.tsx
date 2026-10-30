@@ -416,7 +416,7 @@ function MetricsCard() {
       </div>
       <div className="tile">
         <div className="t-h">
-          <span>Profit factor</span>
+          <span>Профит-фактор</span>
           <Q tip="Сумма всех прибылей, делённая на сумму всех убытков. Больше 1 — в плюсе, меньше 1 — в минусе." />
         </div>
         <div

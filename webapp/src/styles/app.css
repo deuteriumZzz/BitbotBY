@@ -1464,3 +1464,53 @@ button.cm-node:focus-visible{outline:2px solid var(--c-ink);outline-offset:2px}
   .cm-col{padding:0}
 }
 @media (prefers-reduced-motion:reduce){ .cm-dots.ok,.cm-dots.warn,.cm-hub.ok .cm-hub-ring{animation:none} button.cm-node:hover{transform:none} }
+
+/* ---------- «Обучение» — лаборатория: путь к реальным деньгам, модель, проверки таймлайном ---------- */
+.learn{display:flex;flex-direction:column;gap:16px}
+.learn>.cols{margin:0}
+.learn-hero{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:18px 28px;align-items:center;padding:24px;background:var(--glow-card),radial-gradient(520px 260px at 0% 100%,color-mix(in oklab,var(--c-run) 9%,transparent),transparent 70%),linear-gradient(180deg,var(--c-sheen),transparent 96px),var(--c-s1)}
+.learn-hero h2{font:700 26px/1.15 var(--font-text);letter-spacing:var(--track-display);margin:4px 0 8px;color:var(--c-ink)}
+.learn-hero p{color:var(--c-ink2);max-width:64ch;font-size:13.5px;line-height:1.55;margin:0}
+.learn-meter{--p:0;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;width:116px;height:116px;border-radius:50%;background:conic-gradient(var(--c-accent) calc(var(--p) * 1%),var(--c-s3) 0);box-shadow:0 0 30px -10px color-mix(in oklab,var(--c-accent) 60%,transparent)}
+.learn-meter::before{content:"";position:absolute;inset:8px;border-radius:50%;background:var(--c-s1)}
+.learn-meter>*{position:relative}
+.learn-meter b{font:600 30px/1 var(--font-text);letter-spacing:var(--track-display);color:var(--c-ink)}
+.learn-meter b small{font-size:15px;color:var(--c-ink3)}
+.learn-meter span{font:12px var(--font-text);color:var(--c-ink3);margin-top:2px}
+.learn-path{grid-column:1/-1;list-style:none;margin:8px 0 0;padding:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr))}
+.learn-path li{position:relative;display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;padding:0 6px;animation:cardin .5s var(--ease-mech) backwards}
+.learn-path li:nth-child(2){animation-delay:.06s} .learn-path li:nth-child(3){animation-delay:.12s} .learn-path li:nth-child(4){animation-delay:.18s} .learn-path li:nth-child(5){animation-delay:.24s}
+.learn-path li::before{content:"";position:absolute;top:18px;left:-50%;right:50%;height:2px;background:var(--c-line2);transition:background var(--dur-slow) var(--ease-out)}
+.learn-path li:first-child::before{display:none}
+.learn-path li.ok::before{background:linear-gradient(90deg,var(--c-accent),color-mix(in oklab,var(--c-accent) 60%,transparent))}
+.lp-dot{position:relative;z-index:1;display:grid;place-items:center;width:38px;height:38px;border-radius:50%;background:var(--c-s3);border:1px solid var(--c-line2);font:600 13px var(--font-mono);color:var(--c-ink2);transition:background var(--dur-norm),border-color var(--dur-norm),color var(--dur-norm)}
+.learn-path li.ok .lp-dot{background:var(--g-accent);border-color:transparent;color:var(--c-bg);box-shadow:0 0 18px -4px color-mix(in oklab,var(--c-accent) 75%,transparent)}
+.learn-path li.run .lp-dot{border-color:var(--c-run);color:var(--c-run);animation:lp-pulse 1.6s var(--ease-out) infinite}
+.learn-path li.bad .lp-dot{border-color:var(--c-down);color:var(--c-down)}
+@keyframes lp-pulse{0%{box-shadow:0 0 0 0 color-mix(in oklab,var(--c-run) 55%,transparent)}100%{box-shadow:0 0 0 14px transparent}}
+.lp-t{display:flex;flex-direction:column;font:500 13px/1.3 var(--font-text);color:var(--c-ink)}
+.lp-t small{font-size:11.5px;color:var(--c-ink3);margin-top:3px}
+.learn-path li.ok .lp-t small{color:var(--c-accent)}
+.learn-path li.run .lp-t small{color:var(--c-run)}
+/* Проверки — пронумерованный таймлайн; идущая задача пульсирует, готовая — с галочкой. */
+.learn-alpha .jobs{counter-reset:step}
+.learn-alpha .job{position:relative;padding-left:52px;counter-increment:step}
+.learn-alpha .job::before{content:counter(step);position:absolute;left:0;top:14px;z-index:1;display:grid;place-items:center;width:34px;height:34px;border-radius:50%;background:var(--c-s3);border:1px solid var(--c-line2);font:600 12px var(--font-mono);color:var(--c-ink2)}
+.learn-alpha .job::after{content:"";position:absolute;left:16px;top:48px;bottom:-16px;width:2px;background:var(--c-line2)}
+.learn-alpha .job:last-child::after{display:none}
+.learn-alpha .job.ok::before{content:"✓";background:var(--g-accent);border-color:transparent;color:var(--c-bg);box-shadow:0 0 14px -4px color-mix(in oklab,var(--c-accent) 70%,transparent)}
+.learn-alpha .job.ok::after{background:color-mix(in oklab,var(--c-accent) 45%,transparent)}
+.learn-alpha .job.bad::before{content:"✕";border-color:var(--c-down);color:var(--c-down)}
+.learn-alpha .job.run::before{border-color:var(--c-run);color:var(--c-run);animation:lp-pulse 1.6s var(--ease-out) infinite}
+.learn-model{background:radial-gradient(420px 200px at 100% 0%,color-mix(in oklab,var(--c-run) 8%,transparent),transparent 70%),linear-gradient(180deg,var(--c-sheen),transparent 96px),var(--c-s1)}
+.learn .job.run{background:linear-gradient(90deg,color-mix(in oklab,var(--c-run) 6%,transparent),transparent 60%)}
+@container dev (max-width:699px){
+  .learn-hero{grid-template-columns:minmax(0,1fr) auto;padding:18px}
+  .learn-hero h2{font-size:21px}
+  .learn-meter{width:84px;height:84px} .learn-meter b{font-size:22px}
+  .learn-path{grid-template-columns:minmax(0,1fr);gap:12px}
+  .learn-path li{flex-direction:row;text-align:left;align-items:center;gap:12px;padding:0}
+  .learn-path li::before{left:18px;right:auto;top:-12px;width:2px;height:12px}
+}
+@media (prefers-reduced-motion:reduce){ .learn-path li,.learn-path li.run .lp-dot,.learn-alpha .job.run::before{animation:none} }
+@container dev (max-width:699px){ .learn-meter span{font-size:9.5px} }

@@ -248,7 +248,7 @@ function PanicButton({ onFire, disabled }: { onFire: () => void; disabled: boole
   const lift = () => {
     setOpen(true);
     platform.haptic("tap");
-    say("Крышка поднята — удерживайте PANIC 1 секунду");
+    say("Крышка поднята — удерживайте «Стоп» 1 секунду");
     clearTimeout(cover.current);
     cover.current = setTimeout(() => setOpen(false), 5000);
   };
@@ -304,7 +304,7 @@ function PanicButton({ onFire, disabled }: { onFire: () => void; disabled: boole
     >
       {Icon.panic}
       <span>
-        PANIC<span className="long"> CLOSE</span>
+        Стоп<span className="long"> всего</span>
       </span>
       <span className="panic-cover" aria-hidden="true" />
     </button>

@@ -366,9 +366,6 @@ export function Pipeline() {
               <Q tip="Local — только индикаторы. AI — языковая модель. SAC — обученная нейросеть. Hybrid — SAC и AI должны согласиться. Узлы, которые в этом режиме не участвуют, погаснут." />
             </span>
             <ModeSeg />
-            <button type="button" className="btn pipe-learn" onClick={toLearn}>
-              Обучение и проверки →
-            </button>
           </div>
           <ul className="pipe-legend" aria-label="Обозначения">
             <li>

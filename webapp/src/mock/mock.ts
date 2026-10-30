@@ -296,7 +296,8 @@ function journalRow(p: Position, exitPrice: number, qty: number, net: number, fe
       const qty = (400 + seeded() * 1600) / entry;
       const exitPrice = entry + ((side === "long" ? 1 : -1) * (net + fees)) / qty;
       const exit = now - day * 86_400_000 + i * 3_600_000;
-      const p = { trade_id: -closed.length - 1, symbol, side, entry, strategy: at(strategies.slice(0, 6)).name, reasoning: at(WHY) };
+      // История — номера 801…, открытые позиции — с 1001: по порядку и без пересечений, как в настоящей базе.
+      const p = { trade_id: 801 + closed.length, symbol, side, entry, strategy: at(strategies.slice(0, 6)).name, reasoning: at(WHY) };
       const reason = win ? at(["tp", "tp", "trail"]) : at(["sl", "sl", "signal_reversal SELL conf=0.71", "hard_drawdown"]);
       closed.push(journalRow(p as Position, exitPrice, qty, net, fees, exit, exit - (20 + seeded() * 600) * 60_000, reason));
       balance += net;

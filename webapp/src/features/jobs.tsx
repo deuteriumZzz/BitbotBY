@@ -141,7 +141,7 @@ function JobRow({ def, profile }: { def: JobDef; profile?: ProfileInfo }) {
   const foreign = groupSource !== undefined && !job?.running && !sibling;
   const d = job?.done;
   return (
-    <li className="job">
+    <li className={`job${job?.running ? " run" : d ? (d.ok ? " ok" : " bad") : ""}`}>
       <div className="job-h">
         <b>{def.title}</b>
         <Q tip={def.what} />
@@ -379,7 +379,7 @@ export function ModelCard() {
   const [confirm, setConfirm] = useState(false);
   const role = sacRole(mode);
   return (
-    <article className="card">
+    <article className="card learn-model">
       <div className="card-h">
         <h2>Нейросеть SAC</h2>
         <span className={`pill sp ${role.used ? "ok" : ""}`}>
@@ -471,7 +471,7 @@ export function ModelCard() {
 
 function AlphaCard() {
   return (
-    <article className="card">
+    <article className="card learn-alpha">
       <div className="card-h">
         <h2>Поиск преимущества (альфы)</h2>
         <Q tip="Альфа — это то, что стратегия зарабатывает сверх случайности. Эти проверки отвечают на вопрос: есть ли у ваших стратегий и у AI настоящее преимущество, или пока везение." />
@@ -491,10 +491,66 @@ function AlphaCard() {
   );
 }
 
-/** Вкладка «Обучение»: нейросеть и поиск преимущества — всё, что можно улучшить и проверить. */
+/** Путь к реальным деньгам: модель и четыре проверки. «Готово» — задача выполнена, а не «преимущество найдено»:
+ *  вердикт каждой проверки — в её результате ниже. */
+const PATH: { id: JobId | "model"; label: string }[] = [
+  { id: "model", label: "Модель обучена" },
+  { id: "backtest", label: "Бэктест" },
+  { id: "alpha_report", label: "Значимость альфы" },
+  { id: "live_divergence", label: "Live против бэктеста" },
+  { id: "ai_isolation", label: "Вклад AI" },
+];
+
+function LearnPath() {
+  const jobs = useStore((s) => s.jobs);
+  const active = useStore((s) => s.profiles.find((p) => p.active));
+  const state = (id: JobId | "model"): "ok" | "run" | "bad" | "" => {
+    if (id === "model") return jobs.train?.running || jobs.tune?.running ? "run" : active?.model_exists ? "ok" : "";
+    const j = jobs[id];
+    return j?.running ? "run" : j?.done ? (j.done.ok ? "ok" : "bad") : "";
+  };
+  const steps = PATH.map((p) => ({ ...p, st: state(p.id) }));
+  const done = steps.filter((s) => s.st === "ok").length;
+  const note = { ok: "готово", run: "идёт…", bad: "ошибка", "": "не запускалось" } as const;
+  return (
+    <article className="card learn-hero">
+      <div className="learn-hero-t">
+        <span className="label">Лаборатория</span>
+        <h2>Путь к реальным деньгам</h2>
+        <p>
+          Обучите модель и выполните четыре проверки на истории и живых сделках. Бот всё это время торгует на бумажном счёте, задачи
+          идут в фоне.
+        </p>
+      </div>
+      <div className="learn-meter" style={{ "--p": Math.round((done / steps.length) * 100) } as React.CSSProperties} role="img" aria-label={`Выполнено ${done} из ${steps.length}`}>
+        <b className="num">
+          {done}
+          <small>/{steps.length}</small>
+        </b>
+        <span>выполнено</span>
+      </div>
+      <ol className="learn-path">
+        {steps.map((s, i) => (
+          <li key={s.id} className={s.st}>
+            <span className="lp-dot" aria-hidden="true">
+              {s.st === "ok" ? "✓" : s.st === "bad" ? "✕" : i + 1}
+            </span>
+            <span className="lp-t">
+              {s.label}
+              <small>{note[s.st]}</small>
+            </span>
+          </li>
+        ))}
+      </ol>
+    </article>
+  );
+}
+
+/** Раздел «Обучение»: путь к реальным деньгам, нейросеть и поиск преимущества. */
 export function Learn() {
   return (
-    <section className="view enter" aria-label="Обучение">
+    <section className="view enter learn" aria-label="Обучение">
+      <LearnPath />
       <div className="cols">
         <div className="col">
           <ModelCard />
