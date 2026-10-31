@@ -357,15 +357,21 @@ TWITTER_MAX_RESULTS=10   # Твитов на запрос (10 = экономия
 # Бесплатный путь без Bearer Token — аккаунты X через twscrape. Задаются только в приложении
 # (Настройки → Ключи и доступ → Twitter / X → «Через аккаунты»), хранятся зашифрованными.
 
-# Telegram sentiment — мониторинг публичных памп-каналов (только профиль Meme)
-# Бесплатно через Telethon MTProto. Получить: my.telegram.org → API development tools
-# Если не задан — TelegramSentiment молча возвращает 0.0
-TELEGRAM_SENTIMENT_API_ID=
-TELEGRAM_SENTIMENT_API_HASH=
-TELEGRAM_SENTIMENT_PHONE=+375291234567   # Формат с кодом страны
+# Telegram-каналы — посты в реальном времени, во всех профилях (Telethon MTProto).
+# API ID, API Hash и телефон: my.telegram.org → API development tools. Вводятся и проверяются
+# в приложении (Настройки → Ключи и доступ → Памп-каналы Telegram → «Войти»); сессия хранится
+# только в зашифрованном хранилище. Без входа TelegramSentiment возвращает 0.0.
 TELEGRAM_SENTIMENT_CHANNELS=CryptoMoonAlerts,pumpsignalscrypto,memecoinsnews
+TELEGRAM_WINDOW_MIN=60   # Учитывать посты за последние N минут
+# Сделки по доверенным каналам — меняются в приложении (Настройки → Каналы Telegram).
+TELEGRAM_TRUSTED_TRADING=false   # Главный тумблер, по умолчанию выключен
+TELEGRAM_TRUSTED_RISK=0.005      # Риск на сделку
+TELEGRAM_TRUSTED_SLOTS=2         # Позиций по каналам одновременно
+TELEGRAM_TRUSTED_SL=0.03         # Стоп, если в посте его нет
+TELEGRAM_TRUSTED_DEDUP_MIN=30    # Одна сделка по монете за N минут
+TELEGRAM_TRUSTED_UNTRUST=0       # Снять доверие после N убытков подряд (0 — не снимать)
 
-# Параметры опросчика (SentimentPoller, активен только при профиле Meme)
+# Параметры опросчика (SentimentPoller: Twitter только в Meme, Telegram — во всех профилях)
 SENTIMENT_POLL_INTERVAL=300   # Интервал опроса в секундах (каждые 5 мин)
 SENTIMENT_CACHE_TTL=600       # TTL кэша в Redis (10 мин)
 SENTIMENT_BUY_THRESHOLD=0.4   # Score ≥0.4 → buy-сигнал
