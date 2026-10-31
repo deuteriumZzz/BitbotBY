@@ -151,6 +151,8 @@ export interface Store {
   paramSearch: string | null;
   /** Ключ, который открыть в «Настройки → Ключи и доступ» при переходе из другой вкладки. */
   keyJump: string | null;
+  /** Раскрыть «Как рискуем → Настроить вручную» при переходе с плашки порога на «Цепочке». */
+  riskManual: boolean;
   toast: { id: number; text: string; undo?: () => void } | null;
 
   boot(): Promise<void>;
@@ -303,6 +305,7 @@ export const useStore = create<Store>((set, get) => {
     seenFeed: 0,
     paramSearch: null,
     keyJump: null,
+    riskManual: false,
     tab: "terminal",
     ui: savedUi(),
     node: "scan",

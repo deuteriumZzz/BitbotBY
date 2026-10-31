@@ -38,7 +38,6 @@ const state = (s?: SecretItem): string =>
 export function SignalsCard() {
   const config = useStore((s) => s.config);
   const secrets = useStore((s) => s.secrets);
-  const paper = useStore((s) => s.bot?.paper ?? true);
   const fg = useStore((s) => s.market?.fear_greed ?? null);
   const openKey = useStore((s) => s.openKey);
   const mode = cfg<string>(config, "MODE", "ai");
@@ -46,10 +45,6 @@ export function SignalsCard() {
   const chans = chanList(`${cfg(config, "TELEGRAM_SENTIMENT_CHANNELS", "")},${cfg(config, "TELEGRAM_TRUSTED_CHANNELS", "")}`).length;
   const keyed = SIGNAL_KEYS.map((id) => secrets?.find((s) => s.service === id)).filter((s): s is SecretItem => Boolean(s));
   const free = MARKET.filter((m) => !m.key);
-  const keys = paper
-    ? ["MIN_SIGNAL_CONFIDENCE_PAPER", "MIN_SIGNAL_CONFIDENCE", "SENTIMENT_BUY_THRESHOLD", "SENTIMENT_SELL_THRESHOLD"]
-    : ["MIN_SIGNAL_CONFIDENCE", "MIN_SIGNAL_CONFIDENCE_PAPER", "SENTIMENT_BUY_THRESHOLD", "SENTIMENT_SELL_THRESHOLD"];
-  const now = paper ? "MIN_SIGNAL_CONFIDENCE_PAPER" : "MIN_SIGNAL_CONFIDENCE";
   return (
     <article className="card sig">
       <div className="card-h">
@@ -111,8 +106,9 @@ export function SignalsCard() {
         </ul>
       </details>
 
-      <h3 className="sig-h">Порог — дальше в «Риск»</h3>
-      <ParamList keys={keys} mark={now} />
+      <h3 className="sig-h">Пороги стратегии «Настроение»</h3>
+      <ParamList keys={["SENTIMENT_BUY_THRESHOLD", "SENTIMENT_SELL_THRESHOLD"]} />
+      <p className="sig-note">Порог уверенности сделки — в «Риск → Как рискуем → Настроить вручную → Фильтры входа».</p>
     </article>
   );
 }

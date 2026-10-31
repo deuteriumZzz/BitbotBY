@@ -281,7 +281,8 @@ const MX = xOf("scan") + NW / 2; // цепочка рынка: «Сезон» �
 const SX = xOf("strat");
 const SW = NW + GX;
 const SH = MID + TH - TOP;
-const GATE_X = xOf("risk") + 60; // куда провод фильтра рынка входит в порог над «Риском»
+const GATE_X = xOf("risk") + NW / 2; // порог — по центру над «Риском»; провод фильтра входит в середину
+const FY = MID + TH + 20; // высота, на которой провод фильтра идёт вправо: ниже верхних узлов, выше дуг развилки
 /** Кому идут сигналы: AI (в промпт) — в режимах с AI, иначе стратегиям. */
 const sigTo = (mode: string): BotNode => (mode === "ai" || mode === "hybrid" ? "ai" : "strat");
 
@@ -357,9 +358,13 @@ function SignalWires({ mode }: { mode: string }) {
     <>
       {side(mode !== "dqn", [`M ${tx} ${TOP + SH} L ${tx} ${ROW}`], [[tx, TOP + SH], [tx, ROW]], `sig${tx}`)}
       {/* Фильтр рынка и Chronos работают после решения — провод к порогу перед «Риском» (в Local их нет). */}
+      {/* Вниз, потом ровно вправо между верхним рядом и дугами (не по краю «Доверенных каналов»), потом в порог. */}
       {side(
         mode !== "local",
-        [`M ${SX + SW - 24} ${TOP + SH} C ${SX + SW + 120} ${TOP + SH}, ${GATE_X} ${ROW - 80}, ${GATE_X} ${ROW - 37}`],
+        [
+          `M ${SX + SW - 24} ${TOP + SH} C ${SX + SW - 24} ${FY - 6}, ${SX + SW - 18} ${FY}, ${SX + SW} ${FY} ` +
+            `L ${GATE_X - 24} ${FY} C ${GATE_X - 6} ${FY}, ${GATE_X} ${FY + 6}, ${GATE_X} ${ROW - 37}`,
+        ],
         [[SX + SW - 24, TOP + SH], [GATE_X, ROW - 37]],
         "filter",
       )}
@@ -441,9 +446,15 @@ function SignalLane({ mode }: { mode: string }) {
       <span className="pw-tag" style={{ left: xOf(to) + NW / 2, top: (TOP + SH + ROW) / 2 }}>
         {mode === "dqn" ? "не для SAC" : to === "ai" ? "в AI" : "стратегия «Настроение»"}
       </span>
-      <button type="button" className="pw-gate" style={{ left: xOf("risk") + 4, top: ROW - 20 }} onClick={() => openNode(to)} title="Порог — в карточке «Сигналы для решения»">
+      <button
+        type="button"
+        className="pw-gate"
+        style={{ left: GATE_X, top: ROW - 20 }}
+        onClick={() => (useStore.setState({ riskManual: true }), openNode("risk"), scrollWhenReady("risk-conf"))}
+        title={`Дальше в «Риск», только если уверенность сделки ≥ ${minConf}. Нажмите — откроется порог в «Риск → Фильтры входа», меняется сразу, без перезапуска.`}
+      >
         {mode !== "local" && <span>фильтр рынка{chronos && mode === "hybrid" ? " · Chronos" : ""}</span>}
-        <span>дальше, если уверенность ≥ {minConf}</span>
+        <span>уверенность ≥ {minConf}</span>
       </button>
       <div className={`pipe-node pw-tg pw-trust${trade ? "" : " idle"}`} style={{ left: xOf("sac"), top: TOP, width: NW, height: SH }}>
         <button type="button" className="pw-open" onClick={toChannels}>

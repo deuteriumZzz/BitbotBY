@@ -11,7 +11,7 @@ export const shown = (d: SettingDef, v: unknown) => (d.type === "pct" ? +(Number
 export const unitOf = (d: SettingDef) => (d.type === "pct" ? "%" : d.unit);
 
 /** Те, что применяются только после перезапуска бота, — со значком ↻. mark — «· сейчас» (значение текущего счёта). */
-export function ParamList({ keys, mark }: { keys: string[]; mark?: string }) {
+export function ParamList({ keys, mark = [] }: { keys: string[]; mark?: string[] }) {
   const config = useStore((s) => s.config);
   const schema = useStore((s) => s.schema);
   const defs = keys.map((k) => schema.find((d) => d.key === k)).filter((d): d is SettingDef => Boolean(d));
@@ -22,7 +22,7 @@ export function ParamList({ keys, mark }: { keys: string[]; mark?: string }) {
         const label = (
           <span title={d.hint || undefined}>
             {d.label}
-            {d.key === mark && " · сейчас"}
+            {mark.includes(d.key) && " · сейчас"}
             {!d.hot && (
               <small className="prm-restart" title="Заработает после перезапуска бота" aria-label="после перезапуска">
                 {" "}

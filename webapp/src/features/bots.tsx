@@ -179,6 +179,7 @@ const LEV: Record<string, string[]> = {
   volatility: ["LEVERAGE_MIN", "LEVERAGE_MAX", "LEVERAGE_TARGET_RISK"],
   full: ["LEVERAGE_MIN", "LEVERAGE_MAX", "LEVERAGE_TARGET_RISK", "LEVERAGE_DD_THRESHOLD"],
 };
+const CONF = ["MIN_SIGNAL_CONFIDENCE", "MIN_SIGNAL_CONFIDENCE_PAPER"];
 const FILTERS = ["MAX_CORRELATION", "MAX_CORRELATION_PAPER", "CORRELATION_WINDOW", "MAX_SPREAD_PCT", "MAX_POSITION_SIZE"];
 const KILL = ["LIVE_ALPHA_KILL_ENABLED", "LIVE_ALPHA_KILL_MIN_TRADES", "LIVE_ALPHA_KILL_EV_THRESHOLD"];
 
@@ -194,6 +195,13 @@ export function RiskCard({ simple = false }: { simple?: boolean }) {
   const lev = cfg<LevMode>(c, "LEVERAGE_MODE", "volatility");
   const lever = levText(c, spot);
   const corr = paper ? "MAX_CORRELATION_PAPER" : "MAX_CORRELATION";
+  const conf = paper ? "MIN_SIGNAL_CONFIDENCE_PAPER" : "MIN_SIGNAL_CONFIDENCE";
+  const jump = useStore((s) => s.riskManual);
+  useEffect(() => {
+    if (!jump) return;
+    setOpen(true);
+    useStore.setState({ riskManual: false });
+  }, [jump]);
   const kill = cfg<boolean>(c, "LIVE_ALPHA_KILL_ENABLED", true);
   const [risk, setRisk] = useDebouncedPatch(+(cfg(c, "RISK_PER_TRADE", 0.02) * 100).toFixed(2), "RISK_PER_TRADE", (v) => +(v / 100).toFixed(4));
   const [slots, setSlots] = useDebouncedPatch(cfg(c, "MAX_POSITIONS", 3), "MAX_POSITIONS");
@@ -306,13 +314,14 @@ export function RiskCard({ simple = false }: { simple?: boolean }) {
             />
             {spot ? <p>На споте плеча и шортов нет.</p> : <ParamList keys={LEV[lev] ?? LEV.volatility} />}
           </div>
-          <div className="field">
+          <div className="field" id="risk-conf">
             <div className="field-h">
               <span>
-                Фильтры входа <Q tip="Не входить в монету, которая слишком похожа на уже открытые, с широким спредом или слишком крупной позицией." />
+                Фильтры входа{" "}
+                <Q tip="Не входить, если уверенность сделки ниже порога, монета слишком похожа на уже открытые, спред широкий или позиция слишком крупная. Порог уверенности меняется сразу." />
               </span>
             </div>
-            <ParamList keys={[corr, ...FILTERS.filter((k) => k !== corr)]} mark={corr} />
+            <ParamList keys={[conf, ...CONF.filter((k) => k !== conf), corr, ...FILTERS.filter((k) => k !== corr)]} mark={[conf, corr]} />
           </div>
           <div className="field">
             <div className="field-h">
