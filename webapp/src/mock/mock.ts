@@ -742,7 +742,7 @@ function xAccount(b: Body) {
   const email = String(b.email ?? "");
   if (!b.login || !b.password || !email.includes("@") || !b.email_password) fail(422, "invalid", "Проверьте поля.");
   tw.accounts = [...(tw.accounts ?? []).filter((a) => a.login !== b.login), { login: String(b.login), email: `${email[0]}***@${email.split("@")[1]}` }];
-  tw.status = "warn";
+  if (!tw.fields[0].set) tw.status = "unchecked";
   return tw;
 }
 
@@ -796,7 +796,7 @@ function secret(method: string, id: string, b: Body) {
   const s = secrets.find((x) => x.service === id) ?? fail(404, "unknown_service", "Нет такого сервиса.");
   if (method === "DELETE") {
     s.fields.forEach((f) => Object.assign(f, { set: false, last4: null, value: null }));
-    Object.assign(s, { status: "unset", message: "", checked_at: null });
+    Object.assign(s, { status: s.accounts?.length ? "unchecked" : "unset", message: "", checked_at: null });
   } else {
     const values: Record<string, string> = b.fields ?? {};
     for (const f of s.fields) {
@@ -999,6 +999,7 @@ function route(method: string, path: string, body: unknown): unknown {
   if (method === "DELETE" && (m = p.match(/^\/api\/secrets\/twitter\/accounts\/(.+)$/))) {
     const tw = secrets.find((x) => x.service === "twitter")!;
     tw.accounts = (tw.accounts ?? []).filter((a) => a.login !== decodeURIComponent(m![1]));
+    if (!tw.accounts.length && !tw.fields[0].set) tw.status = "unset";
     return tw;
   }
   if ((m = p.match(/^\/api\/secrets\/(.+)$/)) && (method === "PUT" || method === "DELETE")) return secret(method, m[1], b);

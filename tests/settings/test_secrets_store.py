@@ -195,9 +195,35 @@ def test_x_account_replace_and_remove(store):
     ss.x_add_account("alice", "one", "a@m.com", "x", "test")
     ss.x_add_account("alice", "two", "a@m.com", "x", "test")  # тот же логин — замена
     assert [a[1] for a in ss.x_parse(ss.get_value(ss.X_ENV))] == ["two"]
+    # сохранённые аккаунты — «не проверен», а не «есть проблема»
+    assert _x_status() == "unchecked"
     assert ss.x_remove_account("nobody", "test") is False
     assert ss.x_remove_account("alice", "test") is True
     assert ss.x_parse(ss.get_value(ss.X_ENV)) == []
+    assert _x_status() == "unset"
+
+
+def test_x_accounts_keep_official_status(store, monkeypatch):
+    monkeypatch.setenv("TWITTER_BEARER_TOKEN", "AAAA" * 10)
+    ss.save(ss.BY_ID["twitter"], {}, None, "ok", "Ключ рабочий.", "test")
+    ss.x_add_account("alice", "pw", "a@m.com", "x", "test")
+    assert _x_status() == "ok"
+    ss.x_remove_account("alice", "test")
+    assert _x_status() == "ok"
+
+
+def test_deleting_x_api_key_keeps_accounts(store):
+    svc = ss.BY_ID["twitter"]
+    ss.save(svc, {"TWITTER_BEARER_TOKEN": "AAAA" * 10}, None, "ok", "", "test")
+    ss.x_add_account("alice", "pw", "a@m.com", "x", "test")
+    ss.delete(svc, "test")
+    assert ss.get_value("TWITTER_BEARER_TOKEN") is None
+    assert [a[0] for a in ss.x_parse(ss.get_value(ss.X_ENV))] == ["alice"]
+    assert _x_status() == "unchecked"
+
+
+def _x_status() -> str:
+    return next(i for i in ss.public_view() if i["service"] == "twitter")["status"]
 
 
 def test_x_account_routes(keyed):

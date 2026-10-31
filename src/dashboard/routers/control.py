@@ -1126,10 +1126,13 @@ async def add_x_account(request: Request) -> JSONResponse:
         vals["email_password"],
         _source(request),
     )
+    item = _secret_item("twitter")
     bot_bus.emit(
-        data.get_redis(), "secret.changed", {"service": "twitter", "status": "warn"}
+        data.get_redis(),
+        "secret.changed",
+        {"service": "twitter", "status": item["status"]},
     )
-    return JSONResponse({**_secret_item("twitter"), "restart_required": True})
+    return JSONResponse({**item, "restart_required": True})
 
 
 @router.delete("/api/secrets/twitter/accounts/{login}")
@@ -1139,10 +1142,13 @@ async def remove_x_account(login: str, request: Request) -> JSONResponse:
         return denied
     if not secrets_store.x_remove_account(login, _source(request)):
         return _err(404, "unknown_account", "Такого аккаунта нет.")
+    item = _secret_item("twitter")
     bot_bus.emit(
-        data.get_redis(), "secret.changed", {"service": "twitter", "status": "warn"}
+        data.get_redis(),
+        "secret.changed",
+        {"service": "twitter", "status": item["status"]},
     )
-    return JSONResponse({**_secret_item("twitter"), "restart_required": True})
+    return JSONResponse({**item, "restart_required": True})
 
 
 @router.delete("/api/secrets/{service_id}")

@@ -698,7 +698,7 @@ const KEY_INFO: Record<string, [string, string?]> = {
   finnhub: ["Календарь FOMC, CPI, NFP для макро-паузы. Без ключа пауза не работает.", "https://finnhub.io"],
   glassnode: ["On-chain метрики, например запас стейблкоинов.", "https://glassnode.com"],
   reddit: ["Посты r/CryptoCurrency для анализа настроения моделью CryptoBERT.", "https://www.reddit.com/prefs/apps"],
-  twitter: ["Настроение по твитам, только профиль Meme. Два способа: официальный платный API или бесплатный обход через аккаунты X. Если указаны оба, работает официальный API.", "https://developer.twitter.com"],
+  twitter: ["Настроение по твитам, только профиль Meme. Подключается одним из двух способов; если заданы оба, работает официальный API."],
   telethon: ["Чтение публичных каналов через Telethon, только профиль Meme. При первом входе Telegram пришлёт код.", "https://my.telegram.org"],
   pumpportal: ["Темп запуска новых токенов на pump.fun — признак мем-сезона.", "https://pumpportal.fun"],
   server: ["PIN для перехода в Live, доступ к Redis и API дашборда, секрет вебхука алертов."],
@@ -771,7 +771,8 @@ function Keys({ open, setOpen }: { open: string | null; setOpen: (service: strin
   const keyRow = (s: SecretItem) => {
     const [c, t] = STATUS[s.status];
     const last4 = s.fields.find((f) => f.secret && f.last4)?.last4;
-    return row(s.service, c, s.name, `${t}${last4 ? ` · ••••${last4}` : ""}`, FEEDS[s.service] ?? [], () => setOpen(s.service));
+    const way = s.service === "twitter" ? xWay(s) : "";
+    return row(s.service, c, s.name, `${t}${way ? ` · ${way}` : ""}${last4 ? ` · ••••${last4}` : ""}`, FEEDS[s.service] ?? [], () => setOpen(s.service));
   };
   const aiOk = aiKeys.filter((s) => s.status === "ok").length;
   return (
@@ -932,6 +933,9 @@ export function KeyCard({ item }: { item: SecretItem }) {
   const [c, t] = STATUS[item.status];
   const [desc, url] = KEY_INFO[item.service] ?? [""];
   const has = item.fields.some((f) => f.set);
+  // У X два способа подключения: открыт тот, которым бот читает X сейчас.
+  const [way, setWay] = useState<XWayKind>(() => (xWay(item) === "официальный API" ? "api" : "acc"));
+  const xAcc = item.service === "twitter" && way === "acc";
   useEffect(() => setModel(item.model?.value ?? ""), [item.model?.value]);
 
   const save = async () => {
@@ -970,7 +974,8 @@ export function KeyCard({ item }: { item: SecretItem }) {
           </a>
         )}
       </p>
-      {item.fields.filter((f) => !(item.service === "twitter" && f.env === "TWSCRAPE_ACCOUNTS")).map((f) => {
+      {item.service === "twitter" && <XWay item={item} way={way} setWay={setWay} />}
+      {!xAcc && item.fields.filter((f) => !(item.service === "twitter" && f.env === "TWSCRAPE_ACCOUNTS")).map((f) => {
         const id = `k-${f.env}`;
         const tail = f.set ? (f.secret ? (f.last4 ? `сохранён ••••${f.last4}` : "задан") : (f.value ?? "задан")) : f.optional ? "необязательно" : "не задан";
         return (
@@ -1010,7 +1015,7 @@ export function KeyCard({ item }: { item: SecretItem }) {
           </div>
         );
       })}
-      {item.service === "twitter" && <XAccounts item={item} />}
+      {xAcc && <XAccounts item={item} />}
       {item.model && (
         <div className="kf">
           <label htmlFor={`k-${item.model.env}`}>
@@ -1028,7 +1033,7 @@ export function KeyCard({ item }: { item: SecretItem }) {
           onFound={(id) => setValues((v) => ({ ...v, TELEGRAM_CHAT_ID: id }))}
         />
       )}
-      <div className="kc-a">
+      <div className="kc-a" hidden={xAcc}>
         <button className="btn primary" type="button" disabled={busy} onClick={() => void save()}>
           {busy ? (
             <>
@@ -1496,6 +1501,42 @@ function SettingsTools({ schema, config, onImport }: { schema: SettingDef[]; con
 
 // ── X / Twitter: бесплатный обход официального API ────────────────────────────
 
+/** Каким способом бот читает X: официальный API главнее аккаунтов. */
+function xWay(s: SecretItem): string {
+  if (s.fields.find((f) => f.env === "TWITTER_BEARER_TOKEN")?.set) return "официальный API";
+  const n = s.accounts?.length ?? 0;
+  return n ? `через аккаунты X: ${n}` : "";
+}
+
+type XWayKind = "acc" | "api";
+
+/** Два способа подключить X одним переключателем и строка о том, какой работает сейчас. */
+function XWay({ item, way, setWay }: { item: SecretItem; way: XWayKind; setWay: (w: XWayKind) => void }) {
+  return (
+    <>
+      <p className="kc-d">
+        Сейчас бот читает X: <b>{xWay(item) || "никак, выберите способ"}</b>. Изменения заработают после перезапуска бота.
+      </p>
+      <div className="seg full" role="group" aria-label="Способ подключения X">
+        <button type="button" aria-pressed={way === "acc"} onClick={() => setWay("acc")}>
+          Через аккаунты
+        </button>
+        <button type="button" aria-pressed={way === "api"} onClick={() => setWay("api")}>
+          Официальный API
+        </button>
+      </div>
+      {way === "api" && (
+        <p className="kc-d">
+          Надёжно и без риска блокировки аккаунтов.{" "}
+          <a href="https://developer.twitter.com" target="_blank" rel="noopener noreferrer">
+            Где взять ↗
+          </a>
+        </p>
+      )}
+    </>
+  );
+}
+
 const X_FIELDS: [keyof XForm, string, boolean][] = [
   ["login", "Логин в X", false],
   ["password", "Пароль от X", true],
@@ -1524,19 +1565,31 @@ function XAccounts({ item }: { item: SecretItem }) {
     if (ok) setForm(X_EMPTY);
   };
   return (
-    <details className="risk-box" open={accounts.length > 0}>
-      <summary>
-        Без официального API — бесплатно, на ваш страх и риск
-        {accounts.length > 0 && <span className="pill ok">аккаунтов: {accounts.length}</span>}
-      </summary>
+    <>
       <div className="honest">
         <div>
-          <b>Это обход правил X.</b> Бот заходит в X под обычными аккаунтами и читает твиты как человек. X может заблокировать такие аккаунты, поэтому заведите
-          для этого <b>отдельные</b> аккаунты, а не основной, и не используйте почту, которая вам важна. Пароль от почты нужен только затем, чтобы
-          библиотека сама прочитала код подтверждения при входе в X.
-          {official ? " Сейчас задан официальный API, и он имеет приоритет: эти аккаунты не используются." : ""}
+          <b>Бесплатно, но против правил X.</b> Бот входит в X под вашими аккаунтами и ищет твиты так же, как сайт x.com в браузере, через открытую
+          библиотеку{" "}
+          <a href="https://github.com/vladkens/twscrape" target="_blank" rel="noopener noreferrer">
+            twscrape ↗
+          </a>
+          . X может заблокировать такие аккаунты, поэтому берите <b>отдельные</b>, а не основной.
+          {official ? " Сейчас задан официальный API, и он главнее: эти аккаунты не используются." : ""}
         </div>
       </div>
+      <details className="risk-box" open={!accounts.length}>
+        <summary>Как подготовить аккаунт</summary>
+        <ol className="x-steps">
+          <li>Заведите новый аккаунт X на отдельную почту, не на ту, что вам важна.</li>
+          <li>Войдите в него в браузере и пройдите проверки X (телефон, капча), чтобы вход не был заблокирован.</li>
+          <li>Выключите на нём двухфакторную защиту X: бот не умеет вводить код из приложения.</li>
+          <li>
+            В почте включите доступ по IMAP и создайте «пароль приложения» (Gmail, Яндекс и Mail.ru требуют его вместо обычного). По нему бот прочитает код,
+            который X присылает при входе.
+          </li>
+          <li>Добавьте аккаунт ниже и перезапустите бота. Лучше 2–3 аккаунта: когда у одного кончится лимит запросов, бот возьмёт следующий.</li>
+        </ol>
+      </details>
       {accounts.length > 0 && (
         <ul className="xacc">
           {accounts.map((a) => (
@@ -1586,6 +1639,6 @@ function XAccounts({ item }: { item: SecretItem }) {
           {busy ? "Сохраняю…" : "Добавить аккаунт"}
         </button>
       </div>
-    </details>
+    </>
   );
 }

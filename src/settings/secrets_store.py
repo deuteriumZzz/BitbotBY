@@ -148,7 +148,7 @@ SERVICES: Tuple[Service, ...] = (
                 optional=True,
                 hint=(
                     "Платный тариф X API (около $100 в месяц). Если он задан, "
-                    "аккаунты ниже не используются."
+                    "аккаунты X не используются."
                 ),
             ),
             _key(
@@ -318,19 +318,27 @@ def x_accounts_public(raw: Optional[str]) -> List[Dict[str, str]]:
 def _x_save(accounts: List[Tuple[str, str, str, str]], source: str) -> None:
     service = BY_ID["twitter"]
     raw = _load_raw()
+    # Официальный API главнее аккаунтов: его проверенный статус не трогаем.
+    official = bool(get_value("TWITTER_BEARER_TOKEN"))
     if accounts:
         value = ",".join(":".join(x_encode(p) for p in acc) for acc in accounts)
+        meta = raw["meta"].get(service.id, {}) if official else {}
         save(
             service,
             {X_ENV: value},
             None,
-            "warn",
-            "Аккаунты сохранены. Бот войдёт в X при первом запросе — проверить "
-            "заранее нельзя.",
+            meta.get("status", "unchecked"),
+            meta.get(
+                "message",
+                "Аккаунты сохранены. Бот войдёт в X при первом запросе — "
+                "проверить заранее нельзя.",
+            ),
             source,
         )
     else:
         raw["items"].pop(X_ENV, None)
+        if not official:
+            raw["meta"].pop(service.id, None)
         _save_raw(raw)
         audit.info("secret.deleted service=twitter field=%s source=%s", X_ENV, source)
 
@@ -504,7 +512,9 @@ def save(
 def delete(service: Service, source: str) -> None:
     raw = _load_raw()
     for fl in service.fields:
-        raw["items"].pop(fl.env, None)
+        # Аккаунты X удаляются по одному (x_remove_account), не вместе с ключом API.
+        if fl.env != X_ENV:
+            raw["items"].pop(fl.env, None)
     raw["meta"].pop(service.id, None)
     _save_raw(raw)
     audit.info("secret.deleted service=%s source=%s", service.id, source)

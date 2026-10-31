@@ -354,6 +354,8 @@ SAC_MODEL_PATH=models/sac_model.zip  # Путь к файлу SAC-модели.
 # Если не задан — TwitterAnalyzer молча возвращает 0.0
 TWITTER_BEARER_TOKEN=
 TWITTER_MAX_RESULTS=10   # Твитов на запрос (10 = экономия лимита Basic)
+# Бесплатный путь без Bearer Token — аккаунты X через twscrape. Задаются только в приложении
+# (Настройки → Ключи и доступ → Twitter / X → «Через аккаунты»), хранятся зашифрованными.
 
 # Telegram sentiment — мониторинг публичных памп-каналов (только профиль Meme)
 # Бесплатно через Telethon MTProto. Получить: my.telegram.org → API development tools
