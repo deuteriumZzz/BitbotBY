@@ -7,6 +7,7 @@ import { useMemo, useState } from "react";
 import { actions, useStore } from "../store";
 import { Seg } from "../ui";
 import { cfg, stratName } from "./bots";
+import { STATUS } from "./chainops";
 import { RULES } from "./rules";
 
 export type Step = "scan" | "strat" | "ai" | "risk" | "track";
@@ -30,6 +31,8 @@ export interface Block {
   on: boolean;
   /** Работает всегда — убрать нельзя, только настроить в панели шага. */
   locked?: boolean;
+  /** Точка статуса на чипе (провайдер AI): ok | warn | bad | "" — ещё не отвечал. */
+  dot?: string;
   add: () => void;
   remove: () => void;
 }
@@ -111,14 +114,18 @@ export function useBlocks(): Block[] {
       const order = ai.chain.map((c) => c.provider);
       const disabled = ai.providers.filter((p) => p.disabled).map((p) => p.id);
       const back = () => void actions.putAiChain({ disabled, order });
-      for (const p of ai.providers) {
+      // Полоса шага — в порядке очереди, с номером и статусом (это и есть цепочка AI на холсте).
+      const rank = (id: string) => (order.includes(id) ? order.indexOf(id) : order.length);
+      for (const p of [...ai.providers].sort((a, b) => rank(a.id) - rank(b.id))) {
         const on = order.includes(p.id);
+        const [dot, said] = STATUS[p.status] ?? STATUS.unknown;
         out.push({
           id: `ai:${p.id}`,
           step: "ai",
-          title: p.name,
+          title: on && !ai.single ? `${order.indexOf(p.id) + 1} · ${p.name}` : p.name,
+          dot: on ? dot : undefined,
           sub: on
-            ? `${order.indexOf(p.id) + 1} в очереди`
+            ? `${order.indexOf(p.id) + 1} в очереди · ${said}`
             : p.usable
               ? p.free_tier
                 ? "бесплатный"
@@ -353,6 +360,7 @@ export function Lane(props: {
           onDragEnd={() => setDrag(null)}
           title={b.sub}
         >
+          {b.dot !== undefined && <span className={`dot ${b.dot}`} aria-hidden="true" />}
           <span className="chip2-t">{b.title}</span>
           {b.locked ? (
             <i className="chip2-lock">{b.tag ?? "основа"}</i>

@@ -1087,19 +1087,6 @@ details.extra[open]>.card{animation:viewin .28s var(--ease-mech)}
 .pipe-node.on .hd{color:var(--brand-ink)}
 .pipe-node.idle{opacity:.45}
 .pipe-node.idle.on{opacity:.8}
-.pipe-ai{margin-top:12px;padding:10px 12px;border:1px dashed var(--line);border-radius:var(--r);background:color-mix(in oklab,var(--panel) 80%,transparent);transition:opacity var(--t-norm) var(--ease-mech)}
-.pipe-ai.idle{opacity:.45}
-.pipe-ai ol{list-style:none;margin:8px 0;padding:0;display:flex;flex-wrap:wrap;align-items:center;gap:6px}
-.pipe-ai li{display:flex;align-items:center;gap:6px}
-.pipe-ai-sep{font:11px/1 var(--f-ui);color:var(--ink-3)}
-.pipe-ai-chip{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;justify-content:center;gap:2px;min-height:44px;padding:6px 10px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);font:12px/1.3 var(--f-ui);color:var(--ink-3)}
-.pipe-ai-chip b{font:600 13px/1.2 var(--f-ui);color:var(--ink)}
-.pipe-ai-chip span.ok{color:var(--up)}
-.pipe-ai-chip span.bad{color:var(--down)}
-.pipe-ai-chip:hover{border-color:var(--line-ui)}
-.pipe-ai-chip:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
-.pipe-ai-chip.add{flex-direction:row;align-items:center;border-style:dashed;border-color:var(--brand);color:var(--brand-ink);font-weight:600}
-.pipe-ai p{margin:0;font:12px/1.4 var(--f-ui);color:var(--ink-3)}
 .pipe-sum{margin-bottom:12px}
 .pipe-sum-ico{display:flex;color:var(--brand-ink)}
 .pipe-desc{margin:0 0 10px;color:var(--ink-2);font-size:13px}
@@ -1108,7 +1095,7 @@ details.extra[open]>.card{animation:viewin .28s var(--ease-mech)}
 .pipe-fields dt{font:500 11px/1.3 var(--f-label);color:var(--ink-3)}
 .pipe-fields dd{margin:3px 0 0;font:500 13px/1.35 var(--f-num);color:var(--ink);overflow-wrap:anywhere}
 .pipe-body{animation:viewin var(--t-norm) var(--ease-mech)}
-@media (prefers-reduced-motion:reduce){.pipe-node,.pipe-ai{transition:none}.pipe-body{animation:none}}
+@media (prefers-reduced-motion:reduce){.pipe-node{transition:none}.pipe-body{animation:none}}
 
 
 /* ---------- «Тёмный премиум-терминал»: примитивы и каркас (слой поверх старых правил до конца переезда) ---------- */
@@ -1281,9 +1268,6 @@ select.sel{border-radius:var(--r-ctl);background:var(--c-inset);box-shadow:none}
 .pipe-node .res{border-top-color:var(--c-line)}
 .pipe-legend i{border-radius:4px}
 .pipe-legend i.on{border-color:var(--c-accent);box-shadow:none}
-.pipe-ai{border-radius:var(--r-inner);border-style:solid;border-color:var(--c-line);background:var(--c-s2)}
-.pipe-ai-chip{border-radius:var(--r-ctl);background:var(--c-s3);border-color:var(--c-line2);transition:border-color var(--dur-norm),transform var(--dur-fast)}
-.pipe-ai-chip:hover{border-color:var(--c-ctl);transform:translateY(-1px)}
 
 /* Панель шага: выезжает справа поверх затемнения; на телефоне — во весь экран. */
 .pipe-scrim{all:unset;position:fixed;inset:0;z-index:40;background:var(--c-scrim);opacity:0;pointer-events:none;transition:opacity var(--dur-norm) var(--ease-out)}

@@ -10,7 +10,7 @@ import { Q, Seg } from "../ui";
 import { AiPane } from "./ai";
 import { BlockLibrary, Lane, isStep, useBlocks, type Drag } from "./blocks";
 import { ConfirmCard, RiskCard, StrategiesCard, TrackCard, WhatCard, cfg, presetName, presetOf, profileName } from "./bots";
-import { STATUS, chosenId } from "./chainops";
+import { chosenId } from "./chainops";
 import { ModelCard } from "./jobs";
 import { RulesCard } from "./rules";
 import { UiSwitchRow } from "./uimode";
@@ -280,53 +280,6 @@ function usePipeline(mode: string): { status: Record<BotNode, string>; info: Rec
   return { status, info };
 }
 
-/** Мини-цепочка провайдеров на полотне: порядок и статусы — те же, что в схеме узла AI. */
-function AiStrip({ part }: { part: boolean }) {
-  const ai = useStore((s) => s.ai);
-  const openNode = useStore((s) => s.openNode);
-  const fallback = useStore((s) => cfg<boolean>(s.config, "LOCAL_FALLBACK", false));
-  if (!ai) return null;
-  const ids = ai.single ? [chosenId(ai)].filter(Boolean) : ai.chain.map((x) => x.provider);
-  const reserve = ai.providers.filter((p) => p.disabled).length;
-  return (
-    <div className={`pipe-ai${part ? "" : " idle"}`}>
-      <span className="label">{ai.single ? "AI · решает один провайдер" : "AI-цепочка · по очереди, пока кто-то не ответит"}</span>
-      <ol aria-label="Провайдеры AI по порядку">
-        {ids.map((id, i) => {
-          const p = ai.providers.find((x) => x.id === id);
-          const [cls, label] = STATUS[p?.status ?? "unknown"] ?? STATUS.unknown;
-          return (
-            <li key={id}>
-              {i > 0 && (
-                <span className="pipe-ai-sep" aria-hidden="true">
-                  сбой →
-                </span>
-              )}
-              <button type="button" className="pipe-ai-chip" onClick={() => openNode("ai")}>
-                <b>
-                  {i + 1} · {p?.name ?? id}
-                </b>
-                <span className={cls}>
-                  {cls === "ok" ? "▲ " : cls === "bad" ? "▼ " : ""}
-                  {label}
-                </span>
-              </button>
-            </li>
-          );
-        })}
-        <li>
-          <button type="button" className="pipe-ai-chip add" onClick={() => openNode("ai")}>
-            + Провайдер
-          </button>
-        </li>
-      </ol>
-      <p>
-        {reserve > 0 && `В резерве: ${reserve}. `}Если не ответит никто — {fallback ? "решают стратегии (запасной путь)" : "сделки нет"}.
-      </p>
-    </div>
-  );
-}
-
 /** Кто решает и какая роль у стратегий — одной фразой под переключателем (как в src/core/trading_bot.py). */
 const modeNote = (mode: string, fallback: boolean): string =>
   mode === "local"
@@ -436,7 +389,6 @@ export function Pipeline() {
             );
           })}
         </PipeCanvas>
-        <AiStrip part={takesPart(mode, "ai")} />
         <p className="pipe-hint">
           Нажмите на шаг — его настройки откроются справа. Штекер <i className="pw-plug-ico" aria-hidden="true" /> на проводе в «Риск» перетащите на Стратегии, AI
           или SAC — так меняется, кто решает. Числа на проводах — сколько монет прошло в последнем цикле. Ctrl + колесо — масштаб.
