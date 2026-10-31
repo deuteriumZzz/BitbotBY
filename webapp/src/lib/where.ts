@@ -29,7 +29,7 @@ export const OWN_HOME: Record<string, Home> = {
   TELEGRAM_CONFIRM_TIMEOUT: CONFIRM,
   CONFIRM_ON_TIMEOUT: CONFIRM,
   MODE: { tab: "bots", where: "Цепочка → Кто принимает решение" },
-  CHRONOS_ENABLED: WHAT,
+  CHRONOS_ENABLED: SIGNALS,
   MARKET_TYPE: WHAT,
   SEASON_SWITCH_MODE: WHAT,
   PAPER_GUARDS_OFF: RULES,

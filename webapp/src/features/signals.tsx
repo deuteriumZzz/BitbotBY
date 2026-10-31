@@ -1,12 +1,35 @@
-// Сигналы для решения: что, кроме цены и индикаторов, видит тот, кто решает, и с какой уверенности
-// сделка идёт дальше в «Риск». Дом порогов уверенности и настроения (lib/where.ts).
+// Сигналы для решения: что, кроме цены и индикаторов, влияет на сделку (как в SignalCombiner) и что из
+// этого настраивается: ключи подключений, Chronos и пороги. Остальные сигналы рынка бесплатные и работают
+// сами — без ключей и тумблеров. Дом порогов уверенности, настроения и Chronos (lib/where.ts).
 
 import type { SecretItem, SettingDef } from "../lib/types";
 import { plural } from "../lib/format";
 import { actions, useStore } from "../store";
-import { Q } from "../ui";
+import { Q, Toggle } from "../ui";
 import { cfg } from "./bots";
 import { FEEDS, STEP, chanList } from "./settings";
+
+/** Фильтр рынка — 13 сигналов _apply_market_context_filter; key — источнику нужен ключ. */
+export const MARKET: { name: string; rule: string; key?: string }[] = [
+  { name: "Страх и жадность", rule: "≤ 15 — покупка против толпы, ≥ 85 гасит покупки" },
+  { name: "Funding", rule: "> 0.1% — лонги перегреты, против покупки" },
+  { name: "Открытый интерес", rule: "OI и цена падают — ликвидация лонгов" },
+  { name: "Ликвидации", rule: "каскад — против входа" },
+  { name: "Стакан", rule: "ask/bid > 1.4 — давление продаж" },
+  { name: "Basis", rule: "премия фьючерса > 2% — жадность" },
+  { name: "Опционы Deribit", rule: "PCR < 0.5 и перекос IV — все в коллах" },
+  { name: "ETF-потоки", rule: "только BTC: отток < −$100M, приток > $150M" },
+  { name: "Google Trends", rule: "> 75 — пик розничного FOMO" },
+  { name: "Reddit · CryptoBERT", rule: "настроение постов r/CryptoCurrency", key: "reddit" },
+  { name: "Стейблкоины", rule: "запас USDT падает — риск оттока", key: "glassnode" },
+  { name: "Макро-календарь", rule: "FOMC, CPI, NFP рядом", key: "finnhub" },
+];
+
+/** Подключения сигналов, которые добавляются ключом, — в порядке важности для решения. */
+export const SIGNAL_KEYS = ["news", "twitter", "telethon", "reddit", "glassnode", "finnhub"];
+
+/** Единственное место, где меняется CHRONOS_ENABLED (тумблер в карточке и на узле холста). */
+export const setChronos = (on: boolean) => void actions.patchConfig({ CHRONOS_ENABLED: on });
 
 const state = (s?: SecretItem): string =>
   !s ? "—" : s.status === "ok" ? "▲ подключено" : s.status === "bad" ? "▼ не работает" : s.status === "unset" ? "не подключено" : "не проверено";
@@ -16,22 +39,13 @@ export function SignalsCard() {
   const schema = useStore((s) => s.schema);
   const secrets = useStore((s) => s.secrets);
   const paper = useStore((s) => s.bot?.paper ?? true);
+  const fg = useStore((s) => s.market?.fear_greed ?? null);
+  const openKey = useStore((s) => s.openKey);
+  const mode = cfg<string>(config, "MODE", "ai");
+  const chronos = cfg<boolean>(config, "CHRONOS_ENABLED", false);
   const chans = chanList(`${cfg(config, "TELEGRAM_SENTIMENT_CHANNELS", "")},${cfg(config, "TELEGRAM_TRUSTED_CHANNELS", "")}`).length;
-  // Подключения — те же, что в «Настройки → Ключи и доступ»; куда каждое ведёт — карта FEEDS.
-  const rows: [string, string, string][] = [
-    ...(secrets ?? [])
-      .filter((s) => s.group === "Данные и соцсети")
-      .map((s): [string, string, string] => [
-        s.service === "telethon" ? "Telegram-каналы" : s.name,
-        (FEEDS[s.service] ?? []).map(([what, step]) => (step ? `${what} → ${STEP[step]}` : what)).join(" · "),
-        s.service === "telethon" ? (s.signed_in ? `▲ ${chans} ${plural(chans, ["канал", "канала", "каналов"])}` : "нужен вход") : state(s),
-      ]),
-    [
-      "Рынок без ключей",
-      "Страх/Жадность, funding, открытый интерес, ликвидации, стакан, basis, опционы, ETF (BTC), Google Trends → фильтр уверенности: каждый сдвигает её на ±0.05…0.15",
-      "▲ работает",
-    ],
-  ];
+  const keyed = SIGNAL_KEYS.map((id) => secrets?.find((s) => s.service === id)).filter((s): s is SecretItem => Boolean(s));
+  const free = MARKET.filter((m) => !m.key);
   const keys = paper
     ? ["MIN_SIGNAL_CONFIDENCE_PAPER", "MIN_SIGNAL_CONFIDENCE", "SENTIMENT_BUY_THRESHOLD", "SENTIMENT_SELL_THRESHOLD"]
     : ["MIN_SIGNAL_CONFIDENCE", "MIN_SIGNAL_CONFIDENCE_PAPER", "SENTIMENT_BUY_THRESHOLD", "SENTIMENT_SELL_THRESHOLD"];
@@ -41,24 +55,64 @@ export function SignalsCard() {
     <article className="card sig">
       <div className="card-h">
         <h2>Сигналы для решения</h2>
-        <Q tip="Кроме цены и индикаторов тот, кто решает (AI или стратегии), видит новости, соцсети и рынок. Сделка идёт дальше в «Риск», только если её уверенность не ниже порога. Доверенные каналы Telegram сюда не входят — у них свой путь сразу в ордер." />
+        <Q tip="Новости, X и Telegram идут в промпт AI (режимы AI и Hybrid). 13 сигналов рынка — фильтр уверенности после решения в AI, SAC и Hybrid. Chronos — только Hybrid. В режиме Local решают только стратегии, соцсети читает стратегия «Настроение»." />
       </div>
-      <p className="kf-h">
-        В AI уходят новости (выше 0.3 — в пользу покупки, ниже −0.3 — продажи) и соцсети: оценка от −1 до 1 и сколько раз монету упомянули в свежих
-        постах; нет данных — не «нейтрально». Telegram работает в двух режимах: все каналы — сигнал здесь, доверенные — ещё и сделка по посту в обход
-        этого пути.
-      </p>
+      {mode === "local" && <p className="sig-note">Сейчас режим Local: решают стратегии, промпт AI, фильтр рынка и Chronos не работают. Соцсети читает стратегия «Настроение».</p>}
+
+      <h3 className="sig-h">Подключения — добавляются ключом</h3>
       <ul className="sig-list">
-        {rows.map(([name, to, st]) => (
-          <li key={name}>
-            <div>
-              <b>{name}</b>
-              <small>{to}</small>
-            </div>
-            <span>{st}</span>
-          </li>
-        ))}
+        {keyed.map((s) => {
+          const ok = s.service === "telethon" ? Boolean(s.signed_in) : s.status === "ok";
+          return (
+            <li key={s.service}>
+              <div>
+                <b>{s.service === "telethon" ? "Telegram-каналы" : s.name}</b>
+                <small>{(FEEDS[s.service] ?? []).map(([what, step]) => (step ? `${what} → ${STEP[step]}` : what)).join(" · ")}</small>
+              </div>
+              <span className="sig-a">
+                <span>{s.service === "telethon" ? (ok ? `▲ ${chans} ${plural(chans, ["канал", "канала", "каналов"])}` : "нужен вход") : state(s)}</span>
+                <button type="button" className="btn" onClick={() => openKey(s.service)}>
+                  {ok ? "Ключ →" : "Подключить →"}
+                </button>
+              </span>
+            </li>
+          );
+        })}
       </ul>
+
+      <h3 className="sig-h">Chronos — прогноз цены</h3>
+      <div className="alert-row">
+        <div>
+          <b>Сравнивать сделку с прогнозом Chronos</b>
+          <small>
+            Совпал — уверенность +0.05, против — −0.15. Работает только в режиме Hybrid
+            {chronos && mode !== "hybrid" ? " — сейчас другой режим, прогноз не используется" : ""}.
+          </small>
+        </div>
+        <Toggle on={chronos} label="Прогноз Chronos" onChange={setChronos} />
+      </div>
+
+      <h3 className="sig-h">Работают сами — без ключей</h3>
+      <p className="kf-h">
+        {free.map((m) => m.name).join(", ")} — бесплатные источники (alternative.me, Bybit, Deribit и другие). Подключать и включать их не нужно, пороги
+        заданы в коде бота: после решения в AI, SAC и Hybrid каждый сдвигает уверенность на ±0.05…0.15, крайние значения сами дают сигнал.
+        {fg ? ` Индекс страха и жадности сейчас — ${fg.value} (${fg.label}).` : ""}
+      </p>
+      <details className="sig-more">
+        <summary>Как каждый влияет</summary>
+        <ul className="sig-list">
+          {free.map((m) => (
+            <li key={m.name}>
+              <div>
+                <b>{m.name}</b>
+                <small>{m.rule}</small>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </details>
+
+      <h3 className="sig-h">Порог — дальше в «Риск»</h3>
       <div className="tgch-params">
         {params.map((d) => (
           <label className="cool" key={d.key}>

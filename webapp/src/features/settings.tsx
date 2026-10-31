@@ -44,6 +44,13 @@ export function Settings() {
   const [active, setActive] = useState<Pane | "map">("map");
   // Ключ, открытый в боковой панели: с карты или из списка связок.
   const [key, setKey] = useState<string | null>(null);
+  // Переход к ключу из других вкладок («Подключить →» в «Сигналах для решения»).
+  const keyJump = useStore((s) => s.keyJump);
+  useEffect(() => {
+    if (!keyJump) return;
+    setKey(keyJump);
+    useStore.setState({ keyJump: null });
+  }, [keyJump]);
   useEffect(() => {
     const root = document.querySelector("main.views");
     const seen = new Map<string, number>();
@@ -894,9 +901,9 @@ export const FEEDS: Record<string, [string, BotNode?][]> = {
   bybit: [["цены и свечи", "scan"], ["ордера и баланс", "order"]],
   telegram: [["уведомления"], ["управление из чата"]],
   news: [["новости и заголовки", "ai"]],
-  finnhub: [["макро-пауза: FOMC, CPI, NFP", "risk"]],
-  glassnode: [["on-chain контекст", "ai"]],
-  reddit: [["настроение · CryptoBERT", "ai"]],
+  finnhub: [["макро-пауза: FOMC, CPI, NFP", "risk"], ["фильтр рынка · макро", "ai"]],
+  glassnode: [["фильтр рынка · стейблкоины", "ai"]],
+  reddit: [["фильтр рынка · CryptoBERT", "ai"]],
   twitter: [["настроение · Meme", "ai"]],
   telethon: [["настроение и упоминания монет", "ai"], ["доверенные — сделка по посту", "order"]],
   pumpportal: [["детектор мем-сезона", "scan"]],

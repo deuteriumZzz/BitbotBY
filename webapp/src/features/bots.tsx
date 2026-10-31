@@ -416,7 +416,6 @@ export function WhatCard({ simple = false }: { simple?: boolean }) {
   const c = useStore((s) => s.config);
   const profile = useStore((s) => s.bot?.profile ?? null);
   const seasonAuto = cfg<string>(c, "SEASON_SWITCH_MODE", "alert") === "auto";
-  const chronos = cfg(c, "CHRONOS_ENABLED", false);
   return (
     <article className="card">
       <div className="card-h">
@@ -454,14 +453,6 @@ export function WhatCard({ simple = false }: { simple?: boolean }) {
           ]}
           onChange={(v) => void actions.patchConfig({ MARKET_TYPE: v })}
         />
-      </div>
-      <div className="field">
-        <div className="row-tgl">
-          <span>
-            Прогноз Chronos <Q tip="Модель Amazon Chronos прогнозирует цену и чуть повышает или понижает уверенность сигнала." />
-          </span>
-          <Toggle brand on={chronos} label="Chronos" onChange={(on) => void actions.patchConfig({ CHRONOS_ENABLED: on })} />
-        </div>
       </div>
         </>
       )}

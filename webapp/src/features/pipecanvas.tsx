@@ -12,7 +12,8 @@ import type { BotNode, CycleTrace, SecretItem } from "../lib/types";
 import { actions, useStore } from "../store";
 import { Toggle } from "../ui";
 import { cfg } from "./bots";
-import { FEEDS, chanList } from "./settings";
+import { chanList } from "./settings";
+import { MARKET, setChronos } from "./signals";
 import { scrollWhenReady } from "./terminal";
 
 export const NW = 150; // ширина шага
@@ -280,6 +281,7 @@ const MX = xOf("scan") + NW / 2; // цепочка рынка: «Сезон» �
 const SX = xOf("strat");
 const SW = NW + GX;
 const SH = MID + TH - TOP;
+const GATE_X = xOf("risk") + 60; // куда провод фильтра рынка входит в порог над «Риском»
 /** Кому идут сигналы: AI (в промпт) — в режимах с AI, иначе стратегиям. */
 const sigTo = (mode: string): BotNode => (mode === "ai" || mode === "hybrid" ? "ai" : "strat");
 
@@ -354,6 +356,13 @@ function SignalWires({ mode }: { mode: string }) {
   return (
     <>
       {side(mode !== "dqn", [`M ${tx} ${TOP + SH} L ${tx} ${ROW}`], [[tx, TOP + SH], [tx, ROW]], `sig${tx}`)}
+      {/* Фильтр рынка и Chronos работают после решения — провод к порогу перед «Риском» (в Local их нет). */}
+      {side(
+        mode !== "local",
+        [`M ${SX + SW - 24} ${TOP + SH} C ${SX + SW + 120} ${TOP + SH}, ${GATE_X} ${ROW - 80}, ${GATE_X} ${ROW - 37}`],
+        [[SX + SW - 24, TOP + SH], [GATE_X, ROW - 37]],
+        "filter",
+      )}
       {side(
         trade,
         [
@@ -379,9 +388,12 @@ function SignalLane({ mode }: { mode: string }) {
   const setTab = useStore((s) => s.setTab);
   const openNode = useStore((s) => s.openNode);
   const to = sigTo(mode);
-  // Подключения, которые идут в решение, — по карте FEEDS (та же, что в «Ключи и доступ»).
-  const data = (secrets ?? []).filter((s) => FEEDS[s.service]?.some(([, step]) => step === "ai"));
-  const live = data.filter((s) => srcDot(s) === "ok").length + 1;
+  // Три группы, как в SignalCombiner: промпт AI, фильтр рынка (13), Chronos (только Hybrid).
+  const pick = (ids: string[]) => ids.map((id) => (secrets ?? []).find((s) => s.service === id)).filter((s): s is SecretItem => Boolean(s));
+  const prompt = pick(["news", "twitter", "telethon"]);
+  const filterKeys = pick(MARKET.flatMap((m) => (m.key ? [m.key] : [])));
+  const fg = useStore((s) => s.market?.fear_greed ?? null);
+  const chronos = cfg<boolean>(config, "CHRONOS_ENABLED", false);
   const chans = chanList(`${cfg(config, "TELEGRAM_SENTIMENT_CHANNELS", "")},${cfg(config, "TELEGRAM_TRUSTED_CHANNELS", "")}`).length;
   const minConf = cfg<number>(config, paper ? "MIN_SIGNAL_CONFIDENCE_PAPER" : "MIN_SIGNAL_CONFIDENCE", paper ? 0.6 : 0.65);
   const toChannels = () => (setTab("settings"), scrollWhenReady("tg-channels"));
@@ -389,29 +401,49 @@ function SignalLane({ mode }: { mode: string }) {
   const slots = cfg<number>(config, "TELEGRAM_TRUSTED_SLOTS", 2);
   return (
     <>
-      <button type="button" className="pipe-node pw-tg pw-sig" style={{ left: SX, top: TOP, width: SW, height: SH }} onClick={() => openNode(to)}>
-        <b>Сигналы для решения</b>
-        <span className="st">
-          подключено {live} из {data.length + 1} · {mode === "dqn" ? "SAC решает по своей модели" : to === "ai" ? "всё уходит в AI" : "всё уходит стратегиям"}
-        </span>
-        <ul className="pw-src">
-          {data.map((s) => (
-            <li key={s.service}>
-              <i className={`dot ${srcDot(s)}`} aria-hidden="true" />
-              {s.service === "telethon" ? `Telegram · ${chans}` : s.name}
-            </li>
-          ))}
-          <li>
-            <i className="dot ok" aria-hidden="true" />
-            Рынок · без ключей
-          </li>
-        </ul>
-      </button>
+      <div className="pipe-node pw-tg pw-sig" style={{ left: SX, top: TOP, width: SW, height: SH }}>
+        <button type="button" className="pw-open" onClick={() => openNode(to)}>
+          <b>Сигналы для решения</b>
+          <dl className="pw-sigs">
+            <div className={mode === "ai" || mode === "hybrid" ? "" : "off"}>
+              <dt>в промпт AI</dt>
+              <dd>
+                {prompt.map((s) => (
+                  <span key={s.service}>
+                    <i className={`dot ${srcDot(s)}`} aria-hidden="true" />
+                    {s.service === "telethon" ? `Telegram · ${chans}` : s.service === "twitter" ? "X" : s.name}
+                  </span>
+                ))}
+              </dd>
+            </div>
+            <div className={mode === "local" ? "off" : ""}>
+              <dt>фильтр рынка · 13</dt>
+              <dd>
+                {filterKeys.map((s) => (
+                  <span key={s.service}>
+                    <i className={`dot ${srcDot(s)}`} aria-hidden="true" />
+                    {s.name}
+                  </span>
+                ))}
+                <span className="pw-free">+ {MARKET.filter((m) => !m.key).length} сами{fg ? ` · страх ${fg.value}` : ""}</span>
+              </dd>
+            </div>
+          </dl>
+        </button>
+        <div className={`pw-chr${chronos && mode === "hybrid" ? "" : " off"}`}>
+          <span>
+            <i>Chronos</i>
+            {!chronos ? "выключен" : mode === "hybrid" ? "прогноз цены: +0.05 / −0.15" : "только в Hybrid"}
+          </span>
+          <Toggle on={chronos} label="Прогноз Chronos" onChange={setChronos} />
+        </div>
+      </div>
       <span className="pw-tag" style={{ left: xOf(to) + NW / 2, top: (TOP + SH + ROW) / 2 }}>
-        {mode === "dqn" ? "не для SAC" : to === "ai" ? "в AI" : "в стратегии"}
+        {mode === "dqn" ? "не для SAC" : to === "ai" ? "в AI" : "стратегия «Настроение»"}
       </span>
-      <button type="button" className="pw-gate" style={{ left: xOf("risk") + 4, top: ROW - 14 }} onClick={() => openNode(to)} title="Порог — в карточке «Сигналы для решения»">
-        дальше, если уверенность ≥ {minConf}
+      <button type="button" className="pw-gate" style={{ left: xOf("risk") + 4, top: ROW - 20 }} onClick={() => openNode(to)} title="Порог — в карточке «Сигналы для решения»">
+        {mode !== "local" && <span>фильтр рынка{chronos && mode === "hybrid" ? " · Chronos" : ""}</span>}
+        <span>дальше, если уверенность ≥ {minConf}</span>
       </button>
       <div className={`pipe-node pw-tg pw-trust${trade ? "" : " idle"}`} style={{ left: xOf("sac"), top: TOP, width: NW, height: SH }}>
         <button type="button" className="pw-open" onClick={toChannels}>

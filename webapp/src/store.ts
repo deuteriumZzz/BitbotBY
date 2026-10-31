@@ -149,6 +149,8 @@ export interface Store {
   nodeOpen: boolean;
   /** Поиск параметра по Cmd/Ctrl+K: null — не запрошен, строка — что подставить. */
   paramSearch: string | null;
+  /** Ключ, который открыть в «Настройки → Ключи и доступ» при переходе из другой вкладки. */
+  keyJump: string | null;
   toast: { id: number; text: string; undo?: () => void } | null;
 
   boot(): Promise<void>;
@@ -158,6 +160,8 @@ export interface Store {
   needPro(): void;
   /** Открыть вкладку «Бот» на нужном узле конвейера с его панелью настроек. */
   openNode(node: BotNode): void;
+  /** Открыть «Настройки» с панелью этого ключа. */
+  openKey(service: string): void;
   closeNode(): void;
   openSetup(step: SetupStep | null): void;
   openHelp(open: boolean): void;
@@ -298,6 +302,7 @@ export const useStore = create<Store>((set, get) => {
     paletteOpen: false,
     seenFeed: 0,
     paramSearch: null,
+    keyJump: null,
     tab: "terminal",
     ui: savedUi(),
     node: "scan",
@@ -384,6 +389,7 @@ export const useStore = create<Store>((set, get) => {
     },
     // Цепочка и обучение одинаковы в обоих режимах: «Простой» только сворачивает тонкие настройки.
     openNode: (node) => set({ tab: "bots", node, nodeOpen: true, setup: null }),
+    openKey: (keyJump) => set({ tab: "settings", keyJump, nodeOpen: false, setup: null }),
     closeNode: () => set({ nodeOpen: false }),
     openSetup: (setup) => set({ setup }),
     openHelp: (helpOpen) => set({ helpOpen }),

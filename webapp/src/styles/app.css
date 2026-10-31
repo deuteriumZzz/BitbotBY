@@ -1620,9 +1620,23 @@ small.hr-act,.hr-act small{font-size:12px;color:var(--c-ink3);line-height:1.45}
 .pw-tg .st,.pw-tg .res{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pw-tg .res{padding-top:3px}
 /* «Сигналы для решения»: все подключения со статусом; провод — тому, кто решает. */
-.pw-src{list-style:none;margin:4px 0 0;padding:7px 0 0;border-top:1px solid var(--c-line);display:grid;grid-template-columns:1fr 1fr;gap:6px 10px}
-.pw-src li{display:flex;align-items:center;gap:6px;min-width:0;font:500 11.5px/1.3 var(--font-text);color:var(--c-ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.pw-gate{all:unset;position:absolute;z-index:2;transform:translate(0,-50%);cursor:pointer;padding:2px 8px;border-radius:var(--r-pill);border:1px dashed color-mix(in oklab,var(--c-accent) 55%,var(--c-line2));background:var(--c-s1);font:500 10.5px/1.5 var(--font-text);color:var(--c-ink2);white-space:nowrap}
+.pw-sigs{margin:2px 0 0;display:flex;flex-direction:column;gap:7px;min-width:0}
+.pw-sigs>div{display:grid;grid-template-columns:96px minmax(0,1fr);gap:8px;align-items:baseline;padding-top:7px;border-top:1px solid var(--c-line);transition:opacity var(--dur-norm)}
+.pw-sigs>div.off{opacity:.4}
+.pw-sigs dt{font:600 10.5px/1.3 var(--font-text);color:var(--c-ink3);text-transform:uppercase;letter-spacing:.04em}
+.pw-sigs dd{margin:0;min-width:0;display:flex;flex-wrap:wrap;gap:4px 10px;font:500 11.5px/1.35 var(--font-text);color:var(--c-ink2)}
+.pw-sigs dd span{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.pw-gate{all:unset;position:absolute;z-index:2;transform:translate(0,-50%);cursor:pointer;display:flex;flex-direction:column;gap:1px;padding:3px 9px;border-radius:var(--r-ctl);border:1px dashed color-mix(in oklab,var(--c-accent) 55%,var(--c-line2));background:var(--c-s1);font:500 10.5px/1.4 var(--font-text);color:var(--c-ink2);white-space:nowrap}
+.pw-gate span:first-child:not(:last-child){color:var(--c-ink3)}
+.pipe-node.pw-sig{cursor:default}
+.pw-free{color:var(--c-ink3)}
+/* Chronos — тумблер прямо на узле «Сигналы для решения»; работает только в Hybrid. */
+.pw-chr{margin-top:auto;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding-top:7px;border-top:1px solid var(--c-line)}
+.pw-chr>span{display:grid;grid-template-columns:96px minmax(0,1fr);gap:8px;font:500 11.5px/1.35 var(--font-text);color:var(--c-ink2);transition:opacity var(--dur-norm)}
+.pw-chr>span i{font:600 10.5px/1.3 var(--font-text);font-style:normal;color:var(--c-ink3);text-transform:uppercase;letter-spacing:.04em}
+.pw-chr.off>span{opacity:.45}
+.sig-a{display:flex;align-items:center;gap:8px;white-space:nowrap}
+.sig-a .btn{min-height:30px;padding:0 10px;font-size:12px}
 .pw-gate:hover{color:var(--c-ink);border-style:solid}
 .pw-gate:focus-visible{outline:2px solid var(--c-ink);outline-offset:2px}
 /* «Доверенные каналы» — второй режим Telegram: тумблер прямо в узле. */
@@ -1637,6 +1651,12 @@ small.hr-act,.hr-act small{font-size:12px;color:var(--c-ink3);line-height:1.45}
 .sig-list b{display:block;font:600 13px/1.3 var(--font-text);color:var(--c-ink)}
 .sig-list small{display:block;font:12px/1.4 var(--font-text);color:var(--c-ink3)}
 .sig-list li>span{font:500 12px var(--font-text);color:var(--c-ink2);white-space:nowrap}
+.sig-h{margin:14px 0 2px;font:600 12px/1.3 var(--font-text);color:var(--c-ink2);text-transform:uppercase;letter-spacing:.04em}
+.sig-note{margin:8px 0 0;padding:8px 10px;border-radius:var(--r-ctl);border:1px solid color-mix(in oklab,var(--c-warn) 40%,var(--c-line2));background:color-mix(in oklab,var(--c-warn) 8%,transparent);font:12px/1.45 var(--font-text);color:var(--c-ink2)}
+.sig-more summary{cursor:pointer;margin:4px 0;font:500 12.5px var(--font-text);color:var(--c-ink2)}
+.sig-more summary:hover{color:var(--c-ink)}
+.sig-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+.sig-row .kf-h{flex:1 1 280px;margin:0}
 .pw-dot{animation-timing-function:var(--ease-mech)}
 .pw-hit{position:absolute;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;border:2px solid var(--c-up);opacity:0;pointer-events:none;animation:pw-hit .9s var(--ease-out) forwards}
 .pw-hit.bad{border-color:var(--c-down)}
