@@ -1318,7 +1318,7 @@ async def test_close_all_books_exit_in_history_and_balance():
         )
     assert monitored == {}
     monitor._portfolio_manager.update_portfolio.assert_awaited_once_with(
-        "BTC/USDT", "sell", 0.01, 50000.0
+        "BTC/USDT", "sell", 0.01, 50000.0, entry=50000.0, lev=1.0
     )
     kw = monitor._trade_history.record_close.await_args.kwargs
     assert (kw["trade_id"], kw["exit_price"], kw["reason"]) == (
@@ -1355,7 +1355,7 @@ async def test_partial_close_books_balance_and_history():
         )
     assert updated["qty"] == pytest.approx(0.01)
     monitor._portfolio_manager.update_portfolio.assert_awaited_once_with(
-        "BTC/USDT", "sell", pytest.approx(0.01), 51000.0
+        "BTC/USDT", "sell", pytest.approx(0.01), 51000.0, entry=50000.0, lev=1.0
     )
     args = monitor._trade_history.record_partial_close.await_args.args
     assert args[0] == 5 and args[1] == pytest.approx(0.01) and args[2] == 51000.0

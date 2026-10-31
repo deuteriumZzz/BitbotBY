@@ -389,7 +389,9 @@ class PositionMonitor:
         side = pos.get("side", "buy")
         qty = pos.get("qty", 0.0)
         close_side = "sell" if side == "buy" else "buy"
-        await self._portfolio_manager.update_portfolio(sym, close_side, qty, price)
+        await self._portfolio_manager.update_portfolio(
+            sym, close_side, qty, price, entry=pos["entry"], lev=pos.get("lev", 1.0)
+        )
         if self._on_position_closed:
             self._on_position_closed(sym, {"reason": reason, "price": price})
         trade_id = pos.get("trade_id")
@@ -738,7 +740,9 @@ class PositionMonitor:
         if not price or price <= 0:
             logger.error("Partial close of %s not booked: unknown exit price", sym)
             return
-        await self._portfolio_manager.update_portfolio(sym, close_side, qty, price)
+        await self._portfolio_manager.update_portfolio(
+            sym, close_side, qty, price, entry=pos["entry"], lev=pos.get("lev", 1.0)
+        )
         trade_id = pos.get("trade_id")
         if not trade_id:
             return
@@ -917,7 +921,9 @@ class PositionMonitor:
                 )
                 return
 
-        await self._portfolio_manager.update_portfolio(sym, close_side, qty, price)
+        await self._portfolio_manager.update_portfolio(
+            sym, close_side, qty, price, entry=pos["entry"], lev=pos.get("lev", 1.0)
+        )
         async with lock:
             monitored.pop(sym, None)
         if self._on_position_closed:
@@ -1065,7 +1071,9 @@ class PositionMonitor:
             if fee_cost > 0:
                 exit_commission = fee_cost
 
-        await self._portfolio_manager.update_portfolio(sym, close_side, qty, price)
+        await self._portfolio_manager.update_portfolio(
+            sym, close_side, qty, price, entry=pos["entry"], lev=pos.get("lev", 1.0)
+        )
         async with lock:
             monitored.pop(sym, None)
         if self._on_position_closed:

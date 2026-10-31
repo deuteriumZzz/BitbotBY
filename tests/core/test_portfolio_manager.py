@@ -141,3 +141,32 @@ async def test_trailing_stop_not_triggered_small_move(portfolio):
 
     assert triggered is False
     assert "BTC/USDT" in portfolio.positions
+
+
+# ---------------------------------------------------------------------------
+# Закрытие позиции с плечом (Paper): залог + P&L, как на бирже
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "side, close_side, exit_price, pnl",
+    [("sell", "buy", 29000.0, 100.0), ("buy", "sell", 29000.0, -100.0)],
+)
+async def test_close_with_leverage_returns_margin_and_pnl(
+    portfolio, side, close_side, exit_price, pnl
+):
+    """Открыли 0.1 по 30000 с плечом 5 (залог 600), закрыли — баланс меняется на P&L."""
+    qty, entry, lev = 0.1, 30000.0, 5.0
+    rate = portfolio.commission_rate
+    open_fee = qty * entry * rate
+    portfolio.current_balance -= (
+        qty * entry / lev + open_fee
+    )  # так открывает OrderExecutor
+    ok = await portfolio.update_portfolio(
+        "BTC/USDT", close_side, qty, exit_price, entry=entry, lev=lev
+    )
+    assert ok is True
+    close_fee = qty * exit_price * rate
+    assert portfolio.current_balance == pytest.approx(
+        10000.0 + pnl - open_fee - close_fee
+    )

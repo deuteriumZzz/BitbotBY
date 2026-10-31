@@ -1021,6 +1021,26 @@ class TestPaperTradingSell:
         assert paper_balance[0] < initial_bal
 
     @pytest.mark.asyncio
+    async def test_paper_linear_long_reserves_margin_and_records_lev(self):
+        """Paper LINEAR LONG — как шорт: списывается залог qty·entry/lev, плечо в позиции."""
+        executor, monitored, paper_balance = _make_executor()
+        cfg = _make_cfg(paper=True, market_type="linear")
+        with patch("src.core.order_executor.Config", cfg), patch(
+            "src.core.order_executor._ac_impact", return_value=0.0
+        ), patch(
+            "src.core.order_executor._calc_dynamic_leverage", return_value=5
+        ), patch(
+            "src.core.trade_history.get_backtest_stats", return_value=_BT_STATS
+        ):
+            await executor.execute(_TOP_BUY, {}, 10_000.0)
+        pos = monitored["BTC/USDT"]
+        assert pos["lev"] == 5
+        fee = pos["qty"] * pos["entry"] * cfg.COMMISSION_RATE
+        assert 10_000.0 - paper_balance[0] == pytest.approx(
+            pos["qty"] * pos["entry"] / 5 + fee
+        )
+
+    @pytest.mark.asyncio
     async def test_paper_sell_spot_ignored_as_entry(self):
         """Paper SPOT sell-as-entry: сигнал игнорируется, баланс не меняется.
 

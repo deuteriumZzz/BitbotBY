@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Dict
+from typing import Dict, Optional
 
 from config import Config
 from src.infra.redis_client import RedisClient
@@ -48,6 +48,8 @@ class PortfolioManager:
         action: str,
         quantity: float,
         price: float,
+        entry: Optional[float] = None,
+        lev: float = 1.0,
     ) -> bool:
         """
         Обновляет портфель на основе торговой операции.
@@ -59,9 +61,27 @@ class PortfolioManager:
         :param action: Действие ("buy" или "sell").
         :param quantity: Количество актива.
         :param price: Цена актива.
+        :param entry: Цена входа закрываемой позиции. Передана — это закрытие
+            (action — сторона закрытия): как на бирже, возвращается залог
+            qty·entry/lev, списанный OrderExecutor при открытии, и P&L.
+        :param lev: Плечо позиции при открытии (на споте 1).
         :return: True если операция выполнена, False иначе.
         """
         try:
+            if entry is not None:
+                commission = quantity * price * self.commission_rate
+                pnl = quantity * (price - entry if action == "sell" else entry - price)
+                self.current_balance += quantity * entry / max(lev, 1.0) + pnl
+                self.current_balance -= commission
+                self.total_commissions += commission
+                held = self.positions.get(symbol, 0.0)
+                if action == "sell" and held > 0:
+                    self.positions[symbol] = held - quantity
+                    if self.positions[symbol] <= 0:
+                        del self.positions[symbol]
+                await self._save_portfolio_state()
+                return True
+
             if action == "buy":
                 commission = quantity * price * self.commission_rate
                 cost = quantity * price + commission

@@ -597,23 +597,23 @@ class OrderExecutor:
             order_sent_at = time.time()
             fill_price = float(entry)  # paper: симулированное исполнение
             order_filled_at = order_sent_at
+            # Плечо позиции: на споте его нет. Записывается в позицию — по нему
+            # PortfolioManager при закрытии возвращает залог.
+            pos_lev = 1 if _market_type == "spot" else max(1, dynamic_lev)
 
             if Config.PAPER_TRADING:
                 logger.info(
                     "[PAPER] %s %.6f %s @ %.4f", action.upper(), quantity, sym, entry
                 )
                 bal = self._get_paper_balance()
-                if action == "buy":
-                    # Открытие LONG: тратим деньги
-                    self._set_paper_balance(bal - quantity * entry - commission)
+                if action == "buy" or _market_type != "spot":
+                    # LONG и LINEAR SHORT — как на бирже: блокируем залог
+                    # (сумма / плечо); на споте плеча нет — вся сумма.
+                    margin = quantity * entry / pos_lev
+                    self._set_paper_balance(bal - margin - commission)
                 else:
-                    if _market_type == "spot":
-                        # SPOT продажа: получаем деньги (закрытие лонга)
-                        self._set_paper_balance(bal + quantity * entry - commission)
-                    else:
-                        # LINEAR SHORT: резервируем маржу (entry / leverage)
-                        margin = quantity * entry / dynamic_lev
-                        self._set_paper_balance(bal - margin - commission)
+                    # SPOT продажа: получаем деньги (закрытие лонга)
+                    self._set_paper_balance(bal + quantity * entry - commission)
             else:
                 if _market_type != "spot":
                     try:
@@ -665,6 +665,7 @@ class OrderExecutor:
                 "atr": top.get("atr", 0.0),
                 "snap": top.get("_snap"),
                 "balance_at_entry": balance,
+                "lev": pos_lev,
                 "peak_price": entry,
                 "exchange_sl_id": exchange_sl_id,
                 "exchange_tp_id": exchange_tp_id,
