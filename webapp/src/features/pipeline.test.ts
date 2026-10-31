@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { OWN_HOME } from "../lib/where";
 import type { SettingDef } from "../lib/types";
+import { flow, route, stopAt } from "./pipecanvas";
 import { formatSetting, takesPart } from "./pipeline";
 import { RULES, templateOf, templateValues } from "./rules";
 
@@ -75,5 +76,26 @@ describe("шаблоны порогов защиты", () => {
 
   it("каждое правило с порогом или тумблером ссылается на ключ", () => {
     for (const r of RULES) expect(Boolean(r.key || r.on || r.alert)).toBe(true);
+  });
+});
+
+describe("холст цепочки", () => {
+  it("провод идёт только через шаги, которые участвуют в режиме", () => {
+    for (const mode of ["local", "ai", "dqn", "hybrid"]) for (const n of route(mode)) expect(takesPart(mode, n)).toBe(true);
+    expect(route("local")).toEqual(["scan", "strat", "risk", "order", "track"]);
+    expect(route("dqn")).toEqual(["scan", "sac", "risk", "order", "track"]);
+  });
+
+  it("прогон останавливается на первом ▼, иначе на последнем ▲", () => {
+    const r = route("ai");
+    const step = (ok: boolean | null) => ({ node: "scan" as const, ok, text: "" });
+    expect(r[stopAt(r, { scan: step(true), ai: step(true), risk: step(false), order: step(null) })]).toBe("risk");
+    expect(r[stopAt(r, { scan: step(true), ai: step(true), risk: step(true), order: step(true), track: step(true) })]).toBe("track");
+    expect(stopAt(r, { scan: step(null) })).toBe(0);
+  });
+
+  it("числа воронки — на своих проводах", () => {
+    const f = { scanned: 20, candidates: 6, signals: 2, opened: 1 };
+    expect([flow(f, "scan", "strat"), flow(f, "strat", "ai"), flow(f, "ai", "risk"), flow(f, "risk", "order")]).toEqual([20, 6, 2, 1]);
   });
 });

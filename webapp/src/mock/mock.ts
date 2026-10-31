@@ -202,8 +202,8 @@ const coins = (syms: string[], sides: Record<string, Side>): string =>
 const nSignals = (n: number): string => `${n} ${plural(n, ["сигнал", "сигнала", "сигналов"])}`;
 const nHeld = (n: number): string => `сопровождает ${n} ${plural(n, ["позицию", "позиции", "позиций"])}`;
 
-function saveCycle(state: string, nodes: CycleTrace["nodes"]): void {
-  lastCycle = { at: Date.now() / 1000, mode: modeNow(), state, nodes };
+function saveCycle(state: string, nodes: CycleTrace["nodes"], funnel = { scanned: 0, candidates: 0, signals: 0, opened: 0 }): void {
+  lastCycle = { at: Date.now() / 1000, mode: modeNow(), state, nodes, funnel };
   emit("trace.cycle", lastCycle as unknown as Record<string, unknown>);
 }
 
@@ -608,7 +608,12 @@ async function cycle(): Promise<void> {
       opened.push(sym);
     }
   }
-  saveCycle("scan", cycleNodes(scan.length, pre, sides, rejected, opened, used));
+  saveCycle("scan", cycleNodes(scan.length, pre, sides, rejected, opened, used), {
+    scanned: scan.length,
+    candidates: pre.length,
+    signals: picks.length,
+    opened: opened.length,
+  });
 }
 
 function openAndEmit(sym: string, side: Side, why: Partial<Position> = {}, scanN = SYMBOLS.length, inPre = true): void {

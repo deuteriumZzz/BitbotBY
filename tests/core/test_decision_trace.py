@@ -68,6 +68,12 @@ def test_ai_cycle_summary_per_node():
     }
     assert n["order"] == {"node": "order", "ok": True, "text": "открыта: BTC ▲"}
     assert n["track"]["text"] == "сопровождает 2 позиции"
+    assert saved[-1]["funnel"] == {
+        "scanned": 3,
+        "candidates": 2,
+        "signals": 2,
+        "opened": 1,
+    }
 
 
 def test_steps_saved_with_opened_trade():

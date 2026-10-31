@@ -187,7 +187,7 @@ function Idle() {
 }
 
 /** Прокрутка к блоку другой вкладки: ждём, пока вкладка отрисуется (до ~1 с). */
-const scrollWhenReady = (id: string, tries = 20): void => {
+export const scrollWhenReady = (id: string, tries = 20): void => {
   const el = document.getElementById(id);
   if (el) el.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
   else if (tries) setTimeout(() => scrollWhenReady(id, tries - 1), 50);

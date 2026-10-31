@@ -1007,11 +1007,6 @@ details.extra[open]>.card{animation:viewin .28s var(--ease-mech)}
 .pipe-legend i{width:12px;height:12px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-s)}
 .pipe-legend i.on{border-color:var(--brand);box-shadow:var(--glow)}
 .pipe-legend i.idle{opacity:.45}
-.pipe{list-style:none;margin:0;padding:2px 2px 8px;display:flex;overflow-x:auto;scrollbar-width:thin}
-.pipe li{display:flex;align-items:center;flex:1 0 150px}
-.pipe li:first-child{flex-basis:128px}
-.pipe-arrow{flex:0 0 22px;stroke:var(--line-ui);stroke-width:1.5;fill:none}
-.pipe-arrow .hd{fill:var(--line-ui);stroke:none}
 .pipe-node{all:unset;box-sizing:border-box;cursor:pointer;flex:1;align-self:stretch;display:flex;flex-direction:column;gap:4px;min-height:96px;padding:10px 12px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);transition:border-color var(--t-fast),box-shadow var(--t-fast),opacity var(--t-norm) var(--ease-mech)}
 .pipe-node .hd{display:flex;align-items:center;justify-content:space-between;color:var(--ink-2)}
 .pipe-node i{font:500 11px/1 var(--f-num);font-style:normal;color:var(--ink-3)}
@@ -1276,7 +1271,6 @@ select.sel{border-radius:var(--r-ctl);background:var(--c-inset);box-shadow:none}
 /* ---------- «Цепочка»: полотно конвейера, узлы, поток по стрелкам, панель шага справа ---------- */
 .pipe-canvas{border-radius:var(--r-card);border-color:var(--c-line);background-color:var(--c-s1);background-image:radial-gradient(circle,var(--c-line2) 1px,transparent 1.3px);background-size:22px 22px;padding:18px}
 .pipe-hint{margin:12px 2px 0;font:12px/1.4 var(--font-text);color:var(--c-ink3)}
-.pipe li{flex:1 0 156px}
 .pipe-node{border-radius:var(--r-inner);background:linear-gradient(180deg,var(--c-sheen),transparent 60%),var(--c-s2);border-color:var(--c-line2);padding:12px 14px;gap:5px;transition:border-color var(--dur-norm) var(--ease-out),transform var(--dur-fast) var(--ease-out),box-shadow var(--dur-norm) var(--ease-out),opacity var(--dur-norm) var(--ease-out)}
 .pipe-node .hd svg{width:30px;height:30px;padding:7px;border-radius:50%;background:var(--c-s3);border:1px solid var(--c-line2);color:var(--c-ink2);transition:color var(--dur-norm),background var(--dur-norm),border-color var(--dur-norm)}
 .pipe-node:hover:not(.idle){transform:translateY(-2px);border-color:var(--c-ctl);box-shadow:var(--shadow-lift)}
@@ -1287,11 +1281,6 @@ select.sel{border-radius:var(--r-ctl);background:var(--c-inset);box-shadow:none}
 .pipe-node .res{border-top-color:var(--c-line)}
 .pipe-legend i{border-radius:4px}
 .pipe-legend i.on{border-color:var(--c-accent);box-shadow:none}
-/* Поток: по стрелке между участвующими шагами бегут штрихи, как по связи в редакторе потоков. */
-.pipe-arrow{flex:0 0 26px}
-.pipe-arrow path:first-child{stroke-dasharray:3 4;animation:pipe-flow .9s linear infinite}
-.pipe li:has(.pipe-node.idle) .pipe-arrow path:first-child{animation:none;stroke-dasharray:none;opacity:.5}
-@keyframes pipe-flow{to{stroke-dashoffset:-7}}
 .pipe-ai{border-radius:var(--r-inner);border-style:solid;border-color:var(--c-line);background:var(--c-s2)}
 .pipe-ai-chip{border-radius:var(--r-ctl);background:var(--c-s3);border-color:var(--c-line2);transition:border-color var(--dur-norm),transform var(--dur-fast)}
 .pipe-ai-chip:hover{border-color:var(--c-ctl);transform:translateY(-1px)}
@@ -1311,7 +1300,6 @@ select.sel{border-radius:var(--r-ctl);background:var(--c-inset);box-shadow:none}
 .pipe-panel.open .pipe-body>*:nth-child(3){animation-delay:.12s}
 .pipe-panel .pipe-sum .card-h{display:none}
 @media (prefers-reduced-motion:reduce){
-  .pipe-arrow path:first-child{animation:none}
   .pipe-panel,.pipe-scrim{transition:none}
   .pipe-node:hover:not(.idle){transform:none}
 }
@@ -1338,9 +1326,7 @@ select.sel{border-radius:var(--r-ctl);background:var(--c-inset);box-shadow:none}
 .blk-plus{display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--c-s3);color:var(--c-ink2);font:600 14px/1 var(--font-text);transition:background var(--dur-norm),color var(--dur-norm)}
 .blk:hover .blk-plus{background:var(--c-accent);color:var(--c-bg)}
 .blk-empty{margin:6px 2px;font:12px var(--font-text);color:var(--c-ink3)}
-.pipe li{align-items:flex-start}
-.pipe-arrow{margin-top:46px}
-.pipe-col{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px;align-self:stretch}
+.pipe-col{flex:none;min-width:0;display:flex;flex-direction:column;gap:8px}
 .lane2{display:flex;flex-wrap:wrap;align-content:flex-start;gap:5px;min-height:64px;padding:7px;border-radius:var(--r-ctl);border:1px dashed var(--c-line2);background:color-mix(in oklab,var(--c-bg) 55%,transparent);transition:border-color var(--dur-norm) var(--ease-out),background var(--dur-norm) var(--ease-out),opacity var(--dur-norm) var(--ease-out)}
 .lane2.none{border-color:transparent;background:transparent}
 .lane2.can{border-color:var(--c-accent);background:color-mix(in oklab,var(--c-accent) 6%,transparent)}
@@ -1385,8 +1371,6 @@ select.sel{border-radius:var(--r-ctl);background:var(--c-inset);box-shadow:none}
 .toast{border-radius:var(--r-pill)}
 .tip{border-radius:var(--r-ctl)}
 @media (prefers-reduced-transparency:reduce){ .pal-back,.help-back,.pipe-scrim.open{backdrop-filter:none;-webkit-backdrop-filter:none} }
-.pipe li{flex:1 0 128px}
-.pipe li:first-child{flex-basis:104px}
 .pipe-node{padding:11px 12px}
 
 /* ---------- «Журнал»: итоги сверху, сделки во всю ширину (как в обозревателе блоков), ниже стратегии · календарь · исполнение ---------- */
@@ -1632,3 +1616,40 @@ small.hr-act,.hr-act small{font-size:12px;color:var(--c-ink3);line-height:1.45}
 .honest a:hover{text-decoration:underline}
 .x-steps{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:13px;line-height:1.45;color:var(--ink-2)}
 .x-steps li::marker{color:var(--ink-3);font:500 12px var(--f-mono)}
+
+/* Холст «Цепочки» (pipecanvas.tsx): провода, развилка «кто решает», доверенные каналы, прогон цикла. */
+.pw-wrap{display:flex;flex-direction:column;gap:8px}
+.pw-view{overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;scrollbar-color:var(--c-line2) transparent;cursor:grab}
+.pw-world{position:relative;transform-origin:0 0}
+.pw-row{display:flex;align-items:flex-start}
+.pw-wires{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
+.pw-rail{fill:none;stroke:var(--c-line2);stroke-width:1.5}
+.pw-wire{fill:none;stroke:var(--c-accent);stroke-width:2;stroke-linecap:round;stroke-dasharray:1 1;stroke-dashoffset:1;animation:pw-draw .5s var(--ease-out) forwards;transition:opacity var(--dur-fast)}
+.pw-wire.hint{stroke:color-mix(in oklab,var(--c-accent) 55%,var(--c-line2));stroke-width:1.5}
+.pw-wire.lifted{opacity:.2}
+.pw-wire.fall,.pw-wire.ghost,.pw-wire.tg{animation:none;stroke-dashoffset:0}
+.pw-wire.fall{stroke:var(--c-ink3);stroke-width:1.5;stroke-dasharray:4 6}
+.pw-wire.ghost{stroke-dasharray:6 6}
+.pw-wire.tg{stroke-dasharray:none}
+.pw-wire.tg.off{stroke:var(--c-line2);stroke-dasharray:4 6}
+@keyframes pw-draw{to{stroke-dashoffset:0}}
+.pw-n,.pw-tag{position:absolute;transform:translate(-50%,-50%);white-space:nowrap;pointer-events:none;background:var(--c-s1)}
+.pw-n{min-width:22px;height:18px;padding:0 5px;box-sizing:border-box;display:grid;place-items:center;border-radius:var(--r-pill);border:1px solid color-mix(in oklab,var(--c-accent) 55%,var(--c-line2));font:600 11px/1 var(--font-mono);color:var(--c-ink);animation:pw-pop var(--dur-norm) var(--ease-out)}
+.pw-n.zero{border-color:var(--c-line2);color:var(--c-ink3)}
+@keyframes pw-pop{from{opacity:0;transform:translate(-50%,-50%) scale(.6)}}
+.pw-tag{padding:0 5px;font:500 10.5px/1.5 var(--font-text);color:var(--c-ink3)}
+.pw-plug{position:absolute;z-index:3;width:16px;height:16px;margin:-8px 0 0 -8px;box-sizing:border-box;border-radius:50%;background:var(--c-accent);border:3px solid var(--c-s1);box-shadow:0 0 0 1px var(--c-accent);cursor:grab;touch-action:none;transition:left var(--dur-norm) var(--ease-mech),top var(--dur-norm) var(--ease-mech),transform var(--dur-fast) var(--ease-out)}
+.pw-plug:hover{transform:scale(1.25)}
+.pw-plug.held{transition:none;cursor:grabbing;transform:scale(1.25);box-shadow:0 0 0 1px var(--c-accent),0 0 16px color-mix(in oklab,var(--c-accent) 60%,transparent)}
+.pw-plug-ico{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--c-accent);vertical-align:baseline}
+.pw-drop{position:absolute;z-index:2;height:118px;box-sizing:border-box;border:1.5px dashed var(--c-accent);border-radius:var(--r-inner);background:color-mix(in oklab,var(--c-accent) 8%,transparent);pointer-events:none;animation:pw-pop var(--dur-fast) var(--ease-out)}
+.pw-drop b{position:absolute;left:0;bottom:calc(100% + 4px);font:600 11px var(--font-text);color:var(--c-accent);white-space:nowrap}
+.pipe-node.pw-tg{position:absolute;min-height:0;gap:3px;padding:9px 12px}
+.pw-tg .st,.pw-tg .res{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pw-tg .res{padding-top:3px}
+.pw-tg-switch{position:absolute;transform:translate(-50%,-50%);display:flex;align-items:center;gap:8px;padding:3px 4px 3px 10px;border-radius:var(--r-pill);background:var(--c-s1);border:1px solid var(--c-line2);font:500 11.5px var(--font-text);color:var(--c-ink2);white-space:nowrap}
+.pw-dot{animation-timing-function:var(--ease-mech)}
+.pw-hit{position:absolute;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;border:2px solid var(--c-up);opacity:0;pointer-events:none;animation:pw-hit .9s var(--ease-out) forwards}
+.pw-hit.bad{border-color:var(--c-down)}
+@keyframes pw-hit{0%{opacity:.95;transform:scale(1)}100%{opacity:0;transform:scale(3.2)}}
+@media (prefers-reduced-motion:reduce){ .pw-wire,.pw-n,.pw-drop{animation:none;stroke-dashoffset:0} .pw-plug{transition:none} }

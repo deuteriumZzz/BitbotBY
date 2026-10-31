@@ -431,7 +431,7 @@ function AlertsCard() {
 
 const TRUST_PARAMS = ["TELEGRAM_TRUSTED_RISK", "TELEGRAM_TRUSTED_SLOTS", "TELEGRAM_TRUSTED_SL", "TELEGRAM_TRUSTED_DEDUP_MIN", "TELEGRAM_TRUSTED_UNTRUST"];
 /** Как channel_names на сервере: «@Chan, https://t.me/chan2» → ["chan", "chan2"]. */
-const chanList = (raw: unknown): string[] => [
+export const chanList = (raw: unknown): string[] => [
   ...new Set(
     String(raw ?? "")
       .split(/[,\s]+/)

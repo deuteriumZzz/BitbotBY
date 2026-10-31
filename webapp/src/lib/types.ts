@@ -19,6 +19,8 @@ export interface CycleTrace {
   mode: string;
   state: string;
   nodes: Partial<Record<BotNode, TraceStep>>;
+  /** Воронка цикла: сколько монет дошло до каждого этапа. Нет у итогов от старого бота. */
+  funnel?: { scanned: number; candidates: number; signals: number; opened: number };
 }
 
 export interface Position {

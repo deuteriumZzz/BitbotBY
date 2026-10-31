@@ -169,6 +169,13 @@ class DecisionTrace:
             "mode": self._mode,
             "state": self._state,
             "nodes": self._nodes(),
+            # Воронка цикла — числа на проводах «Цепочки».
+            "funnel": {
+                "scanned": self._scanned,
+                "candidates": len(self._candidates),
+                "signals": len(self._signals),
+                "opened": len(self._opened),
+            },
         }
 
     def _source(self, sig: Dict[str, Any]) -> str:

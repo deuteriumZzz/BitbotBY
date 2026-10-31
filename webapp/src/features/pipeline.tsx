@@ -15,6 +15,7 @@ import { ModelCard } from "./jobs";
 import { RulesCard } from "./rules";
 import { UiSwitchRow } from "./uimode";
 import { HoursCard, SymbolsCard } from "./settings";
+import { NW, PipeCanvas } from "./pipecanvas";
 import { mark } from "./trace";
 
 const svg = (body: JSX.Element) => (
@@ -398,20 +399,13 @@ export function Pipeline() {
           </ul>
         </div>
         <BlockLibrary blocks={blocks} drag={drag} setDrag={setDrag} />
-        <ol className="pipe" aria-label="Конвейер решений">
+        <PipeCanvas mode={mode} cycle={cycle} onMode={(m) => void actions.patchConfig({ MODE: m })}>
           {NODES.map(({ id, title, icon }, i) => {
             const on = takesPart(mode, id);
             const res = cycle?.nodes[id];
             const [glyph, cls] = mark(res?.ok);
             return (
-              <li key={id}>
-                {i > 0 && (
-                  <svg className="pipe-arrow" width="22" height="10" viewBox="0 0 22 10" aria-hidden="true">
-                    <path d="M0 5H16" />
-                    <path className="hd" d="M15 1l6 4-6 4z" />
-                  </svg>
-                )}
-                <div className="pipe-col">
+                <div key={id} className="pipe-col" style={{ width: NW }}>
                 <button
                   type="button"
                   className={`pipe-node${node === id ? " on" : ""}${on ? "" : " idle"}`}
@@ -439,12 +433,14 @@ export function Pipeline() {
                     <div className="lane2 none" aria-hidden="true" />
                   )}
                 </div>
-              </li>
             );
           })}
-        </ol>
+        </PipeCanvas>
         <AiStrip part={takesPart(mode, "ai")} />
-        <p className="pipe-hint">Нажмите на шаг — его настройки откроются справа, конвейер останется на виду.</p>
+        <p className="pipe-hint">
+          Нажмите на шаг — его настройки откроются справа. Штекер <i className="pw-plug-ico" aria-hidden="true" /> на проводе в «Риск» перетащите на Стратегии, AI
+          или SAC — так меняется, кто решает. Числа на проводах — сколько монет прошло в последнем цикле. Ctrl + колесо — масштаб.
+        </p>
       </div>
       <button type="button" className={`pipe-scrim${open ? " open" : ""}`} tabIndex={-1} aria-hidden="true" onClick={closeNode} />
       <aside className={`pipe-panel${open ? " open" : ""}`} role="dialog" aria-label={`Шаг «${cur.title}»`} aria-hidden={!open}>
