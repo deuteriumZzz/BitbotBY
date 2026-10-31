@@ -101,6 +101,7 @@ class TestInit:
 
     def test_init_with_rc_calls_get_mode(self, mock_ai, mock_dqn_signal):
         rc = MagicMock()
+        rc.get_signal_confidence.return_value = 0.65  # порог из настроек
         rc.get_mode.return_value = "dqn"
         combiner = SignalCombiner(ai=mock_ai, rc=rc)
         assert combiner._rc is rc
@@ -411,6 +412,24 @@ class TestSacOnly:
 
 
 class TestHybrid:
+    def test_hybrid_uses_app_threshold_not_static(self, mock_ai, mock_dqn_signal):
+        """Порог — из настроек приложения (Paper 0.55), а не статический Config (0.65)."""
+        rc = MagicMock()
+        rc.get_signal_confidence.return_value = 0.65  # порог из настроек
+        rc.get_mode.return_value = "hybrid"
+        rc.get_chronos_enabled.return_value = False
+        rc.get_signal_confidence.return_value = 0.55
+        mock_dqn_signal.get_signal.return_value = {
+            "action": "buy",
+            "confidence": 0.6,
+            "source": "sac",
+        }
+        mock_ai.analyze.return_value = [make_rec(confidence=0.6)]
+        combiner = SignalCombiner(ai=mock_ai, rc=rc)
+        with patch.object(Config, "MIN_SIGNAL_CONFIDENCE", 0.65):
+            result = await_sync(combiner.combine([make_snapshot()], balance=10000))
+        assert [r["confidence"] for r in result] == [0.6]
+
     def test_hybrid_agree_buy(self, combiner, mock_ai, mock_dqn_signal):
         """И DQN, и AI говорят buy → итоговый conf = 0.4*dqn + 0.6*ai."""
         dqn_conf = 0.75
@@ -593,6 +612,7 @@ class TestHybrid:
         import pandas as pd
 
         rc = MagicMock()
+        rc.get_signal_confidence.return_value = 0.65  # порог из настроек
         rc.get_mode.return_value = "hybrid"
         rc.get_chronos_enabled.return_value = True
         mock_dqn_signal.get_signal.return_value = {"action": "buy", "confidence": 0.80}
@@ -623,6 +643,7 @@ class TestHybrid:
         import pandas as pd
 
         rc = MagicMock()
+        rc.get_signal_confidence.return_value = 0.65  # порог из настроек
         rc.get_mode.return_value = "hybrid"
         rc.get_chronos_enabled.return_value = True
         mock_dqn_signal.get_signal.return_value = {"action": "buy", "confidence": 0.80}
@@ -653,6 +674,7 @@ class TestHybrid:
         import pandas as pd
 
         rc = MagicMock()
+        rc.get_signal_confidence.return_value = 0.65  # порог из настроек
         rc.get_mode.return_value = "hybrid"
         rc.get_chronos_enabled.return_value = True
         mock_dqn_signal.get_signal.return_value = {"action": "buy", "confidence": 0.80}
@@ -678,6 +700,7 @@ class TestHybrid:
         import pandas as pd
 
         rc = MagicMock()
+        rc.get_signal_confidence.return_value = 0.65  # порог из настроек
         rc.get_mode.return_value = "hybrid"
         rc.get_chronos_enabled.return_value = True
         mock_dqn_signal.get_signal.return_value = {"action": "buy", "confidence": 0.80}
@@ -705,6 +728,7 @@ class TestHybrid:
         import pandas as pd
 
         rc = MagicMock()
+        rc.get_signal_confidence.return_value = 0.65  # порог из настроек
         rc.get_mode.return_value = "hybrid"
         rc.get_chronos_enabled.return_value = True
         mock_dqn_signal.get_signal.return_value = {"action": "buy", "confidence": 0.80}
@@ -998,6 +1022,7 @@ class TestApplyMarketContextFilter:
         import json
 
         rc = MagicMock()
+        rc.get_signal_confidence.return_value = 0.65  # порог из настроек
         rc.get_market_profile.return_value = "meme"
         rc.get_market_type.return_value = "linear"
         recs = [make_rec(action="buy", confidence=0.80)]
@@ -1020,6 +1045,7 @@ class TestApplyMarketContextFilter:
         import json
 
         rc = MagicMock()
+        rc.get_signal_confidence.return_value = 0.65  # порог из настроек
         rc.get_market_profile.return_value = ""
         rc.get_market_type.return_value = "linear"
         recs = [make_rec(action="buy", confidence=0.80)]
@@ -1034,6 +1060,7 @@ class TestApplyMarketContextFilter:
         import json
 
         rc = MagicMock()
+        rc.get_signal_confidence.return_value = 0.65  # порог из настроек
         rc.get_market_profile.return_value = "altcoin"
         rc.get_market_type.return_value = "spot"
         recs = [make_rec(action="buy", confidence=0.80)]

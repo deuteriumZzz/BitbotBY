@@ -149,6 +149,13 @@ class SignalCombiner:
             return self.ai.unavailable or sac_down
         return False
 
+    def _min_conf(self) -> float:
+        """Порог уверенности как во всём боте: из настроек (Paper или Live, меняется
+        в приложении). Без RuntimeConfig — значение по умолчанию из Config."""
+        if self._rc is None:
+            return Config.MIN_SIGNAL_CONFIDENCE
+        return self._rc.get_signal_confidence(Config.PAPER_TRADING)
+
     def _drop_invalid_for_market(
         self, recs: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
@@ -200,7 +207,7 @@ class SignalCombiner:
         :return: Список рекомендаций с action, confidence, entry, sl/tp.
         """
         results: List[Dict[str, Any]] = []
-        min_conf = Config.MIN_SIGNAL_CONFIDENCE
+        min_conf = self._min_conf()
         for snap in snapshots:
             sig = self.sac.get_signal(snap, balance)
             if sig["action"] == "hold" or sig["confidence"] < min_conf:
@@ -288,7 +295,7 @@ class SignalCombiner:
             if d_action == a_action:
                 a_conf = ai.get("confidence", 0)
                 combined = round(d_conf * w_sac + a_conf * w_ai, 3)
-                if combined < Config.MIN_SIGNAL_CONFIDENCE:
+                if combined < self._min_conf():
                     continue
 
                 # Chronos — третья, независимая от LLM/RL точка зрения.
@@ -323,7 +330,7 @@ class SignalCombiner:
                                 chronos_dir,
                                 combined,
                             )
-                        if combined < Config.MIN_SIGNAL_CONFIDENCE:
+                        if combined < self._min_conf():
                             continue
 
                 rec = dict(ai)
@@ -353,7 +360,7 @@ class SignalCombiner:
         Принимает либо flat dict (один контекст для всех), либо per-symbol map
         {"BTC/USDT": {...}, "ETH/USDT": {...}}.
         """
-        min_conf = Config.MIN_SIGNAL_CONFIDENCE
+        min_conf = self._min_conf()
 
         # Определяем, является ли context per-symbol map
         first_val = next(iter(context.values()), None) if context else None
@@ -574,7 +581,7 @@ class SignalCombiner:
         Очень негативный сентимент блокирует BUY-сигналы;
         очень позитивный немного усиливает их и ослабляет SELL.
         """
-        min_conf = Config.MIN_SIGNAL_CONFIDENCE
+        min_conf = self._min_conf()
 
         result = []
         for rec in recs:
@@ -642,7 +649,7 @@ class SignalCombiner:
         funding rate, PCR, Fear&Greed, basis, ETF flows и импульсную для
         ликвидаций и orderbook imbalance.
         """
-        min_conf = Config.MIN_SIGNAL_CONFIDENCE
+        min_conf = self._min_conf()
 
         # Строим lookup: symbol → snapshot для быстрого доступа
         snap_map: Dict[str, Dict[str, Any]] = {s["symbol"]: s for s in snapshots}
