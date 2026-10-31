@@ -162,7 +162,9 @@ class FakeClient:
     async def get_entity(self, name):
         if name == "ghost":
             raise ValueError("No user has 'ghost' as username")
-        return SimpleNamespace(name=name, left=name == "beta")
+        return SimpleNamespace(
+            name=name, left=name == "beta", title=f"{name.title()} Calls"
+        )
 
     async def __call__(self, request):
         self.joined.append(request.channel.name)
@@ -192,6 +194,7 @@ async def test_watch_joins_new_channels_and_backfills_the_window(monkeypatch):
     assert client.joined == ["beta"]  # на alpha уже подписаны
     assert tg._ids == {-1001: "alpha", -1002: "beta"}
     assert "ghost" in tg._failed
+    assert tg._titles == {"alpha": "Alpha Calls", "beta": "Beta Calls"}
     assert tg.snapshot("WIF/USDT")[1] == 2  # по посту из окна с каждого канала
     await tg._watch()  # повторно не подписываемся
     assert client.joined == ["beta"]
@@ -208,3 +211,28 @@ def test_status_shows_posts_and_mentions():
     st = json.loads(saved[ts.STATUS_KEY])
     assert st["posts"] == 2 and st["mentions"] == {"WIF": 1}
     assert st["window_min"] == 60
+
+
+def test_status_names_each_channel_and_what_happens_to_it():
+    saved = {}
+    tg = _tg((3, "$WIF moon"), (90, "old post"))
+    tg.configure(["alpha", "beta", "gamma"], 60)
+    tg._redis = SimpleNamespace(
+        redis_client=SimpleNamespace(set=lambda k, v: saved.update({k: v}))
+    )
+    tg.state, tg._ids = "ok", {-1001: "alpha"}
+    tg._titles = {"alpha": "Alpha Calls"}
+    tg._failed = {"gamma": "канал не найден или закрыт"}
+    tg.report([])
+    per = json.loads(saved[ts.STATUS_KEY])["per_channel"]
+    assert per["alpha"]["title"] == "Alpha Calls"
+    assert per["alpha"]["state"] == "reading" and per["alpha"]["posts"] == 1
+    assert per["alpha"]["last_at"] == pytest.approx(time.time() - 180, abs=5)
+    assert per["beta"] == {
+        "title": "",
+        "state": "connecting",
+        "why": "",
+        "posts": 0,
+        "last_at": None,
+    }
+    assert per["gamma"]["state"] == "failed" and per["gamma"]["why"]

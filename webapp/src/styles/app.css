@@ -979,8 +979,14 @@ details.extra[open]>.card{animation:viewin .28s var(--ease-mech)}
 .tglogin .tg-h{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;font:500 13px/1.4 var(--f-ui)}
 .tglogin form{display:flex;flex-direction:column;gap:8px}
 .tglogin .kf-h.warn{color:var(--warn)}
+.tgch{scroll-margin-top:64px}
 .tgch .kf-h{margin:6px 0 2px}
 .tgch-a{display:flex;align-items:center;gap:8px}
+.tgch-h{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:8px;font:500 12px/1.4 var(--f-ui);color:var(--ink-2)}
+.tgch-c{min-width:0;display:flex;flex-direction:column;gap:2px}
+.tgch-c b{display:flex;align-items:center;gap:6px;overflow-wrap:anywhere}
+.tgch-c small{overflow-wrap:anywhere}
+.tgch-bad{color:var(--warn)}
 .tgch-add{display:flex;gap:8px;margin:10px 0 4px}
 .tgch-add .inp{flex:1;min-width:0}
 .tgch-params{display:flex;flex-direction:column;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--line-soft)}

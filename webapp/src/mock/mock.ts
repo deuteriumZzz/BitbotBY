@@ -18,6 +18,7 @@ import type {
   PendingSignal,
   Position,
   SecretItem,
+  TgStatus,
   SettingDef,
   Side,
   Strategy,
@@ -84,6 +85,12 @@ for (const s of secrets) {
   Object.assign(s, { status: "ok", message: "Ключ проверен.", checked_at: Date.now() / 1000 - 3600 });
   for (const f of s.fields)
     if (!f.optional) Object.assign(f, { set: true, last4: f.secret ? "a9F2" : null, value: f.secret ? null : "1200450" });
+}
+{
+  // Памп-каналы Telegram в демо подключены: видно, какие каналы отслеживаются. Вход можно повторить кнопкой.
+  const tg = secrets.find((x) => x.service === "telethon")!;
+  for (const f of tg.fields) Object.assign(f, { set: true, last4: f.secret ? "c0de" : null, value: f.secret ? null : f.env.endsWith("PHONE") ? "+375291234567" : "1234567" });
+  Object.assign(tg, { signed_in: true, status: "ok", message: "Вход выполнен как @demo.", checked_at: Date.now() / 1000 - 7200 });
 }
 // ── AI: цепочка провайдеров (как GET /api/ai) ─────────────────────────────────
 const ai = structuredClone(fixtures.ai) as AiState;
@@ -764,6 +771,13 @@ function xAccount(b: Body) {
   return tw;
 }
 
+/** Демо-каналы: название в Telegram, постов за час, минут с последнего поста. */
+const TG_DEMO: Record<string, [string, number, number]> = {
+  cryptomoonalerts: ["Crypto Moon Alerts 🚀", 21, 3],
+  pumpsignalscrypto: ["Pump Signals | Crypto", 16, 7],
+  memecoinsnews: ["Memecoins News", 0, 140],
+};
+
 /** Вход в Telegram для каналов: в демо код 22222 просит облачный пароль, остальные пускают сразу. */
 let tgStep = "";
 function tgLogin(step: string, b: Body) {
@@ -788,15 +802,28 @@ function tgStatus() {
   const channels = String(config.TELEGRAM_SENTIMENT_CHANNELS?.value ?? "").split(",").filter(Boolean);
   if (!tg.fields.every((f) => f.set)) return { state: "off", message: "Ключи не заданы — каналы не читаются.", channels };
   if (!tg.signed_in) return { state: "no_session", message: "Вход не выполнен: нажмите «Войти» на карточке «Памп-каналы Telegram».", channels };
+  const now = Date.now() / 1000;
+  const all = [...new Set([...channels, ...String(config.TELEGRAM_TRUSTED_CHANNELS?.value ?? "").split(",")])].map((c) => c.trim().toLowerCase()).filter(Boolean);
+  // Демо: известные каналы читаются, новый «подключается», несуществующий — не найден.
+  const per_channel: NonNullable<TgStatus["per_channel"]> = {};
+  for (const c of all) {
+    const known = TG_DEMO[c];
+    per_channel[c] = known
+      ? { title: known[0], state: "reading", why: "", posts: known[1], last_at: now - known[2] * 60 }
+      : c.includes("fake")
+        ? { title: "", state: "failed", why: "канал не найден или закрыт", posts: 0, last_at: null }
+        : { title: "", state: "connecting", why: "", posts: 0, last_at: null };
+  }
   return {
     state: "ok",
     message: "Подключено, посты приходят сразу.",
-    at: Date.now() / 1000,
-    channels,
+    at: now,
+    channels: all,
     window_min: Number(config.TELEGRAM_WINDOW_MIN?.value ?? 60),
-    posts: 37,
+    posts: Object.values(per_channel).reduce((n, c) => n + c.posts, 0),
     mentions: { WIF: 3, BONK: 1 },
-    failed: {},
+    failed: Object.fromEntries(Object.entries(per_channel).filter(([, c]) => c.state === "failed").map(([k, c]) => [k, c.why])),
+    per_channel,
   };
 }
 

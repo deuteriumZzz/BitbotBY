@@ -281,6 +281,8 @@ export interface TgStatus {
   /** Постов в окне и сколько из них упоминают монеты текущего скана (0 — нет данных, а не «нейтрально»). */
   posts?: number;
   mentions?: Record<string, number>;
+  /** Каждый канал из настроек: название в Telegram, читается ли, постов в окне, время последнего. */
+  per_channel?: Record<string, { title: string; state: "reading" | "failed" | "connecting"; why: string; posts: number; last_at: number | null }>;
 }
 
 /** Что уже подключено (`GET /api/setup`): ключи из приложения или .env. */

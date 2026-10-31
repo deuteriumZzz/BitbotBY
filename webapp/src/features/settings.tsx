@@ -103,7 +103,7 @@ function Main({ openKey }: { openKey: (service: string) => void }) {
       <div className="cols">
         <div className="col">
           <AlertsCard />
-          <TgChannelsCard />
+          <TgChannelsCard openKey={openKey} />
           <p className="note-soon moved">
             Часы торговли и монеты теперь в узле «Сканер».{" "}
             <button className="btn" type="button" onClick={() => useStore.getState().openNode("scan")}>
@@ -441,7 +441,25 @@ const chanList = (raw: unknown): string[] => [
 ];
 
 /** Каналы, которые бот читает, и доверенные: пост доверенного канала сразу становится сделкой. */
-function TgChannelsCard() {
+const ago = (ts: number): string => {
+  const m = Math.round((Date.now() / 1000 - ts) / 60);
+  return m < 1 ? "только что" : m < 60 ? `${m} мин назад` : m < 1440 ? `${Math.round(m / 60)} ч назад` : `${Math.round(m / 1440)} дн. назад`;
+};
+
+/** Что бот делает с каналом прямо сейчас: [тон точки, строка]. */
+function chanState(rt: TgStatus | null, ch: string): [string, string] {
+  if (!rt || rt.state === "unknown") return ["", "бот ещё не сообщал о каналах"];
+  if (rt.state !== "ok") return ["warn", `не читается: ${TG_STATE[rt.state][1]}`];
+  const c = rt.per_channel?.[ch];
+  if (!c) return ["", "добавлен — бот подключит его в течение минуты"];
+  if (c.state === "failed") return ["bad", `не читается: ${c.why}`];
+  if (c.state === "connecting") return ["", "подключается…"];
+  const win = rt.window_min ?? 60;
+  const last = c.last_at ? `, последний ${ago(c.last_at)}` : "";
+  return ["ok", c.posts ? `читается · ${c.posts} ${plural(c.posts, ["пост", "поста", "постов"])} за ${win} мин${last}` : `читается · за ${win} мин постов нет${last}`];
+}
+
+function TgChannelsCard({ openKey }: { openKey: (service: string) => void }) {
   const config = useStore((s) => s.config);
   const schema = useStore((s) => s.schema);
   const paper = useStore((s) => s.bot?.paper ?? true);
@@ -464,6 +482,16 @@ function TgChannelsCard() {
     setAdd("");
   };
   const params = TRUST_PARAMS.map((k) => schema.find((d) => d.key === k)).filter((d): d is SettingDef => Boolean(d));
+  // Что бот делает с каждым каналом — обновляется раз в 30 с, пока карточка на экране.
+  const [rt, setRt] = useState<TgStatus | null>(null);
+  const listKey = all.join(",");
+  useEffect(() => {
+    const load = () => void actions.tgStatus().then(setRt);
+    load();
+    const t = setInterval(load, 30_000);
+    return () => clearInterval(t);
+  }, [listKey]);
+  const reading = all.filter((ch) => rt?.per_channel?.[ch]?.state === "reading").length;
   return (
     <article className="card tgch" id="tg-channels">
       <div className="card-h">
@@ -481,13 +509,41 @@ function TgChannelsCard() {
         Пост доверенного канала сразу становится сделкой: стратегии и AI его не проверяют и не закрывают — только стоп, тейк и трейлинг. Защиты остаются: стоп
         всегда, свой риск и слоты, пауза, дневной лимит, спред, одна сделка на монету, режим счёта — сейчас {paper ? "Paper" : "Live"}.
       </p>
+      <div className="tgch-h">
+        <b>
+          Отслеживаем: {all.length} {plural(all.length, ["канал", "канала", "каналов"])}
+          {rt?.state === "ok" && ` · читаются ${reading}`}
+        </b>
+        {rt && ["off", "no_session", "revoked"].includes(rt.state) && (
+          <button type="button" className="btn" onClick={() => openKey("telethon")}>
+            Вход в Telegram →
+          </button>
+        )}
+      </div>
       <div className="list-tgl">
-        {all.map((ch) => (
-          <div className={`alert-row${trusted.includes(ch) ? "" : " off"}`} key={ch}>
-            <div>
-              <b>@{ch}</b>
-              <small>{trusted.includes(ch) ? "Доверять: входить по постам" : "только настроение"}</small>
-            </div>
+        {all.map((ch) => {
+          const [tone, line] = chanState(rt, ch);
+          const title = rt?.per_channel?.[ch]?.title;
+          const link = /^-?\d+$/.test(ch) ? null : `https://t.me/${ch}`;
+          return (
+            <div className={`alert-row${trusted.includes(ch) ? "" : " off"}`} key={ch}>
+              <div className="tgch-c">
+                <b>
+                  <span className={`dot ${tone}`} />
+                  {title || (link ? `@${ch}` : `канал ${ch}`)}
+                </b>
+                <small>
+                  {link ? (
+                    <a href={link} target="_blank" rel="noopener noreferrer">
+                      @{ch} ↗
+                    </a>
+                  ) : (
+                    `id ${ch}`
+                  )}{" "}
+                  · <span className={tone === "bad" || tone === "warn" ? "tgch-bad" : ""}>{line}</span>
+                </small>
+                <small>{trusted.includes(ch) ? "Доверять: входить по постам" : "только настроение, без сделок"}</small>
+              </div>
             <span className="tgch-a">
               <Toggle on={trusted.includes(ch)} label={`Доверять @${ch}: входить по постам`} onChange={(v) => trust(ch, v)} />
               <button type="button" className="btn" aria-label={`Убрать @${ch}`} onClick={() => remove(ch)}>
@@ -495,7 +551,9 @@ function TgChannelsCard() {
               </button>
             </span>
           </div>
-        ))}
+          );
+        })}
+        {!all.length && <p className="kf-h">Каналов нет — добавьте первый ниже.</p>}
       </div>
       <form className="tgch-add" onSubmit={addChannel}>
         <input className="inp" aria-label="Добавить канал" placeholder="@канал или ссылка t.me/…" value={add} onChange={(e) => setAdd(e.target.value)} />

@@ -194,6 +194,7 @@ class TelegramSentiment:
         self._watched: Set[str] = set()  # каналы, на которые уже подписаны
         self._ids: Dict[int, str] = {}  # id чата Telegram → имя канала
         self._failed: Dict[str, str] = {}  # канал → почему не читается
+        self._titles: Dict[str, str] = {}  # канал → название в Telegram
         self.state = "off"
         self._message = ""
         # Каждый живой пост (не догрузка истории) — для сделок по доверенным
@@ -226,6 +227,7 @@ class TelegramSentiment:
         if self.state == "ok":
             fresh = self.fresh()
             payload["posts"] = len(fresh)
+            payload["per_channel"] = self._per_channel(fresh)
             n = Counter(
                 s.split("/")[0]
                 for s in symbols or []
@@ -239,6 +241,28 @@ class TelegramSentiment:
             )
         except Exception as e:
             logger.debug("TelegramSentiment: status not saved: %s", e)
+
+    def _per_channel(self, fresh: List[Post]) -> Dict[str, Dict[str, Any]]:
+        """Каждый канал из настроек: название, читается ли, постов в окне, последний."""
+        reading = set(self._ids.values())
+        count = Counter(p.channel for p in fresh)
+        last: Dict[str, float] = {}
+        for p in self._posts:
+            last[p.channel] = max(last.get(p.channel, 0.0), p.at)
+        return {
+            c: {
+                "title": self._titles.get(c, ""),
+                "state": (
+                    "reading"
+                    if c in reading
+                    else "failed" if c in self._failed else "connecting"
+                ),
+                "why": self._failed.get(c, ""),
+                "posts": count.get(c, 0),
+                "last_at": last.get(c),
+            }
+            for c in self._channels
+        }
 
     # ── Подключение ───────────────────────────────────────────────────────────
 
@@ -331,6 +355,7 @@ class TelegramSentiment:
                 if getattr(entity, "left", False):
                     await client(JoinChannelRequest(entity))
                 self._ids[utils.get_peer_id(entity)] = name
+                self._titles[name] = str(getattr(entity, "title", "") or "")
                 await self._backfill(entity, name)
                 self._failed.pop(name, None)
             except errors.FloodWaitError as e:

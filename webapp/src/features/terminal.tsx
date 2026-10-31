@@ -186,6 +186,13 @@ function Idle() {
   );
 }
 
+/** Прокрутка к блоку другой вкладки: ждём, пока вкладка отрисуется (до ~1 с). */
+const scrollWhenReady = (id: string, tries = 20): void => {
+  const el = document.getElementById(id);
+  if (el) el.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+  else if (tries) setTimeout(() => scrollWhenReady(id, tries - 1), 50);
+};
+
 /** Последний пост доверенного канала: откуда, что разобрали, вход через сколько секунд или почему нет. */
 function TrustedLast() {
   const t = useStore((s) => s.trusted);
@@ -204,7 +211,7 @@ function TrustedLast() {
           {t.ok ? `Вход открыт через ${t.latency_s} с после поста` : `Без сделки: ${t.reason}`} · {when}. Стратегии, AI и фильтры скана в этих сделках не участвуют.
         </p>
       </div>
-      <button type="button" className="btn" onClick={() => openSettings("settings")}>
+      <button type="button" className="btn" onClick={() => (openSettings("settings"), scrollWhenReady("tg-channels"))}>
         Каналы →
       </button>
     </div>
