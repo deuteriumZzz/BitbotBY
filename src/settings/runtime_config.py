@@ -257,6 +257,10 @@ class RuntimeConfig:
                 return value
         return getattr(Config, key, None)
 
+    def set_hot(self, key: str, value: Any) -> bool:
+        self._set(f"{HOT_PREFIX}{key}", json.dumps(value))
+        return True
+
     # ── Mode ──────────────────────────────────────────────────────────────────
 
     def get_mode(self) -> str:

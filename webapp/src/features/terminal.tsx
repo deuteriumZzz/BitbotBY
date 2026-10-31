@@ -186,11 +186,37 @@ function Idle() {
   );
 }
 
+/** Последний пост доверенного канала: откуда, что разобрали, вход через сколько секунд или почему нет. */
+function TrustedLast() {
+  const t = useStore((s) => s.trusted);
+  const openSettings = useStore((s) => s.setTab);
+  if (!t || Date.now() / 1000 - t.at > 86_400) return null;
+  const what = t.symbol ? `${base(t.symbol)} ${t.side === "buy" ? "LONG" : "SHORT"}` : "монета не разобрана";
+  const when = new Date(t.at * 1000).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  return (
+    <div className={`why ${t.ok ? "ok" : "warn"}`} role="status">
+      <span className={`dot ${t.ok ? "ok" : "warn"}`} />
+      <div>
+        <b>
+          Доверенный канал @{t.channel} · {what}
+        </b>
+        <p>
+          {t.ok ? `Вход открыт через ${t.latency_s} с после поста` : `Без сделки: ${t.reason}`} · {when}. Стратегии, AI и фильтры скана в этих сделках не участвуют.
+        </p>
+      </div>
+      <button type="button" className="btn" onClick={() => openSettings("settings")}>
+        Каналы →
+      </button>
+    </div>
+  );
+}
+
 export function Terminal() {
   return (
     <section className="view term enter" aria-label="Терминал">
       <HealthStrip />
       <Idle />
+      <TrustedLast />
       <ReadinessCard />
       <Hero />
       <MetricsCard />

@@ -1196,6 +1196,118 @@
    "basic": false
   },
   {
+   "key": "TELEGRAM_TRUSTED_TRADING",
+   "group": "Сделки по доверенным каналам",
+   "label": "Сделки по доверенным каналам",
+   "type": "bool",
+   "default": false,
+   "min": null,
+   "max": null,
+   "step": null,
+   "unit": "",
+   "options": [],
+   "hint": "Пост доверенного канала сразу становится сделкой — без сканера, стратегий и AI, в любом профиле. Остаются стоп, свой риск и слоты, пауза, дневной лимит, спред и режим счёта.",
+   "readonly": false,
+   "hot": true,
+   "basic": false
+  },
+  {
+   "key": "TELEGRAM_TRUSTED_CHANNELS",
+   "group": "Сделки по доверенным каналам",
+   "label": "Доверенные каналы",
+   "type": "str",
+   "default": "",
+   "min": null,
+   "max": null,
+   "step": null,
+   "unit": "",
+   "options": [],
+   "hint": "Через запятую. Удобнее — переключателем «Доверять» в Настройки → Каналы Telegram.",
+   "readonly": false,
+   "hot": true,
+   "basic": false
+  },
+  {
+   "key": "TELEGRAM_TRUSTED_RISK",
+   "group": "Сделки по доверенным каналам",
+   "label": "Риск на сделку по каналу",
+   "type": "pct",
+   "default": 0.005,
+   "min": 0.001,
+   "max": 0.05,
+   "step": 0.001,
+   "unit": "",
+   "options": [],
+   "hint": "Сколько баланса потеряете, если сработает стоп.",
+   "readonly": false,
+   "hot": true,
+   "basic": false
+  },
+  {
+   "key": "TELEGRAM_TRUSTED_SLOTS",
+   "group": "Сделки по доверенным каналам",
+   "label": "Слотов для сделок по каналам",
+   "type": "int",
+   "default": 2,
+   "min": 1,
+   "max": 10,
+   "step": null,
+   "unit": "",
+   "options": [],
+   "hint": "Отдельно от обычных слотов бота.",
+   "readonly": false,
+   "hot": true,
+   "basic": false
+  },
+  {
+   "key": "TELEGRAM_TRUSTED_SL",
+   "group": "Сделки по доверенным каналам",
+   "label": "Стоп, если в посте его нет",
+   "type": "pct",
+   "default": 0.03,
+   "min": 0.005,
+   "max": 0.2,
+   "step": 0.005,
+   "unit": "",
+   "options": [],
+   "hint": "Без цели в посте тейк — в 2 раза дальше стопа.",
+   "readonly": false,
+   "hot": true,
+   "basic": false
+  },
+  {
+   "key": "TELEGRAM_TRUSTED_DEDUP_MIN",
+   "group": "Сделки по доверенным каналам",
+   "label": "Одна сделка по монете за",
+   "type": "int",
+   "default": 30,
+   "min": 1,
+   "max": 1440,
+   "step": null,
+   "unit": "мин",
+   "options": [],
+   "hint": "Та же монета из нескольких каналов или репост — одна сделка.",
+   "readonly": false,
+   "hot": true,
+   "basic": false
+  },
+  {
+   "key": "TELEGRAM_TRUSTED_UNTRUST",
+   "group": "Сделки по доверенным каналам",
+   "label": "Снимать доверие после убытков подряд",
+   "type": "int",
+   "default": 0,
+   "min": 0,
+   "max": 20,
+   "step": null,
+   "unit": "",
+   "options": [],
+   "hint": "0 — никогда. Об отключении канала придёт сообщение в Telegram.",
+   "readonly": false,
+   "hot": true,
+   "basic": false
+  },
+  {
    "key": "SENTIMENT_POLL_INTERVAL",
    "group": "Новости и соцсети",
    "label": "Опрашивать Twitter каждые",
@@ -1970,6 +2082,34 @@
   },
   "TELEGRAM_WINDOW_MIN": {
    "value": 60,
+   "source": "default"
+  },
+  "TELEGRAM_TRUSTED_TRADING": {
+   "value": false,
+   "source": "default"
+  },
+  "TELEGRAM_TRUSTED_CHANNELS": {
+   "value": "",
+   "source": "default"
+  },
+  "TELEGRAM_TRUSTED_RISK": {
+   "value": 0.005,
+   "source": "default"
+  },
+  "TELEGRAM_TRUSTED_SLOTS": {
+   "value": 2,
+   "source": "default"
+  },
+  "TELEGRAM_TRUSTED_SL": {
+   "value": 0.03,
+   "source": "default"
+  },
+  "TELEGRAM_TRUSTED_DEDUP_MIN": {
+   "value": 30,
+   "source": "default"
+  },
+  "TELEGRAM_TRUSTED_UNTRUST": {
+   "value": 0,
    "source": "default"
   }
  },

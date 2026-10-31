@@ -103,6 +103,7 @@ function Main({ openKey }: { openKey: (service: string) => void }) {
       <div className="cols">
         <div className="col">
           <AlertsCard />
+          <TgChannelsCard />
           <p className="note-soon moved">
             Часы торговли и монеты теперь в узле «Сканер».{" "}
             <button className="btn" type="button" onClick={() => useStore.getState().openNode("scan")}>
@@ -420,6 +421,110 @@ function AlertsCard() {
               <span>{a.cooldown_min ? "" : "каждый раз"}</span>
             </label>
           </div>
+        ))}
+      </div>
+    </article>
+  );
+}
+
+// ── Каналы Telegram: какие читать и каким доверять ────────────────────────────
+
+const TRUST_PARAMS = ["TELEGRAM_TRUSTED_RISK", "TELEGRAM_TRUSTED_SLOTS", "TELEGRAM_TRUSTED_SL", "TELEGRAM_TRUSTED_DEDUP_MIN", "TELEGRAM_TRUSTED_UNTRUST"];
+/** Как channel_names на сервере: «@Chan, https://t.me/chan2» → ["chan", "chan2"]. */
+const chanList = (raw: unknown): string[] => [
+  ...new Set(
+    String(raw ?? "")
+      .split(/[,\s]+/)
+      .map((c) => c.replace(/^(?:https?:\/\/)?(?:t\.me\/|telegram\.me\/)?@?/, "").replace(/\/+$/, "").toLowerCase())
+      .filter(Boolean),
+  ),
+];
+
+/** Каналы, которые бот читает, и доверенные: пост доверенного канала сразу становится сделкой. */
+function TgChannelsCard() {
+  const config = useStore((s) => s.config);
+  const schema = useStore((s) => s.schema);
+  const paper = useStore((s) => s.bot?.paper ?? true);
+  const [add, setAdd] = useState("");
+  const on = cfg<boolean>(config, "TELEGRAM_TRUSTED_TRADING", false);
+  const watched = chanList(cfg(config, "TELEGRAM_SENTIMENT_CHANNELS", ""));
+  const trusted = chanList(cfg(config, "TELEGRAM_TRUSTED_CHANNELS", ""));
+  const all = [...new Set([...watched, ...trusted])];
+  const trust = (ch: string, yes: boolean) =>
+    void actions.patchConfig({ TELEGRAM_TRUSTED_CHANNELS: (yes ? [...trusted, ch] : trusted.filter((c) => c !== ch)).join(",") });
+  const remove = (ch: string) =>
+    void actions.patchConfig({
+      TELEGRAM_SENTIMENT_CHANNELS: watched.filter((c) => c !== ch).join(","),
+      TELEGRAM_TRUSTED_CHANNELS: trusted.filter((c) => c !== ch).join(","),
+    });
+  const addChannel = (e: FormEvent) => {
+    e.preventDefault();
+    const fresh = chanList(add).filter((c) => !watched.includes(c));
+    if (fresh.length) void actions.patchConfig({ TELEGRAM_SENTIMENT_CHANNELS: [...watched, ...fresh].join(",") });
+    setAdd("");
+  };
+  const params = TRUST_PARAMS.map((k) => schema.find((d) => d.key === k)).filter((d): d is SettingDef => Boolean(d));
+  return (
+    <article className="card tgch" id="tg-channels">
+      <div className="card-h">
+        <h2>Каналы Telegram</h2>
+        <Q tip="Посты всех каналов идут в оценку настроения по монетам текущего скана. Доверенные — ещё и сразу в сделку. Вход в Telegram — на карточке ключа «Памп-каналы Telegram»." />
+      </div>
+      <div className="alert-row">
+        <div>
+          <b>Сделки по доверенным каналам</b>
+          <small>в любом профиле, мимо сканера, стратегий и AI</small>
+        </div>
+        <Toggle on={on} label="Сделки по доверенным каналам" onChange={(v) => void actions.patchConfig({ TELEGRAM_TRUSTED_TRADING: v })} />
+      </div>
+      <p className="kf-h">
+        Пост доверенного канала сразу становится сделкой: стратегии и AI его не проверяют и не закрывают — только стоп, тейк и трейлинг. Защиты остаются: стоп
+        всегда, свой риск и слоты, пауза, дневной лимит, спред, одна сделка на монету, режим счёта — сейчас {paper ? "Paper" : "Live"}.
+      </p>
+      <div className="list-tgl">
+        {all.map((ch) => (
+          <div className={`alert-row${trusted.includes(ch) ? "" : " off"}`} key={ch}>
+            <div>
+              <b>@{ch}</b>
+              <small>{trusted.includes(ch) ? "Доверять: входить по постам" : "только настроение"}</small>
+            </div>
+            <span className="tgch-a">
+              <Toggle on={trusted.includes(ch)} label={`Доверять @${ch}: входить по постам`} onChange={(v) => trust(ch, v)} />
+              <button type="button" className="btn" aria-label={`Убрать @${ch}`} onClick={() => remove(ch)}>
+                Убрать
+              </button>
+            </span>
+          </div>
+        ))}
+      </div>
+      <form className="tgch-add" onSubmit={addChannel}>
+        <input className="inp" aria-label="Добавить канал" placeholder="@канал или ссылка t.me/…" value={add} onChange={(e) => setAdd(e.target.value)} />
+        <button className="btn" type="submit" disabled={!add.trim()}>
+          Добавить
+        </button>
+      </form>
+      <div className="tgch-params">
+        {params.map((d) => (
+          <label className="cool" key={d.key}>
+            <span>{d.label}</span>
+            <span className="numf">
+              <input
+                key={String(config[d.key]?.value)}
+                type="number"
+                inputMode="decimal"
+                min={d.min === null ? undefined : Number(shown(d, d.min))}
+                max={d.max === null ? undefined : Number(shown(d, d.max))}
+                defaultValue={String(shown(d, config[d.key]?.value ?? d.default))}
+                onBlur={(e) => {
+                  const v = Number(e.target.value.replace(",", "."));
+                  const raw = d.type === "pct" ? +(v / 100).toFixed(6) : v;
+                  if (e.target.value && Number.isFinite(v) && raw !== config[d.key]?.value) void actions.patchConfig({ [d.key]: raw });
+                }}
+                onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+              />
+              <span className="u">{unitOf(d)}</span>
+            </span>
+          </label>
         ))}
       </div>
     </article>

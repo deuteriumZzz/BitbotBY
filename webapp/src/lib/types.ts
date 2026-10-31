@@ -61,7 +61,22 @@ export interface BotState {
   market?: { season: Season | null; fear_greed: FearGreed | null };
   /** Итог последнего цикла; null — бот ещё не прошёл цикл после обновления. */
   cycle?: CycleTrace | null;
+  /** Последний пост доверенного канала Telegram; null — постов ещё не было. */
+  trusted?: TrustedPost | null;
   timestamp: string;
+}
+
+/** Пост доверенного канала (событие trusted.post): вход или почему нет, и сколько прошло от поста до ордера. */
+export interface TrustedPost {
+  channel: string;
+  /** Пусто — монету не разобрали. */
+  symbol: string;
+  side: "buy" | "sell" | "";
+  ok: boolean;
+  reason: string;
+  latency_s: number;
+  at: number;
+  text: string;
 }
 
 export interface Season {

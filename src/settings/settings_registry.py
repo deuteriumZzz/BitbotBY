@@ -25,11 +25,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from src.ai import ai_providers
-from src.settings.runtime_config import (
-    CONFIRM_TIMEOUT_MAX,
-    CONFIRM_TIMEOUT_MIN,
-    HOT_PREFIX,
-)
+from src.settings.runtime_config import CONFIRM_TIMEOUT_MAX, CONFIRM_TIMEOUT_MIN
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +132,7 @@ def _hot(key: str) -> Dict[str, Any]:
     """Меняется сразу, без своего геттера: бот читает RuntimeConfig.hot(key)."""
     HOT_KEYS.append(key)
     return {
-        "hot_set": lambda rc, v: rc._set(f"{HOT_PREFIX}{key}", json.dumps(v)) or True,
+        "hot_set": lambda rc, v: rc.set_hot(key, v),
         "hot_get": lambda rc: rc.hot(key),
     }
 
@@ -164,6 +160,7 @@ _G_AI = "AI и решения"
 _G_KILL = "Kill-switch стратегий"
 _G_NEWS = "Новости и соцсети"
 _G_SEASON = "Сезон рынка"
+_G_TRUST = "Сделки по доверенным каналам"
 _G_SAC = "Обучение SAC и бэктест"
 _G_MON = "Мониторинг и логи"
 _G_SERVER = "Сервер"
@@ -837,6 +834,89 @@ SETTINGS: Tuple[Setting, ...] = (
         unit="мин",
         hint="Монета оценивается только по свежим постам за это время.",
         **_hot("TELEGRAM_WINDOW_MIN"),
+    ),
+    Setting(
+        "TELEGRAM_TRUSTED_TRADING",
+        _G_TRUST,
+        "Сделки по доверенным каналам",
+        "bool",
+        False,
+        hint=(
+            "Пост доверенного канала сразу становится сделкой — без сканера, "
+            "стратегий и AI, в любом профиле. Остаются стоп, свой риск и слоты, "
+            "пауза, дневной лимит, спред и режим счёта."
+        ),
+        **_hot("TELEGRAM_TRUSTED_TRADING"),
+    ),
+    Setting(
+        "TELEGRAM_TRUSTED_CHANNELS",
+        _G_TRUST,
+        "Доверенные каналы",
+        "str",
+        "",
+        hint=(
+            "Через запятую. Удобнее — переключателем «Доверять» в "
+            "Настройки → Каналы Telegram."
+        ),
+        **_hot("TELEGRAM_TRUSTED_CHANNELS"),
+    ),
+    Setting(
+        "TELEGRAM_TRUSTED_RISK",
+        _G_TRUST,
+        "Риск на сделку по каналу",
+        "pct",
+        0.005,
+        min=0.001,
+        max=0.05,
+        step=0.001,
+        hint="Сколько баланса потеряете, если сработает стоп.",
+        **_hot("TELEGRAM_TRUSTED_RISK"),
+    ),
+    Setting(
+        "TELEGRAM_TRUSTED_SLOTS",
+        _G_TRUST,
+        "Слотов для сделок по каналам",
+        "int",
+        2,
+        min=1,
+        max=10,
+        hint="Отдельно от обычных слотов бота.",
+        **_hot("TELEGRAM_TRUSTED_SLOTS"),
+    ),
+    Setting(
+        "TELEGRAM_TRUSTED_SL",
+        _G_TRUST,
+        "Стоп, если в посте его нет",
+        "pct",
+        0.03,
+        min=0.005,
+        max=0.2,
+        step=0.005,
+        hint="Без цели в посте тейк — в 2 раза дальше стопа.",
+        **_hot("TELEGRAM_TRUSTED_SL"),
+    ),
+    Setting(
+        "TELEGRAM_TRUSTED_DEDUP_MIN",
+        _G_TRUST,
+        "Одна сделка по монете за",
+        "int",
+        30,
+        min=1,
+        max=1440,
+        unit="мин",
+        hint="Та же монета из нескольких каналов или репост — одна сделка.",
+        **_hot("TELEGRAM_TRUSTED_DEDUP_MIN"),
+    ),
+    Setting(
+        "TELEGRAM_TRUSTED_UNTRUST",
+        _G_TRUST,
+        "Снимать доверие после убытков подряд",
+        "int",
+        0,
+        min=0,
+        max=20,
+        hint="0 — никогда. Об отключении канала придёт сообщение в Telegram.",
+        **_hot("TELEGRAM_TRUSTED_UNTRUST"),
     ),
     Setting(
         "SENTIMENT_POLL_INTERVAL",

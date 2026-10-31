@@ -33,6 +33,8 @@ from starlette.requests import HTTPConnection
 
 from config import Config
 from src.ai import ai_providers
+from src.core.trusted_trader import LAST_KEY as TRUSTED_LAST_KEY
+from src.core.types import is_trusted
 from src.dashboard import auth, data
 from src.infra import background_jobs, bot_bus
 from src.sentiment import telegram_login
@@ -134,8 +136,14 @@ def build_state() -> Dict[str, Any]:
         },
         # Итог последнего цикла по узлам конвейера (src/core/decision_trace.py).
         "cycle": _redis_json(r, "bot:last_cycle"),
+        # Последний пост доверенного канала: вход или почему нет (trusted_trader).
+        "trusted": _redis_json(r, TRUSTED_LAST_KEY),
         "balance": portfolio.get("balance", Config.INITIAL_BALANCE),
-        "slots": {"used": len(positions), "max": max_pos},
+        # У сделок по каналам свои слоты — обычные они не занимают.
+        "slots": {
+            "used": sum(1 for p in positions if not is_trusted(p)),
+            "max": max_pos,
+        },
         "positions": positions,
         "timestamp": datetime.now().isoformat(),
     }

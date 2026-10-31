@@ -35,6 +35,7 @@ import type {
   Symbols,
   TgStatus,
   TgStep,
+  TrustedPost,
   Tab,
 } from "./lib/types";
 
@@ -97,6 +98,8 @@ export interface Store {
   bot: BotState["bot"] | null;
   /** Итог последнего цикла по узлам конвейера (вкладка «Бот»). */
   lastCycle: CycleTrace | null;
+  /** Последний пост доверенного канала: вход по нему или причина отказа. */
+  trusted: TrustedPost | null;
   balance: number;
   slots: { used: number; max: number };
   positions: Record<string, Position>;
@@ -243,6 +246,7 @@ export const useStore = create<Store>((set, get) => {
     set({
       bot: st.bot,
       lastCycle: st.cycle ?? null,
+      trusted: st.trusted ?? null,
       alive: st.bot.alive,
       balance: st.balance,
       slots: st.slots,
@@ -257,6 +261,7 @@ export const useStore = create<Store>((set, get) => {
     alive: true,
     bot: null,
     lastCycle: null,
+    trusted: null,
     balance: 0,
     slots: { used: 0, max: 0 },
     positions: {},
@@ -517,6 +522,13 @@ export const useStore = create<Store>((set, get) => {
           void get().loadJobs().catch(() => undefined);
           feed("edit", "Модель SAC откатана к предыдущей");
           break;
+        case "trusted.post": {
+          const t = d as TrustedPost;
+          set({ trusted: t });
+          const what = t.symbol ? `${base(t.symbol)} ${t.side === "buy" ? "LONG" : "SHORT"}` : "пост";
+          feed(t.ok ? "open" : "skip", t.ok ? `Канал @${t.channel}: ${what} — вход через ${t.latency_s} с` : `Канал @${t.channel}: ${what} пропущен — ${t.reason}`);
+          break;
+        }
         case "trace.cycle":
           set({ lastCycle: d as unknown as CycleTrace });
           break;

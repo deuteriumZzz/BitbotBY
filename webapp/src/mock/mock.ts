@@ -297,7 +297,13 @@ function journalRow(p: Position, exitPrice: number, qty: number, net: number, fe
       const exitPrice = entry + ((side === "long" ? 1 : -1) * (net + fees)) / qty;
       const exit = now - day * 86_400_000 + i * 3_600_000;
       // История — номера 801…, открытые позиции — с 1001: по порядку и без пересечений, как в настоящей базе.
-      const p = { trade_id: 801 + closed.length, symbol, side, entry, strategy: at(strategies.slice(0, 6)).name, reasoning: at(WHY) };
+      const strategy = at(strategies.slice(0, 6)).name;
+      const reasoning = at(WHY);
+      // Каждая седьмая сделка — по посту доверенного канала (без лишних seeded(): прежняя история не меняется).
+      const channel = closed.length % 7 === 3 ? (closed.length % 2 ? "cryptomoonalerts" : "pumpsignalscrypto") : "";
+      const p = channel
+        ? { trade_id: 801 + closed.length, symbol, side, entry, strategy: `tg:${channel}`, reasoning: `Пост @${channel}: #${symbol.split("/")[0]} ${side === "long" ? "LONG" : "SHORT"}` }
+        : { trade_id: 801 + closed.length, symbol, side, entry, strategy, reasoning };
       const reason = win ? at(["tp", "tp", "trail"]) : at(["sl", "sl", "signal_reversal SELL conf=0.71", "hard_drawdown"]);
       closed.push(journalRow(p as Position, exitPrice, qty, net, fees, exit, exit - (20 + seeded() * 600) * 60_000, reason));
       balance += net;
@@ -413,6 +419,18 @@ function state() {
       trace: p.trace,
     })),
     cycle: lastCycle,
+    trusted: config.TELEGRAM_TRUSTED_TRADING?.value
+      ? {
+          channel: "cryptomoonalerts",
+          symbol: "WIF/USDT",
+          side: "buy",
+          ok: true,
+          reason: "",
+          latency_s: 1.8,
+          at: Date.now() / 1000 - 40 * 60,
+          text: "🚀 #WIF/USDT LONG\nEntry: 2.30\nTargets: 2.50 / 2.80\nStop: 2.10",
+        }
+      : null,
     timestamp: new Date().toISOString(),
   };
 }
@@ -810,6 +828,8 @@ function patchConfig(changes: Body) {
     recomputeAi();
   }
   emit("config.changed", { keys: Object.keys(changes).sort() });
+  // Демо: включили сделки по каналам — через пару секунд приходит пост доверенного канала.
+  if (changes.TELEGRAM_TRUSTED_TRADING === true) setTimeout(() => emit("trusted.post", { ...state().trusted, at: Date.now() / 1000 }), 2000);
   return out;
 }
 

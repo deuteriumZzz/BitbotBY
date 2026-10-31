@@ -60,3 +60,13 @@ class PositionRecord(TypedDict, total=False):
     opened_at: Optional[float]
     # Шаги решения по узлам конвейера (src/core/decision_trace.py)
     trace: List[Dict[str, Any]]
+
+
+# Сделки по постам доверенных Telegram-каналов: strategy = "tg:<канал>".
+# Метка живёт в БД и в сохранённых позициях — переживает перезапуск.
+TRUSTED_PREFIX = "tg:"
+
+
+def is_trusted(pos: Any) -> bool:
+    """Позиция по доверенному каналу: её закрывают только SL, TP и трейлинг."""
+    return bool(pos) and str(pos.get("strategy") or "").startswith(TRUSTED_PREFIX)

@@ -143,10 +143,15 @@ def _patterns(base: str) -> Tuple[Pattern[str], Optional[Pattern[str]]]:
     return marked, word
 
 
-def mentions(text: str, base: str) -> bool:
-    """Упомянута ли монета точно: никаких подстрок вроде «wifi» для WIF."""
+def mentions(text: str, base: str, marked_only: bool = False) -> bool:
+    """Упомянута ли монета точно: никаких подстрок вроде «wifi» для WIF.
+
+    marked_only — только с пометкой ($WIF, #WIF, WIF/USDT), без голого слова.
+    """
     marked, word = _patterns(base.upper())
-    return bool(marked.search(text) or (word and word.search(text)))
+    if marked.search(text):
+        return True
+    return bool(not marked_only and word and word.search(text))
 
 
 def post_score(text: str) -> float:
@@ -313,7 +318,10 @@ class TelegramSentiment:
         client = self._client
         todo = [c for c in self._channels if c not in self._watched]
         if any(c.lstrip("-").isdigit() for c in todo):
-            await client.get_dialogs()  # приватные каналы по id — только из диалогов
+            try:
+                await client.get_dialogs()  # приватные каналы по id — из диалогов
+            except Exception as e:
+                logger.warning("TelegramSentiment: dialogs not loaded — %s", e)
         for name in todo:
             self._watched.add(name)
             try:

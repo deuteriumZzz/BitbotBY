@@ -31,6 +31,7 @@ from src.core.position_monitor import PositionMonitor
 from src.core.risk_management import RiskManager
 from src.core.signal_combiner import SignalCombiner
 from src.core.trade_history import TradeHistory
+from src.core.trusted_trader import TrustedTrader
 from src.core.types import PositionRecord
 from src.exchange.bybit_api import BybitAPI
 from src.infra.bot_bus import CommandConsumer, emit
@@ -129,6 +130,9 @@ class TradingBot:
         )
         self.news = NewsAnalyzer()
         self._sentiment_poller: Optional[SentimentPoller] = None
+        # Почему сейчас нельзя входить (дневной лимит, просадка в Live) — для
+        # сделок по доверенным каналам: они идут мимо цикла, а цикл в это время спит.
+        self._entries_blocked = ""
         self.ai = AIAnalyzer(runtime_config=self._runtime_config)
         self.combiner = SignalCombiner(self.ai, rc=self._runtime_config)
         self.regime_detector = RegimeDetector()
@@ -232,6 +236,18 @@ class TradingBot:
             runtime_config=self._runtime_config,
             on_position_opened=self._on_position_opened,
             emit=self._publish_event,
+        )
+        self._trusted = TrustedTrader(
+            api=self.api,
+            executor=self._executor,
+            runtime_config=self._runtime_config,
+            trade_history=self.trade_history,
+            telegram=self.telegram,
+            get_balance=self._get_balance_usdt,
+            get_monitored=lambda: self._monitored,
+            blocked=lambda: self._entries_blocked,
+            emit=self._publish_event,
+            redis=self._bus,
         )
         self.telegram.set_event_emitter(self._publish_event)
         self._commander = TelegramCommander(
@@ -744,7 +760,7 @@ class TradingBot:
     def _on_position_opened(self, sym: str, pos: PositionRecord) -> None:
         # Шаги решения — к позиции («Почему открыта» в терминале) и к сделке
         # в базе (журнал). Запись в базу — фоном, торговлю не задерживает.
-        steps = self._trace.opened(sym, dict(pos))
+        steps = pos.get("trace") or self._trace.opened(sym, dict(pos))
         pos["trace"] = steps
         trade_id = pos.get("trade_id")
         if trade_id:
@@ -1243,17 +1259,23 @@ class TradingBot:
         список монет для каналов меняется вместе с ними. Twitter — только meme.
         """
         if self._sentiment_poller is None:
+            telegram = TelegramSentiment(self.redis)
+            telegram.on_post = self._trusted.on_post  # доверенные — сразу в ордер
             self._sentiment_poller = SentimentPoller(
-                TwitterAnalyzer(), TelegramSentiment(self.redis), self.redis
+                TwitterAnalyzer(), telegram, self.redis
             )
             await self._sentiment_poller.start(symbols)
         rc = self._runtime_config
         await self._sentiment_poller.sync(
             symbols,
             twitter=profile == "meme",
-            channels=channel_names(rc.hot("TELEGRAM_SENTIMENT_CHANNELS")),
+            channels=channel_names(
+                f"{rc.hot('TELEGRAM_SENTIMENT_CHANNELS')},"
+                f"{rc.hot('TELEGRAM_TRUSTED_CHANNELS')}"
+            ),
             window_min=float(rc.hot("TELEGRAM_WINDOW_MIN") or 60),
         )
+        await self._trusted.review()
 
     async def _inject_sentiment(self, market_data: Dict[str, pd.DataFrame]) -> None:
         """Колонки social_sentiment и social_mentions (0 — «нет данных»)."""
@@ -1723,7 +1745,12 @@ class TradingBot:
                 self._runtime_config.set_current_symbols(
                     _profile, list(market_data.keys())
                 )
-                await self._sync_sentiment_poller(_profile, list(market_data.keys()))
+                try:
+                    await self._sync_sentiment_poller(
+                        _profile, list(market_data.keys())
+                    )
+                except Exception as e:  # соцсети не должны срывать торговый цикл
+                    logger.warning("Social sentiment sync failed: %s", e)
                 await self._inject_sentiment(market_data)
                 snapshots = await self._cycle.collect_snapshots(
                     list(market_data.keys()), market_data
@@ -1828,7 +1855,9 @@ class TradingBot:
                                     "until": time.time() + halt_secs,
                                 },
                             )
+                            self._entries_blocked = "просадка: новые входы остановлены"
                             await asyncio.sleep(halt_secs)
+                            self._entries_blocked = ""
                             self._publish_event(
                                 "guard", {"kind": "drawdown_halt", "active": False}
                             )
@@ -1924,6 +1953,7 @@ class TradingBot:
                         )
                         _check_interval = 60
                         _elapsed = 0.0
+                        self._entries_blocked = "дневной лимит убытка"
                         while _elapsed < sleep_secs:
                             await asyncio.sleep(_check_interval)
                             _elapsed += _check_interval
@@ -1941,6 +1971,7 @@ class TradingBot:
                                     f"Торговля возобновлена досрочно."
                                 )
                                 break
+                        self._entries_blocked = ""
                         self._publish_event(
                             "guard", {"kind": "daily_limit", "active": False}
                         )
