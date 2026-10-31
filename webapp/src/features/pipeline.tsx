@@ -243,16 +243,8 @@ function usePipeline(mode: string): { status: Record<BotNode, string>; info: Rec
     },
     risk: {
       desc: "Последний фильтр перед ордером: размер позиции, плечо, лимиты и защиты портфеля.",
-      fields: [
-        ["Как рискуем", presetName(presetOf(c, presets))],
-        ["Риск на сделку", show("RISK_PER_TRADE")],
-        ["Позиций сразу", show("MAX_POSITIONS")],
-        ["Плечо", spot ? "1× на споте" : show("LEVERAGE_MODE")],
-        ["Стоп-лосс", show("STOP_LOSS_PERCENT")],
-        ["Дневной лимит убытка", show("DAILY_LOSS_LIMIT")],
-        ["Убытков подряд до паузы", show("CIRCUIT_BREAKER_LOSSES")],
-        ["Защиты портфеля", !paper ? "в Live всегда вкл" : guardsOff ? "выкл (Paper)" : "вкл"],
-      ],
+      // Без таблицы: всё это сразу ниже — в «Как рискуем» и «Правилах защиты», там же и меняется.
+      fields: [],
     },
     order: {
       desc: "Отправляет заявку на биржу. В Paper сделки виртуальные, но по реальным ценам.",
@@ -424,14 +416,16 @@ export function Pipeline() {
               <span>итогов пока нет — бот ещё не прошёл цикл после обновления</span>
             )}
           </p>
-          <dl className="pipe-fields">
-            {info[cur.id].fields.map(([k, v]) => (
-              <div key={k}>
-                <dt>{k}</dt>
-                <dd>{v}</dd>
-              </div>
-            ))}
-          </dl>
+          {info[cur.id].fields.length > 0 && (
+            <dl className="pipe-fields">
+              {info[cur.id].fields.map(([k, v]) => (
+                <div key={k}>
+                  <dt>{k}</dt>
+                  <dd>{v}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
         </article>
         {cur.id === "scan" && (
           <div className="cols">
