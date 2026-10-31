@@ -33,14 +33,17 @@ class FakeRedis:
     def hgetall(self, key):
         return dict(self.kv.get(key) or {})
 
+    def hget(self, key, field):
+        return (self.kv.get(key) or {}).get(field)
+
     def hdel(self, key, field):
         (self.kv.get(key) or {}).pop(field, None)
 
     def get(self, key):
         return self.kv.get(key)
 
-    def delete(self, key):
-        return int(self.kv.pop(key, None) is not None)
+    def delete(self, *keys):
+        return sum(self.kv.pop(k, None) is not None for k in keys)
 
     def incr(self, key):
         self.kv[key] = str(int(self.kv.get(key) or 0) + 1)

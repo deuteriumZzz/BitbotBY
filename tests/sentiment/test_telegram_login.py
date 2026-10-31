@@ -52,6 +52,9 @@ class FakeClient:
     def is_connected(self):
         return self.connected
 
+    def add_event_handler(self, callback, event):
+        self.handler = callback
+
     async def is_user_authorized(self):
         return FakeClient.authorized
 

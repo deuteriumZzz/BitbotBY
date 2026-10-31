@@ -25,7 +25,11 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from src.ai import ai_providers
-from src.settings.runtime_config import CONFIRM_TIMEOUT_MAX, CONFIRM_TIMEOUT_MIN
+from src.settings.runtime_config import (
+    CONFIRM_TIMEOUT_MAX,
+    CONFIRM_TIMEOUT_MIN,
+    HOT_PREFIX,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +125,19 @@ def _redis_key(key: str, getter: str) -> Dict[str, Any]:
     return {
         "hot_set": lambda rc, v: rc._set(key, str(v)) or True,
         "hot_get": lambda rc: getattr(rc, getter)(),
+    }
+
+
+# Настройки на RuntimeConfig.hot — их ключи стирает и «Сброс настроек».
+HOT_KEYS: List[str] = []
+
+
+def _hot(key: str) -> Dict[str, Any]:
+    """Меняется сразу, без своего геттера: бот читает RuntimeConfig.hot(key)."""
+    HOT_KEYS.append(key)
+    return {
+        "hot_set": lambda rc, v: rc._set(f"{HOT_PREFIX}{key}", json.dumps(v)) or True,
+        "hot_get": lambda rc: rc.hot(key),
     }
 
 
@@ -802,17 +819,35 @@ SETTINGS: Tuple[Setting, ...] = (
         "Telegram-каналы для мониторинга",
         "str",
         "CryptoMoonAlerts,pumpsignalscrypto,memecoinsnews",
-        hint="Через запятую, без @.",
+        hint=(
+            "Через запятую: имя без @ или ссылка t.me/…, приватный канал — "
+            "числовой id (-100…). Бот подпишется на них от вашего аккаунта: "
+            "так Telegram присылает посты сразу."
+        ),
+        **_hot("TELEGRAM_SENTIMENT_CHANNELS"),
+    ),
+    Setting(
+        "TELEGRAM_WINDOW_MIN",
+        _G_NEWS,
+        "Учитывать посты Telegram за",
+        "int",
+        60,
+        min=5,
+        max=1440,
+        unit="мин",
+        hint="Монета оценивается только по свежим постам за это время.",
+        **_hot("TELEGRAM_WINDOW_MIN"),
     ),
     Setting(
         "SENTIMENT_POLL_INTERVAL",
         _G_NEWS,
-        "Опрашивать соцсети каждые",
+        "Опрашивать Twitter каждые",
         "int",
         300,
         min=60,
         max=3600,
         unit="с",
+        hint="Посты Telegram приходят сразу, без опроса.",
     ),
     Setting(
         "SENTIMENT_CACHE_TTL",

@@ -49,7 +49,7 @@ from src.market.season_detector import SeasonDetector
 from src.research.portfolio_optimizer import PortfolioOptimizer
 from src.sentiment.news_analyzer import NewsAnalyzer
 from src.sentiment.sentiment_poller import SentimentPoller
-from src.sentiment.telegram_sentiment import TelegramSentiment
+from src.sentiment.telegram_sentiment import TelegramSentiment, channel_names
 from src.sentiment.twitter_analyzer import TwitterAnalyzer
 from src.settings.runtime_config import RuntimeConfig
 from src.settings.secrets_store import SERVICES as SECRET_SERVICES
@@ -1237,28 +1237,32 @@ class TradingBot:
         return market_data
 
     async def _sync_sentiment_poller(self, profile: str, symbols: list) -> None:
-        """Запускает/останавливает SentimentPoller при смене профиля на meme."""
-        if profile == "meme":
-            if self._sentiment_poller is None:
-                twitter = TwitterAnalyzer()
-                telegram = TelegramSentiment(self.redis)
-                self._sentiment_poller = SentimentPoller(twitter, telegram, self.redis)
-                await self._sentiment_poller.start(symbols)
-                logger.info("SentimentPoller: started for %d symbols", len(symbols))
-            else:
-                self._sentiment_poller.update_symbols(symbols)
-        elif self._sentiment_poller is not None:
-            await self._sentiment_poller.stop()
-            self._sentiment_poller = None
-            logger.info("SentimentPoller: stopped (profile switched to %s)", profile)
+        """Каналы Telegram — в любом профиле, по монетам текущего скана.
+
+        Скан и профиль (в т.ч. от детектора сезона) меняются каждый цикл —
+        список монет для каналов меняется вместе с ними. Twitter — только meme.
+        """
+        if self._sentiment_poller is None:
+            self._sentiment_poller = SentimentPoller(
+                TwitterAnalyzer(), TelegramSentiment(self.redis), self.redis
+            )
+            await self._sentiment_poller.start(symbols)
+        rc = self._runtime_config
+        await self._sentiment_poller.sync(
+            symbols,
+            twitter=profile == "meme",
+            channels=channel_names(rc.hot("TELEGRAM_SENTIMENT_CHANNELS")),
+            window_min=float(rc.hot("TELEGRAM_WINDOW_MIN") or 60),
+        )
 
     async def _inject_sentiment(self, market_data: Dict[str, pd.DataFrame]) -> None:
-        """Инжектирует колонку social_sentiment в DataFrame для мем-профиля."""
+        """Колонки social_sentiment и social_mentions (0 — «нет данных»)."""
         if self._sentiment_poller is None:
             return
         for sym, df in market_data.items():
-            score = await self._sentiment_poller.get_score(sym)
+            score, n = await self._sentiment_poller.get_score(sym)
             df["social_sentiment"] = score
+            df["social_mentions"] = n
 
     async def _detect_regimes(
         self, market_data: Dict[str, pd.DataFrame]

@@ -66,6 +66,8 @@ _KEY_FEAR_GREED = "bot:fear_greed"
 _KEY_LAUNCH_RATE_HISTORY = "bot:launch_rate_history"
 _KEY_CONFIDENCE_LIVE = "bot:signal_confidence_live"
 _KEY_CONFIDENCE_PAPER = "bot:signal_confidence_paper"
+# Настройки реестра «сразу» без своего геттера (RuntimeConfig.hot).
+HOT_PREFIX = "bot:hot:"
 
 _AI_PROVIDERS = frozenset({"auto", *ai_providers.BY_ID})
 _LEVERAGE_MODES = frozenset({"fixed", "volatility", "full"})
@@ -231,6 +233,29 @@ class RuntimeConfig:
             self._r.redis_client.set(key, value)
         except Exception as e:
             logger.warning("RuntimeConfig set failed: %s", e)
+
+    def hot(self, key: str) -> Any:
+        """Настройка реестра, которая меняется сразу (`bot:hot:KEY`, JSON).
+
+        Нет в Redis — прежнее значение из UI (до того как настройка стала
+        «сразу»), иначе Config.
+        """
+        raw: Any = self._get(f"{HOT_PREFIX}{key}")
+        if raw is None:
+            try:
+                raw = self._r.redis_client.hget("bot:config_overrides", key)
+            except Exception:
+                raw = None
+            if isinstance(raw, bytes):
+                raw = raw.decode()
+        if isinstance(raw, str):
+            try:
+                value = json.loads(raw)
+            except ValueError:
+                value = None
+            if value is not None:
+                return value
+        return getattr(Config, key, None)
 
     # ── Mode ──────────────────────────────────────────────────────────────────
 
@@ -980,7 +1005,10 @@ class RuntimeConfig:
         from src.strategies import set_active_profile  # noqa: PLC0415
 
         set_active_profile(name)
-        _MEME_ONLY = {"momentum_burst", "pump_exit", "sentiment"}
+        # sentiment — во всех профилях: Telegram-каналы читаются по монетам
+        # любого скана (Twitter по-прежнему только в meme).
+        _MEME_ONLY = {"momentum_burst", "pump_exit"}
+        self.enable_strategy("sentiment")
         for legacy in (
             "volume_spike_bluechip",
             "volume_spike_altcoin",
@@ -1360,8 +1388,11 @@ class RuntimeConfig:
         Сбрасывает все Runtime-настройки, возвращая управление .env.
         Вызывается при старте бота — каждый запуск начинается чисто.
         """
+        from src.settings.settings_registry import HOT_KEYS  # noqa: PLC0415
+
+        hot = (f"{HOT_PREFIX}{k}" for k in HOT_KEYS)
         try:
-            self._r.redis_client.delete(*self._ALL_KEYS, _KEY_EXPERIMENTAL_SEEN)
+            self._r.redis_client.delete(*self._ALL_KEYS, _KEY_EXPERIMENTAL_SEEN, *hot)
             logger.info("RuntimeConfig: сброс к .env-дефолтам выполнен")
         except Exception as e:
             logger.warning("RuntimeConfig reset failed: %s", e)

@@ -260,6 +260,12 @@ export interface TgStatus {
   message: string;
   at?: number;
   channels?: string[];
+  /** Каналы, которые не читаются, и почему. */
+  failed?: Record<string, string>;
+  window_min?: number;
+  /** Постов в окне и сколько из них упоминают монеты текущего скана (0 — нет данных, а не «нейтрально»). */
+  posts?: number;
+  mentions?: Record<string, number>;
 }
 
 /** Что уже подключено (`GET /api/setup`): ключи из приложения или .env. */

@@ -1174,15 +1174,31 @@
    "step": null,
    "unit": "",
    "options": [],
-   "hint": "Через запятую, без @.",
+   "hint": "Через запятую: имя без @ или ссылка t.me/…, приватный канал — числовой id (-100…). Бот подпишется на них от вашего аккаунта: так Telegram присылает посты сразу.",
    "readonly": false,
-   "hot": false,
+   "hot": true,
+   "basic": false
+  },
+  {
+   "key": "TELEGRAM_WINDOW_MIN",
+   "group": "Новости и соцсети",
+   "label": "Учитывать посты Telegram за",
+   "type": "int",
+   "default": 60,
+   "min": 5,
+   "max": 1440,
+   "step": null,
+   "unit": "мин",
+   "options": [],
+   "hint": "Монета оценивается только по свежим постам за это время.",
+   "readonly": false,
+   "hot": true,
    "basic": false
   },
   {
    "key": "SENTIMENT_POLL_INTERVAL",
    "group": "Новости и соцсети",
-   "label": "Опрашивать соцсети каждые",
+   "label": "Опрашивать Twitter каждые",
    "type": "int",
    "default": 300,
    "min": 60,
@@ -1190,7 +1206,7 @@
    "step": null,
    "unit": "с",
    "options": [],
-   "hint": "",
+   "hint": "Посты Telegram приходят сразу, без опроса.",
    "readonly": false,
    "hot": false,
    "basic": false
@@ -1950,6 +1966,10 @@
   },
   "QUIET_HOURS": {
    "value": "",
+   "source": "default"
+  },
+  "TELEGRAM_WINDOW_MIN": {
+   "value": 60,
    "source": "default"
   }
  },

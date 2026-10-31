@@ -699,7 +699,7 @@ const KEY_INFO: Record<string, [string, string?]> = {
   glassnode: ["On-chain метрики, например запас стейблкоинов.", "https://glassnode.com"],
   reddit: ["Посты r/CryptoCurrency для анализа настроения моделью CryptoBERT.", "https://www.reddit.com/prefs/apps"],
   twitter: ["Настроение по твитам, только профиль Meme. Два способа: официальный платный API или бесплатный обход через аккаунты X. Если указаны оба, работает официальный API.", "https://developer.twitter.com"],
-  telethon: ["Чтение каналов через Telethon, только профиль Meme. API ID и API Hash — на my.telegram.org, затем «Войти»: код придёт в Telegram.", "https://my.telegram.org"],
+  telethon: ["Посты каналов в реальном времени, во всех профилях: монеты текущего скана ищутся точно ($WIF, #WIF, WIF/USDT). API ID и API Hash — на my.telegram.org, затем «Войти»: код придёт в Telegram.", "https://my.telegram.org"],
   pumpportal: ["Темп запуска новых токенов на pump.fun — признак мем-сезона.", "https://pumpportal.fun"],
   server: ["PIN для перехода в Live, доступ к Redis и API дашборда, секрет вебхука алертов."],
 };
@@ -713,7 +713,7 @@ const FEEDS: Record<string, [string, BotNode?][]> = {
   glassnode: [["on-chain контекст", "scan"]],
   reddit: [["настроение · CryptoBERT", "scan"]],
   twitter: [["настроение · Meme", "scan"]],
-  telethon: [["каналы Telegram · Meme", "scan"]],
+  telethon: [["каналы Telegram · все профили", "scan"]],
   pumpportal: [["детектор мем-сезона", "scan"]],
   server: [["переход в Live", "order"], ["дашборд и вебхуки"]],
 };
@@ -968,6 +968,7 @@ function TgLogin({ item }: { item: SecretItem }) {
         )}
       </div>
       {rt && ready && !["unknown", "no_session"].includes(rt.state) && <p className="kf-h">{rt.message}</p>}
+      {rt?.state === "ok" && <TgWindow rt={rt} />}
       {step === "idle" && (
         <>
           <p className="kf-h">
@@ -1031,6 +1032,23 @@ function TgLogin({ item }: { item: SecretItem }) {
         </form>
       )}
     </div>
+  );
+}
+
+/** Что видно в окне свежих постов: «нет упоминаний» отдельно от нейтрального настроения. */
+function TgWindow({ rt }: { rt: TgStatus }) {
+  const top = Object.entries(rt.mentions ?? {});
+  const failed = Object.entries(rt.failed ?? {});
+  const posts = rt.posts ?? 0;
+  const chans = rt.channels?.length ?? 0;
+  return (
+    <>
+      <p className="kf-h">
+        За {rt.window_min ?? 60} мин: {posts} {plural(posts, ["пост", "поста", "постов"])} из {chans} {plural(chans, ["канала", "каналов", "каналов"])} ·{" "}
+        {top.length ? `упоминания: ${top.map(([c, n]) => `${c} ${n}`).join(" · ")}` : "монеты текущего скана не упоминались"}
+      </p>
+      {failed.length > 0 && <p className="kf-h warn">Не читаются: {failed.map(([c, why]) => `${c} — ${why}`).join("; ")}</p>}
+    </>
   );
 }
 

@@ -978,6 +978,7 @@ details.extra[open]>.card{animation:viewin .28s var(--ease-mech)}
 .chatfind .note-soon{margin:0}
 .tglogin .tg-h{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;font:500 13px/1.4 var(--f-ui)}
 .tglogin form{display:flex;flex-direction:column;gap:8px}
+.tglogin .kf-h.warn{color:var(--warn)}
 .chatpick{display:flex;flex-wrap:wrap;gap:6px}
 /* MiniApp внутри Telegram: заголовок окна уже показывает название, место в шапке экономим */
 .miniapp .brand{font-size:0;gap:0}

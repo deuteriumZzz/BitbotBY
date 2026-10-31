@@ -243,6 +243,8 @@ class Config:
         "TELEGRAM_SENTIMENT_CHANNELS",
         "CryptoMoonAlerts,pumpsignalscrypto,memecoinsnews",
     )
+    # Оценка по каналам считается только из постов за последние N минут
+    TELEGRAM_WINDOW_MIN: int = int(os.getenv("TELEGRAM_WINDOW_MIN", "60"))
 
     # ── Sentiment Poller ───────────────────────────────────────────────────
     # Интервал опроса Twitter + Telegram в секундах

@@ -770,7 +770,16 @@ function tgStatus() {
   const channels = String(config.TELEGRAM_SENTIMENT_CHANNELS?.value ?? "").split(",").filter(Boolean);
   if (!tg.fields.every((f) => f.set)) return { state: "off", message: "Ключи не заданы — каналы не читаются.", channels };
   if (!tg.signed_in) return { state: "no_session", message: "Вход не выполнен: нажмите «Войти» на карточке «Памп-каналы Telegram».", channels };
-  return { state: "ok", message: `Подключено, каналов: ${channels.length}.`, at: Date.now() / 1000, channels };
+  return {
+    state: "ok",
+    message: "Подключено, посты приходят сразу.",
+    at: Date.now() / 1000,
+    channels,
+    window_min: Number(config.TELEGRAM_WINDOW_MIN?.value ?? 60),
+    posts: 37,
+    mentions: { WIF: 3, BONK: 1 },
+    failed: {},
+  };
 }
 
 function patchConfig(changes: Body) {
