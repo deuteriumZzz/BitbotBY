@@ -492,23 +492,46 @@ function TgChannelsCard({ openKey }: { openKey: (service: string) => void }) {
     return () => clearInterval(t);
   }, [listKey]);
   const reading = all.filter((ch) => rt?.per_channel?.[ch]?.state === "reading").length;
+  // Две роли: доверенные торгуют по постам (и тоже дают настроение), остальные — только сбор информации.
+  const tradeList = all.filter((ch) => trusted.includes(ch));
+  const infoList = all.filter((ch) => !trusted.includes(ch));
+  const row = (ch: string) => {
+    const [tone, line] = chanState(rt, ch);
+    const title = rt?.per_channel?.[ch]?.title;
+    const link = /^-?\d+$/.test(ch) ? null : `https://t.me/${ch}`;
+    return (
+      <div className="alert-row" key={ch}>
+        <div className="tgch-c">
+          <b>
+            <span className={`dot ${tone}`} />
+            {title || (link ? `@${ch}` : `канал ${ch}`)}
+          </b>
+          <small>
+            {link ? (
+              <a href={link} target="_blank" rel="noopener noreferrer">
+                @{ch} ↗
+              </a>
+            ) : (
+              `id ${ch}`
+            )}{" "}
+            · <span className={tone === "bad" || tone === "warn" ? "tgch-bad" : ""}>{line}</span>
+          </small>
+        </div>
+        <span className="tgch-a">
+          <Toggle on={trusted.includes(ch)} label={`Доверять @${ch}: входить по постам`} onChange={(v) => trust(ch, v)} />
+          <button type="button" className="btn" aria-label={`Убрать @${ch}`} onClick={() => remove(ch)}>
+            Убрать
+          </button>
+        </span>
+      </div>
+    );
+  };
   return (
     <article className="card tgch" id="tg-channels">
       <div className="card-h">
         <h2>Каналы Telegram</h2>
-        <Q tip="Посты всех каналов идут в оценку настроения по монетам текущего скана. Доверенные — ещё и сразу в сделку. Вход в Telegram — на карточке ключа «Памп-каналы Telegram»." />
+        <Q tip="Две роли. Сбор информации — посты дают настроение и упоминания монет текущего скана, дальше обычным путём через все проверки. Доверенные — то же самое и ещё сразу сделка по посту. Тумблер «Доверять» переносит канал между ролями. Вход в Telegram — на карточке ключа «Памп-каналы Telegram»." />
       </div>
-      <div className="alert-row">
-        <div>
-          <b>Сделки по доверенным каналам</b>
-          <small>в любом профиле, мимо сканера, стратегий и AI</small>
-        </div>
-        <Toggle on={on} label="Сделки по доверенным каналам" onChange={(v) => void actions.patchConfig({ TELEGRAM_TRUSTED_TRADING: v })} />
-      </div>
-      <p className="kf-h">
-        Пост доверенного канала сразу становится сделкой: стратегии и AI его не проверяют и не закрывают — только стоп, тейк и трейлинг. Защиты остаются: стоп
-        всегда, свой риск и слоты, пауза, дневной лимит, спред, одна сделка на монету, режим счёта — сейчас {paper ? "Paper" : "Live"}.
-      </p>
       <div className="tgch-h">
         <b>
           Отслеживаем: {all.length} {plural(all.length, ["канал", "канала", "каналов"])}
@@ -520,48 +543,28 @@ function TgChannelsCard({ openKey }: { openKey: (service: string) => void }) {
           </button>
         )}
       </div>
-      <div className="list-tgl">
-        {all.map((ch) => {
-          const [tone, line] = chanState(rt, ch);
-          const title = rt?.per_channel?.[ch]?.title;
-          const link = /^-?\d+$/.test(ch) ? null : `https://t.me/${ch}`;
-          return (
-            <div className={`alert-row${trusted.includes(ch) ? "" : " off"}`} key={ch}>
-              <div className="tgch-c">
-                <b>
-                  <span className={`dot ${tone}`} />
-                  {title || (link ? `@${ch}` : `канал ${ch}`)}
-                </b>
-                <small>
-                  {link ? (
-                    <a href={link} target="_blank" rel="noopener noreferrer">
-                      @{ch} ↗
-                    </a>
-                  ) : (
-                    `id ${ch}`
-                  )}{" "}
-                  · <span className={tone === "bad" || tone === "warn" ? "tgch-bad" : ""}>{line}</span>
-                </small>
-                <small>{trusted.includes(ch) ? "Доверять: входить по постам" : "только настроение, без сделок"}</small>
-              </div>
-            <span className="tgch-a">
-              <Toggle on={trusted.includes(ch)} label={`Доверять @${ch}: входить по постам`} onChange={(v) => trust(ch, v)} />
-              <button type="button" className="btn" aria-label={`Убрать @${ch}`} onClick={() => remove(ch)}>
-                Убрать
-              </button>
-            </span>
+
+      <section className="tgch-g" aria-label="Доверенные каналы: торговля по постам">
+        <div className="tgch-gh">
+          <b>Торгуем по постам — доверенные · {tradeList.length}</b>
+          <small>пост сразу становится сделкой и тоже идёт в настроение</small>
+        </div>
+        <div className="alert-row">
+          <div>
+            <b>Сделки по доверенным каналам</b>
+            <small>в любом профиле, мимо сканера, стратегий и AI</small>
           </div>
-          );
-        })}
-        {!all.length && <p className="kf-h">Каналов нет — добавьте первый ниже.</p>}
-      </div>
-      <form className="tgch-add" onSubmit={addChannel}>
-        <input className="inp" aria-label="Добавить канал" placeholder="@канал или ссылка t.me/…" value={add} onChange={(e) => setAdd(e.target.value)} />
-        <button className="btn" type="submit" disabled={!add.trim()}>
-          Добавить
-        </button>
-      </form>
-      <div className="tgch-params">
+          <Toggle on={on} label="Сделки по доверенным каналам" onChange={(v) => void actions.patchConfig({ TELEGRAM_TRUSTED_TRADING: v })} />
+        </div>
+        <p className="kf-h">
+          Стратегии и AI такой вход не проверяют и не закрывают — только стоп, тейк и трейлинг. Защиты остаются: стоп всегда, свой риск и слоты, пауза, дневной
+          лимит, спред, одна сделка на монету, режим счёта — сейчас {paper ? "Paper" : "Live"}.
+        </p>
+        <div className="list-tgl">
+          {tradeList.map(row)}
+          {!tradeList.length && <p className="kf-h">Доверенных нет — включите «Доверять» у канала из сбора информации ниже.</p>}
+        </div>
+        <div className="tgch-params">
         {params.map((d) => (
           <label className="cool" key={d.key}>
             <span>{d.label}</span>
@@ -584,7 +587,25 @@ function TgChannelsCard({ openKey }: { openKey: (service: string) => void }) {
             </span>
           </label>
         ))}
-      </div>
+        </div>
+      </section>
+
+      <section className="tgch-g" aria-label="Каналы только для сбора информации">
+        <div className="tgch-gh">
+          <b>Только сбор информации · {infoList.length}</b>
+          <small>посты дают настроение и упоминания монет текущего скана — обычным путём, через все проверки</small>
+        </div>
+        <div className="list-tgl">
+          {infoList.map(row)}
+          {!infoList.length && <p className="kf-h">{all.length ? "Все каналы доверенные." : "Каналов нет — добавьте первый ниже."}</p>}
+        </div>
+        <form className="tgch-add" onSubmit={addChannel}>
+          <input className="inp" aria-label="Добавить канал для сбора информации" placeholder="@канал или ссылка t.me/…" value={add} onChange={(e) => setAdd(e.target.value)} />
+          <button className="btn" type="submit" disabled={!add.trim()}>
+            Добавить
+          </button>
+        </form>
+      </section>
     </article>
   );
 }
@@ -867,20 +888,21 @@ const KEY_INFO: Record<string, [string, string?]> = {
   server: ["PIN для перехода в Live, доступ к Redis и API дашборда, секрет вебхука алертов."],
 };
 
-/** Что питает каждый ключ: [что именно, шаг цепочки]. Шаг в панели ключа — переход в «Цепочку». */
-const FEEDS: Record<string, [string, BotNode?][]> = {
+/** Что питает каждый ключ: [что именно, шаг цепочки]. Шаг в панели ключа — переход в «Цепочку».
+ * Сигналы для решения ведут в AI-цепочку: там карточка «Сигналы для решения» и её узел на холсте. */
+export const FEEDS: Record<string, [string, BotNode?][]> = {
   bybit: [["цены и свечи", "scan"], ["ордера и баланс", "order"]],
   telegram: [["уведомления"], ["управление из чата"]],
-  news: [["настроение рынка", "scan"]],
+  news: [["новости и заголовки", "ai"]],
   finnhub: [["макро-пауза: FOMC, CPI, NFP", "risk"]],
-  glassnode: [["on-chain контекст", "scan"]],
-  reddit: [["настроение · CryptoBERT", "scan"]],
-  twitter: [["настроение · Meme", "scan"]],
-  telethon: [["каналы Telegram · все профили", "scan"]],
+  glassnode: [["on-chain контекст", "ai"]],
+  reddit: [["настроение · CryptoBERT", "ai"]],
+  twitter: [["настроение · Meme", "ai"]],
+  telethon: [["настроение и упоминания монет", "ai"], ["доверенные — сделка по посту", "order"]],
   pumpportal: [["детектор мем-сезона", "scan"]],
   server: [["переход в Live", "order"], ["дашборд и вебхуки"]],
 };
-const STEP: Partial<Record<BotNode, string>> = { scan: "Сканер", ai: "AI-цепочка", risk: "Риск", order: "Ордер" };
+export const STEP: Partial<Record<BotNode, string>> = { scan: "Сканер", ai: "AI-цепочка", risk: "Риск", order: "Ордер" };
 
 /** Ключи как связки: сервис → что он питает в боте. Форма ключа открывается панелью справа, список остаётся на виду. */
 function Keys({ open, setOpen }: { open: string | null; setOpen: (service: string | null) => void }) {

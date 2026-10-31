@@ -2089,7 +2089,7 @@
    "source": "default"
   },
   "TELEGRAM_TRUSTED_CHANNELS": {
-   "value": "",
+   "value": "cryptomoonalerts",
    "source": "default"
   },
   "TELEGRAM_TRUSTED_RISK": {

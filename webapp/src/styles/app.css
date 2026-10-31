@@ -1290,43 +1290,21 @@ select.sel{border-radius:var(--r-ctl);background:var(--c-inset);box-shadow:none}
 
 /* ---------- Блоки цепочки: библиотека над конвейером, полосы под шагами ---------- */
 .pipe-learn{margin-left:8px}
-.blk-lib{margin:0 0 14px;padding:12px;border-radius:var(--r-inner);border:1px solid var(--c-line2);background:color-mix(in oklab,var(--c-s1) 82%,transparent);transition:border-color var(--dur-norm) var(--ease-out),background var(--dur-norm) var(--ease-out)}
-.blk-lib.back{border-style:dashed;border-color:var(--c-down);background:color-mix(in oklab,var(--c-down) 6%,var(--c-s1))}
-.blk-lib-h{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin-bottom:10px}
-.blk-lib-h b{font:600 14px/1.2 var(--font-text)}
-.blk-lib-h .sp{margin-left:auto}
-.blk-find{all:unset;box-sizing:border-box;width:100%;max-width:320px;height:34px;margin-bottom:10px;padding:0 12px;border-radius:var(--r-pill);background:var(--c-inset);border:1px solid var(--c-line2);font:13px var(--font-text);color:var(--c-ink)}
-.blk-find:focus-visible{outline:2px solid var(--c-ink);outline-offset:2px}
-.blk-list{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 6px;scrollbar-width:thin;scrollbar-color:var(--c-line2) transparent}
-.blk{all:unset;box-sizing:border-box;cursor:grab;flex:0 0 auto;display:flex;align-items:center;gap:8px;min-height:46px;max-width:240px;padding:6px 10px 6px 8px;border-radius:var(--r-ctl);background:var(--g-ctl);border:1px solid var(--c-line2);box-shadow:inset 0 1px 0 var(--c-hi-dark);transition:transform var(--dur-fast) var(--ease-out),border-color var(--dur-norm) var(--ease-out),box-shadow var(--dur-norm) var(--ease-out)}
-.blk:hover{transform:translateY(-2px);border-color:var(--c-ctl);box-shadow:inset 0 1px 0 var(--c-hi-dark),var(--shadow-lift)}
-.blk:active{cursor:grabbing;transform:scale(.97)}
-.blk:focus-visible{outline:2px solid var(--c-ink);outline-offset:2px}
-.blk .grip{color:var(--c-ink3);font-size:11px;letter-spacing:-2px}
-.blk-t{display:flex;flex-direction:column;min-width:0}
-.blk-t b{font:500 13px/1.25 var(--font-text);color:var(--c-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.blk-t small{font:11px/1.25 var(--font-text);color:var(--c-ink3);white-space:nowrap}
-.blk-tag{font-style:normal;font:500 10px/1 var(--font-text);padding:3px 6px;border-radius:var(--r-pill);color:var(--c-warn);background:color-mix(in oklab,var(--c-warn) 12%,transparent)}
-.blk-plus{display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--c-s3);color:var(--c-ink2);font:600 14px/1 var(--font-text);transition:background var(--dur-norm),color var(--dur-norm)}
-.blk:hover .blk-plus{background:var(--c-accent);color:var(--c-bg)}
-.blk-empty{margin:6px 2px;font:12px var(--font-text);color:var(--c-ink3)}
 .pipe-col{flex:none;min-width:0;display:flex;flex-direction:column;gap:8px}
 .lane2{display:flex;flex-wrap:wrap;align-content:flex-start;gap:5px;min-height:64px;padding:7px;border-radius:var(--r-ctl);border:1px dashed var(--c-line2);background:color-mix(in oklab,var(--c-bg) 55%,transparent);transition:border-color var(--dur-norm) var(--ease-out),background var(--dur-norm) var(--ease-out),opacity var(--dur-norm) var(--ease-out)}
 .lane2.none{border-color:transparent;background:transparent}
-.lane2.can{border-color:var(--c-accent);background:color-mix(in oklab,var(--c-accent) 6%,transparent)}
-.lane2.over{border-style:solid;background:color-mix(in oklab,var(--c-accent) 12%,transparent);box-shadow:0 0 0 3px color-mix(in oklab,var(--c-accent) 18%,transparent)}
-.lane2.dim{opacity:.4}
-.lane2-hint{flex-basis:100%;text-align:center;font:500 11px var(--font-text);color:var(--c-accent)}
+/* Полоса — сводка шага: нажатие открывает панель; у AI чипы перетаскиваются — это порядок очереди. */
+.lane2.sum{cursor:pointer}
+.lane2.sum:hover{border-color:var(--c-ctl)}
 .lane2-empty{font:11px var(--font-text);color:var(--c-ink3)}
-.chip2{display:inline-flex;align-items:center;gap:4px;max-width:100%;height:26px;padding:0 4px 0 9px;border-radius:var(--r-pill);background:var(--c-s3);border:1px solid var(--c-line2);font:500 11.5px/1 var(--font-text);color:var(--c-ink);cursor:grab;animation:chip-in .32s var(--ease-mech) backwards;transition:border-color var(--dur-norm),transform var(--dur-fast)}
-.chip2:hover{border-color:var(--c-ctl);transform:translateY(-1px)}
-.chip2.locked{cursor:default;padding-right:8px}
+.chip2{display:inline-flex;align-items:center;gap:5px;max-width:100%;height:26px;padding:0 9px;border-radius:var(--r-pill);background:var(--c-s3);border:1px solid var(--c-line2);font:500 11.5px/1 var(--font-text);color:var(--c-ink);animation:chip-in .32s var(--ease-mech) backwards;transition:border-color var(--dur-norm),transform var(--dur-fast),opacity var(--dur-fast)}
+.chip2.grab{cursor:grab}
+.chip2.grab:hover{border-color:var(--c-ctl);transform:translateY(-1px)}
+.chip2.lifted{opacity:.4;cursor:grabbing}
+.chip2.over{border-color:var(--c-accent);box-shadow:0 0 0 3px color-mix(in oklab,var(--c-accent) 20%,transparent);transform:scale(1.04)}
 .chip2-t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px}
-.chip2 button{all:unset;cursor:pointer;display:grid;place-items:center;width:20px;height:20px;border-radius:50%;color:var(--c-ink3);font-size:13px}
-.chip2 button:hover{background:color-mix(in oklab,var(--c-down) 22%,transparent);color:var(--c-down)}
-.chip2 button:focus-visible{outline:2px solid var(--c-ink);outline-offset:1px}
 .chip2-lock{font-style:normal;font-size:10px;color:var(--c-ink3)}
-.chip2.more{all:unset;cursor:pointer;height:26px;padding:0 10px;border-radius:var(--r-pill);font:500 11.5px var(--font-text);color:var(--c-ink2);border:1px dashed var(--c-line2)}
+.chip2.more{all:unset;height:26px;padding:0 10px;border-radius:var(--r-pill);font:500 11.5px/26px var(--font-text);color:var(--c-ink2);border:1px dashed var(--c-line2)}
 .chip2.more:hover{color:var(--c-ink);border-color:var(--c-ctl)}
 @keyframes chip-in{from{opacity:0;transform:translateY(-6px) scale(.94)}}
 
@@ -1347,7 +1325,7 @@ select.sel{border-radius:var(--r-ctl);background:var(--c-inset);box-shadow:none}
 @media (prefers-reduced-transparency:reduce){
   .pipe-panel,.sheet,.toast,.tip,.pal,.help-sheet,.nav{background:var(--c-s1);backdrop-filter:none;-webkit-backdrop-filter:none}
 }
-@media (prefers-reduced-motion:reduce){ .blk,.chip2{transition:none;animation:none} .blk:hover{transform:none} }
+@media (prefers-reduced-motion:reduce){ .chip2{transition:none;animation:none} .chip2.grab:hover,.chip2.over{transform:none} }
 .pal-back,.help-back{background:var(--c-scrim);backdrop-filter:blur(8px) saturate(120%);-webkit-backdrop-filter:blur(8px) saturate(120%)}
 .pal{border-radius:var(--r-card)}
 .help-sheet{border-radius:var(--r-card) var(--r-card) 0 0}
@@ -1607,33 +1585,69 @@ small.hr-act,.hr-act small{font-size:12px;color:var(--c-ink3);line-height:1.45}
 .pw-world{position:relative;transform-origin:0 0}
 .pw-row{display:flex;align-items:flex-start}
 .pw-wires{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
-.pw-rail{fill:none;stroke:var(--c-line2);stroke-width:1.5}
-.pw-wire{fill:none;stroke:var(--c-accent);stroke-width:2;stroke-linecap:round;stroke-dasharray:1 1;stroke-dashoffset:1;animation:pw-draw .5s var(--ease-out) forwards;transition:opacity var(--dur-fast)}
-.pw-wire.hint{stroke:color-mix(in oklab,var(--c-accent) 55%,var(--c-line2));stroke-width:1.5}
-.pw-wire.lifted{opacity:.2}
-.pw-wire.fall,.pw-wire.ghost,.pw-wire.tg{animation:none;stroke-dashoffset:0}
-.pw-wire.fall{stroke:var(--c-ink3);stroke-width:1.5;stroke-dasharray:4 6}
-.pw-wire.ghost{stroke-dasharray:6 6}
-.pw-wire.tg{stroke-dasharray:none}
-.pw-wire.tg.off{stroke:var(--c-line2);stroke-dasharray:4 6}
+.pw-rail{fill:none;stroke:var(--c-line2);stroke-width:1.25;stroke-dasharray:2 5}
+/* Живой провод: тонкая приглушённая основа + бегущие светящиеся пакеты по ходу сделки. */
+.pw-wire{fill:none;stroke:color-mix(in oklab,var(--c-accent) 42%,transparent);stroke-width:1.5;stroke-linecap:round;stroke-dasharray:1 1;stroke-dashoffset:1;animation:pw-draw .55s var(--ease-out) forwards}
+.pw-flow{fill:none;stroke:var(--c-accent);stroke-width:2.5;stroke-linecap:round;stroke-dasharray:6 30;animation:pw-flow .7s linear infinite,pw-fade .45s var(--ease-out) .4s backwards;filter:drop-shadow(0 0 3px color-mix(in oklab,var(--c-accent) 80%,transparent))}
 @keyframes pw-draw{to{stroke-dashoffset:0}}
+@keyframes pw-flow{to{stroke-dashoffset:-36}}
+@keyframes pw-fade{from{opacity:0}}
+.pw-edge{transition:opacity var(--dur-fast)}
+.pw-edge.lifted{opacity:.2}
+.pw-edge.hint .pw-wire{stroke:color-mix(in oklab,var(--c-accent) 26%,transparent)}
+.pw-edge.hint .pw-flow{stroke-width:2;stroke-dasharray:3 33;opacity:.6;animation-duration:1.1s,.45s}
+.pw-edge.side.off .pw-wire{stroke:var(--c-line2);stroke-dasharray:4 6;stroke-dashoffset:0;animation:none}
+.pw-tag.side{transform:translate(0,-50%);background:none}
+.pw-wire.fall,.pw-wire.ghost{animation:none;stroke-dashoffset:0}
+.pw-wire.fall{stroke:var(--c-ink3);stroke-dasharray:4 6}
+.pw-wire.ghost{stroke:var(--c-accent);stroke-dasharray:6 6}
+.pw-port circle{fill:var(--c-s1);stroke:var(--c-line2);stroke-width:1.5;transition:stroke var(--dur-norm),fill var(--dur-norm)}
+.pw-port circle.on{stroke:var(--c-accent);fill:color-mix(in oklab,var(--c-accent) 22%,var(--c-s1))}
 .pw-n,.pw-tag{position:absolute;transform:translate(-50%,-50%);white-space:nowrap;pointer-events:none;background:var(--c-s1)}
 .pw-n{min-width:22px;height:18px;padding:0 5px;box-sizing:border-box;display:grid;place-items:center;border-radius:var(--r-pill);border:1px solid color-mix(in oklab,var(--c-accent) 55%,var(--c-line2));font:600 11px/1 var(--font-mono);color:var(--c-ink);animation:pw-pop var(--dur-norm) var(--ease-out)}
 .pw-n.zero{border-color:var(--c-line2);color:var(--c-ink3)}
 @keyframes pw-pop{from{opacity:0;transform:translate(-50%,-50%) scale(.6)}}
 .pw-tag{padding:0 5px;font:500 10.5px/1.5 var(--font-text);color:var(--c-ink3)}
-.pw-plug{position:absolute;z-index:3;width:16px;height:16px;margin:-8px 0 0 -8px;box-sizing:border-box;border-radius:50%;background:var(--c-accent);border:3px solid var(--c-s1);box-shadow:0 0 0 1px var(--c-accent);cursor:grab;touch-action:none;transition:left var(--dur-norm) var(--ease-mech),top var(--dur-norm) var(--ease-mech),transform var(--dur-fast) var(--ease-out)}
+.pw-plug{position:absolute;z-index:3;width:16px;height:16px;margin:-8px 0 0 -8px;box-sizing:border-box;border-radius:50%;background:var(--c-accent);border:3px solid var(--c-s1);box-shadow:0 0 0 1px var(--c-accent);cursor:grab;touch-action:none;transition:left var(--dur-norm) var(--ease-mech),top var(--dur-norm) var(--ease-mech),transform var(--dur-fast) var(--ease-out);animation:pw-breathe 2.6s var(--ease-out) infinite}
 .pw-plug:hover{transform:scale(1.25)}
-.pw-plug.held{transition:none;cursor:grabbing;transform:scale(1.25);box-shadow:0 0 0 1px var(--c-accent),0 0 16px color-mix(in oklab,var(--c-accent) 60%,transparent)}
+.pw-plug.held{transition:none;animation:none;cursor:grabbing;transform:scale(1.25);box-shadow:0 0 0 1px var(--c-accent),0 0 16px color-mix(in oklab,var(--c-accent) 60%,transparent)}
+/* Штекер «дышит» — кольцо расходится, видно, что его можно тянуть. */
+@keyframes pw-breathe{0%{box-shadow:0 0 0 1px var(--c-accent),0 0 0 0 color-mix(in oklab,var(--c-accent) 50%,transparent)}60%,100%{box-shadow:0 0 0 1px var(--c-accent),0 0 0 9px transparent}}
 .pw-plug-ico{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--c-accent);vertical-align:baseline}
 .pw-drop{position:absolute;z-index:2;height:118px;box-sizing:border-box;border:1.5px dashed var(--c-accent);border-radius:var(--r-inner);background:color-mix(in oklab,var(--c-accent) 8%,transparent);pointer-events:none;animation:pw-pop var(--dur-fast) var(--ease-out)}
 .pw-drop b{position:absolute;left:0;bottom:calc(100% + 4px);font:600 11px var(--font-text);color:var(--c-accent);white-space:nowrap}
 .pipe-node.pw-tg{position:absolute;min-height:0;gap:3px;padding:9px 12px}
 .pw-tg .st,.pw-tg .res{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pw-tg .res{padding-top:3px}
-.pw-tg-switch{position:absolute;transform:translate(-50%,-50%);display:flex;align-items:center;gap:8px;padding:3px 4px 3px 10px;border-radius:var(--r-pill);background:var(--c-s1);border:1px solid var(--c-line2);font:500 11.5px var(--font-text);color:var(--c-ink2);white-space:nowrap}
+/* «Сигналы для решения»: все подключения со статусом; провод — тому, кто решает. */
+.pw-src{list-style:none;margin:4px 0 0;padding:7px 0 0;border-top:1px solid var(--c-line);display:grid;grid-template-columns:1fr 1fr;gap:6px 10px}
+.pw-src li{display:flex;align-items:center;gap:6px;min-width:0;font:500 11.5px/1.3 var(--font-text);color:var(--c-ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pw-gate{all:unset;position:absolute;z-index:2;transform:translate(0,-50%);cursor:pointer;padding:2px 8px;border-radius:var(--r-pill);border:1px dashed color-mix(in oklab,var(--c-accent) 55%,var(--c-line2));background:var(--c-s1);font:500 10.5px/1.5 var(--font-text);color:var(--c-ink2);white-space:nowrap}
+.pw-gate:hover{color:var(--c-ink);border-style:solid}
+.pw-gate:focus-visible{outline:2px solid var(--c-ink);outline-offset:2px}
+/* «Доверенные каналы» — второй режим Telegram: тумблер прямо в узле. */
+.pipe-node.pw-trust{cursor:default}
+.pw-open{all:unset;cursor:pointer;display:flex;flex-direction:column;gap:3px;min-width:0}
+.pw-open:focus-visible{outline:2px solid var(--c-ink);outline-offset:2px}
+.pw-trust .st{white-space:normal}
+.pw-trust-sw{margin-top:auto;display:flex;align-items:center;gap:8px;font:500 11.5px var(--font-text);color:var(--c-ink2)}
+/* Карточка «Сигналы для решения» в панели AI и «Стратегий». */
+.sig-list{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column}
+.sig-list li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:9px 0;border-bottom:1px solid var(--c-line);align-items:start}
+.sig-list b{display:block;font:600 13px/1.3 var(--font-text);color:var(--c-ink)}
+.sig-list small{display:block;font:12px/1.4 var(--font-text);color:var(--c-ink3)}
+.sig-list li>span{font:500 12px var(--font-text);color:var(--c-ink2);white-space:nowrap}
 .pw-dot{animation-timing-function:var(--ease-mech)}
 .pw-hit{position:absolute;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;border:2px solid var(--c-up);opacity:0;pointer-events:none;animation:pw-hit .9s var(--ease-out) forwards}
 .pw-hit.bad{border-color:var(--c-down)}
 @keyframes pw-hit{0%{opacity:.95;transform:scale(1)}100%{opacity:0;transform:scale(3.2)}}
-@media (prefers-reduced-motion:reduce){ .pw-wire,.pw-n,.pw-drop{animation:none;stroke-dashoffset:0} .pw-plug{transition:none} }
+@media (prefers-reduced-motion:reduce){ .pw-wire,.pw-n,.pw-drop{animation:none;stroke-dashoffset:0} .pw-wire{stroke:var(--c-accent)} .pw-flow{display:none} .pw-plug{transition:none;animation:none} }
+
+/* Каналы Telegram: две роли — доверенные (торговля по постам) и сбор информации. */
+.tgch-g{margin-top:12px;padding:10px 12px 4px;border:1px solid var(--c-line2);border-radius:var(--r-inner);background:color-mix(in oklab,var(--c-s1) 70%,transparent)}
+.tgch-g:first-of-type{border-color:color-mix(in oklab,var(--c-accent) 35%,var(--c-line2))}
+.tgch-gh{display:flex;flex-direction:column;gap:2px;padding-bottom:6px;border-bottom:1px solid var(--c-line)}
+.tgch-gh b{font:600 13px/1.3 var(--font-text);color:var(--c-ink)}
+.tgch-gh small{font:12px/1.4 var(--font-text);color:var(--c-ink3)}
+.tgch-g .list-tgl .alert-row:last-child{border-bottom:0}
+.tgch-g .tgch-params{border-top-color:var(--c-line)}

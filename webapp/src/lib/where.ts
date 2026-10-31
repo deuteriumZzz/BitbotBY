@@ -18,6 +18,7 @@ const RISK: Home = { tab: "bots", node: "risk", where: "Цепочка → Ри�
 const RULES: Home = { tab: "bots", node: "risk", where: "Цепочка → Риск → Правила защиты" };
 const CONFIRM: Home = { tab: "bots", node: "order", where: "Цепочка → Ордер → Открытие сделок" };
 const WHAT: Home = { tab: "bots", node: "scan", where: "Цепочка → Сканер → Что торговать" };
+const SIGNALS: Home = { tab: "bots", node: "ai", where: "Цепочка → AI-цепочка → Сигналы для решения" };
 
 export const OWN_HOME: Record<string, Home> = {
   RISK_PER_TRADE: RISK,
@@ -37,4 +38,8 @@ export const OWN_HOME: Record<string, Home> = {
   TESTNET: { tab: "settings", pane: "conn", where: "Настройки → Подключения → Bybit" },
   QUIET_HOURS: { tab: "settings", pane: "main", where: "Настройки → Основное → Уведомления" },
   AI_PROVIDER: { tab: "bots", node: "ai", where: "Цепочка → AI-цепочка" },
+  MIN_SIGNAL_CONFIDENCE: SIGNALS,
+  MIN_SIGNAL_CONFIDENCE_PAPER: SIGNALS,
+  SENTIMENT_BUY_THRESHOLD: SIGNALS,
+  SENTIMENT_SELL_THRESHOLD: SIGNALS,
 };

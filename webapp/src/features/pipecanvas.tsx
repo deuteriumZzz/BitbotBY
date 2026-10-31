@@ -8,23 +8,23 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "re
 
 import { plural } from "../lib/format";
 import { reducedMotion } from "../lib/platform";
-import type { BotNode, CycleTrace } from "../lib/types";
+import type { BotNode, CycleTrace, SecretItem } from "../lib/types";
 import { actions, useStore } from "../store";
 import { Toggle } from "../ui";
 import { cfg } from "./bots";
-import { chanList } from "./settings";
+import { FEEDS, chanList } from "./settings";
 import { scrollWhenReady } from "./terminal";
 
 export const NW = 150; // ширина шага
 const GX = 184; // шаг колонок
 export const GAP = GX - NW;
 export const X0 = 16;
-const TOP = 14; // ряд доверенных каналов
-const TH = 76;
-export const ROW = TOP + TH + 74; // верх ряда шагов: над ним дуги развилки
+const TOP = 14; // верхний ряд: сезон рынка, каналы Telegram, лимиты каналов
+const TH = 72;
+const MID = TOP + TH + 40; // средний ряд: профиль рынка над «Сканером»
+export const ROW = MID + TH + 86; // верх ряда шагов: над ним дуги развилки
 const PY = ROW + 32; // высота портов шагов
 const TY = TOP + TH / 2;
-const TW = NW + 50; // узел «Доверенные каналы» шире — название в одну строку
 const W = X0 * 2 + GX * 6 + NW;
 
 const COL: Record<BotNode, number> = { scan: 0, strat: 1, ai: 2, sac: 3, risk: 4, order: 5, track: 6 };
@@ -197,16 +197,22 @@ export function PipeCanvas(props: { mode: string; cycle: CycleTrace | null; onMo
                 <path key={n} className="pw-rail" d={`M ${xOf(n) - GAP} ${PY} L ${xOf(n)} ${PY}`} />
               ))}
               {fallback && mode !== "local" && <path className="pw-wire fall" d={wire("strat", "risk", 104)} />}
+              {/* Живой путь: приглушённая основа прорисовывается при смене режима, по ней бегут пакеты. */}
               {edges.map(([a, b]) => (
-                <path
-                  key={`${mode}${a}${b}`}
-                  className={`pw-wire${b === "risk" && plug ? " lifted" : ""}${a === "strat" && b === "ai" ? " hint" : ""}`}
-                  d={wire(a, b)}
-                  pathLength={1}
-                />
+                <g key={`${mode}${a}${b}`} className={`pw-edge${b === "risk" && plug ? " lifted" : ""}${a === "strat" && b === "ai" ? " hint" : ""}`}>
+                  <path className="pw-wire" d={wire(a, b)} pathLength={1} />
+                  <path className="pw-flow" d={wire(a, b)} />
+                </g>
+              ))}
+              {(Object.keys(COL) as BotNode[]).map((n) => (
+                <g key={n} className="pw-port">
+                  {n !== "scan" && <circle className={edges.some(([, b]) => b === n) ? "on" : ""} cx={xOf(n)} cy={PY} r={3.5} />}
+                  {n !== "track" && <circle className={edges.some(([a]) => a === n) ? "on" : ""} cx={xOf(n) + NW} cy={PY} r={3.5} />}
+                </g>
               ))}
               {plug && <path className="pw-wire ghost" d={`M ${plug.x} ${plug.y} C ${plug.x + 60} ${plug.y}, ${xOf("risk") - 60} ${PY}, ${xOf("risk")} ${PY}`} />}
-              <TrustedWires />
+              <MarketWires />
+              <SignalWires mode={mode} />
             </svg>
 
             {fallback && mode !== "local" && (
@@ -231,7 +237,8 @@ export function PipeCanvas(props: { mode: string; cycle: CycleTrace | null; onMo
                 );
               })}
 
-            <TrustedLane />
+            <MarketLane />
+            <SignalLane mode={mode} />
 
             {plugTo && (
               <span className="pw-drop" style={{ left: xOf(plugTo) - 6, top: ROW - 6, width: NW + 12 }}>
@@ -259,52 +266,172 @@ export function PipeCanvas(props: { mode: string; cycle: CycleTrace | null; onMo
   );
 }
 
-/** Провода доверенных каналов: мимо сканера, стратегий и AI — в «Лимиты каналов» и сразу в «Ордер». */
-function TrustedWires() {
-  const on = useStore((s) => cfg<boolean>(s.config, "TELEGRAM_TRUSTED_TRADING", false));
-  const x2 = xOf("order") + NW / 2;
-  const cls = `pw-wire tg${on ? "" : " off"}`;
+/** Каналы Telegram в двух режимах: все — сигнал для решения, доверенные — ещё и сделка по посту. */
+function useChannels() {
+  const config = useStore((s) => s.config);
+  const signed = useStore((s) => Boolean(s.secrets?.find((x) => x.service === "telethon")?.signed_in));
+  const trusted = chanList(cfg(config, "TELEGRAM_TRUSTED_CHANNELS", ""));
+  const on = cfg<boolean>(config, "TELEGRAM_TRUSTED_TRADING", false);
+  return { config, signed, trusted, on, trade: on && signed && trusted.length > 0 };
+}
+
+const MX = xOf("scan") + NW / 2; // цепочка рынка: «Сезон» → «Профиль» → «Сканер», сверху вниз
+// «Сигналы для решения» — над «Стратегиями» и AI, на два верхних ряда; «Доверенные каналы» — рядом, над SAC.
+const SX = xOf("strat");
+const SW = NW + GX;
+const SH = MID + TH - TOP;
+/** Кому идут сигналы: AI (в промпт) — в режимах с AI, иначе стратегиям. */
+const sigTo = (mode: string): BotNode => (mode === "ai" || mode === "hybrid" ? "ai" : "strat");
+
+/** Провод сбоку от ряда шагов; key по состоянию — ожил: заново прорисовывается и по нему пускается поток. */
+const side = (live: boolean, paths: string[], ports: number[][], k: string) => (
+  <g key={`${k}${live}`} className={`pw-edge side${live ? "" : " off"}`}>
+    {paths.map((d) => (
+      <g key={d}>
+        <path className="pw-wire" d={d} pathLength={live ? 1 : undefined} />
+        {live && <path className="pw-flow" d={d} />}
+      </g>
+    ))}
+    <g className="pw-port">
+      {ports.map(([x, y]) => (
+        <circle key={`${x}:${y}`} className={live ? "on" : ""} cx={x} cy={y} r={3.5} />
+      ))}
+    </g>
+  </g>
+);
+
+/** Сезон меняет профиль сам (авто) или только предлагает; профиль задаёт, какие монеты смотрит сканер. */
+function MarketWires() {
+  const auto = useStore((s) => cfg<string>(s.config, "SEASON_SWITCH_MODE", "alert") === "auto");
   return (
     <>
-      <path className={cls} d={`M ${xOf("scan") + TW} ${TY} L ${xOf("risk")} ${TY}`} />
-      <path className={cls} d={`M ${xOf("risk") + NW} ${TY} C ${x2} ${TY}, ${x2} ${TY}, ${x2} ${ROW}`} />
+      {side(auto, [`M ${MX} ${TOP + TH} L ${MX} ${MID}`], [[MX, TOP + TH], [MX, MID]], "season")}
+      {side(true, [`M ${MX} ${MID + TH} L ${MX} ${ROW}`], [[MX, MID + TH], [MX, ROW]], "profile")}
     </>
   );
 }
 
-function TrustedLane() {
+function MarketLane() {
+  const season = useStore((s) => s.market?.season ?? null);
+  const profiles = useStore((s) => s.profiles);
   const config = useStore((s) => s.config);
+  const openNode = useStore((s) => s.openNode);
+  const auto = cfg<string>(config, "SEASON_SWITCH_MODE", "alert") === "auto";
+  const active = profiles.find((p) => p.active);
+  const name = !season ? "нет данных" : season.signal === "altcoin" ? "альтсезон" : season.signal === "bluechip" ? "сезон BTC" : "нейтрально";
+  const facts = season
+    ? [season.altcoin_index !== null && `индекс ${Math.round(season.altcoin_index)}`, season.btc_dominance !== null && `BTC ${Math.round(season.btc_dominance)}%`]
+        .filter(Boolean)
+        .join(" · ")
+    : "";
+  const scanN = cfg<number>(config, "SCAN_TOP_N", 20);
+  return (
+    <>
+      <button type="button" className="pipe-node pw-tg" style={{ left: xOf("scan"), top: TOP, width: NW, height: TH }} onClick={() => openNode("scan")}>
+        <b>Сезон рынка</b>
+        <span className="st">{name}</span>
+        {facts && <span className="st">{facts}</span>}
+      </button>
+      <span className="pw-tag side" style={{ left: MX + 10, top: (TOP + TH + MID) / 2 }}>
+        {auto ? "меняет сам" : "предлагает"}
+      </span>
+      <button type="button" className="pipe-node pw-tg" style={{ left: xOf("scan"), top: MID, width: NW, height: TH }} onClick={() => openNode("scan")}>
+        <b>Профиль рынка</b>
+        <span className="st">{active ? `${active.label} · ${active.timeframe}` : "—"}</span>
+        <span className="st">
+          {scanN} {plural(scanN, ["монета", "монеты", "монет"])} в скане
+        </span>
+      </button>
+    </>
+  );
+}
+
+/** Сигналы — тому, кто решает; Telegram ещё и вторым режимом: доверенные → «Лимиты каналов» → «Ордер», мимо всех проверок. */
+function SignalWires({ mode }: { mode: string }) {
+  const { trade } = useChannels();
+  const tx = xOf(sigTo(mode)) + NW / 2;
+  const x2 = xOf("order") + NW / 2;
+  return (
+    <>
+      {side(mode !== "dqn", [`M ${tx} ${TOP + SH} L ${tx} ${ROW}`], [[tx, TOP + SH], [tx, ROW]], `sig${tx}`)}
+      {side(
+        trade,
+        [
+          `M ${SX + SW} ${TY} L ${xOf("sac")} ${TY}`,
+          `M ${xOf("sac") + NW} ${TY} L ${xOf("risk")} ${TY}`,
+          `M ${xOf("risk") + NW} ${TY} C ${x2} ${TY}, ${x2} ${TY}, ${x2} ${ROW}`,
+        ],
+        [[SX + SW, TY], [xOf("sac"), TY], [xOf("sac") + NW, TY], [xOf("risk"), TY], [xOf("risk") + NW, TY], [x2, ROW]],
+        "trade",
+      )}
+    </>
+  );
+}
+
+const srcDot = (s: SecretItem): string =>
+  s.service === "telethon" ? (s.signed_in ? "ok" : "") : s.status === "ok" ? "ok" : s.status === "bad" ? "bad" : s.status === "warn" ? "warn" : "";
+
+function SignalLane({ mode }: { mode: string }) {
+  const { config, signed, trusted, on, trade } = useChannels();
+  const secrets = useStore((s) => s.secrets);
   const post = useStore((s) => s.trusted);
-  const tg = useStore((s) => s.secrets?.find((x) => x.service === "telethon"));
+  const paper = useStore((s) => s.bot?.paper ?? true);
   const setTab = useStore((s) => s.setTab);
-  const on = cfg<boolean>(config, "TELEGRAM_TRUSTED_TRADING", false);
-  const chans = chanList(cfg(config, "TELEGRAM_TRUSTED_CHANNELS", ""));
+  const openNode = useStore((s) => s.openNode);
+  const to = sigTo(mode);
+  // Подключения, которые идут в решение, — по карте FEEDS (та же, что в «Ключи и доступ»).
+  const data = (secrets ?? []).filter((s) => FEEDS[s.service]?.some(([, step]) => step === "ai"));
+  const live = data.filter((s) => srcDot(s) === "ok").length + 1;
+  const chans = chanList(`${cfg(config, "TELEGRAM_SENTIMENT_CHANNELS", "")},${cfg(config, "TELEGRAM_TRUSTED_CHANNELS", "")}`).length;
+  const minConf = cfg<number>(config, paper ? "MIN_SIGNAL_CONFIDENCE_PAPER" : "MIN_SIGNAL_CONFIDENCE", paper ? 0.6 : 0.65);
   const toChannels = () => (setTab("settings"), scrollWhenReady("tg-channels"));
   const fresh = post && Date.now() / 1000 - post.at < 86_400 ? post : null;
-  const state = !tg?.signed_in
-    ? "нужен вход в Telegram"
-    : chans.length
-      ? `${chans.length} ${plural(chans.length, ["канал", "канала", "каналов"])}: ${chans.slice(0, 2).map((c) => `@${c}`).join(", ")}${chans.length > 2 ? "…" : ""}`
-      : "не выбраны";
   const slots = cfg<number>(config, "TELEGRAM_TRUSTED_SLOTS", 2);
   return (
     <>
-      <button type="button" className={`pipe-node pw-tg${on ? "" : " idle"}`} style={{ left: xOf("scan"), top: TOP, width: TW, height: TH }} onClick={toChannels}>
-        <b>Доверенные каналы</b>
-        <span className="st">{state}</span>
-        {fresh && (
-          <span className={`res ${fresh.ok ? "ok" : "bad"}`} title={fresh.ok ? undefined : fresh.reason}>
-            <i aria-hidden="true">{fresh.ok ? "▲" : "▼"}</i> @{fresh.channel}
-            {fresh.symbol ? ` · ${fresh.symbol.split("/")[0]}` : ""}
-            {fresh.ok ? ` · ${fresh.latency_s} с` : " · без сделки"}
-          </span>
-        )}
+      <button type="button" className="pipe-node pw-tg pw-sig" style={{ left: SX, top: TOP, width: SW, height: SH }} onClick={() => openNode(to)}>
+        <b>Сигналы для решения</b>
+        <span className="st">
+          подключено {live} из {data.length + 1} · {mode === "dqn" ? "SAC решает по своей модели" : to === "ai" ? "всё уходит в AI" : "всё уходит стратегиям"}
+        </span>
+        <ul className="pw-src">
+          {data.map((s) => (
+            <li key={s.service}>
+              <i className={`dot ${srcDot(s)}`} aria-hidden="true" />
+              {s.service === "telethon" ? `Telegram · ${chans}` : s.name}
+            </li>
+          ))}
+          <li>
+            <i className="dot ok" aria-hidden="true" />
+            Рынок · без ключей
+          </li>
+        </ul>
       </button>
-      <div className="pw-tg-switch" style={{ left: (xOf("scan") + TW + xOf("risk")) / 2, top: TY }}>
-        <span>{on ? "сделки по постам — мимо сканера, стратегий и AI" : "сделки по каналам выключены"}</span>
-        <Toggle on={on} label="Сделки по доверенным каналам" onChange={(v) => void actions.patchConfig({ TELEGRAM_TRUSTED_TRADING: v })} />
+      <span className="pw-tag" style={{ left: xOf(to) + NW / 2, top: (TOP + SH + ROW) / 2 }}>
+        {mode === "dqn" ? "не для SAC" : to === "ai" ? "в AI" : "в стратегии"}
+      </span>
+      <button type="button" className="pw-gate" style={{ left: xOf("risk") + 4, top: ROW - 14 }} onClick={() => openNode(to)} title="Порог — в карточке «Сигналы для решения»">
+        дальше, если уверенность ≥ {minConf}
+      </button>
+      <div className={`pipe-node pw-tg pw-trust${trade ? "" : " idle"}`} style={{ left: xOf("sac"), top: TOP, width: NW, height: SH }}>
+        <button type="button" className="pw-open" onClick={toChannels}>
+          <b>Доверенные каналы</b>
+          <span className="st">{!signed ? "нужен вход в Telegram" : trusted.length ? `${trusted.length} ${plural(trusted.length, ["канал", "канала", "каналов"])}` : "не выбраны"}</span>
+          <span className="st">сделка по посту — мимо сигналов, стратегий и AI</span>
+          {fresh && (
+            <span className={`res ${fresh.ok ? "ok" : "bad"}`} title={fresh.ok ? undefined : fresh.reason}>
+              <i aria-hidden="true">{fresh.ok ? "▲" : "▼"}</i> @{fresh.channel}
+              {fresh.symbol ? ` · ${fresh.symbol.split("/")[0]}` : ""}
+              {fresh.ok ? ` · ${fresh.latency_s} с` : " · без сделки"}
+            </span>
+          )}
+        </button>
+        <span className="pw-trust-sw">
+          <Toggle on={on} label="Сделки по доверенным каналам" onChange={(v) => void actions.patchConfig({ TELEGRAM_TRUSTED_TRADING: v })} />
+          {on ? "сделки вкл" : "сделки выкл"}
+        </span>
       </div>
-      <button type="button" className={`pipe-node pw-tg${on ? "" : " idle"}`} style={{ left: xOf("risk"), top: TOP, width: NW, height: TH }} onClick={toChannels}>
+      <button type="button" className={`pipe-node pw-tg${trade ? "" : " idle"}`} style={{ left: xOf("risk"), top: TOP, width: NW, height: TH }} onClick={toChannels}>
         <b>Лимиты каналов</b>
         <span className="st">
           риск {pct(config.TELEGRAM_TRUSTED_RISK?.value, 0.005)} · стоп {pct(config.TELEGRAM_TRUSTED_SL?.value, 0.03)} · {slots}{" "}

@@ -2,13 +2,13 @@
 // под ним — сводка выбранного узла и его карточки (те же, что были во вкладке раньше).
 // Итогов последнего цикла на узлах пока нет: бот не сохраняет шаги решения (этап 2).
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 
 import type { BotNode, SecretItem, SettingDef } from "../lib/types";
 import { actions, useStore } from "../store";
 import { Q, Seg } from "../ui";
 import { AiPane } from "./ai";
-import { BlockLibrary, Lane, isStep, useBlocks, type Drag } from "./blocks";
+import { Lane, isStep, useLanes } from "./blocks";
 import { ConfirmCard, RiskCard, StrategiesCard, TrackCard, WhatCard, cfg, presetName, presetOf, profileName } from "./bots";
 import { chosenId } from "./chainops";
 import { ModelCard } from "./jobs";
@@ -16,6 +16,7 @@ import { RulesCard } from "./rules";
 import { UiSwitchRow } from "./uimode";
 import { HoursCard, SymbolsCard } from "./settings";
 import { NW, PipeCanvas } from "./pipecanvas";
+import { SignalsCard } from "./signals";
 import { mark } from "./trace";
 
 const svg = (body: JSX.Element) => (
@@ -309,9 +310,8 @@ export function Pipeline() {
   const open = useStore((s) => s.nodeOpen);
   const closeNode = useStore((s) => s.closeNode);
   const closeBtn = useRef<HTMLButtonElement>(null);
-  // Настройка перетаскиванием: блоки из библиотеки на шаги и обратно.
-  const blocks = useBlocks();
-  const [drag, setDrag] = useState<Drag | null>(null);
+  // Полосы под шагами — сводка; включается и выключается всё в панели шага.
+  const lanes = useLanes();
   const toLearn = () => setTab("learn");
   useEffect(() => {
     if (!open) return;
@@ -351,7 +351,6 @@ export function Pipeline() {
             </li>
           </ul>
         </div>
-        <BlockLibrary blocks={blocks} drag={drag} setDrag={setDrag} />
         <PipeCanvas mode={mode} cycle={cycle} onMode={(m) => void actions.patchConfig({ MODE: m })}>
           {NODES.map(({ id, title, icon }, i) => {
             const on = takesPart(mode, id);
@@ -381,7 +380,7 @@ export function Pipeline() {
                   )}
                 </button>
                   {isStep(id) ? (
-                    <Lane step={id} blocks={blocks} drag={drag} setDrag={setDrag} onMore={() => openNode(id)} />
+                    <Lane step={id} items={lanes[id]} onOpen={() => openNode(id)} />
                   ) : (
                     <div className="lane2 none" aria-hidden="true" />
                   )}
@@ -447,11 +446,17 @@ export function Pipeline() {
         {cur.id === "strat" && (
           <div className="cols">
             <div className="col">
+              <SignalsCard />
               <StrategiesCard />
             </div>
           </div>
         )}
-        {cur.id === "ai" && <AiPane />}
+        {cur.id === "ai" && (
+          <>
+            <SignalsCard />
+            <AiPane />
+          </>
+        )}
         {cur.id === "sac" && (
           <div className="cols">
             <div className="col">
