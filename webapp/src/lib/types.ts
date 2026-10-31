@@ -244,9 +244,22 @@ export interface SecretItem {
   model: { env: string; value: string | null } | null;
   /** Только у X/Twitter: сохранённые аккаунты для обхода официального API (без паролей). */
   accounts?: { login: string; email: string }[];
+  /** Только у памп-каналов Telegram: вход по коду выполнен, сессия лежит в хранилище. */
+  signed_in?: boolean;
   status: "ok" | "warn" | "bad" | "unset" | "unchecked";
   message: string;
   checked_at: number | null;
+}
+
+/** Шаг входа в Telegram для чтения каналов (`POST /api/secrets/telethon/*`). */
+export type TgStep = { step: "code"; via: "app" | "sms" } | { step: "password" } | ({ step: "done" } & SecretItem);
+
+/** Что бот делает с каналами Telegram (`GET /api/secrets/telethon/status`). */
+export interface TgStatus {
+  state: "ok" | "off" | "no_session" | "revoked" | "error" | "stopped" | "unknown";
+  message: string;
+  at?: number;
+  channels?: string[];
 }
 
 /** Что уже подключено (`GET /api/setup`): ключи из приложения или .env. */

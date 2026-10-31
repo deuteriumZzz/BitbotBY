@@ -33,6 +33,8 @@ import type {
   Side,
   Strategy,
   Symbols,
+  TgStatus,
+  TgStep,
   Tab,
 } from "./lib/types";
 
@@ -838,6 +840,21 @@ export const actions = {
       return null;
     }
   },
+  /** Вход в Telegram для чтения каналов: «Войти» → код → облачный пароль, если он включён. */
+  tgLogin: async (path: "login" | "code" | "password", body?: Record<string, string>): Promise<TgStep | null> => {
+    try {
+      const r = await api<TgStep>("POST", `/api/secrets/telethon/${path}`, body);
+      if (r.step === "done") {
+        await st().loadSecrets();
+        st().say("Вход в Telegram выполнен — бот подключится к каналам в течение минуты.");
+      }
+      return r;
+    } catch (e) {
+      st().say(e instanceof ApiError ? e.message : "Не удалось связаться с Telegram.");
+      return null;
+    }
+  },
+  tgStatus: (): Promise<TgStatus | null> => api<TgStatus>("GET", "/api/secrets/telethon/status").catch(() => null),
   deleteSecret: (service: string) =>
     st().act(() => api("DELETE", `/api/secrets/${service}`).then(() => st().loadSecrets()), "Ключ удалён"),
 };

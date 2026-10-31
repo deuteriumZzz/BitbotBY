@@ -35,6 +35,8 @@ from config import Config
 from src.ai import ai_providers
 from src.dashboard import auth, data
 from src.infra import background_jobs, bot_bus
+from src.sentiment import telegram_login
+from src.sentiment.telegram_sentiment import STATUS_KEY as TG_STATUS_KEY
 from src.settings import secrets_store
 from src.settings import settings_registry as registry
 from src.settings.runtime_config import RISK_PRESETS, RuntimeConfig
@@ -1143,6 +1145,75 @@ async def remove_x_account(login: str, request: Request) -> JSONResponse:
         data.get_redis(), "secret.changed", {"service": "twitter", "status": "warn"}
     )
     return JSONResponse({**_secret_item("twitter"), "restart_required": True})
+
+
+# ── Вход в Telegram для памп-каналов: код и облачный пароль из приложения ──────
+
+
+async def _tg_step(request: Request, step: Any) -> JSONResponse:
+    try:
+        result = await step
+    except telegram_login.LoginError as e:
+        return _err(e.status, e.code, e.message)
+    if result is None:
+        return JSONResponse({"step": "password"})
+    session, name = result
+    secrets_store.tg_save_session(session, name, _source(request))
+    bot_bus.emit(
+        data.get_redis(), "secret.changed", {"service": "telethon", "status": "ok"}
+    )
+    return JSONResponse({"step": "done", **_secret_item("telethon")})
+
+
+@router.post("/api/secrets/telethon/login")
+async def telethon_login(request: Request) -> JSONResponse:
+    denied = _secrets_unavailable(request)
+    if denied is not None:
+        return denied
+    api_id, api_hash, phone = (
+        secrets_store.get_value(k) or "" for k in secrets_store.TG_KEYS
+    )
+    if not (api_id and api_hash and phone):
+        return _err(400, "no_keys", "Сначала сохраните API ID, API Hash и телефон.")
+    try:
+        via = await telegram_login.send_code(api_id, api_hash, phone)
+    except telegram_login.LoginError as e:
+        return _err(e.status, e.code, e.message)
+    return JSONResponse({"step": "code", "via": via})
+
+
+@router.post("/api/secrets/telethon/code")
+async def telethon_code(request: Request) -> JSONResponse:
+    denied = _secrets_unavailable(request)
+    if denied is not None:
+        return denied
+    code = re.sub(r"\s", "", str((await _body(request)).get("code") or ""))
+    if not code.isdigit() or not 4 <= len(code) <= 8:
+        return _err(422, "bad_code", "Код — это цифры из сообщения Telegram.")
+    return await _tg_step(request, telegram_login.submit_code(code))
+
+
+@router.post("/api/secrets/telethon/password")
+async def telethon_password(request: Request) -> JSONResponse:
+    denied = _secrets_unavailable(request)
+    if denied is not None:
+        return denied
+    password = str((await _body(request)).get("password") or "")
+    if not password or len(password) > 256:
+        return _err(422, "bad_password", "Введите облачный пароль Telegram.")
+    return await _tg_step(request, telegram_login.submit_password(password))
+
+
+@router.get("/api/secrets/telethon/status")
+async def telethon_status(request: Request) -> JSONResponse:
+    """Что бот делает с каналами прямо сейчас (пишет сам бот, без секретов)."""
+    denied = _control_denied(request)
+    if denied is not None:
+        return denied
+    return JSONResponse(
+        _redis_json(data.get_redis(), TG_STATUS_KEY)
+        or {"state": "unknown", "message": "Бот ещё не сообщал о Telegram."}
+    )
 
 
 @router.delete("/api/secrets/{service_id}")

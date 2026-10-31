@@ -746,6 +746,33 @@ function xAccount(b: Body) {
   return tw;
 }
 
+/** Вход в Telegram для каналов: в демо код 22222 просит облачный пароль, остальные пускают сразу. */
+let tgStep = "";
+function tgLogin(step: string, b: Body) {
+  const tg = secrets.find((x) => x.service === "telethon")!;
+  if (step === "login") {
+    if (!tg.fields.every((f) => f.set)) fail(400, "no_keys", "Сначала сохраните API ID, API Hash и телефон.");
+    tgStep = "code";
+    return { step: "code", via: "app" };
+  }
+  if (tgStep !== step) fail(409, "no_login", "Вход не начат или устарел — нажмите «Войти» ещё раз.");
+  if (step === "code" && !/^\d{4,8}$/.test(String(b.code ?? "").replace(/\s/g, ""))) fail(422, "bad_code", "Код — это цифры из сообщения Telegram.");
+  if (step === "code" && String(b.code).trim() === "22222") return (tgStep = "password"), { step: "password" };
+  if (step === "password" && !b.password) fail(422, "bad_password", "Введите облачный пароль Telegram.");
+  tgStep = "";
+  Object.assign(tg, { signed_in: true, status: "ok", message: "Вход выполнен как @demo. Бот подключится к каналам в течение минуты.", checked_at: Date.now() / 1000 });
+  emit("secret.changed", { service: "telethon", status: "ok" });
+  return { step: "done", ...tg };
+}
+
+function tgStatus() {
+  const tg = secrets.find((x) => x.service === "telethon")!;
+  const channels = String(config.TELEGRAM_SENTIMENT_CHANNELS?.value ?? "").split(",").filter(Boolean);
+  if (!tg.fields.every((f) => f.set)) return { state: "off", message: "Ключи не заданы — каналы не читаются.", channels };
+  if (!tg.signed_in) return { state: "no_session", message: "Вход не выполнен: нажмите «Войти» на карточке «Памп-каналы Telegram».", channels };
+  return { state: "ok", message: `Подключено, каналов: ${channels.length}.`, at: Date.now() / 1000, channels };
+}
+
 function patchConfig(changes: Body) {
   const fields: Record<string, string> = {};
   for (const [key, raw] of Object.entries(changes)) {
@@ -796,6 +823,7 @@ function secret(method: string, id: string, b: Body) {
   const s = secrets.find((x) => x.service === id) ?? fail(404, "unknown_service", "Нет такого сервиса.");
   if (method === "DELETE") {
     s.fields.forEach((f) => Object.assign(f, { set: false, last4: null, value: null }));
+    if (s.service === "telethon") s.signed_in = false;
     Object.assign(s, { status: "unset", message: "", checked_at: null });
   } else {
     const values: Record<string, string> = b.fields ?? {};
@@ -805,6 +833,7 @@ function secret(method: string, id: string, b: Body) {
     }
     if (s.model && b.model) s.model.value = b.model;
     Object.assign(s, { status: "ok", message: "Демо: ключ принят без проверки.", checked_at: Date.now() / 1000 });
+    if (s.service === "telethon" && !s.signed_in) Object.assign(s, { status: "warn", message: "Ключи сохранены. Нажмите «Войти» — Telegram пришлёт код." });
   }
   const aiProvider = ai.providers.find((p) => p.id === s.service);
   if (aiProvider) {
@@ -995,6 +1024,8 @@ function route(method: string, path: string, body: unknown): unknown {
     launcher = { ...launcher, [key]: b.on, result: { id, ok: true, message: b.on ? "Включено." : "Выключено.", at: Date.now() / 1000 } };
     return { id };
   }
+  if (method === "POST" && (m = p.match(/^\/api\/secrets\/telethon\/(login|code|password)$/))) return tgLogin(m[1], b);
+  if (method === "GET" && p === "/api/secrets/telethon/status") return tgStatus();
   if (method === "POST" && p === "/api/secrets/twitter/accounts") return xAccount(b);
   if (method === "DELETE" && (m = p.match(/^\/api\/secrets\/twitter\/accounts\/(.+)$/))) {
     const tw = secrets.find((x) => x.service === "twitter")!;

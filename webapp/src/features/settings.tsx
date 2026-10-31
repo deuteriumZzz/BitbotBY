@@ -6,7 +6,7 @@ import { api } from "../lib/api";
 import { OWN_HOME, type SettingsPane } from "../lib/where";
 import { fmtN, plural } from "../lib/format";
 import { inHours } from "../lib/idle";
-import type { BotNode, ConfigHistoryItem, ConfigValues, SecretItem, SettingDef } from "../lib/types";
+import type { BotNode, ConfigHistoryItem, ConfigValues, SecretItem, SettingDef, TgStatus } from "../lib/types";
 import { actions, useStore, type PatchResult } from "../store";
 import { Icon, Q, Seg, Toggle, useArm } from "../ui";
 import { cfg } from "./bots";
@@ -699,7 +699,7 @@ const KEY_INFO: Record<string, [string, string?]> = {
   glassnode: ["On-chain метрики, например запас стейблкоинов.", "https://glassnode.com"],
   reddit: ["Посты r/CryptoCurrency для анализа настроения моделью CryptoBERT.", "https://www.reddit.com/prefs/apps"],
   twitter: ["Настроение по твитам, только профиль Meme. Два способа: официальный платный API или бесплатный обход через аккаунты X. Если указаны оба, работает официальный API.", "https://developer.twitter.com"],
-  telethon: ["Чтение публичных каналов через Telethon, только профиль Meme. При первом входе Telegram пришлёт код.", "https://my.telegram.org"],
+  telethon: ["Чтение каналов через Telethon, только профиль Meme. API ID и API Hash — на my.telegram.org, затем «Войти»: код придёт в Telegram.", "https://my.telegram.org"],
   pumpportal: ["Темп запуска новых токенов на pump.fun — признак мем-сезона.", "https://pumpportal.fun"],
   server: ["PIN для перехода в Live, доступ к Redis и API дашборда, секрет вебхука алертов."],
 };
@@ -922,6 +922,118 @@ function ChatFinder({ token, hasToken, onFound }: { token: string; hasToken: boo
   );
 }
 
+const TG_STATE: Record<TgStatus["state"], [string, string]> = {
+  ok: ["ok", "читает каналы"],
+  off: ["", "нет ключей"],
+  no_session: ["warn", "нужен вход"],
+  revoked: ["bad", "вход отозван"],
+  error: ["warn", "нет связи"],
+  stopped: ["", "остановлено"],
+  unknown: ["", "бот молчит"],
+};
+const TG_KEYS = ["TELEGRAM_SENTIMENT_API_ID", "TELEGRAM_SENTIMENT_API_HASH", "TELEGRAM_SENTIMENT_PHONE"];
+
+/** Вход в Telegram кодом из приложения: сессия хранится на сервере зашифрованной, бот код не просит никогда. */
+function TgLogin({ item }: { item: SecretItem }) {
+  const [step, setStep] = useState<"idle" | "code" | "password">("idle");
+  const [via, setVia] = useState<"app" | "sms">("app");
+  const [code, setCode] = useState("");
+  const [pw, setPw] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [rt, setRt] = useState<TgStatus | null>(null);
+  const ready = TG_KEYS.every((env) => item.fields.find((f) => f.env === env)?.set);
+  const phone = item.fields.find((f) => f.env === "TELEGRAM_SENTIMENT_PHONE")?.value;
+  useEffect(() => void actions.tgStatus().then(setRt), [item.signed_in, item.checked_at]);
+  const run = async (path: "login" | "code" | "password", body?: Record<string, string>) => {
+    setBusy(true);
+    const r = await actions.tgLogin(path, body);
+    setBusy(false);
+    if (!r) return;
+    if (r.step === "code") return setVia(r.via), setStep("code");
+    if (r.step === "password") return setStep("password");
+    setStep("idle");
+    setCode("");
+    setPw("");
+  };
+  const [c, t] = TG_STATE[rt?.state ?? "unknown"];
+  return (
+    <div className="chatfind tglogin">
+      <div className="tg-h">
+        <b>Вход в Telegram: {item.signed_in ? "выполнен" : "не выполнен"}</b>
+        {rt && (
+          <span className={`pill ${c}`}>
+            <span className={`dot ${c}`} />
+            {t}
+          </span>
+        )}
+      </div>
+      {rt && ready && !["unknown", "no_session"].includes(rt.state) && <p className="kf-h">{rt.message}</p>}
+      {step === "idle" && (
+        <>
+          <p className="kf-h">
+            {!ready
+              ? "Сначала сохраните API ID, API Hash и телефон — потом войдите кодом из Telegram."
+              : item.signed_in
+                ? "Войти заново нужно, только если Telegram отозвал вход или вы сменили аккаунт."
+                : "Telegram пришлёт код в приложение Telegram (или по SMS) — введите его здесь. Сессия хранится на сервере зашифрованной, повторно код не понадобится."}
+          </p>
+          <button className="btn" type="button" disabled={busy || !ready} onClick={() => void run("login")}>
+            {busy ? (
+              <>
+                <span className="spin" />
+                Запрашиваю код…
+              </>
+            ) : item.signed_in ? (
+              "Войти заново"
+            ) : (
+              "Войти"
+            )}
+          </button>
+        </>
+      )}
+      {step !== "idle" && (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void (step === "code" ? run("code", { code }) : run("password", { password: pw }));
+          }}
+        >
+          {step === "code" ? (
+            <div className="kf">
+              <label htmlFor="tg-code">
+                <span>Код из {via === "app" ? "Telegram (чат «Telegram»)" : "SMS"}</span>
+                {phone && <span className="saved">{phone}</span>}
+              </label>
+              <input className="inp num" id="tg-code" inputMode="numeric" autoComplete="one-time-code" spellCheck={false} value={code} onChange={(e) => setCode(e.target.value)} />
+            </div>
+          ) : (
+            <div className="kf">
+              <label htmlFor="tg-pw">Облачный пароль Telegram</label>
+              <small className="kf-h">У аккаунта включена двухэтапная проверка. Пароль нужен один раз для входа и не сохраняется.</small>
+              <input className="inp" id="tg-pw" type="password" autoComplete="off" value={pw} onChange={(e) => setPw(e.target.value)} />
+            </div>
+          )}
+          <div className="kc-a">
+            <button className="btn primary" type="submit" disabled={busy || (step === "code" ? code.trim().length < 4 : !pw)}>
+              {busy ? (
+                <>
+                  <span className="spin" />
+                  Проверяю…
+                </>
+              ) : (
+                "Подтвердить"
+              )}
+            </button>
+            <button className="btn" type="button" disabled={busy} onClick={() => setStep("idle")}>
+              Отмена
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
+
 export function KeyCard({ item }: { item: SecretItem }) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [model, setModel] = useState(item.model?.value ?? "");
@@ -1011,6 +1123,7 @@ export function KeyCard({ item }: { item: SecretItem }) {
         );
       })}
       {item.service === "twitter" && <XAccounts item={item} />}
+      {item.service === "telethon" && <TgLogin item={item} />}
       {item.model && (
         <div className="kf">
           <label htmlFor={`k-${item.model.env}`}>

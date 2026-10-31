@@ -80,6 +80,7 @@ class SentimentPoller:
         """Основной цикл опроса."""
         while True:
             try:
+                await self._telegram.start()  # подхватывает вход, сделанный позже
                 await self._poll_all()
             except asyncio.CancelledError:
                 raise

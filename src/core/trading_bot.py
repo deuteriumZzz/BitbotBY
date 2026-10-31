@@ -1241,7 +1241,7 @@ class TradingBot:
         if profile == "meme":
             if self._sentiment_poller is None:
                 twitter = TwitterAnalyzer()
-                telegram = TelegramSentiment()
+                telegram = TelegramSentiment(self.redis)
                 self._sentiment_poller = SentimentPoller(twitter, telegram, self.redis)
                 await self._sentiment_poller.start(symbols)
                 logger.info("SentimentPoller: started for %d symbols", len(symbols))
