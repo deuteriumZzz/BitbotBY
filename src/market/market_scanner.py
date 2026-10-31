@@ -297,6 +297,16 @@ class MarketScanner:
         resistance = float(prev20["high"].max())
         support = float(prev20["low"].min())
 
+        # Twitter + Telegram (TradingBot._inject_sentiment). Нули — «нет данных»,
+        # а не нейтральное настроение: для AI это None.
+        social_score = self._safe(last, "social_sentiment")
+        mentions = int(self._safe(last, "social_mentions"))
+        social = (
+            {"score": round(social_score, 3), "mentions": mentions}
+            if social_score or mentions
+            else None
+        )
+
         return {
             "symbol": symbol,
             "price": round(close, 6),
@@ -329,6 +339,7 @@ class MarketScanner:
                 "support": round(support, 6),
             },
             "news_sentiment": round(news_sentiment, 3),
+            "social_sentiment": social,
             "top_headlines": headlines[:3],
             "timestamp": datetime.now().isoformat(),
         }

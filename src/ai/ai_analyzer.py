@@ -240,6 +240,7 @@ class AIAnalyzer:
                 "indicators": s.get("indicators"),
                 "levels": s.get("levels"),
                 "news_sentiment": s.get("news_sentiment"),
+                "social_sentiment": s.get("social_sentiment"),
                 "top_headlines": (s.get("top_headlines") or [])[:2],
             }
             for s in snapshots
@@ -274,6 +275,10 @@ class AIAnalyzer:
             f"RULES:\n"
             f"- Only include symbols with confidence >= {min_conf}\n"
             f"- news_sentiment > 0.3 boosts buy; < -0.3 boosts sell\n"
+            f"- social_sentiment: Twitter + Telegram channels, score -1..1 and "
+            f"mentions of the coin in fresh channel posts; null means no data, "
+            f"not neutral. score >= 0.4 supports buy, <= -0.4 supports sell; "
+            f"a single mention is weak evidence\n"
             f"- Match strategy to market_type\n"
             f"- The strategy name is a label for the setup type; backtest EV "
             f"shows how each performed historically (no strategy has a proven "

@@ -252,6 +252,27 @@ class TestBuildPrompt:
         result = no_key_analyzer._build_prompt([], balance=100.0)
         assert isinstance(result, str)
 
+    def test_social_sentiment_reaches_prompt(self, no_key_analyzer):
+        from src.market.market_scanner import MarketScanner
+
+        no_key_analyzer.strategies = []
+        scanner = MarketScanner.__new__(MarketScanner)
+        df = pd.DataFrame({"close": [1.0, 1.1], "high": [1.2, 1.2], "low": [0.9, 0.9]})
+        # без колонок и с нулями — «нет данных», а не нейтральное настроение
+        assert (
+            scanner.build_snapshot("WIF/USDT", df, 0.0, [])["social_sentiment"] is None
+        )
+        df["social_sentiment"], df["social_mentions"] = 0.0, 0
+        assert (
+            scanner.build_snapshot("WIF/USDT", df, 0.0, [])["social_sentiment"] is None
+        )
+        df["social_sentiment"], df["social_mentions"] = 0.55, 3
+        snap = scanner.build_snapshot("WIF/USDT", df, 0.0, [])
+        assert snap["social_sentiment"] == {"score": 0.55, "mentions": 3}
+        prompt = no_key_analyzer._build_prompt([snap], balance=1000.0)
+        assert '"social_sentiment": {"score": 0.55, "mentions": 3}' in prompt
+        assert "null means no data" in prompt
+
 
 # ---------------------------------------------------------------------------
 # AIAnalyzer._parse_response() — дополнительные случаи, не в test_ai_parse_response
