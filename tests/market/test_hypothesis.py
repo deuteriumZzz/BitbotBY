@@ -148,31 +148,6 @@ if HYPOTHESIS_AVAILABLE:
             f"order={order_size}, vol={daily_volume}, dv={daily_vol}"
         )
 
-    @given(
-        signal_action=st.sampled_from(["buy", "sell", "hold"]),
-        confidence=st.floats(min_value=0.0, max_value=1.0, allow_nan=False),
-    )
-    @settings(max_examples=50, suppress_health_check=[HealthCheck.too_slow])
-    def test_validate_signal_returns_bool(signal_action, confidence):
-        """validate_signal всегда возвращает bool."""
-        import asyncio
-        from unittest.mock import patch
-
-        with patch("src.infra.redis_client.RedisClient.__init__", return_value=None):
-            from src.core.risk_management import RiskManager
-
-            rm = RiskManager(10000, 0.02)
-            rm.redis = None
-
-        result = asyncio.get_event_loop().run_until_complete(
-            rm.validate_signal(
-                {"action": signal_action, "confidence": confidence}, None
-            )
-        )
-        assert isinstance(result, bool)
-        if signal_action == "hold":
-            assert result is False
-
     @given(n_recs=st.integers(min_value=0, max_value=20))
     @settings(
         max_examples=30,

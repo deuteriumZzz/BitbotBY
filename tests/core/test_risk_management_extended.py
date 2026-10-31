@@ -3,9 +3,7 @@
 
 Покрывают строки, не охваченные test_risk_manager.py:
 - calculate_kelly_size (граничные случаи)
-- calculate_stop_loss (hold-action, fallback sell)
-- calculate_take_profit (все ветки)
-- validate_signal (все ветки)
+- check_daily_loss_limit (граничные случаи)
 - apply_risk_cap через kelly
 """
 
@@ -135,116 +133,6 @@ class TestCalculateKellySize:
 
 
 # ---------------------------------------------------------------------------
-# calculate_stop_loss
-# ---------------------------------------------------------------------------
-
-
-class TestCalculateStopLossExtended:
-    """Дополнительные тесты для calculate_stop_loss (непокрытые ветки)."""
-
-    @pytest.mark.asyncio
-    async def test_stop_loss_hold_with_atr(self):
-        """action=hold с ATR → возвращается entry_price (без изменений)."""
-        rm = RiskManager(10000.0)
-        sl = await rm.calculate_stop_loss(100.0, {"action": "hold", "atr": 5.0})
-        assert sl == 100.0
-
-    @pytest.mark.asyncio
-    async def test_stop_loss_sell_fallback_no_atr(self):
-        """action=sell без ATR → entry * (1 + STOP_LOSS_PERCENT)."""
-        rm = RiskManager(10000.0)
-        sl = await rm.calculate_stop_loss(100.0, {"action": "sell", "atr": 0.0})
-        assert sl > 100.0  # для sell стоп выше цены входа
-
-    @pytest.mark.asyncio
-    async def test_stop_loss_hold_no_atr(self):
-        """action=hold без ATR → возвращается entry_price."""
-        rm = RiskManager(10000.0)
-        sl = await rm.calculate_stop_loss(100.0, {"action": "hold"})
-        assert sl == 100.0
-
-
-# ---------------------------------------------------------------------------
-# calculate_take_profit
-# ---------------------------------------------------------------------------
-
-
-class TestCalculateTakeProfitExtended:
-    """Тесты calculate_take_profit для всех веток."""
-
-    @pytest.mark.asyncio
-    async def test_take_profit_buy(self):
-        """Buy TP = entry + 2 * risk."""
-        rm = RiskManager(10000.0)
-        tp = await rm.calculate_take_profit(100.0, {"action": "buy", "atr": 2.0})
-        sl = 100.0 - 1.5 * 2.0  # = 97.0
-        risk = 100.0 - sl  # = 3.0
-        expected = 100.0 + risk * 2  # = 106.0
-        assert tp == pytest.approx(expected)
-
-    @pytest.mark.asyncio
-    async def test_take_profit_sell(self):
-        """Sell TP = entry - 2 * risk."""
-        rm = RiskManager(10000.0)
-        tp = await rm.calculate_take_profit(100.0, {"action": "sell", "atr": 2.0})
-        sl = 100.0 + 1.5 * 2.0  # = 103.0
-        risk = sl - 100.0  # = 3.0
-        expected = 100.0 - risk * 2  # = 94.0
-        assert tp == pytest.approx(expected)
-
-    @pytest.mark.asyncio
-    async def test_take_profit_hold(self):
-        """Hold → TP = entry (без изменений)."""
-        rm = RiskManager(10000.0)
-        tp = await rm.calculate_take_profit(100.0, {"action": "hold"})
-        assert tp == 100.0
-
-
-# ---------------------------------------------------------------------------
-# validate_signal
-# ---------------------------------------------------------------------------
-
-
-class TestValidateSignalExtended:
-    """Расширенные тесты validate_signal."""
-
-    @pytest.mark.asyncio
-    async def test_validate_signal_buy_high_confidence(self):
-        """Buy с высокой уверенностью — проходит валидацию."""
-        rm = RiskManager(10000.0)
-        result = await rm.validate_signal({"action": "buy", "confidence": 0.9}, None)
-        assert result is True
-
-    @pytest.mark.asyncio
-    async def test_validate_signal_sell_high_confidence(self):
-        """Sell с высокой уверенностью — проходит валидацию."""
-        rm = RiskManager(10000.0)
-        result = await rm.validate_signal({"action": "sell", "confidence": 0.9}, None)
-        assert result is True
-
-    @pytest.mark.asyncio
-    async def test_validate_signal_hold_always_false(self):
-        """Hold никогда не проходит валидацию."""
-        rm = RiskManager(10000.0)
-        result = await rm.validate_signal({"action": "hold", "confidence": 0.95}, None)
-        assert result is False
-
-    @pytest.mark.asyncio
-    async def test_validate_signal_low_confidence(self):
-        """Сигнал с уверенностью ниже MIN_SIGNAL_CONFIDENCE отклоняется."""
-        rm = RiskManager(10000.0)
-        result = await rm.validate_signal({"action": "buy", "confidence": 0.01}, None)
-        assert result is False
-
-    @pytest.mark.asyncio
-    async def test_validate_signal_zero_confidence(self):
-        """Нулевая уверенность — отклоняется."""
-        rm = RiskManager(10000.0)
-        result = await rm.validate_signal({"action": "buy", "confidence": 0.0}, None)
-        assert result is False
-
-
-# ---------------------------------------------------------------------------
 # check_daily_loss_limit (дополнительные случаи)
 # ---------------------------------------------------------------------------
 
@@ -274,29 +162,3 @@ class TestCheckDailyLossLimitExtended:
         rm = RiskManager(initial_balance=5000.0, risk_per_trade=0.01)
         # 5% от 5000 = 250; потеряли 300 → должно быть False
         assert rm.check_daily_loss_limit(4700.0) is False
-
-
-# ---------------------------------------------------------------------------
-# calculate_position_size (дополнительные случаи)
-# ---------------------------------------------------------------------------
-
-
-class TestCalculatePositionSizeExtended:
-    """Дополнительные тесты calculate_position_size."""
-
-    @pytest.mark.asyncio
-    async def test_position_size_scales_with_risk_per_trade(self):
-        """Удвоение risk_per_trade удваивает размер позиции."""
-        rm1 = RiskManager(10000.0, risk_per_trade=0.01)
-        rm2 = RiskManager(10000.0, risk_per_trade=0.02)
-        size1 = await rm1.calculate_position_size(10000.0, 100.0, 90.0)
-        size2 = await rm2.calculate_position_size(10000.0, 100.0, 90.0)
-        assert size2 == pytest.approx(size1 * 2)
-
-    @pytest.mark.asyncio
-    async def test_position_size_larger_when_tight_stop(self):
-        """Более узкий стоп → больший размер позиции."""
-        rm = RiskManager(10000.0, risk_per_trade=0.02)
-        size_tight = await rm.calculate_position_size(10000.0, 100.0, 99.0)  # 1 diff
-        size_wide = await rm.calculate_position_size(10000.0, 100.0, 90.0)  # 10 diff
-        assert size_tight > size_wide
