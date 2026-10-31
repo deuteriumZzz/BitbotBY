@@ -177,7 +177,17 @@ SERVICES: Tuple[Service, ...] = (
             Field("TELEGRAM_SENTIMENT_API_ID", "API ID", secret=False, min_len=1),
             _key("TELEGRAM_SENTIMENT_API_HASH", "API Hash", min_len=32),
             Field("TELEGRAM_SENTIMENT_PHONE", "Телефон", secret=False, min_len=8),
+            # Сессия Telethon после входа по коду: даёт доступ к аккаунту, поэтому
+            # хранится только здесь — не в файле, не в .env и не в os.environ.
+            _key(
+                "TELEGRAM_SENTIMENT_SESSION",
+                "Вход в Telegram",
+                optional=True,
+                min_len=100,
+                show_last4=False,
+            ),
         ),
+        validator="telethon",
     ),
     Service(
         "pumpportal", "PumpPortal", "Данные и соцсети", (_key("PUMPPORTAL_API_KEY"),)
@@ -361,6 +371,30 @@ def x_remove_account(login: str, source: str) -> bool:
     return True
 
 
+# ── Вход Telethon (памп-каналы Telegram) ──────────────────────────────────────
+# Код подтверждения вводится в приложении (src/sentiment/telegram_login.py),
+# готовая StringSession попадает только сюда.
+
+TG_SESSION_ENV = "TELEGRAM_SENTIMENT_SESSION"
+TG_KEYS = (
+    "TELEGRAM_SENTIMENT_API_ID",
+    "TELEGRAM_SENTIMENT_API_HASH",
+    "TELEGRAM_SENTIMENT_PHONE",
+)
+
+
+def tg_save_session(session: str, name: str, source: str) -> None:
+    who = f" как {name}" if name else ""
+    save(
+        BY_ID["telethon"],
+        {TG_SESSION_ENV: session},
+        None,
+        "ok",
+        f"Вход выполнен{who}. Бот подключится к каналам в течение минуты.",
+        source,
+    )
+
+
 def get_value(env: str) -> Optional[str]:
     """Значение из хранилища, иначе из окружения."""
     try:
@@ -381,6 +415,8 @@ def apply_secrets(config_cls: Any) -> List[str]:
         logger.error("Secrets store unreadable: %s", e)
         return []
     for env, value in {**values, **models}.items():
+        if env == TG_SESSION_ENV:
+            continue  # бот читает сессию прямо из хранилища
         os.environ[env] = value
         if hasattr(config_cls, env):
             setattr(config_cls, env, value)
@@ -399,6 +435,8 @@ def public_view() -> List[Dict[str, Any]]:
         meta = raw["meta"].get(s.id, {})
         fields = []
         for fl in s.fields:
+            if fl.env == TG_SESSION_ENV:
+                continue  # вход показывает своя кнопка: signed_in ниже
             v = values.get(fl.env)
             fields.append(
                 {
@@ -435,6 +473,11 @@ def public_view() -> List[Dict[str, Any]]:
                         )
                     }
                     if s.id == "twitter"
+                    else {}
+                ),
+                **(
+                    {"signed_in": bool(values.get(TG_SESSION_ENV))}
+                    if s.id == "telethon"
                     else {}
                 ),
             }
@@ -646,6 +689,11 @@ async def validate(
         )
     if service.validator is None:
         return "warn", _NOT_SUPPORTED
+    if service.validator == "telethon":
+        # Проверить ключи может только вход: код Telegram пришлёт по кнопке «Войти».
+        if values.get(TG_SESSION_ENV):
+            return "ok", "Ключи сохранены, вход в Telegram выполнен."
+        return "warn", "Ключи сохранены. Нажмите «Войти» — Telegram пришлёт код."
     if service.validator == "bybit":
         return await _check_bybit(values, testnet)
     import httpx  # noqa: PLC0415

@@ -84,7 +84,8 @@ export const STRATEGY_NAME: Record<string, string> = {
   gtaa_ma: "Тайминг по SMA",
   spike_reversal: "Разворот после всплеска",
 };
-export const stratName = (k: string): string => STRATEGY_NAME[k] ?? k;
+/** Сделки по доверенным Telegram-каналам записаны как «tg:канал». */
+export const stratName = (k: string): string => (k.startsWith("tg:") ? `Канал @${k.slice(3)}` : (STRATEGY_NAME[k] ?? k));
 
 export const cfg = <T,>(c: ConfigValues, key: string, fallback: T): T => (c[key]?.value as T) ?? fallback;
 

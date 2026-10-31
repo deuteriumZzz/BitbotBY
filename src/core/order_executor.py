@@ -29,7 +29,7 @@ import pandas as pd
 
 from config import Config
 from src.core.constants import KELLY_MIN_TRADES, TRADE_HISTORY_LOOKBACK
-from src.core.types import PositionRecord
+from src.core.types import PositionRecord, is_trusted
 from src.market.market_impact import estimate_from_df as _ac_impact
 from src.settings.runtime_config import confirm_policy
 
@@ -165,6 +165,8 @@ class OrderExecutor:
         self._get_current_regime = get_current_regime
         # УЛУЧШЕНИЕ 6: отслеживание пика баланса для масштабирования при просадке
         self._peak_balance: float = 0.0
+        # Почему не открыли — для сделок по доверенным каналам (trusted_trader).
+        self.last_reject: Dict[str, str] = {}
 
     def configure_risk(
         self,
@@ -182,6 +184,8 @@ class OrderExecutor:
 
     def _stage(self, sym: str, stage: str, reason: str = "") -> None:
         """Событие радара для приложения: этап «Проверки» и причина отказа."""
+        if stage == "rejected":
+            self.last_reject[sym] = reason
         if self._emit is None:
             return
         data: Dict[str, Any] = {"symbol": sym, "stage": stage}
@@ -215,6 +219,11 @@ class OrderExecutor:
         action = top.get("action")
         if action not in ("buy", "sell"):
             return
+        # Пост доверенного Telegram-канала (src/core/trusted_trader.py): мимо
+        # часов торговли, корреляции, kill-switch, лимита нагрузки, подтверждения
+        # и Kelly — свои слоты и объём. Ликвидность, спред и проверка SL/TP —
+        # как у всех.
+        trusted = bool(top.get("trusted"))
 
         _rc = getattr(self, "_runtime_config", None)
         _market_type = _rc.get_market_type() if _rc is not None else Config.MARKET_TYPE
@@ -233,7 +242,7 @@ class OrderExecutor:
         _trading_hours = (
             _rc.get_trading_hours() if _rc is not None else Config.TRADING_HOURS
         )
-        if _trading_hours:
+        if _trading_hours and not trusted:
             if _rc is not None:
                 if not _rc.is_trading_time():
                     logger.info(
@@ -267,18 +276,27 @@ class OrderExecutor:
         # lock so a second concurrent cycle can't open the same symbol while
         # Telegram confirmation is being awaited (up to TELEGRAM_CONFIRM_TIMEOUT s).
         async with lock:
-            _max = (
-                self._runtime_config.get_max_positions()
-                if self._runtime_config is not None
-                else Config.MAX_POSITIONS
-            )
-            if len(monitored) >= _max:
+            if trusted:
+                _max = int(top.get("max_slots") or 1)
+            else:
+                _max = (
+                    self._runtime_config.get_max_positions()
+                    if self._runtime_config is not None
+                    else Config.MAX_POSITIONS
+                )
+            # У сделок по каналам свои слоты: обычные их не занимают и наоборот.
+            taken = sum(1 for p in monitored.values() if is_trusted(p) == trusted)
+            if taken >= _max:
                 logger.warning(
                     "Max positions (%d) reached, skipping %s",
                     _max,
                     sym,
                 )
-                self._stage(sym, "rejected", "все слоты заняты")
+                self._stage(
+                    sym,
+                    "rejected",
+                    "слоты для каналов заняты" if trusted else "все слоты заняты",
+                )
                 return
             if sym in monitored:
                 logger.info("%s already monitored, skipping duplicate", sym)
@@ -291,7 +309,7 @@ class OrderExecutor:
             open_syms = [s for s in monitored if s != sym]
 
         _grc = getattr(self, "_runtime_config", None)
-        guards_off = _grc is not None and _grc.paper_guards_off() is True
+        guards_off = trusted or (_grc is not None and _grc.paper_guards_off() is True)
         position_opened = False
         try:
             # Correlation guard: block positions too correlated with existing ones.
@@ -347,7 +365,7 @@ class OrderExecutor:
             _auto_exec = (
                 _rc.get_auto_execute() if _rc is not None else Config.AUTO_EXECUTE
             )
-            if _auto_exec or Config.PAPER_TRADING:
+            if _auto_exec or Config.PAPER_TRADING or trusted:
                 # Paper режим и AUTO_EXECUTE=true → без диалога, исполняем сразу
                 confirmed = True
             else:
@@ -431,12 +449,14 @@ class OrderExecutor:
                     self._stage(sym, "rejected", "неверный тейк-профит")
                     return
 
-            quantity = self._size_position(top, balance, live_wr, live_n, entry)
-
-            # УЛУЧШЕНИЕ 6: масштабирование при просадке от пика баланса
-            scale = self._drawdown_scale(balance)
-            if scale < 1.0:
-                quantity *= scale
+            if trusted:
+                quantity = float(top["quantity"])  # свой риск на сделку
+            else:
+                quantity = self._size_position(top, balance, live_wr, live_n, entry)
+                # УЛУЧШЕНИЕ 6: масштабирование при просадке от пика баланса
+                scale = self._drawdown_scale(balance)
+                if scale < 1.0:
+                    quantity *= scale
 
             # Portfolio-wide exposure cap: совокупная notional-экспозиция всех
             # открытых позиций (включая эту) не должна превышать
@@ -655,6 +675,8 @@ class OrderExecutor:
                 "reasoning": str(top.get("reasoning") or "")[:500],
                 "opened_at": time.time(),
             }
+            if top.get("trace"):
+                pos["trace"] = top["trace"]  # пост → ордер (доверенный канал)
             async with lock:
                 monitored[sym] = pos
             position_opened = True

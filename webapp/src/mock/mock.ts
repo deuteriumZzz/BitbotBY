@@ -18,6 +18,7 @@ import type {
   PendingSignal,
   Position,
   SecretItem,
+  TgStatus,
   SettingDef,
   Side,
   Strategy,
@@ -84,6 +85,12 @@ for (const s of secrets) {
   Object.assign(s, { status: "ok", message: "Ключ проверен.", checked_at: Date.now() / 1000 - 3600 });
   for (const f of s.fields)
     if (!f.optional) Object.assign(f, { set: true, last4: f.secret ? "a9F2" : null, value: f.secret ? null : "1200450" });
+}
+{
+  // Памп-каналы Telegram в демо подключены: видно, какие каналы отслеживаются. Вход можно повторить кнопкой.
+  const tg = secrets.find((x) => x.service === "telethon")!;
+  for (const f of tg.fields) Object.assign(f, { set: true, last4: f.secret ? "c0de" : null, value: f.secret ? null : f.env.endsWith("PHONE") ? "+375291234567" : "1234567" });
+  Object.assign(tg, { signed_in: true, status: "ok", message: "Вход выполнен как @demo.", checked_at: Date.now() / 1000 - 7200 });
 }
 // ── AI: цепочка провайдеров (как GET /api/ai) ─────────────────────────────────
 const ai = structuredClone(fixtures.ai) as AiState;
@@ -297,7 +304,13 @@ function journalRow(p: Position, exitPrice: number, qty: number, net: number, fe
       const exitPrice = entry + ((side === "long" ? 1 : -1) * (net + fees)) / qty;
       const exit = now - day * 86_400_000 + i * 3_600_000;
       // История — номера 801…, открытые позиции — с 1001: по порядку и без пересечений, как в настоящей базе.
-      const p = { trade_id: 801 + closed.length, symbol, side, entry, strategy: at(strategies.slice(0, 6)).name, reasoning: at(WHY) };
+      const strategy = at(strategies.slice(0, 6)).name;
+      const reasoning = at(WHY);
+      // Каждая седьмая сделка — по посту доверенного канала (без лишних seeded(): прежняя история не меняется).
+      const channel = closed.length % 7 === 3 ? (closed.length % 2 ? "cryptomoonalerts" : "pumpsignalscrypto") : "";
+      const p = channel
+        ? { trade_id: 801 + closed.length, symbol, side, entry, strategy: `tg:${channel}`, reasoning: `Пост @${channel}: #${symbol.split("/")[0]} ${side === "long" ? "LONG" : "SHORT"}` }
+        : { trade_id: 801 + closed.length, symbol, side, entry, strategy, reasoning };
       const reason = win ? at(["tp", "tp", "trail"]) : at(["sl", "sl", "signal_reversal SELL conf=0.71", "hard_drawdown"]);
       closed.push(journalRow(p as Position, exitPrice, qty, net, fees, exit, exit - (20 + seeded() * 600) * 60_000, reason));
       balance += net;
@@ -413,6 +426,18 @@ function state() {
       trace: p.trace,
     })),
     cycle: lastCycle,
+    trusted: config.TELEGRAM_TRUSTED_TRADING?.value
+      ? {
+          channel: "cryptomoonalerts",
+          symbol: "WIF/USDT",
+          side: "buy",
+          ok: true,
+          reason: "",
+          latency_s: 1.8,
+          at: Date.now() / 1000 - 40 * 60,
+          text: "🚀 #WIF/USDT LONG\nEntry: 2.30\nTargets: 2.50 / 2.80\nStop: 2.10",
+        }
+      : null,
     timestamp: new Date().toISOString(),
   };
 }
@@ -746,6 +771,62 @@ function xAccount(b: Body) {
   return tw;
 }
 
+/** Демо-каналы: название в Telegram, постов за час, минут с последнего поста. */
+const TG_DEMO: Record<string, [string, number, number]> = {
+  cryptomoonalerts: ["Crypto Moon Alerts 🚀", 21, 3],
+  pumpsignalscrypto: ["Pump Signals | Crypto", 16, 7],
+  memecoinsnews: ["Memecoins News", 0, 140],
+};
+
+/** Вход в Telegram для каналов: в демо код 22222 просит облачный пароль, остальные пускают сразу. */
+let tgStep = "";
+function tgLogin(step: string, b: Body) {
+  const tg = secrets.find((x) => x.service === "telethon")!;
+  if (step === "login") {
+    if (!tg.fields.every((f) => f.set)) fail(400, "no_keys", "Сначала сохраните API ID, API Hash и телефон.");
+    tgStep = "code";
+    return { step: "code", via: "app" };
+  }
+  if (tgStep !== step) fail(409, "no_login", "Вход не начат или устарел — нажмите «Войти» ещё раз.");
+  if (step === "code" && !/^\d{4,8}$/.test(String(b.code ?? "").replace(/\s/g, ""))) fail(422, "bad_code", "Код — это цифры из сообщения Telegram.");
+  if (step === "code" && String(b.code).trim() === "22222") return (tgStep = "password"), { step: "password" };
+  if (step === "password" && !b.password) fail(422, "bad_password", "Введите облачный пароль Telegram.");
+  tgStep = "";
+  Object.assign(tg, { signed_in: true, status: "ok", message: "Вход выполнен как @demo. Бот подключится к каналам в течение минуты.", checked_at: Date.now() / 1000 });
+  emit("secret.changed", { service: "telethon", status: "ok" });
+  return { step: "done", ...tg };
+}
+
+function tgStatus() {
+  const tg = secrets.find((x) => x.service === "telethon")!;
+  const channels = String(config.TELEGRAM_SENTIMENT_CHANNELS?.value ?? "").split(",").filter(Boolean);
+  if (!tg.fields.every((f) => f.set)) return { state: "off", message: "Ключи не заданы — каналы не читаются.", channels };
+  if (!tg.signed_in) return { state: "no_session", message: "Вход не выполнен: нажмите «Войти» на карточке «Памп-каналы Telegram».", channels };
+  const now = Date.now() / 1000;
+  const all = [...new Set([...channels, ...String(config.TELEGRAM_TRUSTED_CHANNELS?.value ?? "").split(",")])].map((c) => c.trim().toLowerCase()).filter(Boolean);
+  // Демо: известные каналы читаются, новый «подключается», несуществующий — не найден.
+  const per_channel: NonNullable<TgStatus["per_channel"]> = {};
+  for (const c of all) {
+    const known = TG_DEMO[c];
+    per_channel[c] = known
+      ? { title: known[0], state: "reading", why: "", posts: known[1], last_at: now - known[2] * 60 }
+      : c.includes("fake")
+        ? { title: "", state: "failed", why: "канал не найден или закрыт", posts: 0, last_at: null }
+        : { title: "", state: "connecting", why: "", posts: 0, last_at: null };
+  }
+  return {
+    state: "ok",
+    message: "Подключено, посты приходят сразу.",
+    at: now,
+    channels: all,
+    window_min: Number(config.TELEGRAM_WINDOW_MIN?.value ?? 60),
+    posts: Object.values(per_channel).reduce((n, c) => n + c.posts, 0),
+    mentions: { WIF: 3, BONK: 1 },
+    failed: Object.fromEntries(Object.entries(per_channel).filter(([, c]) => c.state === "failed").map(([k, c]) => [k, c.why])),
+    per_channel,
+  };
+}
+
 function patchConfig(changes: Body) {
   const fields: Record<string, string> = {};
   for (const [key, raw] of Object.entries(changes)) {
@@ -774,6 +855,8 @@ function patchConfig(changes: Body) {
     recomputeAi();
   }
   emit("config.changed", { keys: Object.keys(changes).sort() });
+  // Демо: включили сделки по каналам — через пару секунд приходит пост доверенного канала.
+  if (changes.TELEGRAM_TRUSTED_TRADING === true) setTimeout(() => emit("trusted.post", { ...state().trusted, at: Date.now() / 1000 }), 2000);
   return out;
 }
 
@@ -796,6 +879,7 @@ function secret(method: string, id: string, b: Body) {
   const s = secrets.find((x) => x.service === id) ?? fail(404, "unknown_service", "Нет такого сервиса.");
   if (method === "DELETE") {
     s.fields.forEach((f) => Object.assign(f, { set: false, last4: null, value: null }));
+    if (s.service === "telethon") s.signed_in = false;
     Object.assign(s, { status: s.accounts?.length ? "unchecked" : "unset", message: "", checked_at: null });
   } else {
     const values: Record<string, string> = b.fields ?? {};
@@ -805,6 +889,7 @@ function secret(method: string, id: string, b: Body) {
     }
     if (s.model && b.model) s.model.value = b.model;
     Object.assign(s, { status: "ok", message: "Демо: ключ принят без проверки.", checked_at: Date.now() / 1000 });
+    if (s.service === "telethon" && !s.signed_in) Object.assign(s, { status: "warn", message: "Ключи сохранены. Нажмите «Войти» — Telegram пришлёт код." });
   }
   const aiProvider = ai.providers.find((p) => p.id === s.service);
   if (aiProvider) {
@@ -995,6 +1080,8 @@ function route(method: string, path: string, body: unknown): unknown {
     launcher = { ...launcher, [key]: b.on, result: { id, ok: true, message: b.on ? "Включено." : "Выключено.", at: Date.now() / 1000 } };
     return { id };
   }
+  if (method === "POST" && (m = p.match(/^\/api\/secrets\/telethon\/(login|code|password)$/))) return tgLogin(m[1], b);
+  if (method === "GET" && p === "/api/secrets/telethon/status") return tgStatus();
   if (method === "POST" && p === "/api/secrets/twitter/accounts") return xAccount(b);
   if (method === "DELETE" && (m = p.match(/^\/api\/secrets\/twitter\/accounts\/(.+)$/))) {
     const tw = secrets.find((x) => x.service === "twitter")!;

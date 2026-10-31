@@ -5,6 +5,8 @@ stable-baselines3>=2.3.2
 gymnasium>=0.29.1
 vaderSentiment==3.3.2
 twscrape>=0.16.0
+# Чтение Telegram-каналов: вход по коду из приложения, сессия — в шифрованном хранилище
+telethon>=1.36
 ccxt==4.3.47
 numpy>=2.2.6
 pandas>=2.3.2

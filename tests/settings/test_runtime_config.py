@@ -390,6 +390,16 @@ class TestRuntimeConfigMarketProfile:
         rc, _, _ = rc_bundle
         assert rc.apply_market_profile("unknown") is False
 
+    def test_sentiment_strategy_on_in_every_profile(self, rc_bundle):
+        # Каналы Telegram читаются по монетам любого скана — не только meme.
+        rc, redis_mock, _ = rc_bundle
+        rc.apply_market_profile("bluechip")
+        removed = [c.args for c in redis_mock.redis_client.srem.call_args_list]
+        added = [c.args for c in redis_mock.redis_client.sadd.call_args_list]
+        assert any("sentiment" in a for a in removed)
+        assert not any("sentiment" in a for a in added)
+        assert any("pump_exit" in a for a in added)
+
     def test_get_market_profiles_info_returns_dict(self, rc_bundle):
         rc, _, _ = rc_bundle
         info = rc.get_market_profiles_info()

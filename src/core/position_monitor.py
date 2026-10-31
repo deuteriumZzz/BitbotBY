@@ -21,7 +21,7 @@ import ccxt
 
 from config import Config
 from src.core.constants import MONITOR_MAX_ERRORS
-from src.core.types import PositionRecord
+from src.core.types import PositionRecord, is_trusted
 
 if TYPE_CHECKING:
     from src.ai.online_learner import OnlineLearner
@@ -276,6 +276,10 @@ class PositionMonitor:
             action=None          — ничего не делать
         """
         if not self._current_signals and not self._current_market_ctx:
+            return None, ""
+        if is_trusted(record):
+            # Вход по посту доверенного канала: стратегии, режим и контекст
+            # рынка его не закрывают — только SL, TP и трейлинг.
             return None, ""
 
         side = record.get("side", "buy")

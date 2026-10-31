@@ -61,7 +61,22 @@ export interface BotState {
   market?: { season: Season | null; fear_greed: FearGreed | null };
   /** Итог последнего цикла; null — бот ещё не прошёл цикл после обновления. */
   cycle?: CycleTrace | null;
+  /** Последний пост доверенного канала Telegram; null — постов ещё не было. */
+  trusted?: TrustedPost | null;
   timestamp: string;
+}
+
+/** Пост доверенного канала (событие trusted.post): вход или почему нет, и сколько прошло от поста до ордера. */
+export interface TrustedPost {
+  channel: string;
+  /** Пусто — монету не разобрали. */
+  symbol: string;
+  side: "buy" | "sell" | "";
+  ok: boolean;
+  reason: string;
+  latency_s: number;
+  at: number;
+  text: string;
 }
 
 export interface Season {
@@ -244,9 +259,30 @@ export interface SecretItem {
   model: { env: string; value: string | null } | null;
   /** Только у X/Twitter: сохранённые аккаунты для обхода официального API (без паролей). */
   accounts?: { login: string; email: string }[];
+  /** Только у памп-каналов Telegram: вход по коду выполнен, сессия лежит в хранилище. */
+  signed_in?: boolean;
   status: "ok" | "warn" | "bad" | "unset" | "unchecked";
   message: string;
   checked_at: number | null;
+}
+
+/** Шаг входа в Telegram для чтения каналов (`POST /api/secrets/telethon/*`). */
+export type TgStep = { step: "code"; via: "app" | "sms" } | { step: "password" } | ({ step: "done" } & SecretItem);
+
+/** Что бот делает с каналами Telegram (`GET /api/secrets/telethon/status`). */
+export interface TgStatus {
+  state: "ok" | "off" | "no_session" | "revoked" | "error" | "stopped" | "unknown";
+  message: string;
+  at?: number;
+  channels?: string[];
+  /** Каналы, которые не читаются, и почему. */
+  failed?: Record<string, string>;
+  window_min?: number;
+  /** Постов в окне и сколько из них упоминают монеты текущего скана (0 — нет данных, а не «нейтрально»). */
+  posts?: number;
+  mentions?: Record<string, number>;
+  /** Каждый канал из настроек: название в Telegram, читается ли, постов в окне, время последнего. */
+  per_channel?: Record<string, { title: string; state: "reading" | "failed" | "connecting"; why: string; posts: number; last_at: number | null }>;
 }
 
 /** Что уже подключено (`GET /api/setup`): ключи из приложения или .env. */

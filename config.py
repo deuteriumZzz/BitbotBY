@@ -243,6 +243,19 @@ class Config:
         "TELEGRAM_SENTIMENT_CHANNELS",
         "CryptoMoonAlerts,pumpsignalscrypto,memecoinsnews",
     )
+    # Оценка по каналам считается только из постов за последние N минут
+    TELEGRAM_WINDOW_MIN: int = int(os.getenv("TELEGRAM_WINDOW_MIN", "60"))
+    # Сделки по постам доверенных каналов (src/core/trusted_trader.py).
+    # Меняются в приложении сразу; здесь — значения по умолчанию.
+    TELEGRAM_TRUSTED_TRADING: bool = (
+        os.getenv("TELEGRAM_TRUSTED_TRADING", "false").lower() == "true"
+    )
+    TELEGRAM_TRUSTED_CHANNELS: str = os.getenv("TELEGRAM_TRUSTED_CHANNELS", "")
+    TELEGRAM_TRUSTED_RISK: float = float(os.getenv("TELEGRAM_TRUSTED_RISK", "0.005"))
+    TELEGRAM_TRUSTED_SLOTS: int = int(os.getenv("TELEGRAM_TRUSTED_SLOTS", "2"))
+    TELEGRAM_TRUSTED_SL: float = float(os.getenv("TELEGRAM_TRUSTED_SL", "0.03"))
+    TELEGRAM_TRUSTED_DEDUP_MIN: int = int(os.getenv("TELEGRAM_TRUSTED_DEDUP_MIN", "30"))
+    TELEGRAM_TRUSTED_UNTRUST: int = int(os.getenv("TELEGRAM_TRUSTED_UNTRUST", "0"))
 
     # ── Sentiment Poller ───────────────────────────────────────────────────
     # Интервал опроса Twitter + Telegram в секундах

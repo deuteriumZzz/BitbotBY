@@ -78,6 +78,23 @@ def test_apply_patch_hot_and_restart():
     assert json.loads(r.hgetall(reg.OVERRIDES_KEY)["ATR_SPIKE_MULT"]) == 4.0
 
 
+def test_hot_settings_apply_at_once_and_survive_old_overrides():
+    from src.settings.runtime_config import RuntimeConfig
+
+    r = FakeRedis()
+    rc = RuntimeConfig(MagicMock(redis_client=r))
+    assert rc.hot("TELEGRAM_WINDOW_MIN") == Config.TELEGRAM_WINDOW_MIN
+    # значение из UI, сохранённое, когда настройка ещё требовала рестарта
+    r.hset(reg.OVERRIDES_KEY, "TELEGRAM_SENTIMENT_CHANNELS", json.dumps("old"))
+    assert rc.hot("TELEGRAM_SENTIMENT_CHANNELS") == "old"
+    out = reg.apply_patch(rc, r, {"TELEGRAM_WINDOW_MIN": 15})
+    assert out["applied_hot"] == ["TELEGRAM_WINDOW_MIN"]
+    assert rc.hot("TELEGRAM_WINDOW_MIN") == 15
+    assert reg.current_values(Config, rc, r)["TELEGRAM_WINDOW_MIN"]["value"] == 15
+    rc.reset_to_defaults()  # «Сброс настроек» стирает и их
+    assert rc.hot("TELEGRAM_WINDOW_MIN") == Config.TELEGRAM_WINDOW_MIN
+
+
 def test_apply_patch_none_removes_override():
     r = FakeRedis()
     r.hset(reg.OVERRIDES_KEY, "ATR_SPIKE_MULT", "4.0")

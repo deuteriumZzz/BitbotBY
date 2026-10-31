@@ -16,7 +16,7 @@ import logging
 import os
 import sqlite3
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 _BACKTEST_JSON = os.path.join("data", "backtest_results.json")
 
@@ -462,6 +462,22 @@ class TradeHistory:
                 if len(result) >= lookback:
                     break
         return result
+
+    async def recent_results(
+        self, strategy: str, n: int, after_id: int = 0
+    ) -> List[Tuple[int, float]]:
+        """(id, pnl) последних n закрытых сделок стратегии новее after_id."""
+        sql = (
+            "SELECT id, pnl FROM trades WHERE status='closed' AND strategy=? "
+            "AND id>? ORDER BY id DESC LIMIT ?"
+        )
+        async with self._lock:
+
+            def _read():
+                return self._conn.execute(sql, (strategy, after_id, n)).fetchall()
+
+            rows = await self._run_db(_read)
+        return [(int(i), float(p or 0.0)) for i, p in rows]
 
     async def get_win_rate(
         self,
