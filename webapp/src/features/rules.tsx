@@ -7,7 +7,8 @@ import type { ConfigValues, SettingDef } from "../lib/types";
 import { actions, useStore } from "../store";
 import { Q, Seg, Toggle } from "../ui";
 import { cfg } from "./bots";
-import { NumField, fmtVal, shown } from "./settings";
+import { shown } from "./params";
+import { NumField, fmtVal } from "./settings";
 
 export interface Rule {
   id: string;

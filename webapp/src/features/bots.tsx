@@ -8,6 +8,7 @@ import { reducedMotion } from "../lib/platform";
 import type { ConfigValues, RiskPreset, Strategy } from "../lib/types";
 import { actions, useStore } from "../store";
 import { Icon, Q, Seg, Toggle } from "../ui";
+import { ParamList } from "./params";
 
 export const STRATEGY_NAME: Record<string, string> = {
   scalping: "Скальпинг",
@@ -89,6 +90,10 @@ export const stratName = (k: string): string => (k.startsWith("tg:") ? `Кана
 
 export const cfg = <T,>(c: ConfigValues, key: string, fallback: T): T => (c[key]?.value as T) ?? fallback;
 
+/** Плечо одной строкой, как его выбирает бот: на споте 1×, «Фикс» — своё, иначе — до максимума. */
+export const levText = (c: ConfigValues, spot: boolean): string =>
+  spot ? "1×" : cfg<string>(c, "LEVERAGE_MODE", "volatility") === "fixed" ? `${cfg(c, "LEVERAGE", 3)}×` : `до ${cfg(c, "LEVERAGE_MAX", 5)}×`;
+
 type LevMode = RiskPreset["LEVERAGE_MODE"];
 const ico = (d: string) => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -168,6 +173,15 @@ function useDebouncedPatch<T>(server: T, key: string, toServer: (v: T) => unknow
  * «Уменьшать при просадке» — в «Правилах защиты» (пресет ставит и его).
  */
 /** simple — режим «Простой»: только пресеты, без ручной настройки. */
+/** Тонкие настройки плеча по режиму (как в _calc_dynamic_leverage): «Фикс» тоже ограничен минимумом и максимумом. */
+const LEV: Record<string, string[]> = {
+  fixed: ["LEVERAGE", "LEVERAGE_MIN", "LEVERAGE_MAX"],
+  volatility: ["LEVERAGE_MIN", "LEVERAGE_MAX", "LEVERAGE_TARGET_RISK"],
+  full: ["LEVERAGE_MIN", "LEVERAGE_MAX", "LEVERAGE_TARGET_RISK", "LEVERAGE_DD_THRESHOLD"],
+};
+const FILTERS = ["MAX_CORRELATION", "MAX_CORRELATION_PAPER", "CORRELATION_WINDOW", "MAX_SPREAD_PCT", "MAX_POSITION_SIZE"];
+const KILL = ["LIVE_ALPHA_KILL_ENABLED", "LIVE_ALPHA_KILL_MIN_TRADES", "LIVE_ALPHA_KILL_EV_THRESHOLD"];
+
 export function RiskCard({ simple = false }: { simple?: boolean }) {
   const c = useStore((s) => s.config);
   const presets = useStore((s) => s.riskPresets);
@@ -178,7 +192,9 @@ export function RiskCard({ simple = false }: { simple?: boolean }) {
   const manual = !simple && (open || (active === undefined && Object.keys(presets).length > 0));
   const spot = cfg<string>(c, "MARKET_TYPE", "linear") === "spot";
   const lev = cfg<LevMode>(c, "LEVERAGE_MODE", "volatility");
-  const levText = spot ? "1×" : lev === "fixed" ? `${cfg(c, "LEVERAGE", 3)}×` : `до ${cfg(c, "LEVERAGE_MAX", 5)}×`;
+  const lever = levText(c, spot);
+  const corr = paper ? "MAX_CORRELATION_PAPER" : "MAX_CORRELATION";
+  const kill = cfg<boolean>(c, "LIVE_ALPHA_KILL_ENABLED", true);
   const [risk, setRisk] = useDebouncedPatch(+(cfg(c, "RISK_PER_TRADE", 0.02) * 100).toFixed(2), "RISK_PER_TRADE", (v) => +(v / 100).toFixed(4));
   const [slots, setSlots] = useDebouncedPatch(cfg(c, "MAX_POSITIONS", 3), "MAX_POSITIONS");
   const one = (balance * risk) / 100;
@@ -275,7 +291,7 @@ export function RiskCard({ simple = false }: { simple?: boolean }) {
               <span>
                 Плечо <Q tip="Фикс — всегда одно плечо. По волатильности — меньше плеча на резких монетах. Макс — максимальное плечо из настроек." />
               </span>
-              <output className="num">{levText}</output>
+              <output className="num">{lever}</output>
             </div>
             <Seg
               className="full"
@@ -288,9 +304,29 @@ export function RiskCard({ simple = false }: { simple?: boolean }) {
               ]}
               onChange={(v) => void actions.patchConfig({ LEVERAGE_MODE: v })}
             />
-            {spot && <p>На споте плеча и шортов нет.</p>}
+            {spot ? <p>На споте плеча и шортов нет.</p> : <ParamList keys={LEV[lev] ?? LEV.volatility} />}
           </div>
-          <p className="note-soon">Поменяли вручную — вверху «Свои настройки». Пресет можно выбрать снова в любой момент. Уменьшение сделок при просадке — в «Правилах защиты».</p>
+          <div className="field">
+            <div className="field-h">
+              <span>
+                Фильтры входа <Q tip="Не входить в монету, которая слишком похожа на уже открытые, с широким спредом или слишком крупной позицией." />
+              </span>
+            </div>
+            <ParamList keys={[corr, ...FILTERS.filter((k) => k !== corr)]} mark={corr} />
+          </div>
+          <div className="field">
+            <div className="field-h">
+              <span>
+                Kill-switch стратегий <Q tip="Стратегия выключается сама, если её средний результат в реальных сделках хуже порога." />
+              </span>
+              <output className="num">{kill ? "вкл" : "выкл"}</output>
+            </div>
+            <ParamList keys={KILL} />
+          </div>
+          <p className="note-soon">
+            Поменяли вручную — вверху «Свои настройки». Пресет можно выбрать снова в любой момент. ↻ — заработает после перезапуска бота. Уменьшение сделок
+            при просадке — в «Правилах защиты».
+          </p>
         </div>
       )}
     </article>

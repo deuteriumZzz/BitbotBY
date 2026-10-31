@@ -9,7 +9,7 @@ import { actions, useStore } from "../store";
 import { Q, Seg } from "../ui";
 import { AiPane } from "./ai";
 import { Lane, isStep, useLanes } from "./blocks";
-import { ConfirmCard, RiskCard, StrategiesCard, TrackCard, WhatCard, cfg, presetName, presetOf, profileName } from "./bots";
+import { ConfirmCard, RiskCard, StrategiesCard, TrackCard, WhatCard, cfg, levText, presetName, presetOf, profileName } from "./bots";
 import { chosenId } from "./chainops";
 import { ModelCard } from "./jobs";
 import { RulesCard } from "./rules";
@@ -176,7 +176,8 @@ function usePipeline(mode: string): { status: Record<BotNode, string>; info: Rec
           : `подсказка для AI · ${strategies.filter((s) => s.enabled).length}`,
     ai: !ai ? "цепочка" : ai.single ? "один провайдер" : `${ai.chain.length} в цепочке`,
     sac: mode === "dqn" ? "решает сам" : "вместе с AI",
-    risk: `${presetName(presetOf(c, presets))}${guardsOff ? " · без защит" : ""}`,
+    // Главные цифры риска прямо на холсте: пресет, риск на сделку, позиций сразу, плечо.
+    risk: `${presetName(presetOf(c, presets))} · ${show("RISK_PER_TRADE")} · ${cfg(c, "MAX_POSITIONS", 3)} поз. · плечо ${levText(c, spot)}${guardsOff ? " · без защит" : ""}`,
     order: `Bybit ${bybit?.status === "ok" ? "▲" : bybit?.status === "bad" ? "▼" : "·"} ${paper ? "Paper" : "Live"} · ${auto ? "авто" : "с подтверждением"}`,
     track: partial ? `${pct(cfg(c, "PARTIAL_TP_FRACTION", 0.5))} на ${pct(cfg(c, "PARTIAL_TP_TRIGGER", 0.6))} · безубыток` : "без частичной фиксации",
   };

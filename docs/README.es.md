@@ -797,7 +797,7 @@ make test
 # pytest tests/ -v --cov=src --cov-fail-under=50
 ```
 
-**1242 tests unitarios** — indicadores, estrategias, gestión de riesgo, CVaR, Kelly, Almgren-Chriss,
+**2012 tests unitarios** — indicadores, estrategias, gestión de riesgo, CVaR, Kelly, Almgren-Chriss,
 correlación, inferencia de SAC, dynamic leverage, partial TP, drawdown scaling, liquidity filter,
 dynamic exits, position monitor, online learner, runtime config, ciclo de trading e2e. Cobertura: **69%**.
 

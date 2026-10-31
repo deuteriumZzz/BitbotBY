@@ -15,6 +15,7 @@ export interface Home {
 }
 
 const RISK: Home = { tab: "bots", node: "risk", where: "Цепочка → Риск → Как рискуем" };
+const RISK_MANUAL: Home = { tab: "bots", node: "risk", where: "Цепочка → Риск → Как рискуем → Настроить вручную" };
 const RULES: Home = { tab: "bots", node: "risk", where: "Цепочка → Риск → Правила защиты" };
 const CONFIRM: Home = { tab: "bots", node: "order", where: "Цепочка → Ордер → Открытие сделок" };
 const WHAT: Home = { tab: "bots", node: "scan", where: "Цепочка → Сканер → Что торговать" };
@@ -42,4 +43,17 @@ export const OWN_HOME: Record<string, Home> = {
   MIN_SIGNAL_CONFIDENCE_PAPER: SIGNALS,
   SENTIMENT_BUY_THRESHOLD: SIGNALS,
   SENTIMENT_SELL_THRESHOLD: SIGNALS,
+  LEVERAGE: RISK_MANUAL,
+  LEVERAGE_MIN: RISK_MANUAL,
+  LEVERAGE_MAX: RISK_MANUAL,
+  LEVERAGE_TARGET_RISK: RISK_MANUAL,
+  LEVERAGE_DD_THRESHOLD: RISK_MANUAL,
+  MAX_CORRELATION: RISK_MANUAL,
+  MAX_CORRELATION_PAPER: RISK_MANUAL,
+  CORRELATION_WINDOW: RISK_MANUAL,
+  MAX_SPREAD_PCT: RISK_MANUAL,
+  MAX_POSITION_SIZE: RISK_MANUAL,
+  LIVE_ALPHA_KILL_ENABLED: RISK_MANUAL,
+  LIVE_ALPHA_KILL_MIN_TRADES: RISK_MANUAL,
+  LIVE_ALPHA_KILL_EV_THRESHOLD: RISK_MANUAL,
 };

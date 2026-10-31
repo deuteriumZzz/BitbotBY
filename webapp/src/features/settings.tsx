@@ -10,6 +10,7 @@ import type { BotNode, ConfigHistoryItem, ConfigValues, SecretItem, SettingDef, 
 import { actions, useStore, type PatchResult } from "../store";
 import { Icon, Q, Seg, Toggle, useArm } from "../ui";
 import { cfg } from "./bots";
+import { ParamList, shown, unitOf } from "./params";
 
 type Pane = SettingsPane;
 
@@ -468,7 +469,6 @@ function chanState(rt: TgStatus | null, ch: string): [string, string] {
 
 function TgChannelsCard({ openKey }: { openKey: (service: string) => void }) {
   const config = useStore((s) => s.config);
-  const schema = useStore((s) => s.schema);
   const paper = useStore((s) => s.bot?.paper ?? true);
   const [add, setAdd] = useState("");
   const on = cfg<boolean>(config, "TELEGRAM_TRUSTED_TRADING", false);
@@ -488,7 +488,6 @@ function TgChannelsCard({ openKey }: { openKey: (service: string) => void }) {
     if (fresh.length) void actions.patchConfig({ TELEGRAM_SENTIMENT_CHANNELS: [...watched, ...fresh].join(",") });
     setAdd("");
   };
-  const params = TRUST_PARAMS.map((k) => schema.find((d) => d.key === k)).filter((d): d is SettingDef => Boolean(d));
   // Что бот делает с каждым каналом — обновляется раз в 30 с, пока карточка на экране.
   const [rt, setRt] = useState<TgStatus | null>(null);
   const listKey = all.join(",");
@@ -571,30 +570,7 @@ function TgChannelsCard({ openKey }: { openKey: (service: string) => void }) {
           {tradeList.map(row)}
           {!tradeList.length && <p className="kf-h">Доверенных нет — включите «Доверять» у канала из сбора информации ниже.</p>}
         </div>
-        <div className="tgch-params">
-        {params.map((d) => (
-          <label className="cool" key={d.key}>
-            <span>{d.label}</span>
-            <span className="numf">
-              <input
-                key={String(config[d.key]?.value)}
-                type="number"
-                inputMode="decimal"
-                min={d.min === null ? undefined : Number(shown(d, d.min))}
-                max={d.max === null ? undefined : Number(shown(d, d.max))}
-                defaultValue={String(shown(d, config[d.key]?.value ?? d.default))}
-                onBlur={(e) => {
-                  const v = Number(e.target.value.replace(",", "."));
-                  const raw = d.type === "pct" ? +(v / 100).toFixed(6) : v;
-                  if (e.target.value && Number.isFinite(v) && raw !== config[d.key]?.value) void actions.patchConfig({ [d.key]: raw });
-                }}
-                onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-              />
-              <span className="u">{unitOf(d)}</span>
-            </span>
-          </label>
-        ))}
-        </div>
+        <ParamList keys={TRUST_PARAMS} />
       </section>
 
       <section className="tgch-g" aria-label="Каналы только для сбора информации">
@@ -1388,8 +1364,6 @@ export function KeyCard({ item }: { item: SecretItem }) {
 // ══ Все параметры ════════════════════════════════════════════════════════════
 
 const NUMERIC = ["int", "float", "pct"];
-export const shown = (d: SettingDef, v: unknown) => (d.type === "pct" ? +(Number(v) * 100).toFixed(4) : v);
-const unitOf = (d: SettingDef) => (d.type === "pct" ? "%" : d.unit);
 
 export function fmtVal(d: SettingDef, v: unknown): string {
   if (d.type === "bool") return v ? "вкл" : "выкл";

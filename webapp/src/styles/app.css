@@ -1635,6 +1635,16 @@ small.hr-act,.hr-act small{font-size:12px;color:var(--c-ink3);line-height:1.45}
 .pw-chr>span{display:grid;grid-template-columns:96px minmax(0,1fr);gap:8px;font:500 11.5px/1.35 var(--font-text);color:var(--c-ink2);transition:opacity var(--dur-norm)}
 .pw-chr>span i{font:600 10.5px/1.3 var(--font-text);font-style:normal;color:var(--c-ink3);text-transform:uppercase;letter-spacing:.04em}
 .pw-chr.off>span{opacity:.45}
+.prm-restart{font:400 11px var(--font-text);color:var(--c-ink3)}
+/* «Как рискуем → Настроить вручную»: тонкие настройки — в группах .field, без своих линий у списка. */
+.manual .tgch-params{margin-top:0;padding-top:0;border-top:0}
+/* «Правила защиты»: фон строк закрывал скругление рамки — скругляем крайние строки (overflow нельзя — подсказки). */
+.rules>li:first-child{border-top-left-radius:calc(var(--r-inner) - 1px);border-top-right-radius:calc(var(--r-inner) - 1px)}
+.rules>li:last-child{border-bottom-left-radius:calc(var(--r-inner) - 1px);border-bottom-right-radius:calc(var(--r-inner) - 1px)}
+/* Сводка шага в панели: строка «Последний цикл» и таблица полей — со скруглением, как всё остальное. */
+.pipe-res-line{border-radius:var(--r-ctl);border-color:var(--c-line);background:var(--c-bg)}
+.pipe-fields{padding:0;gap:0;border:1px solid var(--c-line);border-radius:var(--r-inner);overflow:hidden;background:var(--c-bg)}
+.pipe-fields div{outline:0;margin:-1px 0 0 -1px;border-top:1px solid var(--c-line);border-left:1px solid var(--c-line);background:transparent}
 .sig-a{display:flex;align-items:center;gap:8px;white-space:nowrap}
 .sig-a .btn{min-height:30px;padding:0 10px;font-size:12px}
 .pw-gate:hover{color:var(--c-ink);border-style:solid}

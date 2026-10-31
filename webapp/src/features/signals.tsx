@@ -2,11 +2,12 @@
 // этого настраивается: ключи подключений, Chronos и пороги. Остальные сигналы рынка бесплатные и работают
 // сами — без ключей и тумблеров. Дом порогов уверенности, настроения и Chronos (lib/where.ts).
 
-import type { SecretItem, SettingDef } from "../lib/types";
+import type { SecretItem } from "../lib/types";
 import { plural } from "../lib/format";
 import { actions, useStore } from "../store";
 import { Q, Toggle } from "../ui";
 import { cfg } from "./bots";
+import { ParamList } from "./params";
 import { FEEDS, STEP, chanList } from "./settings";
 
 /** Фильтр рынка — 13 сигналов _apply_market_context_filter; key — источнику нужен ключ. */
@@ -36,7 +37,6 @@ const state = (s?: SecretItem): string =>
 
 export function SignalsCard() {
   const config = useStore((s) => s.config);
-  const schema = useStore((s) => s.schema);
   const secrets = useStore((s) => s.secrets);
   const paper = useStore((s) => s.bot?.paper ?? true);
   const fg = useStore((s) => s.market?.fear_greed ?? null);
@@ -49,7 +49,6 @@ export function SignalsCard() {
   const keys = paper
     ? ["MIN_SIGNAL_CONFIDENCE_PAPER", "MIN_SIGNAL_CONFIDENCE", "SENTIMENT_BUY_THRESHOLD", "SENTIMENT_SELL_THRESHOLD"]
     : ["MIN_SIGNAL_CONFIDENCE", "MIN_SIGNAL_CONFIDENCE_PAPER", "SENTIMENT_BUY_THRESHOLD", "SENTIMENT_SELL_THRESHOLD"];
-  const params = keys.map((k) => schema.find((d) => d.key === k)).filter((d): d is SettingDef => Boolean(d));
   const now = paper ? "MIN_SIGNAL_CONFIDENCE_PAPER" : "MIN_SIGNAL_CONFIDENCE";
   return (
     <article className="card sig">
@@ -113,32 +112,7 @@ export function SignalsCard() {
       </details>
 
       <h3 className="sig-h">Порог — дальше в «Риск»</h3>
-      <div className="tgch-params">
-        {params.map((d) => (
-          <label className="cool" key={d.key}>
-            <span>
-              {d.label}
-              {d.key === now && " · сейчас"}
-            </span>
-            <span className="numf">
-              <input
-                key={String(config[d.key]?.value)}
-                type="number"
-                inputMode="decimal"
-                step={d.step ?? 0.01}
-                min={d.min ?? undefined}
-                max={d.max ?? undefined}
-                defaultValue={String(config[d.key]?.value ?? d.default)}
-                onBlur={(e) => {
-                  const v = Number(e.target.value.replace(",", "."));
-                  if (e.target.value && Number.isFinite(v) && v !== config[d.key]?.value) void actions.patchConfig({ [d.key]: v });
-                }}
-                onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-              />
-            </span>
-          </label>
-        ))}
-      </div>
+      <ParamList keys={keys} mark={now} />
     </article>
   );
 }
