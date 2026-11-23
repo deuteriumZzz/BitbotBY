@@ -14,7 +14,7 @@
 | 2. Data Quality | статусы свежести, snapshot-id, спецификации контракта, опциональный gate | ✅ (gate выключен; WS-часть → 4b) |
 | 3. Signal Intelligence | группы независимости, избыточные каналы, конфликты, отчёт по журналу | ✅ (описание/измерение); дедупликация confidence — ⏳ за воротами §5 |
 | 4. Data Engineering (replay, ADR) | воспроизведение решений комбинатора, ADR-001 (хранилища) | ✅ replay + ADR; Parquet/Dataset Builder → Phase 7; ClickHouse отложен по ADR |
-| 4b. WS-ingestion | WebSocket рынка и приватных событий | ⏳ |
+| 4b. WS-ingestion | стакан с проверкой целостности, метрики потока, свечи + сверка с REST, обработка приватных событий, устойчивое соединение, Shadow-CLI | ✅ инфраструктура (AUDIT_REPORT §10l, ADR-003); замер ≥ 7 дней, приватный поток и подключение к сканеру — впереди |
 | 5. Execution reliability | периодическая сверка, проверяемые позиции, ордера с неизвестным исходом, машина состояний (ADR-002) | ✅; DMS/in-flight margin/Smart Execution/funding-ledger — решения в ADR-002 |
 | 6. Decision Engine / Hybrid | эталон правила Hybrid + 4 теневые стратегии, причины отказов, объяснимость | ✅ инфраструктура; **ворота «Hybrid ≥ лучшего компонента после издержек» не пройдены — нужны SAC-модель и исходы** |
 | 7. SAC pipeline | реестр/lifecycle + допуск, среда v2 (шорт/funding/slippage), walk-forward/bootstrap, Dataset Builder (Parquet+ZSTD) | ✅ инфраструктура (AUDIT_REPORT §10g); обучение на v2 и параметры среды — после подтверждения владельцем |
