@@ -195,6 +195,14 @@ class Config:
     # Теневой Risk Gate: после каждого фактического входа пишет в Ledger вердикт
     # единого гейта (src/risk/shadow.py). Ничего не блокирует и не меняет.
     RISK_GATE_SHADOW: bool = os.getenv("RISK_GATE_SHADOW", "true").lower() != "false"
+    # WS-shadow (Phase 4b): публичный поток Bybit параллельно REST, только метрики и
+    # тревога при тишине; выключен по умолчанию — открывает внешнее соединение.
+    WS_SHADOW_ENABLED: bool = os.getenv("WS_SHADOW_ENABLED", "false").lower() == "true"
+    WS_SHADOW_SYMBOLS: str = os.getenv("WS_SHADOW_SYMBOLS", "BTC/USDT,ETH/USDT")
+    # Ежедневная проверенная копия БД сделок (src/infra/db_health.py); защитная мера.
+    DB_BACKUP_ENABLED: bool = os.getenv("DB_BACKUP_ENABLED", "true").lower() != "false"
+    DB_BACKUP_INTERVAL_H: float = float(os.getenv("DB_BACKUP_INTERVAL_H", "24"))
+    DB_BACKUP_KEEP: int = int(os.getenv("DB_BACKUP_KEEP", "7"))
     SAC_MODEL_PATH: str = os.getenv(
         "SAC_MODEL_PATH",
         (

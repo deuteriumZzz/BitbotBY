@@ -1156,7 +1156,9 @@ class TelegramCommander:
         on_mode_switch: "Optional[Callable[[], Any]]" = None,
         on_restart: "Optional[Callable[[], Any]]" = None,
         on_close_all: "Optional[Callable[[], Any]]" = None,
+        on_emergency: "Optional[Callable[[list, str], Any]]" = None,
     ) -> None:
+        self._on_emergency = on_emergency
         self._notifier = notifier
         self._rc = runtime_config
         self._get_state = get_state
@@ -1205,6 +1207,7 @@ class TelegramCommander:
             ("digest", self._cmd_digest),
             ("audit", self._cmd_audit),
             ("dbcheck", self._cmd_dbcheck),
+            ("emergency", self._cmd_emergency),
         ]
         for name, handler in commands:
             app.add_handler(CommandHandler(name, handler))
@@ -1236,6 +1239,7 @@ class TelegramCommander:
             ("digest", "Сводка по журналу решений"),
             ("audit", "Разбор решения по id"),
             ("dbcheck", "Проверка целостности БД"),
+            ("emergency", "Аварийное управление (уровни 1-4)"),
             ("trainn", "Переобучить SAC"),
             ("help", "Справка"),
         ]
@@ -1714,6 +1718,22 @@ class TelegramCommander:
             text = await asyncio.to_thread(tv.audit_text, args[0] if args else "")
         except Exception as exc:
             text = f"Не удалось разобрать решение: {type(exc).__name__}: {exc}"
+        await self._reply_plain(update, text)
+
+    async def _cmd_emergency(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """/emergency [1-4 [confirm] | reset] — аварийные уровни; опасные шаги с подтверждением."""
+        if not self._authorized(update):
+            return
+        if self._on_emergency is None:
+            await self._reply_plain(update, "Аварийное управление недоступно: бот не передал обработчик.")
+            return
+        who = str(getattr(update.effective_chat, "id", "owner"))
+        try:
+            text = await self._on_emergency(list(getattr(context, "args", None) or []), who)
+        except Exception as exc:  # аварийная команда обязана ответить, а не упасть молча
+            text = f"Аварийная команда не выполнена: {type(exc).__name__}: {exc}"
         await self._reply_plain(update, text)
 
     async def _cmd_dbcheck(

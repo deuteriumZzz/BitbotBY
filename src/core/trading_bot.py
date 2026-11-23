@@ -25,6 +25,7 @@ from src.core.bot_commands import BotCommands
 from src.core.constants import REDIS_TTL_MARKET_DATA, SILENT_DEATH_ALERT_COOLDOWN
 from src.core.contracts import decision_from_rec
 from src.core.cycle import CycleRunner
+from src.core import ops_tasks
 from src.core.decision_ledger import DecisionLedger
 from src.core.execution_reliability import ConfirmTracker, diff_positions
 from src.core.decision_trace import DecisionTrace
@@ -162,6 +163,10 @@ class TradingBot:
         # Периодическая сверка с биржей (Phase 5): задача, подтверждение проблем
         # на двух проверках подряд, кулдаун алертов, счётчик сбоев запроса.
         self._reconcile_task: Optional[asyncio.Task[None]] = None
+        self._ws_task: Optional[asyncio.Task[None]] = None  # WS-shadow (флаг)
+        self._backup_task: Optional[asyncio.Task[None]] = None  # ежедневная копия БД
+        self.ws_stream: Any = None
+        self._emergency_ctl: Any = None
         self._reconcile_tracker = ConfirmTracker()
         self._reconcile_alerted: Dict[str, float] = {}
         self._reconcile_failures = 0
@@ -274,6 +279,7 @@ class TradingBot:
             on_mode_switch=self._handle_mode_switch,
             on_restart=self._handle_restart,
             on_close_all=self._handle_close_all,
+            on_emergency=self._handle_emergency_cmd,
         )
         self._cycle = CycleRunner(
             news=self.news,
@@ -1188,6 +1194,10 @@ class TradingBot:
         logger.info("Mode switch: _monitored cleared, peak balance reset")
         await self._reconcile_positions()
 
+    async def _handle_emergency_cmd(self, args: list, who: str) -> str:
+        """Telegram /emergency: уровни аварийного управления (src/core/ops_tasks.py)."""
+        return await ops_tasks.emergency_command(self, args, who)
+
     async def _handle_close_all(self) -> int:
         """Закрывает все открытые позиции по команде из Telegram.
 
@@ -2023,6 +2033,11 @@ class TradingBot:
         self._monitor_task = asyncio.create_task(self._monitor_positions())
         if Config.PAPER_TRADING is not True:
             self._reconcile_task = asyncio.create_task(self._reconcile_loop())
+        if Config.WS_SHADOW_ENABLED:
+            self._ws_task = asyncio.create_task(ops_tasks.ws_shadow_loop(self))
+        if Config.DB_BACKUP_ENABLED:
+            self._backup_task = asyncio.create_task(ops_tasks.db_backup_loop(self))
+        await ops_tasks.apply_emergency_on_start(self)
         asyncio.create_task(self._season_check_loop())
         # Команды из приложения (MiniApp / Desktop) — через очередь в Redis.
         self._command_task = asyncio.create_task(
@@ -2605,6 +2620,9 @@ class TradingBot:
             self._command_task.cancel()
         if self._reconcile_task:
             self._reconcile_task.cancel()
+        for _t in (self._ws_task, self._backup_task):
+            if _t:
+                _t.cancel()
         if self._monitor_task:
             self._monitor_task.cancel()
             try:

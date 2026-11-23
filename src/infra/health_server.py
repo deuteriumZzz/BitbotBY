@@ -61,6 +61,25 @@ cycles_counter = Counter("bot_cycles_total", "Всего итераций тор
 _g_peak_balance = Gauge("bitbot_peak_balance", "Исторический пик баланса USDT")
 _g_balance = Gauge("bitbot_balance", "Текущий баланс USDT")
 
+# WS-shadow (Phase 4b): состояние публичных потоков
+_g_ws_lag_p99 = Gauge("bitbot_ws_lag_p99_ms", "p99 задержки WS-потока, мс (относительно лучшего)", ["stream"])
+_g_ws_gaps = Gauge("bitbot_ws_gaps", "Пропуски (ресинки) WS-потока", ["stream"])
+_g_ws_silence = Gauge("bitbot_ws_seconds_since_last", "Секунд с последнего сообщения потока", ["stream"])
+_g_ws_reconnects = Gauge("bitbot_ws_reconnects", "Переподключений WS")
+
+
+def publish_ws_metrics(snapshot: Dict[str, Any]) -> None:
+    """Выкладывает `StreamHealth.snapshot()` в Prometheus."""
+    _g_ws_reconnects.set(snapshot.get("reconnects", 0))
+    for name, m in (snapshot.get("streams") or {}).items():
+        _g_ws_gaps.labels(name).set(m.get("gaps", 0))
+        if m.get("seconds_since_last") is not None:
+            _g_ws_silence.labels(name).set(m["seconds_since_last"])
+        p99 = (m.get("lag_ms") or {}).get("p99")
+        if p99 is not None:
+            _g_ws_lag_p99.labels(name).set(p99)
+
+
 _bot: "TradingBot | None" = None
 app = FastAPI(docs_url=None, redoc_url=None, title="BitbotBY health")
 

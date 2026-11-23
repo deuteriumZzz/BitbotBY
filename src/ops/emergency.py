@@ -11,10 +11,11 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import os
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 
 LEVELS = {1: "block_entries", 2: "cancel_orders", 3: "reduce_positions", 4: "full_stop"}
 
@@ -58,14 +59,9 @@ class EmergencyControl:
         возвращается в отчёте; уровень фиксируется до выполнения, чтобы сбой
         на полпути не оставил систему «как будто без аварии».
         """
-        if level not in LEVELS:
-            raise ValueError("уровень 1–4")
-        if not by or not reason:
-            raise ValueError("нужны автор и причина")
-        current = self.level
-        if level <= current:
-            return {"level": current, "executed": [], "errors": {}, "noop": True}
-        self._save(level, by, reason)
+        current = self._prepare(level, by, reason)
+        if current is None:
+            return {"level": self.level, "executed": [], "errors": {}, "noop": True}
         executed: List[str] = []
         errors: Dict[str, str] = {}
         for lv in range(current + 1, level + 1):
@@ -76,6 +72,36 @@ class EmergencyControl:
             except Exception as exc:  # noqa: BLE001
                 errors[name] = f"{type(exc).__name__}: {exc}"
         return {"level": level, "executed": executed, "errors": errors, "noop": False}
+
+    async def aescalate(self, level: int, by: str, reason: str) -> Dict[str, Any]:
+        """То же, что `escalate`, но действия могут быть корутинами (действия бота асинхронны)."""
+        current = self._prepare(level, by, reason)
+        if current is None:
+            return {"level": self.level, "executed": [], "errors": {}, "noop": True}
+        executed: List[str] = []
+        errors: Dict[str, str] = {}
+        for lv in range(current + 1, level + 1):
+            name = LEVELS[lv]
+            try:
+                res = self.actions[name]()
+                if inspect.isawaitable(res):
+                    await res
+                executed.append(name)
+            except Exception as exc:  # noqa: BLE001
+                errors[name] = f"{type(exc).__name__}: {exc}"
+        return {"level": level, "executed": executed, "errors": errors, "noop": False}
+
+    def _prepare(self, level: int, by: str, reason: str) -> Optional[int]:
+        """Проверка аргументов и фиксация уровня ДО действий; None — повышать нечего."""
+        if level not in LEVELS:
+            raise ValueError("уровень 1–4")
+        if not by or not reason:
+            raise ValueError("нужны автор и причина")
+        current = self.level
+        if level <= current:
+            return None
+        self._save(level, by, reason)
+        return current
 
     def reset(self, by: str, reason: str) -> None:
         """Снятие аварии — только явно; сами действия (например, закрытие) не откатываются."""

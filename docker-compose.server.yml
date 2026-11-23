@@ -31,6 +31,11 @@ services:
     build: .
     restart: unless-stopped
     command: python supervisor.py
+    # Потолок ресурсов контейнера бота (0 = без лимита). Обучение SAC и тяжёлые
+    # фоновые задачи идут подпроцессами ВНУТРИ этого контейнера: задайте BOT_CPUS
+    # (например 3) и BOT_MEM_LIMIT (например 4g) в .env, чтобы PyTorch не душил бота.
+    cpus: ${BOT_CPUS:-0}
+    mem_limit: ${BOT_MEM_LIMIT:-0}
     environment:
       <<: *bot-env
       HEALTH_PORT: "8080"
