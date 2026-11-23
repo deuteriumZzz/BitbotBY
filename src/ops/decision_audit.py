@@ -50,6 +50,8 @@ def audit_decision(
         kind = r.get("kind")
         if kind == "execution" and r.get("decision_id") == decision_id:
             chain["execution"] = r
+        elif kind == "outcome" and r.get("decision_id") == decision_id:
+            chain["outcome"] = r  # исход пишется при закрытии, в другом цикле — связь по decision_id
         elif r.get("trace_id") == trace_id and kind in STAGES and kind not in ("signals", "execution"):
             chain.setdefault(kind, r)  # первая запись цикла этого типа
     if outcome is not None:

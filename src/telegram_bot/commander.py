@@ -1202,6 +1202,9 @@ class TelegramCommander:
             ("provider", self._cmd_provider),
             ("alerts", self._cmd_alerts),
             ("app", self._cmd_app),
+            ("digest", self._cmd_digest),
+            ("audit", self._cmd_audit),
+            ("dbcheck", self._cmd_dbcheck),
         ]
         for name, handler in commands:
             app.add_handler(CommandHandler(name, handler))
@@ -1230,6 +1233,9 @@ class TelegramCommander:
             ("strategies", "Стратегии"),
             ("alerts", "Управление уведомлениями"),
             ("app", "Ссылка входа в приложение"),
+            ("digest", "Сводка по журналу решений"),
+            ("audit", "Разбор решения по id"),
+            ("dbcheck", "Проверка целостности БД"),
             ("trainn", "Переобучить SAC"),
             ("help", "Справка"),
         ]
@@ -1674,6 +1680,55 @@ class TelegramCommander:
             f"Работает {login_link.TTL // 60} минут и только один раз. "
             "Если вы её не запрашивали — просто не открывайте.",
         )
+
+    async def _reply_plain(self, update: Any, text: str) -> None:
+        """Ответ без Markdown: тексты отчётов содержат `_`, `[`, `*`, ломающие разметку."""
+        if update and update.message:
+            await update.message.reply_text(text)
+
+    async def _cmd_digest(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """/digest [часы] — сводка по Decision Ledger (только чтение)."""
+        if not self._authorized(update):
+            return
+        from src.ops import telegram_views as tv  # noqa: PLC0415
+
+        hours = tv.parse_hours((getattr(context, "args", None) or [None])[0])
+        try:
+            text = await asyncio.to_thread(tv.digest_text, hours)
+        except Exception as exc:  # отчёт не должен ронять командер
+            text = f"Не удалось построить сводку: {type(exc).__name__}: {exc}"
+        await self._reply_plain(update, text)
+
+    async def _cmd_audit(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """/audit <decision_id> — цепочка Data→…→Outcome по решению (только чтение)."""
+        if not self._authorized(update):
+            return
+        from src.ops import telegram_views as tv  # noqa: PLC0415
+
+        args = getattr(context, "args", None) or []
+        try:
+            text = await asyncio.to_thread(tv.audit_text, args[0] if args else "")
+        except Exception as exc:
+            text = f"Не удалось разобрать решение: {type(exc).__name__}: {exc}"
+        await self._reply_plain(update, text)
+
+    async def _cmd_dbcheck(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """/dbcheck — целостность БД сделок по снимку, боевой файл не трогается."""
+        if not self._authorized(update):
+            return
+        from src.ops import telegram_views as tv  # noqa: PLC0415
+
+        try:
+            text = await asyncio.to_thread(tv.dbcheck_text)
+        except Exception as exc:
+            text = f"Проверка БД не удалась: {type(exc).__name__}: {exc}"
+        await self._reply_plain(update, text)
 
     async def _cmd_settings(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
