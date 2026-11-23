@@ -13,7 +13,8 @@
 | **B/C. Контракты и режимы (Phase 1)** | `ModelOutput`/`TradingDecision`, `TradingMode`, запись в ledger | ✅ (коммит — см. git log) |
 | 2. Data Quality | статусы свежести, snapshot-id, спецификации контракта, опциональный gate | ✅ (gate выключен; WS-часть → 4b) |
 | 3. Signal Intelligence | группы независимости, избыточные каналы, конфликты, отчёт по журналу | ✅ (описание/измерение); дедупликация confidence — ⏳ за воротами §5 |
-| 4/4b. Data Engineering, WS | Parquet/ClickHouse (ADR), WS-ingestion | ⏳ |
+| 4. Data Engineering (replay, ADR) | воспроизведение решений комбинатора, ADR-001 (хранилища) | ✅ replay + ADR; Parquet/Dataset Builder → Phase 7; ClickHouse отложен по ADR |
+| 4b. WS-ingestion | WebSocket рынка и приватных событий | ⏳ |
 | 5. Execution reliability | Order State Machine, периодическая сверка, DMS | ⏳ |
 | 6. Decision Engine / Hybrid | независимые оценки AI и SAC, 4 стратегии объединения | ⏳ |
 | 7. SAC pipeline | Dataset Builder, среда с шортом/funding/slippage, lifecycle | ⏳ |

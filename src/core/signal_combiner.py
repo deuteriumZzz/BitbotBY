@@ -8,6 +8,7 @@ ai (только Claude API), hybrid (согласие обоих источни
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import logging
 from typing import Any, Dict, List, Tuple
@@ -74,9 +75,24 @@ class SignalCombiner:
     _W_AI = 0.6
     _SAC_SOLO_MIN = 0.80
 
-    def __init__(self, ai: AIAnalyzer, rc: Any = None):
+    def __init__(
+        self,
+        ai: AIAnalyzer,
+        rc: Any = None,
+        sac: Any = None,
+        forecaster: Any = None,
+    ):
+        """
+        :param sac: подмена SAC-политики (для replay/тестов); по умолчанию — SACSignal.
+        :param forecaster: подмена прогнозатора с `predict_direction` (для replay);
+            по умолчанию — модуль chronos_analyzer.
+        """
         self.ai = ai
-        self.sac = SACSignal()
+        self.sac = sac if sac is not None else SACSignal()
+        self._forecaster = forecaster
+        # Входы последнего combine() — для воспроизведения решения (Phase 4):
+        # ответ AI, сигналы SAC, направления Chronos и настройки. Только запись.
+        self.last_inputs: Dict[str, Any] = {}
         self._rc = rc
         self._sac_missing_logged = False
         self.logger = logging.getLogger(__name__)
@@ -113,6 +129,7 @@ class SignalCombiner:
         # Флаг прошлого цикла не должен дожить до этого:
         # AI в этом цикле может и не вызываться.
         self.ai.unavailable = False
+        self._capture_settings(mode, regime, regimes)
 
         if mode == "local":
             return []
@@ -144,6 +161,8 @@ class SignalCombiner:
             self.logger.warning("Unknown MODE='%s', fallback to 'ai'", mode)
             recs = await self.ai.analyze(snapshots, balance)
 
+        if mode not in ("dqn", "hybrid"):  # ai и неизвестный режим → ответ AI
+            self._cap("ai_recs", recs)
         recs = self._drop_invalid_for_market(recs)
         for _r in recs:
             if "conf_trail" not in _r:
@@ -164,6 +183,43 @@ class SignalCombiner:
                 return self._merge_with_context(recs, context_recs)
 
         return recs
+
+    # ── Захват входов для replay (только наблюдение) ──────────────────────────
+
+    def _cap(self, key: str, value: Any) -> None:
+        try:
+            self.last_inputs[key] = copy.deepcopy(value)
+        except Exception:  # захват не должен влиять на решение
+            pass
+
+    def _cap_sac(self, snap: Dict[str, Any], sig: Any) -> None:
+        try:
+            self.last_inputs.setdefault("sac", {})[snap["symbol"]] = dict(sig)
+        except Exception:
+            pass
+
+    def _capture_settings(
+        self, mode: str, regime: str, regimes: Dict[str, str] | None
+    ) -> None:
+        """Настройки, от которых зависит расчёт; сбрасывает входы прошлого вызова."""
+        rc = self._rc
+        try:
+            settings = {
+                "mode": mode,
+                "min_conf": float(self._min_conf()),
+                "market_type": str(
+                    rc.get_market_type() if rc is not None else Config.MARKET_TYPE
+                ),
+                "profile": str(rc.get_market_profile() or "") if rc is not None else "",
+                "chronos_enabled": bool(
+                    rc is not None and rc.get_chronos_enabled() is True
+                ),
+                "regime": regime,
+                "regimes": dict(regimes or {}),
+            }
+        except Exception:
+            settings = {"mode": mode, "incomplete": True}
+        self.last_inputs = {"settings": settings, "sac": {}, "chronos": {}}
 
     def decider_unavailable(self, mode: str) -> bool:
         """
@@ -241,6 +297,7 @@ class SignalCombiner:
         min_conf = self._min_conf()
         for snap in snapshots:
             sig = self.sac.get_signal(snap, balance)
+            self._cap_sac(snap, sig)
             if sig["action"] == "hold" or sig["confidence"] < min_conf:
                 continue
             price = snap.get("price", 0)
@@ -285,6 +342,7 @@ class SignalCombiner:
             )
 
         ai_recs = await self.ai.analyze(snapshots, balance)
+        self._cap("ai_recs", ai_recs)
         ai_map: Dict[str, Dict] = {r["symbol"]: r for r in ai_recs}
 
         results = []
@@ -294,6 +352,7 @@ class SignalCombiner:
             w_sac, w_ai = _REGIME_WEIGHTS.get(sym_regime, (self._W_SAC, self._W_AI))
 
             sac_sig = self.sac.get_signal(snap, balance)
+            self._cap_sac(snap, sac_sig)
             ai = ai_map.get(sym)
 
             d_action = sac_sig["action"]
@@ -347,11 +406,13 @@ class SignalCombiner:
                         )
                         # Синхронный инференс модели — в потоке, чтобы не
                         # блокировать event loop на каждый символ.
+                        forecaster = self._forecaster or chronos_analyzer
                         chronos_dir = await asyncio.to_thread(
-                            chronos_analyzer.predict_direction,
+                            forecaster.predict_direction,
                             df["close"].tolist(),
                             threshold_pct=threshold_pct,
                         )
+                        self.last_inputs.setdefault("chronos", {})[sym] = chronos_dir
                         expected = "up" if d_action == "buy" else "down"
                         if chronos_dir == expected:
                             combined = min(

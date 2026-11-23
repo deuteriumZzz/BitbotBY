@@ -29,6 +29,7 @@ from src.core.decision_ledger import DecisionLedger
 from src.core.decision_trace import DecisionTrace
 from src.core.order_executor import OrderExecutor
 from src.core.portfolio_manager import PortfolioManager
+from src.core.replay import build_replay_input
 from src.core.position_monitor import PositionMonitor
 from src.core.risk_management import RiskManager
 from src.core.signal_combiner import SignalCombiner
@@ -1034,6 +1035,35 @@ class TradingBot:
         if ledger is not None:
             ledger.write(kind, **fields)
 
+    def _record_replay_input(
+        self,
+        snapshots: list,
+        balance: float,
+        market_context: Optional[Dict[str, Any]],
+        recs: list,
+    ) -> None:
+        """Пишет входы расчёта комбинатора в журнал для replay (Phase 4).
+
+        Только запись и только когда есть рекомендации: по символам без решений
+        ничего не сохраняется, поэтому объём небольшой.
+        """
+        ledger = getattr(self, "ledger", None)
+        if ledger is None or not getattr(ledger, "enabled", False) or not recs:
+            return
+        try:
+            inp = build_replay_input(
+                getattr(self.combiner, "last_inputs", None) or {},
+                snapshots,
+                balance,
+                market_context,
+                recs,
+            )
+        except Exception as exc:  # журнал не должен ломать торговый цикл
+            logger.debug("build_replay_input failed: %s", exc)
+            return
+        if inp:
+            self._ledger_write("replay_input", input=inp)
+
     def _record_data_quality(self, snapshots: list) -> None:
         """Сводка качества данных цикла в Decision Ledger (только наблюдение)."""
         counts: Dict[str, int] = {}
@@ -1481,6 +1511,9 @@ class TradingBot:
             market_context=market_context,
         )
         recs = self._cycle.optimize_allocation(recs, market_data)
+        # Входы расчёта — для replay решения; до локального fallback, чтобы
+        # записывались только рекомендации самого комбинатора.
+        self._record_replay_input(snapshots, balance, market_context, recs)
 
         _TRENDING_STRATEGIES = {
             "trend_following",
