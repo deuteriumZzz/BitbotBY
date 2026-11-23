@@ -544,6 +544,26 @@ C-9 (reduceOnly), C-8 (защиты без паузы), C-1/C-2 (двойной 
 - подключение WS-данных к `MarketScanner`/фиче-пайплайну за флагом;
 - `orjson`, Redis Streams, хранение тиков (по профилю/ADR).
 
+### 10m. Добивка пробелов: исходы сделок, RAG, TimesFM, изоляция нагрузки
+
+| Элемент | Что сделано | Файлы |
+|---|---|---|
+| Исходы сделок в Ledger | Позиция теперь хранит `decision_id`; при закрытии (все три пути в `PositionMonitor`) пишется запись `outcome` {decision_id, symbol, side, entry, exit, qty, reason, pnl (net), recorded, hold_s, strategy, confidence, lev}. Это замыкает цепочку Data→…→Outcome (Decision Audit) и даёт данные для Meta-Model/ablation/RAG. Только запись; сбой гасится. `recorded=false` — сделка не попала в БД. | `src/core/order_executor.py`, `src/core/types.py`, `src/core/position_monitor.py`, `src/core/trading_bot.py` |
+| RAG по Ledger | BM25 в памяти по решениям (текст `explain_decision` + исполнение + исход); фильтры по символу/статусу/наличию исхода; `similar_outcomes` — описательная статистика с оговоркой; `context_block` — недоверенный блок (`wrap_untrusted`, инъекции нейтрализуются); `safe_context` при сбое возвращает пустоту и флаг `rag_failure`. Векторная БД не нужна на тысячах документов; в промпт AI **не подключён** (изменил бы вход модели). CLI: `python -m src.rag.ledger_rag "запрос"`. | `src/rag/ledger_rag.py` |
+| TimesFM установлен | Отдельное окружение `.venv-timesfm` (Python 3.11, в `.gitignore`): `timesfm 3.0.2` (код Apache-2.0), `torch 2.2.2`, `numpy<2`; веса `google/timesfm-2.5-200m-pytorch` (Apache-2.0, 925 МБ, без токена) скачаны в кэш Hugging Face. Проект остаётся на Python 3.9. Лицензионное утверждение ТЗ про «3.0 non-commercial» к этим весам не подтвердилось (§14). | `.venv-timesfm/`, `.gitignore` |
+| Воркер TimesFM | Долгоживущий процесс с протоколом JSON-строк, клиент с таймаутом, паузой после сбоя и без штормов перезапуска; недоступность = `None` (прогнозная поправка нейтральна). Адаптер к `forecast_eval` бросает исключение, а не подменяет ответ. **Обходной путь:** в torch 2.2.2 (последний для macOS Intel) `scaled_dot_product_attention` даёт NaN на полностью замаскированных строках — воркер подменяет NaN нулями (как делают новые torch). Проверено: на синтетическом сезонном ряду MAE 0.011 против 0.79 у naive. | `src/forecast/timesfm_worker.py`, `src/forecast/timesfm_client.py` |
+| Изоляция нагрузки | `src/infra/heavy_job.py`: пониженный приоритет (`nice`, `HEAVY_JOB_NICE`=10) и потолок потоков BLAS/OpenMP/torch (`HEAVY_JOB_THREADS`, по умолчанию половина ядер). Применено к запуску обучения SAC из Telegram и к фоновым задачам (`background_jobs._exec`) и к воркеру TimesFM. | `src/infra/heavy_job.py`, `src/infra/background_jobs.py`, `src/telegram_bot/commander.py` |
+
+Тесты: `tests/rag/test_ledger_rag.py` (9), `tests/forecast/test_timesfm.py` (15 + 1 опциональный с реальной моделью: `RUN_TIMESFM=1`, проходит за ~30 с).
+
+**Что было и чего не было по нагрузке (ответ на вопрос владельца):** обучение SAC и бэктесты и раньше запускались отдельными процессами, SQLite — через `run_in_executor`, Chronos — в `asyncio.to_thread`. Не было: приоритета, потолка потоков, жёстких лимитов CPU/RAM контейнеров (`deploy/` без `cpus`/`mem_limit`), выделенного воркера переобучения (пункт №6 реестра) и пула процессов для тяжёлой математики (пункт №4, «сначала профилирование»). Закрыты первые две меры; лимиты контейнера, выделенный воркер переобучения и профилирование остаются.
+
+**Ограничения/риски:**
+- на диске осталось ~2.4 ГБ (`/System/Volumes/Data` заполнен на 99%), веса TimesFM занимают 925 МБ в `~/.cache/huggingface`;
+- на Intel-Mac torch не новее 2.2.2; обход NaN — заплатка, а не исправление; при апгрейде железа/torch удалить;
+- TimesFM пока вне бота: прогнозы не подключены к `SignalCombiner`; сравнение с Chronos и ablation ещё не выполнялись (нужны исторические ряды и исходы);
+- `RISK_GATE_SHADOW`, `outcome` и RAG ничего не меняют в торговых решениях.
+
 ## 11. Критерии приёмки Phase 0
 
 - [x] Реальный путь решения прослежен по коду (§1–2).

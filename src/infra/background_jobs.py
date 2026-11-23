@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from src.infra.bot_bus import emit, error
+from src.infra.heavy_job import limit_env, lower_priority
 
 logger = logging.getLogger(__name__)
 
@@ -175,9 +176,12 @@ class JobRunner:
         proc = await asyncio.create_subprocess_exec(
             sys.executable,
             *target,
-            env={**os.environ, "PYTHONPATH": os.getcwd(), **env},
+            # тяжёлая фоновая задача: ниже приоритет и потолок потоков, чтобы не
+            # тормозить торговый цикл (src/infra/heavy_job.py)
+            env=limit_env({**os.environ, "PYTHONPATH": os.getcwd(), **env}),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            preexec_fn=lower_priority(),
         )
         lines: List[str] = []
 

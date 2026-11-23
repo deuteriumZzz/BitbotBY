@@ -2340,12 +2340,15 @@ class TelegramCommander:
                     )
                 ),
             }
+            from src.infra.heavy_job import limit_env, lower_priority  # noqa: PLC0415
+
             proc = await _asyncio.create_subprocess_exec(
                 "python",
                 "reinforcement_learning/train_sac.py",
-                env=env,
+                env=limit_env(env),  # обучение не должно тормозить торговый цикл
                 stdout=_asyncio.subprocess.PIPE,
                 stderr=_asyncio.subprocess.PIPE,
+                preexec_fn=lower_priority(),
             )
             self._rc.clear_train_progress()
             await self._notifier.notify(

@@ -400,17 +400,48 @@ class PositionMonitor:
         if self._on_position_closed:
             self._on_position_closed(sym, {"reason": reason, "price": price})
         trade_id = pos.get("trade_id")
-        if not trade_id:
+        pnl = None
+        if trade_id:
+            try:
+                pnl = await self._trade_history.record_close(
+                    trade_id=trade_id,
+                    exit_price=price,
+                    commission=qty * price * Config.COMMISSION_RATE,
+                    reason=reason,
+                )
+            except Exception as exc:
+                logger.error("record_close for trade %s failed: %s", trade_id, exc)
+        self._ledger_outcome(sym, pos, price, reason, pnl)
+
+    def _ledger_outcome(
+        self, sym: str, pos: Any, price: float, reason: str, pnl: Optional[float]
+    ) -> None:
+        """Пишет исход сделки в Decision Ledger (`outcome`). Только запись; сбой гасится."""
+        ledger = getattr(self, "ledger", None)
+        if ledger is None:
             return
         try:
-            await self._trade_history.record_close(
-                trade_id=trade_id,
-                exit_price=price,
-                commission=qty * price * Config.COMMISSION_RATE,
+            import time as _time  # noqa: PLC0415
+
+            opened = pos.get("opened_at")
+            ledger.write(
+                "outcome",
+                decision_id=pos.get("decision_id"),
+                symbol=sym,
+                side=pos.get("side"),
+                entry=pos.get("entry"),
+                exit=price,
+                qty=pos.get("qty"),
                 reason=reason,
+                pnl=pnl,  # net за вычетом комиссий; None — сделка не записана в БД
+                recorded=pnl is not None,
+                hold_s=round(_time.time() - opened) if opened else None,
+                strategy=pos.get("strategy"),
+                confidence=pos.get("confidence"),
+                lev=pos.get("lev"),
             )
-        except Exception as exc:
-            logger.error("record_close for trade %s failed: %s", trade_id, exc)
+        except Exception as exc:  # журнал не должен ломать закрытие позиции
+            logger.debug("Ledger outcome failed for %s: %s", sym, exc)
 
     async def close_losers_tighten_winners(
         self,
@@ -958,10 +989,11 @@ class PositionMonitor:
             await self._online_learner.on_trade_closed(sym, side, pnl_pct, strategy)
 
         trade_id = pos.get("trade_id")
+        pnl = None
         if trade_id:
             exit_commission = qty * price * Config.COMMISSION_RATE
             try:
-                await self._trade_history.record_close(
+                pnl = await self._trade_history.record_close(
                     trade_id=trade_id,
                     exit_price=price,
                     commission=exit_commission,
@@ -969,6 +1001,7 @@ class PositionMonitor:
                 )
             except Exception as exc:
                 logger.error("record_close for trade %s failed: %s", trade_id, exc)
+        self._ledger_outcome(sym, pos, price, reason, pnl)
 
         stats = await self._trade_history.get_summary()
         await self._telegram.notify(
@@ -1134,9 +1167,10 @@ class PositionMonitor:
             await self._online_learner.on_trade_closed(sym, side, pnl_pct, strategy)
 
         trade_id = pos.get("trade_id")
+        pnl = None
         if trade_id:
             try:
-                await self._trade_history.record_close(
+                pnl = await self._trade_history.record_close(
                     trade_id=trade_id,
                     exit_price=price,
                     commission=exit_commission,
@@ -1152,6 +1186,7 @@ class PositionMonitor:
                     trade_id,
                     exc,
                 )
+        self._ledger_outcome(sym, pos, price, exit_reason, pnl)
 
         stats = await self._trade_history.get_summary()
         pnl_sign = "+" if pnl_pct >= 0 else ""

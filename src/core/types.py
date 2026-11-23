@@ -56,6 +56,10 @@ class PositionRecord(TypedDict, total=False):
     # УЛУЧШЕНИЕ 3: флаг частичного тейк-профита — True после первого закрытия 50%
     partial_tp_triggered: bool
 
+    # Идентификатор решения в Decision Ledger: по нему к исходу сделки привязываются
+    # сигналы, объяснение и контекст (RAG, Meta-Model, аудит решения)
+    decision_id: Optional[str]
+
     # Почему открыта: стратегия, уверенность и объяснение AI/стратегии
     strategy: str
     confidence: float

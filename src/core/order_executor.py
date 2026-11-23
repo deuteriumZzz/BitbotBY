@@ -689,6 +689,8 @@ class OrderExecutor:
                 "reasoning": str(top.get("reasoning") or "")[:500],
                 "opened_at": time.time(),
             }
+            if top.get("decision_id"):
+                pos["decision_id"] = top["decision_id"]  # связь с Ledger → исход сделки
             if top.get("trace"):
                 pos["trace"] = top["trace"]  # пост → ордер (доверенный канал)
             async with lock:

@@ -234,6 +234,7 @@ class TradingBot:
             on_position_closed=self._on_position_closed,
             emit=self._publish_event,
         )
+        self._position_monitor.ledger = self.ledger  # исходы сделок → Decision Ledger
         self._executor = OrderExecutor(
             api=self.api,
             trade_history=self.trade_history,
