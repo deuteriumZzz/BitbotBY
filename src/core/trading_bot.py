@@ -124,6 +124,7 @@ class TradingBot:
         self.risk_manager = RiskManager(
             Config.INITIAL_BALANCE,
             Config.RISK_PER_TRADE,
+            redis_client=self.redis,
         )
         self.scanner = MarketScanner(
             self.api, self.data_loader, rc=self._runtime_config
@@ -321,7 +322,10 @@ class TradingBot:
                     )
                     if real_balance > 0:
                         self.risk_manager.initial_balance = real_balance
-                        self.risk_manager._day_start_balance = real_balance
+                        # Рестарт в те же сутки UTC не должен обнулять дневной
+                        # лимит потерь: сохранённая ссылка важнее текущего баланса.
+                        if not self.risk_manager.day_reference_restored:
+                            self.risk_manager.set_day_reference(real_balance)
                         self.portfolio_manager.current_balance = real_balance
                         self._live_balance_cache = real_balance
                         logger.info(
@@ -435,6 +439,7 @@ class TradingBot:
                 sym = sym.split(":")[0]
             active[sym] = p
 
+        stale_trade_ids: list = []
         async with self._monitored_lock:
             stale = [s for s in self._monitored if s not in active]
             for sym in stale:
@@ -442,7 +447,9 @@ class TradingBot:
                     "Reconcile: удалена устаревшая позиция %s (закрыта на бирже)",
                     sym,
                 )
-                self._monitored.pop(sym, None)
+                _gone = self._monitored.pop(sym, None)
+                if _gone and _gone.get("trade_id"):
+                    stale_trade_ids.append(_gone["trade_id"])
 
             added = []
             for sym, pos in active.items():
@@ -510,6 +517,14 @@ class TradingBot:
                         sl,
                         tp,
                     )
+
+        # Сделку в БД нельзя оставлять 'open' навсегда; цена выхода неизвестна,
+        # поэтому 'orphaned' — вне статистики и без выдуманного PnL.
+        for _tid in stale_trade_ids:
+            try:
+                await self.trade_history.mark_orphaned(_tid)
+            except Exception as exc:
+                logger.warning("Reconcile: mark_orphaned(%s) failed: %s", _tid, exc)
 
         logger.info(
             "Reconciliation: удалено=%d восстановлено=%d активных=%d",

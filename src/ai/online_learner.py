@@ -254,8 +254,8 @@ class OnlineLearner:
             logger.error("OnlineLearner [online] ошибка: %s", exc)
 
     # Порог: новая модель должна быть не хуже Buy&Hold минус эта дельта.
-    # 10% — достаточно мягко чтобы не блокировать обучение на боковиках.
-    _RETRAIN_REJECT_DELTA = 10.0
+    # 0 — модель хуже Buy&Hold не подменяет текущую (раньше допускалось -10 п.п.).
+    _RETRAIN_REJECT_DELTA = 0.0
 
     def _run_full_retrain(self) -> None:
         """Синхронный: полный ретрейн через subprocess с горячей подменой модели.

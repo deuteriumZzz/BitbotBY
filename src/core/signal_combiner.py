@@ -67,6 +67,7 @@ class SignalCombiner:
         self.ai = ai
         self.sac = SACSignal()
         self._rc = rc
+        self._sac_missing_logged = False
         self.logger = logging.getLogger(__name__)
         self.logger.info(
             "SignalCombiner mode=%s",
@@ -104,6 +105,21 @@ class SignalCombiner:
 
         if mode == "local":
             return []
+
+        # Режимы с SAC без загруженной модели не торгуют: необученная политика
+        # не должна ни решать, ни молча подменяться контекстными сигналами.
+        # Локальный запасной путь (если включён) подхватит цикл через
+        # decider_unavailable().
+        if mode in ("dqn", "hybrid") and not getattr(self.sac, "loaded", False):
+            if not self._sac_missing_logged:
+                self._sac_missing_logged = True
+                self.logger.warning(
+                    "MODE=%s, но SAC-модель не загружена — сигналов нет, пока "
+                    "не будет обучена и допущена модель",
+                    mode,
+                )
+            return []
+        self._sac_missing_logged = False
 
         if mode == "ai":
             recs = await self.ai.analyze(snapshots, balance)

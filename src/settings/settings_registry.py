@@ -985,7 +985,7 @@ SETTINGS: Tuple[Setting, ...] = (
         _G_SAC,
         "Автообучение",
         "choice",
-        "periodic",
+        "disabled",
         options=(
             ("disabled", "Выключено"),
             ("periodic", "Периодически"),

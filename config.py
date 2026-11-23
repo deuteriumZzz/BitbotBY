@@ -381,7 +381,9 @@ class Config:
     #   online   — gradient steps после каждой сделки [РИСКОВАННО, только эксперименты]
     #   periodic — полный ретрейн в фоне каждые N сделок [РЕКОМЕНДУЕТСЯ]
     #   hybrid   — periodic + динамические веса стратегий в реальном времени
-    ONLINE_LEARNING_MODE: str = os.getenv("ONLINE_LEARNING_MODE", "periodic")
+    # По умолчанию выключено: автоматическая подмена модели без Shadow/Paper-ворот
+    # недопустима (см. docs/architecture/AUDIT_REPORT.md, C-5).
+    ONLINE_LEARNING_MODE: str = os.getenv("ONLINE_LEARNING_MODE", "disabled")
     # Количество закрытых сделок до запуска переобучения (для periodic/hybrid)
     ONLINE_LEARNING_TRIGGER: int = int(os.getenv("ONLINE_LEARNING_TRIGGER", "50"))
     # Шаги градиента за один online-апдейт (для режима online)

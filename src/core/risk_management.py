@@ -7,10 +7,14 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime
+from typing import Any
 
 from config import Config
+
+_DAY_REF_TTL = 3 * 24 * 3600  # ссылка на баланс дня живёт дольше самих суток
 
 
 class RiskManager:
@@ -23,6 +27,7 @@ class RiskManager:
         self,
         initial_balance: float,
         risk_per_trade: float = 0.02,
+        redis_client: Any = None,
     ) -> None:
         """
         Инициализирует менеджер рисков.
@@ -30,6 +35,8 @@ class RiskManager:
         :param initial_balance: Начальный баланс счёта.
         :param risk_per_trade: Доля баланса на риск в сделке
             (по умолчанию 0.02 = 2%).
+        :param redis_client: RedisClient для сохранения баланса начала дня:
+            без него рестарт посреди дня обнулял бы дневной лимит потерь.
         """
         self.initial_balance = initial_balance
         self.risk_per_trade = risk_per_trade
@@ -40,6 +47,68 @@ class RiskManager:
         # limit applies to intraday losses, not total losses since bot start.
         self._day_start_balance: float = initial_balance
         self._last_reset_date = datetime.utcnow().date()
+        self._redis = redis_client
+        # True — баланс начала дня восстановлен из Redis (рестарт в те же сутки UTC).
+        self.day_reference_restored: bool = False
+        self._restore_day_reference()
+
+    # ── Daily reference persistence ───────────────────────────────────────────
+
+    def _ref_key(self) -> str:
+        mode = "paper" if Config.PAPER_TRADING else "live"
+        return f"bot:risk:daily_ref:{mode}"
+
+    def _raw_redis(self) -> Any:
+        rc = self._redis
+        if rc is None or not getattr(rc, "_available", True):
+            return None
+        return getattr(rc, "redis_client", None)
+
+    def _restore_day_reference(self) -> None:
+        """Восстанавливает баланс начала дня, если он сохранён за те же сутки UTC."""
+        raw = self._raw_redis()
+        if raw is None:
+            return
+        try:
+            data = raw.get(self._ref_key())
+            if not data:
+                return
+            if isinstance(data, bytes):
+                data = data.decode()
+            ref = json.loads(data)
+            if ref.get("date") == self._last_reset_date.isoformat():
+                self._day_start_balance = float(ref["balance"])
+                self.day_reference_restored = True
+                self.logger.info(
+                    "Daily loss reference restored: $%.2f (%s)",
+                    self._day_start_balance,
+                    ref["date"],
+                )
+        except Exception as exc:
+            self.logger.warning("Daily loss reference restore failed: %s", exc)
+
+    def _save_day_reference(self) -> None:
+        raw = self._raw_redis()
+        if raw is None:
+            return
+        try:
+            raw.setex(
+                self._ref_key(),
+                _DAY_REF_TTL,
+                json.dumps(
+                    {
+                        "date": self._last_reset_date.isoformat(),
+                        "balance": self._day_start_balance,
+                    }
+                ),
+            )
+        except Exception as exc:
+            self.logger.warning("Daily loss reference save failed: %s", exc)
+
+    def set_day_reference(self, balance: float) -> None:
+        """Задаёт баланс начала дня (после синхронизации с биржей) и сохраняет его."""
+        self._day_start_balance = balance
+        self._save_day_reference()
 
     def calculate_kelly_size(
         self,
@@ -99,6 +168,7 @@ class RiskManager:
         if today != self._last_reset_date:
             self._day_start_balance = current_balance
             self._last_reset_date = today
+            self._save_day_reference()
             self.logger.info(
                 "Daily loss limit reset for %s; reference balance $%.2f",
                 today,
