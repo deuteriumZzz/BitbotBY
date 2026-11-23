@@ -19,7 +19,8 @@
 | 6. Decision Engine / Hybrid | эталон правила Hybrid + 4 теневые стратегии, причины отказов, объяснимость | ✅ инфраструктура; **ворота «Hybrid ≥ лучшего компонента после издержек» не пройдены — нужны SAC-модель и исходы** |
 | 7. SAC pipeline | реестр/lifecycle + допуск, среда v2 (шорт/funding/slippage), walk-forward/bootstrap, Dataset Builder (Parquet+ZSTD) | ✅ инфраструктура (AUDIT_REPORT §10g); обучение на v2 и параметры среды — после подтверждения владельцем |
 | 8. Forecast/Meta-Model/Drift | калибровка, Meta-Model с вердиктом `usable`, PSI/KS/Mahalanobis/CUSUM, conformal с измерением покрытия, harness сравнения прогнозистов | ✅ измерительная часть (AUDIT_REPORT §10h); прогон Chronos vs TimesFM и обучение на исходах — нужны данные/модели |
-| 9–11 | Risk, AI infra, Observability | ⏳ |
+| 9. Risk | единый Risk Gate (чистая функция), CVaR/бета/стресс, четыре уровня breaker, распределение капитала с лимитом скорости | ✅ модули (AUDIT_REPORT §10i); **не подключены к исполнителю** — сначала теневой режим |
+| 10–11 | AI infra, Observability | ⏳ |
 
 ## 2. Phase 1 — состав и файлы
 
