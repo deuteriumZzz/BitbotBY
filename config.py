@@ -295,6 +295,12 @@ class Config:
     # свечи не VALID (устарели, битые, неполные). Статусы пишутся в Decision Ledger
     # всегда; сама блокировка по умолчанию выключена — сначала наблюдаем по журналу.
     DATA_QUALITY_GATE: bool = os.getenv("DATA_QUALITY_GATE", "false").lower() == "true"
+    # Периодическая сверка позиций с биржей (live, не спот): раз в N секунд.
+    # Проблема подтверждается двумя проверками подряд. По умолчанию бот только
+    # сообщает о расхождении; RECONCILE_AUTOFIX=true разрешает ему самому
+    # выполнить ту же сверку, что и при старте (добавить/убрать позиции).
+    RECONCILE_INTERVAL_S: int = int(os.getenv("RECONCILE_INTERVAL_S", "60"))
+    RECONCILE_AUTOFIX: bool = os.getenv("RECONCILE_AUTOFIX", "false").lower() == "true"
     # Pre-committed kill-switch: если live EV стратегии за последние
     # LIVE_ALPHA_KILL_MIN_TRADES сделок хуже LIVE_ALPHA_KILL_EV_THRESHOLD —
     # новые сделки по этой стратегии блокируются до ручного вмешательства.

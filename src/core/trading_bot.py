@@ -26,6 +26,7 @@ from src.core.constants import REDIS_TTL_MARKET_DATA, SILENT_DEATH_ALERT_COOLDOW
 from src.core.contracts import decision_from_rec
 from src.core.cycle import CycleRunner
 from src.core.decision_ledger import DecisionLedger
+from src.core.execution_reliability import ConfirmTracker, diff_positions
 from src.core.decision_trace import DecisionTrace
 from src.core.order_executor import OrderExecutor
 from src.core.portfolio_manager import PortfolioManager
@@ -158,6 +159,12 @@ class TradingBot:
         self._monitored: Dict[str, PositionRecord] = {}
         self._monitored_lock: asyncio.Lock = asyncio.Lock()
         self._monitor_task: Optional[asyncio.Task[None]] = None
+        # Периодическая сверка с биржей (Phase 5): задача, подтверждение проблем
+        # на двух проверках подряд, кулдаун алертов, счётчик сбоев запроса.
+        self._reconcile_task: Optional[asyncio.Task[None]] = None
+        self._reconcile_tracker = ConfirmTracker()
+        self._reconcile_alerted: Dict[str, float] = {}
+        self._reconcile_failures = 0
         self._command_task: Optional[asyncio.Task[None]] = None
         self.trade_history = TradeHistory()
         # След решения для приложения: только слушает события и ничего не решает.
@@ -424,8 +431,18 @@ class TradingBot:
         if Config.PAPER_TRADING:
             await self._reconcile_paper_positions()
             return
+        if self.api.market_type() == "spot":
+            # У спота нет API позиций: «пусто» не означает «позиций нет», и сверка
+            # по нему убрала бы из мониторинга все открытые позиции.
+            logger.warning(
+                "Reconciliation skipped: spot has no positions API — "
+                "позиции не сверены с биржей"
+            )
+            return
         try:
-            exchange_positions = await self.api.fetch_positions()
+            # fetch_positions_checked бросает ошибку вместо пустого списка, иначе
+            # сбой сети выглядел бы как «все позиции закрыты» (AUDIT H-7).
+            exchange_positions = await self.api.fetch_positions_checked()
         except Exception as exc:
             logger.critical(
                 "Reconciliation skipped — any position open on the exchange but "
@@ -540,6 +557,110 @@ class TradingBot:
             len(added),
             len(active),
         )
+
+    async def _reconcile_tick(self) -> None:
+        """Одна периодическая сверка с биржей (live, не спот).
+
+        По умолчанию только обнаруживает и сообщает. Проблема подтверждается
+        двумя проверками подряд (иначе гонка с открытием/закрытием даёт ложные
+        тревоги). Исправляет лишь при RECONCILE_AUTOFIX — тем же кодом, что и
+        стартовая сверка.
+        """
+        if Config.PAPER_TRADING is True or self.api.market_type() == "spot":
+            return
+        # 1. Ордера с неизвестным исходом (сеть оборвалась при отправке).
+        for r in await self.api.resolve_ambiguous():
+            self._ledger_write("reconcile_order", **r)
+            if r["state"] in ("FILLED", "PARTIALLY_FILLED"):
+                await self.telegram.notify(
+                    f"⚠️ Ордер по {r['symbol']} после сбоя сети всё же исполнен "
+                    f"(состояние {r['state']}, исполнено {r['filled']}), а бот "
+                    "считал его неотправленным. Проверьте позицию вручную."
+                )
+            elif r["state"] == "UNRESOLVED":
+                logger.warning("Order %s remained unresolved", r["client_id"])
+        # 2. Позиции.
+        try:
+            positions = await self.api.fetch_positions_checked()
+        except Exception as exc:
+            self._reconcile_failures += 1
+            logger.warning(
+                "Periodic reconcile: positions unavailable (%d in a row): %s",
+                self._reconcile_failures,
+                exc,
+            )
+            if self._reconcile_failures == 3:
+                await self.telegram.notify(
+                    "⚠️ Не удаётся получить позиции с биржи 3 проверки подряд — "
+                    "сверка не работает."
+                )
+            return
+        self._reconcile_failures = 0
+        async with self._monitored_lock:
+            monitored = dict(self._monitored)
+        diff = diff_positions(monitored, positions)
+        confirmed = self._reconcile_tracker.update(diff.keys())
+        current = diff.keys()
+        for key in list(self._reconcile_alerted):
+            if key not in current:
+                self._reconcile_alerted.pop(key)  # проблема ушла — кулдаун сброшен
+        if not confirmed:
+            return
+        self._ledger_write(
+            "reconcile",
+            confirmed=sorted(confirmed),
+            untracked=list(diff.untracked),
+            stale=list(diff.stale),
+            qty_mismatch=[list(x) for x in diff.qty_mismatch],
+            side_mismatch=list(diff.side_mismatch),
+        )
+        now = time.time()
+        fresh = sorted(k for k in confirmed if now - self._reconcile_alerted.get(k, 0) > 1800)
+        for key in fresh:
+            self._reconcile_alerted[key] = now
+        autofix = getattr(Config, "RECONCILE_AUTOFIX", False) is True
+        if fresh:
+            lines = []
+            for key in fresh:
+                kind, _, sym = key.partition(":")
+                if kind == "untracked":
+                    lines.append(
+                        f"• {sym}: позиция есть на бирже, бот её НЕ наблюдает "
+                        "(мониторинг SL/TP бота не работает; биржевые SL/TP, если "
+                        "стоят, действуют)"
+                    )
+                elif kind == "stale":
+                    lines.append(f"• {sym}: бот ведёт позицию, на бирже её нет")
+                elif kind == "qty":
+                    bot_q, ex_q = next(
+                        (b, e) for s, b, e in diff.qty_mismatch if s == sym
+                    )
+                    lines.append(f"• {sym}: объём бота {bot_q} ≠ объёму на бирже {ex_q}")
+                else:
+                    lines.append(f"• {sym}: сторона позиции у бота и биржи разная")
+            await self.telegram.notify(
+                "🚨 Расхождение с биржей (подтверждено двумя проверками):\n"
+                + "\n".join(lines)
+                + (
+                    "\nАвтоисправление включено: запускаю сверку."
+                    if autofix
+                    else "\nБот ничего не менял — проверьте вручную."
+                )
+            )
+        if autofix:
+            await self._reconcile_positions()
+
+    async def _reconcile_loop(self) -> None:
+        """Периодическая сверка с биржей, пока бот работает."""
+        interval = max(10, int(getattr(Config, "RECONCILE_INTERVAL_S", 60)))
+        while self.is_running:
+            await asyncio.sleep(interval)
+            try:
+                await self._reconcile_tick()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # сверка не должна ронять торговлю
+                logger.error("Periodic reconcile failed: %s", exc)
 
     async def _reconcile_paper_positions(self) -> None:
         """
@@ -1792,6 +1913,8 @@ class TradingBot:
         """
         self.is_running = True
         self._monitor_task = asyncio.create_task(self._monitor_positions())
+        if Config.PAPER_TRADING is not True:
+            self._reconcile_task = asyncio.create_task(self._reconcile_loop())
         asyncio.create_task(self._season_check_loop())
         # Команды из приложения (MiniApp / Desktop) — через очередь в Redis.
         self._command_task = asyncio.create_task(
@@ -2372,6 +2495,8 @@ class TradingBot:
         self.is_running = False
         if self._command_task:
             self._command_task.cancel()
+        if self._reconcile_task:
+            self._reconcile_task.cancel()
         if self._monitor_task:
             self._monitor_task.cancel()
             try:

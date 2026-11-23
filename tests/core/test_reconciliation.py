@@ -74,7 +74,7 @@ def make_bot(paper: bool = False):
             from src.core.trading_bot import TradingBot
 
             bot = TradingBot()
-            bot.api.fetch_positions = AsyncMock(  # type: ignore[method-assign]
+            bot.api.fetch_positions_checked = AsyncMock(  # type: ignore[method-assign]
                 return_value=[]
             )
             return bot
@@ -94,14 +94,14 @@ class TestReconcilePositions:
         with patch("src.core.trading_bot.Config") as cfg:
             cfg.PAPER_TRADING = True
             await bot._reconcile_positions()
-        bot.api.fetch_positions.assert_not_called()
+        bot.api.fetch_positions_checked.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_removes_stale_position(self):
         """Позиция в _monitored, отсутствующая на бирже, должна быть удалена."""
         bot = make_bot()
         bot._monitored["BTC/USDT"] = {"qty": 0.01, "entry": 50000.0, "side": "buy"}
-        bot.api.fetch_positions = AsyncMock(return_value=[])
+        bot.api.fetch_positions_checked = AsyncMock(return_value=[])
 
         await bot._reconcile_positions()
 
@@ -111,7 +111,7 @@ class TestReconcilePositions:
     async def test_recovers_lost_position(self):
         """Позиция на бирже, отсутствующая в _monitored, должна быть восстановлена."""
         bot = make_bot()
-        bot.api.fetch_positions = AsyncMock(
+        bot.api.fetch_positions_checked = AsyncMock(
             return_value=[
                 _exchange_pos("BTC/USDT", side="buy", contracts=0.5, entry=45000.0)
             ]
@@ -130,7 +130,7 @@ class TestReconcilePositions:
     async def test_skips_zero_qty_position(self):
         """Позиция на бирже с contracts=0 не должна добавляться в _monitored."""
         bot = make_bot()
-        bot.api.fetch_positions = AsyncMock(
+        bot.api.fetch_positions_checked = AsyncMock(
             return_value=[_exchange_pos("ETH/USDT", contracts=0.0)]
         )
 
@@ -142,7 +142,7 @@ class TestReconcilePositions:
     async def test_normalises_colon_symbol(self):
         """ccxt может вернуть 'BTC/USDT:USDT' — должно нормализоваться до 'BTC/USDT'."""
         bot = make_bot()
-        bot.api.fetch_positions = AsyncMock(
+        bot.api.fetch_positions_checked = AsyncMock(
             return_value=[_exchange_pos("BTC/USDT:USDT", contracts=1.0, entry=60000.0)]
         )
 
@@ -156,7 +156,7 @@ class TestReconcilePositions:
         """При исключении в fetch_positions _monitored должен остаться нетронутым."""
         bot = make_bot()
         bot._monitored["SOL/USDT"] = {"qty": 10.0, "entry": 150.0, "side": "buy"}
-        bot.api.fetch_positions = AsyncMock(side_effect=Exception("network error"))
+        bot.api.fetch_positions_checked = AsyncMock(side_effect=Exception("network error"))
         bot.telegram.notify = AsyncMock()
 
         await bot._reconcile_positions()
@@ -172,7 +172,7 @@ class TestReconcilePositions:
         """Удаляет один символ и восстанавливает другой одновременно."""
         bot = make_bot()
         bot._monitored["OLD/USDT"] = {"qty": 1.0, "entry": 100.0, "side": "buy"}
-        bot.api.fetch_positions = AsyncMock(
+        bot.api.fetch_positions_checked = AsyncMock(
             return_value=[_exchange_pos("NEW/USDT", contracts=2.0, entry=200.0)]
         )
 
@@ -191,7 +191,7 @@ class TestReconcilePositions:
             "side": "buy",
             "stop_loss": 48000.0,
         }
-        bot.api.fetch_positions = AsyncMock(
+        bot.api.fetch_positions_checked = AsyncMock(
             return_value=[_exchange_pos("BTC/USDT", contracts=1.0, entry=51000.0)]
         )
 
@@ -204,7 +204,7 @@ class TestReconcilePositions:
     async def test_negative_qty_skipped(self):
         """Отрицательное значение contracts должно считаться нулевым и пропускаться."""
         bot = make_bot()
-        bot.api.fetch_positions = AsyncMock(
+        bot.api.fetch_positions_checked = AsyncMock(
             return_value=[_exchange_pos("ADA/USDT", contracts=-0.5)]
         )
 

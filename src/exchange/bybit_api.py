@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 import uuid
 from datetime import datetime
 from typing import Any, Optional
@@ -18,6 +19,7 @@ import pandas as pd
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from config import Config
+from src.core.execution_reliability import classify_order
 from src.infra.redis_client import RedisClient
 
 
@@ -96,6 +98,10 @@ class BybitAPI:
         if rc is not None:
             return rc.get_market_type()
         return Config.MARKET_TYPE
+
+    def market_type(self) -> str:
+        """Текущий тип рынка (spot | linear | ...), публичный доступ для сверки."""
+        return self._current_market_type()
 
     def sync_market_type(self) -> None:
         """Синхронизирует defaultType уже подключённого ccxt-клиента с текущим
@@ -427,6 +433,10 @@ class BybitAPI:
             self.logger.error(
                 "Ордер не создан после 3 попыток: %s", last_error, exc_info=True
             )
+            if isinstance(last_error, ccxt.NetworkError):
+                # Сеть оборвалась, а биржа могла принять ордер: исход неизвестен.
+                # «None» здесь НЕ значит «ордера нет» — сверка выяснит по clientOrderId.
+                self._note_ambiguous(symbol, client_order_id, side, amount)
             return None
         finally:
             self.redis.release_lock(lock_name)
@@ -476,6 +486,67 @@ class BybitAPI:
         except Exception as e:
             self.logger.error("fetch_positions: %s", e, exc_info=True)
             return []
+
+    async def fetch_positions_checked(self) -> list:
+        """Позиции биржи ИЛИ исключение.
+
+        В отличие от `fetch_positions` не выдаёт ошибку (сеть, таймаут, спот без
+        API позиций) за «позиций нет»: вызывающий код сверки при пустом ответе
+        иначе счёл бы все позиции бота закрытыми.
+        """
+        raw = await self.exchange.fetch_positions()
+        if raw is None:
+            raise RuntimeError("fetch_positions: пустой ответ биржи")
+        return [p for p in raw if float(p.get("contracts") or 0) > 0]
+
+    # ── Ордера с неизвестным исходом ──────────────────────────────────────────
+
+    def _note_ambiguous(
+        self, symbol: str, client_order_id: str, side: str, amount: float
+    ) -> None:
+        pending = self.__dict__.setdefault("ambiguous_orders", {})
+        pending[client_order_id] = {
+            "symbol": symbol,
+            "side": side,
+            "amount": amount,
+            "ts": time.time(),
+        }
+
+    async def resolve_ambiguous(self, max_age_s: float = 600.0) -> list:
+        """Выясняет судьбу ордеров, чей исход после сетевой ошибки был неизвестен.
+
+        Для каждого ищет ордер по clientOrderId. Найден — возвращает его
+        состояние и убирает из списка. Не найден или поиск не удался — остаётся
+        до `max_age_s`, затем снимается как UNRESOLVED (не «ордера нет»).
+        """
+        pending = self.__dict__.get("ambiguous_orders") or {}
+        results = []
+        for cid, info in list(pending.items()):
+            order = await self._find_order_by_client_id(info["symbol"], cid)
+            if order is not None:
+                state = classify_order(order)
+                pending.pop(cid, None)
+                results.append(
+                    {
+                        "client_id": cid,
+                        "symbol": info["symbol"],
+                        "state": state.value,
+                        "filled": float(order.get("filled") or 0),
+                        "order_id": order.get("id"),
+                    }
+                )
+            elif time.time() - info["ts"] > max_age_s:
+                pending.pop(cid, None)
+                results.append(
+                    {
+                        "client_id": cid,
+                        "symbol": info["symbol"],
+                        "state": "UNRESOLVED",
+                        "filled": None,
+                        "order_id": None,
+                    }
+                )
+        return results
 
     async def get_current_price(self, symbol: str) -> Optional[float]:
         """
