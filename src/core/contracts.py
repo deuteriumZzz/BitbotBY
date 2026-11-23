@@ -19,6 +19,8 @@ import json
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
+from src.core.signal_intelligence import analyze_signal
+
 # Статусы решения (MASTER_SPEC §12.3).
 LONG = "LONG"
 SHORT = "SHORT"
@@ -72,6 +74,11 @@ class TradingDecision:
     outputs: Tuple[ModelOutput, ...]
     conf_trail: Tuple[Tuple[str, float], ...]
     reason_codes: Tuple[str, ...]
+    # Signal Intelligence (Phase 3): описание опоры решения, confidence не трогает.
+    independent_groups: Tuple[str, ...] = ()
+    redundant_groups: Tuple[str, ...] = ()
+    channels: Optional[Dict[str, Tuple[str, ...]]] = None
+    conflicts: Tuple[Dict[str, Any], ...] = ()
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -171,6 +178,13 @@ def decision_from_rec(
     combined = len(outputs) > 1
     kind = CK_COMBINED if combined else outputs[0].confidence_kind
     symbol = str(rec.get("symbol", ""))
+    analysis = analyze_signal(
+        rec,
+        [
+            (o.kind, o.direction, o.model_id, str(o.rationale.get("reasoning", "")))
+            for o in outputs
+        ],
+    )
     return TradingDecision(
         decision_id=make_decision_id(trace_id, symbol, action),
         trace_id=trace_id,
@@ -187,4 +201,8 @@ def decision_from_rec(
         outputs=outputs,
         conf_trail=tuple((str(s), float(v)) for s, v in trail),
         reason_codes=_reason_codes(rec),
+        independent_groups=analysis.independent_groups,
+        redundant_groups=analysis.redundant_groups,
+        channels=analysis.channels,
+        conflicts=analysis.conflicts,
     )
