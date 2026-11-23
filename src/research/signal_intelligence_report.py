@@ -208,9 +208,29 @@ def _shadow(records: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
+def _risk_gate(records: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
+    """Теневой Risk Gate: что сказал бы единый гейт о входах, которые бот совершил."""
+    items = [r for r in records if r.get("kind") == "risk_gate_shadow"]
+    actions = Counter((r.get("verdict") or {}).get("action") for r in items)
+    reasons: Counter = Counter()
+    for r in items:
+        reasons.update((r.get("verdict") or {}).get("reasons") or [])
+    n = len(items)
+    return {
+        "n": n,
+        "by_action": dict(actions),
+        "would_block_share": round(sum(bool(r.get("would_block")) for r in items) / n, 3) if n else None,
+        "by_reason": dict(reasons.most_common()),
+        "inputs_computed": sum(
+            1 for r in items if (r.get("inputs") or {}).get("source") == "computed"
+        ),
+    }
+
+
 def build_report(records: List[Dict[str, Any]]) -> Dict[str, Any]:
     return {
         "records": len(records),
+        "risk_gate": _risk_gate(records),
         "rejections": _rejections(records),
         "shadow": _shadow(records),
         "signals": _signals(records),
@@ -282,6 +302,16 @@ def format_report(rep: Dict[str, Any]) -> str:
         extra += [
             "  Какая стратегия лучше, по этим данным сказать нельзя: нужны исходы "
             "сделок после издержек.",
+            "",
+        ]
+    rg = rep.get("risk_gate", {})
+    if rg.get("n"):
+        extra += [
+            f"ТЕНЕВОЙ RISK GATE: {rg['n']} фактических входов, вердикты {rg['by_action']}, "
+            f"гейт строже действующей защиты в {rg['would_block_share']:.0%} случаев",
+            f"  причины: {rg['by_reason'] or 'нет'}; входы по расчётным данным: "
+            f"{rg['inputs_computed']}/{rg['n']} (остальные — значения по умолчанию)",
+            "  Это сравнение правил, не доход: «строже» не значит «лучше», пока нет исходов сделок.",
             "",
         ]
     if extra:

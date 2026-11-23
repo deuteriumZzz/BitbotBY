@@ -192,6 +192,9 @@ class Config:
     # Модель торгует только после допуска в реестре (reinforcement_learning/
     # model_registry.py): Paper — стадии paper/canary/production, Live — production.
     SAC_REQUIRE_APPROVAL: bool = os.getenv("SAC_REQUIRE_APPROVAL", "true").lower() != "false"
+    # Теневой Risk Gate: после каждого фактического входа пишет в Ledger вердикт
+    # единого гейта (src/risk/shadow.py). Ничего не блокирует и не меняет.
+    RISK_GATE_SHADOW: bool = os.getenv("RISK_GATE_SHADOW", "true").lower() != "false"
     SAC_MODEL_PATH: str = os.getenv(
         "SAC_MODEL_PATH",
         (

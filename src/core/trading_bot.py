@@ -1081,9 +1081,15 @@ class TradingBot:
                     "Symbol cooldown: skipping %s (%d min remaining)", sym, remaining
                 )
                 continue
+            async with self._monitored_lock:
+                before = {s: dict(p) for s, p in self._monitored.items() if p is not None}
             await self._executor.execute(rec, market_data, balance)
             async with self._monitored_lock:
-                opened = self._monitored.get(sym) is not None
+                new_pos = self._monitored.get(sym)
+                opened = new_pos is not None
+                new_pos = dict(new_pos) if new_pos else None
+            if opened and new_pos is not None:
+                self._shadow_risk_gate(rec, before, new_pos, balance)
             self._ledger_write(
                 "execution",
                 symbol=sym,
@@ -1096,6 +1102,56 @@ class TradingBot:
                 ai_model=rec.get("ai_model"),
                 conf_trail=rec.get("conf_trail"),
             )
+
+    def _shadow_risk_gate(
+        self, rec: dict, before: dict, new_pos: dict, balance: float
+    ) -> None:
+        """Теневой Risk Gate: пишет в Ledger, что сказал бы единый гейт о фактическом входе.
+
+        Ничего не блокирует и не меняет; любой сбой гасится (журнал и тень не должны
+        влиять на торговый цикл).
+        """
+        if not Config.RISK_GATE_SHADOW:
+            return
+        try:
+            from src.risk.risk_gate import GateLimits  # noqa: PLC0415
+            from src.risk.shadow import shadow_verdict  # noqa: PLC0415
+
+            margin = sum(
+                float(p.get("qty") or 0)
+                * float(p.get("entry") or 0)
+                / max(float(p.get("lev") or 1.0), 1.0)
+                for p in before.values()
+            )
+            equity = balance + margin
+            if not Config.PAPER_TRADING and self._live_equity_cache:
+                equity = float(self._live_equity_cache)
+            out = shadow_verdict(
+                symbol=rec.get("symbol", ""),
+                side=new_pos.get("side", "buy"),
+                qty=float(new_pos.get("qty") or 0),
+                entry=float(new_pos.get("entry") or 0),
+                positions_before=before,
+                equity=equity,
+                peak_equity=float(self._peak_balance or equity),
+                day_start_equity=float(
+                    getattr(self.risk_manager, "_day_start_balance", equity) or equity
+                ),
+                consecutive_losses=int(
+                    getattr(self._position_monitor, "_consecutive_losses", 0) or 0
+                ),
+                returns=self.corr_filter.returns,
+                max_corr=self.corr_filter.max_correlation,
+                limits=GateLimits.from_config(Config),
+            )
+            self._ledger_write(
+                "risk_gate_shadow",
+                symbol=rec.get("symbol"),
+                decision_id=rec.get("decision_id"),
+                **out,
+            )
+        except Exception as exc:  # тень не имеет права ломать цикл
+            logger.debug("Shadow risk gate failed: %s", exc)
 
     async def _close_all_open_positions(self, reason: str) -> None:
         """Принудительно закрывает все открытые позиции — делегирует PositionMonitor."""

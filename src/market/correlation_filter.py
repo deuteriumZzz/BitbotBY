@@ -67,6 +67,10 @@ class CorrelationFilter:
         # Малая epsilon защищает от log(0) при нулевых ценах
         return np.diff(np.log(arr + 1e-10))
 
+    def returns(self, symbol: str) -> Optional[np.ndarray]:
+        """Лог-доходности окна символа (публичный доступ; None, если меньше 10 свечей)."""
+        return self._returns(symbol)
+
     def correlation(self, sym_a: str, sym_b: str) -> Optional[float]:
         """
         Вычисляет Pearson-корреляцию log-returns двух монет.
