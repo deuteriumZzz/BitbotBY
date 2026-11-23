@@ -156,6 +156,31 @@ class SACSignal:
         self._consecutive_drifts: int = 0
         self._try_load()
 
+    @property
+    def stage(self) -> str:
+        """Стадия загруженного файла модели в реестре (`unregistered`, если не внесён)."""
+        from reinforcement_learning.model_registry import (  # noqa: PLC0415
+            ModelRegistry,
+            default_registry_path,
+        )
+
+        path = Config.SAC_MODEL_PATH
+        return ModelRegistry(default_registry_path(path)).stage_of_path(path)
+
+    @property
+    def approved(self) -> bool:
+        """Допущена ли модель к исполнению сделок в текущем режиме (Paper/Live)."""
+        if not getattr(Config, "SAC_REQUIRE_APPROVAL", True):
+            return True
+        from reinforcement_learning.model_registry import EXECUTABLE  # noqa: PLC0415
+
+        return self.stage in EXECUTABLE["paper" if Config.PAPER_TRADING else "live"]
+
+    @property
+    def tradable(self) -> bool:
+        """Модель загружена И допущена реестром: только такая может решать."""
+        return bool(self.loaded and self.approved)
+
     def _try_load(self) -> None:
         """
         Загружает SAC-модель и norm_stats из файловой системы.

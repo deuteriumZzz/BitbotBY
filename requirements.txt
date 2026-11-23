@@ -40,3 +40,6 @@ mypy>=1.9.0
 # Хранилище ключей и их проверка (уже приходят с ccxt и python-telegram-bot)
 cryptography>=41.0
 httpx>=0.25
+# Датасеты SAC: Parquet + ZSTD (ADR-001, Phase 7)
+pyarrow>=21.0
+zstandard>=0.25

@@ -971,6 +971,7 @@ class TradingBot:
             # (например, нет допущенной SAC-модели). Аддитивный ключ.
             "mode_readiness": all_readiness(
                 sac_loaded=bool(getattr(self.combiner.sac, "loaded", False)),
+                sac_approved=bool(getattr(self.combiner.sac, "approved", True)),
                 ai_available=bool(getattr(self.ai, "enabled", True)),
             ),
         }

@@ -17,7 +17,7 @@
 | 4b. WS-ingestion | WebSocket рынка и приватных событий | ⏳ |
 | 5. Execution reliability | периодическая сверка, проверяемые позиции, ордера с неизвестным исходом, машина состояний (ADR-002) | ✅; DMS/in-flight margin/Smart Execution/funding-ledger — решения в ADR-002 |
 | 6. Decision Engine / Hybrid | эталон правила Hybrid + 4 теневые стратегии, причины отказов, объяснимость | ✅ инфраструктура; **ворота «Hybrid ≥ лучшего компонента после издержек» не пройдены — нужны SAC-модель и исходы** |
-| 7. SAC pipeline | Dataset Builder, среда с шортом/funding/slippage, lifecycle | ⏳ |
+| 7. SAC pipeline | реестр/lifecycle + допуск, среда v2 (шорт/funding/slippage), walk-forward/bootstrap, Dataset Builder (Parquet+ZSTD) | ✅ инфраструктура (AUDIT_REPORT §10g); обучение на v2 и параметры среды — после подтверждения владельцем |
 | 8–11 | Forecast/Meta-Model/Drift, Risk, AI infra, Observability | ⏳ |
 
 ## 2. Phase 1 — состав и файлы

@@ -189,6 +189,9 @@ class Config:
     MODE: str = os.getenv("MODE", "ai")
     # Путь к SAC-модели (создаётся train_sac.py).
     # bluechip / пусто → sac_model.zip (дефолт), altcoin → sac_model_altcoin.zip
+    # Модель торгует только после допуска в реестре (reinforcement_learning/
+    # model_registry.py): Paper — стадии paper/canary/production, Live — production.
+    SAC_REQUIRE_APPROVAL: bool = os.getenv("SAC_REQUIRE_APPROVAL", "true").lower() != "false"
     SAC_MODEL_PATH: str = os.getenv(
         "SAC_MODEL_PATH",
         (

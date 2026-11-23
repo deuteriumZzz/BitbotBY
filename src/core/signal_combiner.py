@@ -139,7 +139,9 @@ class SignalCombiner:
         # не должна ни решать, ни молча подменяться контекстными сигналами.
         # Локальный запасной путь (если включён) подхватит цикл через
         # decider_unavailable().
-        if requires_sac(mode) and not getattr(self.sac, "loaded", False):
+        if requires_sac(mode) and not (
+            getattr(self.sac, "loaded", False) and getattr(self.sac, "tradable", True)
+        ):
             if not self._sac_missing_logged:
                 self._sac_missing_logged = True
                 self.logger.warning(

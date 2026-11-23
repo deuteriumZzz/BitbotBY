@@ -13,7 +13,8 @@ from dataclasses import dataclass
 from typing import Dict, Tuple
 
 REASON_SAC_MISSING = "sac_model_missing"
-REASON_AI_UNAVAILABLE = "ai_unavailable"
+REASON_SAC_NOT_APPROVED = "sac_not_approved"
+REASON_AI_UNAVAILABLE ="ai_unavailable"
 REASON_UNKNOWN_MODE = "unknown_mode"
 
 
@@ -42,7 +43,7 @@ def requires_sac(mode: str) -> bool:
 
 
 def readiness(
-    mode: str, *, sac_loaded: bool, ai_available: bool = True
+    mode: str, *, sac_loaded: bool, ai_available: bool = True, sac_approved: bool = True
 ) -> Tuple[bool, str]:
     """(готов, причина). Причина пустая, если режим может принимать решения."""
     spec = MODE_SPECS.get(mode)
@@ -50,17 +51,24 @@ def readiness(
         return False, REASON_UNKNOWN_MODE
     if spec.needs_sac and not sac_loaded:
         return False, REASON_SAC_MISSING
+    if spec.needs_sac and not sac_approved:
+        return False, REASON_SAC_NOT_APPROVED
     if spec.needs_ai and not ai_available:
         return False, REASON_AI_UNAVAILABLE
     return True, ""
 
 
 def all_readiness(
-    *, sac_loaded: bool, ai_available: bool = True
+    *, sac_loaded: bool, ai_available: bool = True, sac_approved: bool = True
 ) -> Dict[str, Dict[str, object]]:
     """Готовность всех режимов — для состояния бота и приложения."""
     out: Dict[str, Dict[str, object]] = {}
     for name in MODE_SPECS:
-        ready, reason = readiness(name, sac_loaded=sac_loaded, ai_available=ai_available)
+        ready, reason = readiness(
+            name,
+            sac_loaded=sac_loaded,
+            ai_available=ai_available,
+            sac_approved=sac_approved,
+        )
         out[name] = {"ready": ready, "reason": reason}
     return out
