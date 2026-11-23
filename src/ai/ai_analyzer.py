@@ -335,6 +335,27 @@ class AIAnalyzer:
             valid.append(r)
         return valid
 
+    @staticmethod
+    def _shadow_audit(
+        valid: List[Dict[str, Any]], snapshots: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """Теневая строгая проверка ответа и скан заголовков (Phase 10).
+
+        Только пишется в Ledger: рекомендации не фильтруются и не меняются.
+        Любой сбой аудита гасится — он не должен влиять на цикл.
+        """
+        try:
+            from src.ai_infra.injection_guard import scan_snapshots  # noqa: PLC0415
+            from src.ai_infra.schema import audit_response  # noqa: PLC0415
+
+            out: Dict[str, Any] = {"schema_audit": audit_response(valid, snapshots)}
+            hits = scan_snapshots(snapshots)
+            if hits:
+                out["injection_flags"] = hits
+            return out
+        except Exception:  # аудит не имеет права ломать вызов AI
+            return {}
+
     def _record_usage(self, provider: str, total_tokens: "int | None") -> None:
         """Копит счётчик токенов за сутки для панели статусов в Telegram."""
         if not total_tokens:
@@ -545,6 +566,7 @@ class AIAnalyzer:
                 n_signals=len(valid),
                 attempts=attempts,
                 raw=raw,
+                **self._shadow_audit(valid, snapshots),
             )
             return valid
 
