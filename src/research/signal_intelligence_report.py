@@ -161,9 +161,58 @@ def _execution(records: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
+def _rejections(records: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
+    items = [
+        i for r in records if r.get("kind") == "rejections" for i in r.get("items", [])
+    ]
+    strong_ai_overruled = sum(
+        1
+        for i in items
+        if i.get("reason") == "sac_hold"
+        and float((i.get("ai") or {}).get("confidence") or 0) >= 0.8
+    )
+    return {
+        "n": len(items),
+        "by_reason": dict(Counter(i.get("reason") for i in items).most_common()),
+        "strong_ai_overruled_by_sac_hold": strong_ai_overruled,
+    }
+
+
+def _shadow(records: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
+    """Сравнение стратегий объединения: частота входов и расхождение с боевой."""
+    items = [
+        i
+        for r in records
+        if r.get("kind") == "shadow_decisions"
+        for i in r.get("items", [])
+    ]
+    per: Dict[str, Dict[str, int]] = {}
+    for item in items:
+        verdicts = item.get("verdicts") or {}
+        base = (verdicts.get("current") or {}).get("action")
+        for name, v in verdicts.items():
+            st = per.setdefault(name, {"trades": 0, "differs_from_current": 0})
+            st["trades"] += v.get("action") != "hold"
+            st["differs_from_current"] += v.get("action") != base
+    mismatch = sum(
+        1
+        for i in items
+        if i.get("real") is not None
+        and (i.get("verdicts", {}).get("current") or {}).get("action") != i.get("real")
+    )
+    return {
+        "n": len(items),
+        "per_strategy": per,
+        # эталон `current` обязан совпадать с боевым решением; иначе он разъехался
+        "current_vs_real_mismatch": mismatch,
+    }
+
+
 def build_report(records: List[Dict[str, Any]]) -> Dict[str, Any]:
     return {
         "records": len(records),
+        "rejections": _rejections(records),
+        "shadow": _shadow(records),
         "signals": _signals(records),
         "ai": _ai(records),
         "data_quality": _data_quality(records),
@@ -211,6 +260,32 @@ def format_report(rep: Dict[str, Any]) -> str:
         "Описательная статистика: из неё не следует ни наличие, ни отсутствие "
         "торгового преимущества.",
     ]
+    rj, sh = rep.get("rejections", {}), rep.get("shadow", {})
+    extra: List[str] = []
+    if rj.get("n"):
+        extra += [
+            f"ОТКЛОНЁННЫЕ ВОЗМОЖНОСТИ: {rj['n']} {rj['by_reason']}",
+            f"  сильный сигнал AI (≥0.8), отменённый SAC hold: "
+            f"{rj['strong_ai_overruled_by_sac_hold']}",
+            "",
+        ]
+    if sh.get("n"):
+        extra.append(
+            f"СТРАТЕГИИ ОБЪЕДИНЕНИЯ (в тени): {sh['n']} случаев; "
+            f"эталон расходится с боевым решением: {sh['current_vs_real_mismatch']}"
+        )
+        for name, st in sh["per_strategy"].items():
+            extra.append(
+                f"  {name}: входов {st['trades']}, отличий от current "
+                f"{st['differs_from_current']}"
+            )
+        extra += [
+            "  Какая стратегия лучше, по этим данным сказать нельзя: нужны исходы "
+            "сделок после издержек.",
+            "",
+        ]
+    if extra:
+        lines = lines[:-2] + extra + lines[-2:]
     return "\n".join(lines)
 
 

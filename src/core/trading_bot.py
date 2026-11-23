@@ -1185,6 +1185,55 @@ class TradingBot:
         if inp:
             self._ledger_write("replay_input", input=inp)
 
+    def _record_decision_diagnostics(self, snapshots: list, recs: list) -> None:
+        """Отклонённые возможности и теневые вердикты стратегий объединения (Phase 6).
+
+        Только запись в журнал. «rejections» — предложения политик, не ставшие
+        рекомендацией, с причиной (например, SAC hold отменил сигнал AI);
+        «shadow_decisions» — что решили бы альтернативные стратегии рядом с
+        боевой; пишутся лишь случаи, где стратегии расходятся или есть решение.
+        """
+        ledger = getattr(self, "ledger", None)
+        if ledger is None or not getattr(ledger, "enabled", False):
+            return
+        inputs = getattr(self.combiner, "last_inputs", None)
+        if not isinstance(inputs, dict):
+            return
+        snap_ids = {
+            s.get("symbol"): s.get("snapshot_id")
+            for s in snapshots
+            if isinstance(s, dict)
+        }
+        vetoes = inputs.get("vetoes") or {}
+        if vetoes:
+            self._ledger_write(
+                "rejections",
+                items=[
+                    {"symbol": sym, "snapshot_id": snap_ids.get(sym), **v}
+                    for sym, v in list(vetoes.items())[:30]
+                ],
+            )
+        shadow = inputs.get("shadow") or {}
+        real = {
+            r.get("symbol"): r.get("action")
+            for r in recs
+            if str(r.get("strategy", "")).startswith(("hybrid(", "sac"))
+        }
+        items = []
+        for sym, entry in shadow.items():
+            actions = {v["action"] for v in entry["verdicts"].values()}
+            if len(actions) > 1 or sym in real:
+                items.append(
+                    {
+                        "symbol": sym,
+                        "snapshot_id": snap_ids.get(sym),
+                        "real": real.get(sym),
+                        **entry,
+                    }
+                )
+        if items:
+            self._ledger_write("shadow_decisions", items=items[:30])
+
     def _record_data_quality(self, snapshots: list) -> None:
         """Сводка качества данных цикла в Decision Ledger (только наблюдение)."""
         counts: Dict[str, int] = {}
@@ -1635,6 +1684,7 @@ class TradingBot:
         # Входы расчёта — для replay решения; до локального fallback, чтобы
         # записывались только рекомендации самого комбинатора.
         self._record_replay_input(snapshots, balance, market_context, recs)
+        self._record_decision_diagnostics(snapshots, recs)
 
         _TRENDING_STRATEGIES = {
             "trend_following",

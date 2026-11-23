@@ -17,6 +17,7 @@ from config import Config
 from src.ai import chronos_analyzer
 from src.ai.ai_analyzer import AIAnalyzer
 from src.ai.dqn_signal import SACSignal
+from src.core.decision_engine import Proposal, Views, evaluate_all
 from src.core.trading_modes import requires_sac
 
 logger = logging.getLogger(__name__)
@@ -198,6 +199,73 @@ class SignalCombiner:
         except Exception:
             pass
 
+    def _veto(
+        self,
+        sym: str,
+        reason: str,
+        ai: Dict[str, Any] | None,
+        sac_sig: Dict[str, Any],
+        regime: str,
+    ) -> None:
+        """Причина, по которой предложение политик не стало рекомендацией (Phase 6).
+
+        Отклонённые возможности нужны для оценки вето (например, «SAC hold
+        отменил сильный сигнал AI»); на решения не влияет.
+        """
+        try:
+            self.last_inputs.setdefault("vetoes", {})[sym] = {
+                "reason": reason,
+                "regime": regime,
+                "ai": (
+                    {"action": ai.get("action"), "confidence": ai.get("confidence")}
+                    if ai
+                    else None
+                ),
+                "sac": {
+                    "action": sac_sig.get("action"),
+                    "confidence": sac_sig.get("confidence"),
+                },
+            }
+        except Exception:
+            pass
+
+    def _shadow(
+        self,
+        sym: str,
+        ai: Dict[str, Any] | None,
+        sac_sig: Dict[str, Any],
+        regime: str,
+    ) -> None:
+        """Вердикты альтернативных стратегий объединения — только в журнал."""
+        try:
+            sac_action = str(sac_sig.get("action", "hold"))
+            if ai is None and sac_action == "hold":
+                return  # предложений нет — сравнивать нечего
+            ai_view = (
+                Proposal(str(ai.get("action", "hold")), float(ai.get("confidence", 0)))
+                if ai
+                else None
+            )
+            sac_view = Proposal(sac_action, float(sac_sig.get("confidence", 0)))
+            verdicts = evaluate_all(
+                Views(ai_view, sac_view, regime, float(self._min_conf()))
+            )
+            self.last_inputs.setdefault("shadow", {})[sym] = {
+                "regime": regime,
+                "ai": ai_view and {"action": ai_view.action, "confidence": ai_view.confidence},
+                "sac": {"action": sac_view.action, "confidence": sac_view.confidence},
+                "verdicts": {
+                    name: {
+                        "action": v.action,
+                        "confidence": v.confidence,
+                        "reasons": list(v.reasons),
+                    }
+                    for name, v in verdicts.items()
+                },
+            }
+        except Exception:
+            pass
+
     def _capture_settings(
         self, mode: str, regime: str, regimes: Dict[str, str] | None
     ) -> None:
@@ -354,11 +422,14 @@ class SignalCombiner:
             sac_sig = self.sac.get_signal(snap, balance)
             self._cap_sac(snap, sac_sig)
             ai = ai_map.get(sym)
+            self._shadow(sym, ai, sac_sig, sym_regime)
 
             d_action = sac_sig["action"]
             d_conf = sac_sig["confidence"]
 
             if d_action == "hold":
+                if ai is not None:  # AI предлагал, SAC отменил
+                    self._veto(sym, "sac_hold", ai, sac_sig, sym_regime)
                 continue
 
             # AI молчит — принимаем SAC только при высоком conf
@@ -380,6 +451,8 @@ class SignalCombiner:
                             "conf_trail": [["sac", round(float(d_conf), 3)]],
                         }
                     )
+                if d_conf < self._SAC_SOLO_MIN:
+                    self._veto(sym, "ai_silent_sac_below_solo", ai, sac_sig, sym_regime)
                 continue
 
             a_action = ai.get("action", "hold")
@@ -388,6 +461,7 @@ class SignalCombiner:
                 a_conf = ai.get("confidence", 0)
                 combined = round(d_conf * w_sac + a_conf * w_ai, 3)
                 if combined < self._min_conf():
+                    self._veto(sym, "below_min_conf", ai, sac_sig, sym_regime)
                     continue
 
                 # Chronos — третья, независимая от LLM/RL точка зрения.
@@ -429,6 +503,13 @@ class SignalCombiner:
                                 combined,
                             )
                         if combined < self._min_conf():
+                            self._veto(
+                                sym,
+                                "below_min_conf_after_chronos",
+                                ai,
+                                sac_sig,
+                                sym_regime,
+                            )
                             continue
 
                 rec = dict(ai)
@@ -451,6 +532,7 @@ class SignalCombiner:
                 results.append(rec)
             else:
                 self.logger.debug("%s: AI=%s vs SAC=%s → hold", sym, a_action, d_action)
+                self._veto(sym, "disagree", ai, sac_sig, sym_regime)
 
         return results
 

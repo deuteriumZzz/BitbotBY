@@ -16,7 +16,7 @@
 | 4. Data Engineering (replay, ADR) | воспроизведение решений комбинатора, ADR-001 (хранилища) | ✅ replay + ADR; Parquet/Dataset Builder → Phase 7; ClickHouse отложен по ADR |
 | 4b. WS-ingestion | WebSocket рынка и приватных событий | ⏳ |
 | 5. Execution reliability | периодическая сверка, проверяемые позиции, ордера с неизвестным исходом, машина состояний (ADR-002) | ✅; DMS/in-flight margin/Smart Execution/funding-ledger — решения в ADR-002 |
-| 6. Decision Engine / Hybrid | независимые оценки AI и SAC, 4 стратегии объединения | ⏳ |
+| 6. Decision Engine / Hybrid | эталон правила Hybrid + 4 теневые стратегии, причины отказов, объяснимость | ✅ инфраструктура; **ворота «Hybrid ≥ лучшего компонента после издержек» не пройдены — нужны SAC-модель и исходы** |
 | 7. SAC pipeline | Dataset Builder, среда с шортом/funding/slippage, lifecycle | ⏳ |
 | 8–11 | Forecast/Meta-Model/Drift, Risk, AI infra, Observability | ⏳ |
 
