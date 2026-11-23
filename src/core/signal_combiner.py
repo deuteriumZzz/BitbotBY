@@ -7,6 +7,7 @@ ai (только Claude API), hybrid (согласие обоих источни
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Any, Dict, List, Tuple
@@ -312,8 +313,12 @@ class SignalCombiner:
                         threshold_pct = max(
                             _CHRONOS_MIN_THRESHOLD, _CHRONOS_ATR_MULT * atr_pct
                         )
-                        chronos_dir = chronos_analyzer.predict_direction(
-                            df["close"].tolist(), threshold_pct=threshold_pct
+                        # Синхронный инференс модели — в потоке, чтобы не
+                        # блокировать event loop на каждый символ.
+                        chronos_dir = await asyncio.to_thread(
+                            chronos_analyzer.predict_direction,
+                            df["close"].tolist(),
+                            threshold_pct=threshold_pct,
                         )
                         expected = "up" if d_action == "buy" else "down"
                         if chronos_dir == expected:

@@ -986,6 +986,19 @@ class TradingBot:
         """Paper-only переключатель «без защит портфеля»; в Live всегда False."""
         return self._runtime_config.paper_guards_off() is True
 
+    async def _sleep_rest_of_cycle(self, t0: float) -> None:
+        """Допаузивает цикл до TRADING_INTERVAL.
+
+        Ветки защит (просадка до подтверждения, ATR-спайк) раньше делали
+        `continue` без паузы: цикл крутился на лимите API, а «подтверждение N
+        циклов» набиралось за N скан-времён, а не N интервалов.
+
+        :param t0: loop.time() начала итерации.
+        """
+        loop = asyncio.get_running_loop()
+        interval = self._runtime_config.get_trading_interval()
+        await asyncio.sleep(max(0.0, interval - (loop.time() - t0)))
+
     def _is_atr_spike(self, market_data: Dict) -> bool:
         """Возвращает True если ATR вырос в ATR_SPIKE_MULT раз от медианы.
 
@@ -994,7 +1007,7 @@ class TradingBot:
         lookback = Config.ATR_SPIKE_LOOKBACK
         mult = Config.ATR_SPIKE_MULT
         candidates: list = []
-        for sym in ["BTCUSDT", Config.SYMBOL]:
+        for sym in ["BTC/USDT", Config.SYMBOL]:
             if sym in market_data and sym not in candidates:
                 candidates.append(sym)
         for sym in market_data:
@@ -1864,6 +1877,7 @@ class TradingBot:
                             self._peak_balance = await self._get_balance_usdt()
                             continue
                     else:
+                        await self._sleep_rest_of_cycle(t0)
                         continue
                 else:
                     self._drawdown_consec = 0
@@ -2008,6 +2022,7 @@ class TradingBot:
                                 f"{Config.ATR_SPIKE_MULT:.0f}x от нормы.\n"
                                 "Позиции закрыты, цикл пропущен.",
                             )
+                    await self._sleep_rest_of_cycle(t0)
                     continue
 
                 async with self._monitored_lock:

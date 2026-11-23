@@ -208,7 +208,7 @@ class TestPaperVsLive:
         await _run_once(bot, price=48500.0, paper=False)
 
         bot.api.create_order.assert_called_once_with(
-            "BTC/USDT", "market", "sell", 0.01, lock_suffix="close"
+            "BTC/USDT", "market", "sell", 0.01, lock_suffix="close", reduce_only=True
         )
 
     @pytest.mark.asyncio

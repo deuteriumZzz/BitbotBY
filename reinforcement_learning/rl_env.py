@@ -30,12 +30,12 @@ class TradingEnv(gym.Env):
         action < -HOLD_ZONE → SELL (fraction of position)
         else                → HOLD
 
-    Пространство наблюдений Box(-inf, inf, shape=(21,)):
+    Пространство наблюдений Box(-inf, inf, shape=(OBS_DIM,)), OBS_DIM=22:
         [open_rel, high_rel, low_rel, in_position, vol_norm, rsi_norm,
          macd_norm, macd_sig_norm, bb_upper_rel, bb_mid_rel, bb_lower_rel,
          balance_norm, pos_value_norm, val_norm,
          funding_rate_norm, ob_imbalance, pcr_norm, fear_greed_norm,
-         iv_skew_norm, basis_norm, google_trends_norm]
+         iv_skew_norm, basis_norm, google_trends_norm, atr_norm]
 
     Все ценовые фичи нормализованы относительно close — BTC ($90k)
     и SOL ($150) дают одинаковый масштаб градиентов нейросети.

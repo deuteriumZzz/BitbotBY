@@ -548,7 +548,12 @@ class TestCheckPartialTp:
         assert monitor._api.cancel_order.await_count == 2
         # Market close for partial qty
         monitor._api.create_order.assert_awaited_once_with(
-            "BTC/USDT", "market", "sell", pytest.approx(0.05), lock_suffix="partial_tp"
+            "BTC/USDT",
+            "market",
+            "sell",
+            pytest.approx(0.05),
+            lock_suffix="partial_tp",
+            reduce_only=True,
         )
         assert result["partial_tp_triggered"] is True
 
@@ -738,7 +743,7 @@ class TestCloseLosersTightenWinners:
                 monitored, lock, {"BTC/USDT": 49000.0}
             )
         monitor._api.create_order.assert_awaited_once_with(
-            "BTC/USDT", "market", "sell", 0.1, lock_suffix="close"
+            "BTC/USDT", "market", "sell", 0.1, lock_suffix="close", reduce_only=True
         )
         assert "BTC/USDT" not in monitored
 

@@ -364,7 +364,12 @@ class PositionMonitor:
                     except Exception as _e:
                         logger.debug("Cancel order %s failed: %s", oid, _e)
                 await self._api.create_order(
-                    sym, "market", close_side, qty, lock_suffix="close"
+                    sym,
+                    "market",
+                    close_side,
+                    qty,
+                    lock_suffix="close",
+                    reduce_only=True,
                 )
             async with lock:
                 monitored.pop(sym, None)
@@ -456,7 +461,12 @@ class PositionMonitor:
                         except Exception as _e:
                             logger.debug("Cancel order %s failed: %s", oid, _e)
                     await self._api.create_order(
-                        sym, "market", close_side, qty, lock_suffix="close"
+                        sym,
+                        "market",
+                        close_side,
+                        qty,
+                        lock_suffix="close",
+                        reduce_only=True,
                     )
                 async with lock:
                     monitored.pop(sym, None)
@@ -656,7 +666,12 @@ class PositionMonitor:
                         )
             try:
                 await self._api.create_order(
-                    sym, "market", close_side, partial_qty, lock_suffix=label
+                    sym,
+                    "market",
+                    close_side,
+                    partial_qty,
+                    lock_suffix=label,
+                    reduce_only=True,
                 )
             except Exception as exc:
                 logger.error("%s order failed for %s: %s", label, sym, exc)
@@ -913,7 +928,7 @@ class PositionMonitor:
                 except Exception as _e:
                     logger.debug("Cancel order %s failed: %s", oid, _e)
             close_order = await self._api.create_order(
-                sym, "market", close_side, qty, lock_suffix="close"
+                sym, "market", close_side, qty, lock_suffix="close", reduce_only=True
             )
             if close_order is None:
                 logger.error(
@@ -1045,7 +1060,7 @@ class PositionMonitor:
             # Шаг 2: программное закрытие позиции (lock_suffix="close" не конкурирует
             # с order_open:{sym} при открытии новой позиции).
             close_order = await self._api.create_order(
-                sym, "market", close_side, qty, lock_suffix="close"
+                sym, "market", close_side, qty, lock_suffix="close", reduce_only=True
             )
 
             if close_order is None:

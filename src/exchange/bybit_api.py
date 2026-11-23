@@ -269,6 +269,7 @@ class BybitAPI:
         amount: float,
         price: Optional[float] = None,
         lock_suffix: str = "trade",
+        reduce_only: bool = False,
     ) -> Optional[dict]:
         """
         Создаёт ордер с Redis-блокировкой для предотвращения конфликтов.
@@ -284,8 +285,14 @@ class BybitAPI:
         :param side: Сторона ордера ("buy" или "sell").
         :param amount: Количество актива.
         :param price: Цена (для лимитных ордеров).
+        :param reduce_only: Ордер только закрывает позицию. На фьючерсах
+            ставит reduceOnly — если позицию уже закрыл биржевой SL/TP, ордер
+            не откроет встречную. На споте не применяется.
         :return: Словарь с данными ордера или None при неудаче.
         """
+        order_params: dict = {}
+        if reduce_only and self._current_market_type() != "spot":
+            order_params["reduceOnly"] = True
         lock_name = f"order_{lock_suffix}:{symbol}"
         if not self.redis.acquire_lock(lock_name):
             self.logger.warning("Не удалось захватить блокировку для %s", symbol)
@@ -301,7 +308,7 @@ class BybitAPI:
                         side,
                         amount,
                         price,
-                        params={"clientOrderId": client_order_id},
+                        params={"clientOrderId": client_order_id, **order_params},
                     )
                     order_data = {
                         "id": order["id"],

@@ -639,21 +639,34 @@ class OrderExecutor:
                     sym, close_side, quantity, sl_price, tp_price
                 )
 
-            trade_id = await self._trade_history.record_open(
-                symbol=sym,
-                strategy=strategy,
-                action=action,
-                entry_price=entry,
-                quantity=quantity,
-                confidence=top.get("confidence", 0.0),
-                commission=commission,
-                context_flags=top.get("context_flags", ""),
-                reasoning=str(top.get("reasoning") or ""),
-                signal_price=signal_price,
-                fill_price=fill_price,
-                order_sent_at=order_sent_at,
-                order_filled_at=order_filled_at,
-            )
+            try:
+                trade_id = await self._trade_history.record_open(
+                    symbol=sym,
+                    strategy=strategy,
+                    action=action,
+                    entry_price=entry,
+                    quantity=quantity,
+                    confidence=top.get("confidence", 0.0),
+                    commission=commission,
+                    context_flags=top.get("context_flags", ""),
+                    reasoning=str(top.get("reasoning") or ""),
+                    signal_price=signal_price,
+                    fill_price=fill_price,
+                    order_sent_at=order_sent_at,
+                    order_filled_at=order_filled_at,
+                )
+            except Exception as exc:
+                # Ордер уже на бирже (live) или залог списан (paper). Если
+                # пробросить ошибку, `finally` освободит слот, и позиция
+                # останется без мониторинга SL/TP до рестарта. Ведём её без
+                # trade_id — закрытие это поддерживает (`if trade_id:`).
+                logger.critical(
+                    "record_open failed for %s: %s — позиция ведётся без trade_id, "
+                    "нужна ручная сверка trade_history",
+                    sym,
+                    exc,
+                )
+                trade_id = None
 
             pos: PositionRecord = {
                 "trade_id": trade_id,
@@ -692,7 +705,13 @@ class OrderExecutor:
             await self._telegram.notify(
                 f"Opened *{sym}*\n"
                 f"{action.upper()} {quantity:.6f} @ ${entry:.4f}\n"
-                f"SL: ${sl_price:.4f}  TP: ${tp_price:.4f}",
+                f"SL: ${sl_price:.4f}  TP: ${tp_price:.4f}"
+                + (
+                    "\n⚠️ Биржевой SL не выставлен — позицию защищает только "
+                    "мониторинг бота"
+                    if (not Config.PAPER_TRADING and sl_price and not exchange_sl_id)
+                    else ""
+                ),
                 kind="position_open",
             )
             logger.info(

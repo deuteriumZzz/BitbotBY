@@ -319,6 +319,7 @@ def _finetune_on_experiences(model: Any, norm_stats: Dict[str, Any]) -> None:
         return obs
 
     added = 0
+    skipped = 0
     for rec in records:
         try:
             obs = _to_obs(rec, use_exit=False)
@@ -336,7 +337,19 @@ def _finetune_on_experiences(model: Any, norm_stats: Dict[str, Any]) -> None:
             )
             added += 1
         except Exception as exc:
+            skipped += 1
             logger.debug("Пропускаем запись опыта: %s", exc)
+
+    if skipped:
+        # Раньше пропуск был виден только на уровне debug: если формат записей
+        # не совпал с _to_obs, дообучение молча становилось пустым.
+        logger.warning(
+            "Fine-tune: пропущено %d из %d записей опыта (формат не совпал с "
+            "_to_obs); добавлено %d",
+            skipped,
+            len(records),
+            added,
+        )
 
     if added < 10 or model.replay_buffer.size() < model.batch_size:
         logger.info("Fine-tune: недостаточно данных в буфере, пропускаем")
