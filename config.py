@@ -291,6 +291,10 @@ class Config:
     ATR_SPIKE_MULT: float = float(os.getenv("ATR_SPIKE_MULT", "3.0"))
     # Кол-во свечей для расчёта базового ATR (медиана)
     ATR_SPIKE_LOOKBACK: int = int(os.getenv("ATR_SPIKE_LOOKBACK", "20"))
+    # Data Quality gate (Phase 2): не открывать новые позиции по символам, у которых
+    # свечи не VALID (устарели, битые, неполные). Статусы пишутся в Decision Ledger
+    # всегда; сама блокировка по умолчанию выключена — сначала наблюдаем по журналу.
+    DATA_QUALITY_GATE: bool = os.getenv("DATA_QUALITY_GATE", "false").lower() == "true"
     # Pre-committed kill-switch: если live EV стратегии за последние
     # LIVE_ALPHA_KILL_MIN_TRADES сделок хуже LIVE_ALPHA_KILL_EV_THRESHOLD —
     # новые сделки по этой стратегии блокируются до ручного вмешательства.

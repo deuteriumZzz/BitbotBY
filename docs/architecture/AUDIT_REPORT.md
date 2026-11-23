@@ -325,6 +325,26 @@ C-9 (reduceOnly), C-8 (защиты без паузы), C-1/C-2 (двойной 
 
 **Не вошло в Phase 1 намеренно:** новый Decision Engine (сейчас роль у `SignalCombiner`), Portfolio Context, Strategy Registry (есть `STRATEGY_REGISTRY`), Decision Router (по `mode` внутри `combine`), показ `mode_readiness` в UI, политика перехода между режимами при открытых позициях.
 
+**Phase 2 — Data Quality (торговые решения по умолчанию не меняются):**
+
+| Элемент | Что сделано | Файлы |
+|---|---|---|
+| Статусы качества | `check_ohlcv` → `DataQuality(status, reasons, age_s, last_candle_time, n_rows)`; статусы VALID/STALE/INCOMPLETE/INVALID/UNAVAILABLE (приоритет INVALID > UNAVAILABLE > INCOMPLETE > STALE). Проверки: пусто, недостающие колонки, NaN/inf, неположительные цены, `high<low`, close вне диапазона, отрицательный объём, дубликаты/неупорядоченность индекса, свеча «из будущего», мало строк (<50), «устарело» (последняя свеча старше 2 таймфреймов). `check_context` — статус контекста по `data_status` (закрывает H-8 до решения). Чистые функции, без сети. | `src/market/data_quality.py` (новый) |
+| snapshot_id | Детерминированный `snapshot_id = sha1(symbol, timeframe, candle_time, close)`; снэпшот несёт `snapshot_id` и `data_quality`. | `src/market/market_scanner.py` |
+| Сканер | `scanner.quality[symbol]` пишется в `_fetch_one` (в т.ч. INCOMPLETE для короткой истории и UNAVAILABLE при ошибке — раньше такие символы пропадали молча, M-9); `reset_quality()` в начале цикла. | `src/market/market_scanner.py`, `src/core/trading_bot.py` |
+| Ledger | Запись `data_quality` каждый цикл: счётчики по статусам, проблемные символы, отброшенные сканером. | `src/core/trading_bot.py` |
+| Опциональная блокировка | `DATA_QUALITY_GATE` (по умолчанию **false**): убирает не-VALID символы только из поиска новых входов (после `_record_data_quality`, перед prescore); пишет `data_quality_block`. Проверка `is True`, чтобы подменённый Config не включил её случайно. Мониторинг открытых позиций не затрагивает. | `config.py`, `src/core/trading_bot.py` |
+| Спецификации контракта | `BybitAPI.get_contract_spec(symbol)` — `tick_size`, `qty_step`, `min_qty`, `funding_interval_min` из уже загруженных `markets` (без запросов); фактический интервал funding не предполагается равным 8 ч. | `src/exchange/bybit_api.py` |
+| M-6 (часть) | Цены биржевых SL/TP округляются по шагу цены контракта (`price_to_precision`); при отсутствии рынка или ошибке цена как была. | `src/exchange/bybit_api.py` |
+
+Тесты: `tests/market/test_data_quality.py` (24). Полный прогон: **2092 passed, 13 skipped**.
+
+**Важные оговорки Phase 2:**
+- Блокировка выключена: сначала наблюдать по журналу `data_quality`, нет ли ложных STALE (например, из-за TTL Redis-кэша свечей, значение которого не найдено в проверенных файлах). Включать — только после просмотра статистики.
+- Три времени (exchange/UTC/monotonic): есть время свечи (биржа) и `snapshot_utc` (UTC); monotonic имеет смысл вместе с WS-ingestion (Phase 4b).
+- Не сделано из ТЗ Phase 2: целостность стакана `u/seq` и lag потоков (нет WS), динамическая подгрузка и пересчёт риска после округления объёма по `qtyStep` (`get_contract_spec` готов, подключения к Kelly нет — это изменение размера позиции), per-symbol/volatility режимы HMM (отдельная задача, H-9), `adlAlert`.
+- Для линейных контрактов `exchange.markets` ключуется как `SYM:USDT`; поиск идёт сначала по нему, затем по `SYM`. Совпадение рынка с тем, на который реально уходят ордера бота (ccxt по символу `BTC/USDT` может выбрать спотовый рынок), проверить на testnet.
+
 **Тесты первого пакета:** новые `tests/exchange/test_bybit_reduce_only.py` (3), `tests/core/test_guard_fixes.py` (4); обновлены ожидаемые аргументы закрывающего вызова в `tests/core/test_position_monitor_new.py` (2 места) и `tests/core/test_monitor_positions.py` (1) — проверка осталась строгой, добавлен `reduce_only=True`. Полный прогон: **2019 passed, 13 skipped**.
 
 **Оставшиеся известные ограничения:** ветки с `continue` проверены юнит-тестом хелпера, а не прогоном `trading_loop`; гонка SL/TP и поведение `reduceOnly` на реальной бирже не проверялись (нужен testnet); H-7 (запись сделки при удалении устаревшей позиции в reconcile) не исправлялся — затрагивает учёт PnL и требует решения о формате записи.

@@ -11,7 +11,7 @@
 | Защиты (блок 2) | дневной лимит при рестарте, SAC без модели, автоподмена SAC, H-7 | ✅ `efa521c` |
 | Наблюдаемость (блок 1) | Decision Ledger v0, provenance, conf_trail, data_status, candle_time | ✅ `9387e71` |
 | **B/C. Контракты и режимы (Phase 1)** | `ModelOutput`/`TradingDecision`, `TradingMode`, запись в ledger | ✅ (коммит — см. git log) |
-| 2. Data Quality | статусы свежести, snapshot-id, три часа | ⏳ |
+| 2. Data Quality | статусы свежести, snapshot-id, спецификации контракта, опциональный gate | ✅ (gate выключен; WS-часть → 4b) |
 | 3. Signal Intelligence | дедупликация/группы независимости — **после** измерения по conf_trail | ⏳ |
 | 4/4b. Data Engineering, WS | Parquet/ClickHouse (ADR), WS-ingestion | ⏳ |
 | 5. Execution reliability | Order State Machine, периодическая сверка, DMS | ⏳ |

@@ -20,6 +20,12 @@ import pandas as pd
 from config import JUNK_BASES, JUNK_PREFIXES, MEME_COIN_BASES, STABLECOIN_BASES, Config
 from src.exchange.bybit_api import BybitAPI
 from src.market.data_loader import DataLoader
+from src.market.data_quality import (
+    UNAVAILABLE,
+    DataQuality,
+    check_ohlcv,
+    make_snapshot_id,
+)
 
 # SMA-50 is the slowest indicator — need at least this many bars before
 # calculate_technical_indicators() produces meaningful (non-zero) values.
@@ -42,6 +48,14 @@ class MarketScanner:
         self.data_loader = data_loader
         self._rc = rc
         self.logger = logging.getLogger(__name__)
+        # Качество свечей по символам за текущий цикл (Phase 2): пишется в
+        # снэпшот и Decision Ledger; торговлю само по себе не блокирует.
+        self.quality: Dict[str, DataQuality] = {}
+        self._timeframe = ""
+
+    def reset_quality(self) -> None:
+        """Начало цикла: забываем статусы прошлого цикла."""
+        self.quality = {}
 
     async def get_top_symbols(
         self,
@@ -173,11 +187,16 @@ class MarketScanner:
                     len(df),
                     _MIN_INDICATOR_ROWS,
                 )
+                self.quality[symbol] = check_ohlcv(df, timeframe)
                 return None
             df = self.data_loader.calculate_technical_indicators(df)
+            self.quality[symbol] = check_ohlcv(df, timeframe)
             return symbol, df
         except Exception as e:
             self.logger.debug("Skip %s: %s", symbol, e)
+            self.quality[symbol] = DataQuality(
+                UNAVAILABLE, (f"error:{type(e).__name__}",)
+            )
             return None
 
     async def scan_all(
@@ -192,6 +211,7 @@ class MarketScanner:
         :param timeframe: Таймфрейм ccxt ('15m', '1h', ...).
         :return: {symbol: DataFrame с индикаторами}
         """
+        self._timeframe = timeframe
         tasks = [self._fetch_one(s, timeframe) for s in symbols]
         results = await asyncio.gather(*tasks)
 
@@ -278,6 +298,8 @@ class MarketScanner:
         atr = self._safe(last, "atr", close * 0.02)
 
         bb_width = (bb_u - bb_l) / bb_m if bb_m > 0 else 0
+        candle_time = self._candle_time(df)
+        quality = getattr(self, "quality", {}).get(symbol)
 
         if ema_s > ema_l and sma20 > sma50:
             trend = "uptrend"
@@ -344,8 +366,13 @@ class MarketScanner:
             "timestamp": datetime.now().isoformat(),
             # Время последней свечи и момент построения в UTC — чтобы проверять
             # свежесть данных и воспроизводить снэпшот (AUDIT_REPORT H-13).
-            "candle_time": self._candle_time(df),
+            "candle_time": candle_time,
             "snapshot_utc": datetime.now(timezone.utc).isoformat(),
+            # Детерминированный id входных данных и статус их качества (Phase 2).
+            "snapshot_id": make_snapshot_id(
+                symbol, getattr(self, "_timeframe", ""), candle_time, close
+            ),
+            "data_quality": quality.to_dict() if quality else None,
         }
 
     @staticmethod

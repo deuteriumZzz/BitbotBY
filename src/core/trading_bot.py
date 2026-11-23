@@ -36,6 +36,7 @@ from src.core.trade_history import TradeHistory
 from src.core.trading_modes import all_readiness
 from src.core.trusted_trader import TrustedTrader
 from src.core.types import PositionRecord
+from src.market.data_quality import VALID
 from src.exchange.bybit_api import BybitAPI
 from src.infra.bot_bus import CommandConsumer, emit
 from src.infra.health_server import cycles_counter
@@ -1033,6 +1034,71 @@ class TradingBot:
         if ledger is not None:
             ledger.write(kind, **fields)
 
+    def _record_data_quality(self, snapshots: list) -> None:
+        """Сводка качества данных цикла в Decision Ledger (только наблюдение)."""
+        counts: Dict[str, int] = {}
+        issues: list = []
+        for snap in snapshots:
+            if not isinstance(snap, dict):
+                continue
+            dq = snap.get("data_quality") or {}
+            status = dq.get("status", "UNKNOWN")
+            counts[status] = counts.get(status, 0) + 1
+            if status != VALID:
+                issues.append(
+                    {
+                        "symbol": snap.get("symbol"),
+                        "snapshot_id": snap.get("snapshot_id"),
+                        **dq,
+                    }
+                )
+        dropped: list = []
+        scanner_q = getattr(getattr(self, "scanner", None), "quality", None)
+        if isinstance(scanner_q, dict):
+            have = {s.get("symbol") for s in snapshots if isinstance(s, dict)}
+            dropped = [
+                {"symbol": sym, **q.to_dict()}
+                for sym, q in scanner_q.items()
+                if sym not in have and getattr(q, "status", VALID) != VALID
+            ]
+        self._ledger_write(
+            "data_quality",
+            counts=counts,
+            issues=issues[:20],
+            dropped=dropped[:20],
+        )
+
+    def _quality_filter(self, snapshots: list) -> list:
+        """Убирает из входов символы с не-VALID свечами, если включён DATA_QUALITY_GATE.
+
+        Выключено по умолчанию (`is True` — чтобы подменённый в тестах Config не
+        включил блокировку случайно). Блокируется только поиск новых входов.
+        """
+        if getattr(Config, "DATA_QUALITY_GATE", False) is not True:
+            return snapshots
+        kept: list = []
+        blocked: list = []
+        for snap in snapshots:
+            dq = (snap.get("data_quality") if isinstance(snap, dict) else None) or {}
+            if dq.get("status", VALID) == VALID:
+                kept.append(snap)
+            else:
+                blocked.append(
+                    {
+                        "symbol": snap.get("symbol"),
+                        "status": dq.get("status"),
+                        "reasons": dq.get("reasons"),
+                    }
+                )
+        if blocked:
+            logger.warning(
+                "Data quality gate: %d symbols excluded from entries: %s",
+                len(blocked),
+                ", ".join(str(b["symbol"]) for b in blocked[:10]),
+            )
+            self._ledger_write("data_quality_block", blocked=blocked[:20])
+        return kept
+
     async def _sleep_rest_of_cycle(self, t0: float) -> None:
         """Допаузивает цикл до TRADING_INTERVAL.
 
@@ -1821,6 +1887,10 @@ class TradingBot:
                 # refill_kwargs: если после scan_all не хватило _scan_n монет с
                 # валидными данными (молодой листинг, делистинг, сбой API) —
                 # добираем следующими по рейтингу, а не смиряемся с недобором.
+                try:
+                    self.scanner.reset_quality()
+                except Exception:  # статусы качества не должны ломать цикл
+                    pass
                 market_data = await self._scan_and_update_correlations(
                     symbols, target_n=_scan_n, refill_kwargs=_refill_kwargs
                 )
@@ -1837,6 +1907,7 @@ class TradingBot:
                 snapshots = await self._cycle.collect_snapshots(
                     list(market_data.keys()), market_data
                 )
+                self._record_data_quality(snapshots)
                 self._publish_event(
                     "radar.stage",
                     {"stage": "scan", "symbols": [s.get("symbol") for s in snapshots]},
@@ -2194,7 +2265,9 @@ class TradingBot:
                 # Умный предфильтр: из 100 монет выбираем 30 лучших кандидатов
                 # по быстрым метрикам — до отправки в AI
                 _ai_limit = int(os.getenv("AI_MAX_SYMBOLS", "30"))
-                ai_snapshots = self._prescore_snapshots(snapshots, regimes, _ai_limit)
+                ai_snapshots = self._prescore_snapshots(
+                    self._quality_filter(snapshots), regimes, _ai_limit
+                )
                 self._publish_event(
                     "cycle", {"state": "scan", "used": _open, "max": _max}
                 )

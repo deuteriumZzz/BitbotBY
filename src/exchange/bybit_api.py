@@ -555,6 +555,10 @@ class BybitAPI:
         sl_id: str | None = None
         tp_id: str | None = None
 
+        # Биржа отклоняет цены не по шагу цены (tickSize): округляем по контракту.
+        sl_price = self._round_price(symbol, sl_price)
+        tp_price = self._round_price(symbol, tp_price)
+
         # На фьючерсном рынке ордера закрытия должны иметь reduceOnly=True,
         # чтобы не открыть новую позицию если основная уже закрыта.
         extra: dict = (
@@ -617,6 +621,55 @@ class BybitAPI:
         except Exception as e:
             self.logger.error("Неожиданная ошибка cancel_order: %s", e, exc_info=True)
             return False
+
+    def _market_for(self, symbol: str) -> Optional[tuple]:
+        """(ключ, рынок ccxt) для символа; на фьючерсах сначала 'SYM:USDT'.
+
+        Берётся из уже загруженных `exchange.markets` — без запросов к бирже.
+        """
+        markets = getattr(self.exchange, "markets", None) or {}
+        candidates = (
+            [f"{symbol}:USDT", symbol]
+            if self._current_market_type() != "spot"
+            else [symbol]
+        )
+        for key in candidates:
+            if key in markets:
+                return key, markets[key]
+        return None
+
+    def get_contract_spec(self, symbol: str) -> Optional[dict]:
+        """Спецификация контракта из загруженных рынков (Phase 2, MASTER_SPEC §3).
+
+        `tick_size`/`qty_step` — как отдаёт ccxt (число знаков или шаг, зависит от
+        precisionMode биржи); `funding_interval_min` — фактический интервал
+        funding конкретного контракта (минуты), его нельзя считать 8 часами.
+        """
+        found = self._market_for(symbol)
+        if not found:
+            return None
+        key, market = found
+        precision = market.get("precision") or {}
+        amount_limits = (market.get("limits") or {}).get("amount") or {}
+        return {
+            "symbol": key,
+            "type": market.get("type"),
+            "tick_size": precision.get("price"),
+            "qty_step": precision.get("amount"),
+            "min_qty": amount_limits.get("min"),
+            "funding_interval_min": (market.get("info") or {}).get("fundingInterval"),
+        }
+
+    def _round_price(self, symbol: str, price: float) -> float:
+        """Округляет цену до шага цены контракта; при любой проблеме — как есть."""
+        found = self._market_for(symbol)
+        if not found or not price:
+            return price
+        try:
+            return float(self.exchange.price_to_precision(found[0], price))
+        except Exception as exc:
+            self.logger.warning("round_price failed for %s: %s", symbol, exc)
+            return price
 
     def round_quantity(self, symbol: str, quantity: float) -> float:
         """
