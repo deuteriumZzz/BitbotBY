@@ -44,6 +44,16 @@ _CHRONOS_MIN_THRESHOLD = 0.001
 _MAX_CONTEXT_PENALTY = 0.25
 
 
+def _trail(rec: Dict[str, Any], stage: str, conf: float) -> None:
+    """Дописывает стадию в rec['conf_trail'] — только измерение, решений не меняет.
+
+    Нужен, чтобы по журналу было видно, на какой стадии и насколько менялась
+    уверенность (AUDIT_REPORT C-1/C-2: один фактор учитывается в нескольких
+    местах). Список пересоздаётся: копии рекомендаций не делят его между собой.
+    """
+    rec["conf_trail"] = [*rec.get("conf_trail", []), [stage, round(float(conf), 3)]]
+
+
 class SignalCombiner:
     """
     Объединяет сигналы SAC и AI согласно MODE.
@@ -134,6 +144,9 @@ class SignalCombiner:
             recs = await self.ai.analyze(snapshots, balance)
 
         recs = self._drop_invalid_for_market(recs)
+        for _r in recs:
+            if "conf_trail" not in _r:
+                _trail(_r, f"source:{mode}", _r.get("confidence", 0.0))
 
         if market_context and recs:
             recs = self._apply_market_context_filter(recs, market_context)
@@ -242,6 +255,7 @@ class SignalCombiner:
                     "stop_loss": sl,
                     "take_profit": tp,
                     "reasoning": f"SAC conf {sig['confidence']:.0%}",
+                    "conf_trail": [["sac", round(float(sig["confidence"]), 3)]],
                 }
             )
         return results
@@ -303,6 +317,7 @@ class SignalCombiner:
                             "stop_loss": sl,
                             "take_profit": tp,
                             "reasoning": f"SAC {d_conf:.0%}, AI silent",
+                            "conf_trail": [["sac", round(float(d_conf), 3)]],
                         }
                     )
                 continue
@@ -357,6 +372,11 @@ class SignalCombiner:
                 rec = dict(ai)
                 rec["confidence"] = combined
                 rec["chronos_signal"] = chronos_dir
+                rec["conf_trail"] = [
+                    ["ai", round(float(a_conf), 3)],
+                    ["sac", round(float(d_conf), 3)],
+                    ["hybrid", combined],
+                ]
                 base_strat = ai.get("strategy", "ai")
                 enhanced = "+chronos" if use_chronos else ""
                 rec["strategy"] = f"hybrid({base_strat}+sac{enhanced})"
@@ -589,6 +609,10 @@ class SignalCombiner:
             rec["context_flags"] = (
                 json.dumps(fired, ensure_ascii=False) if fired else ""
             )
+            if penalty:
+                rec["ctx_penalty"] = round(capped_penalty, 3)
+                rec["ctx_penalty_raw"] = round(penalty, 3)
+            _trail(rec, "context_filter", conf)
             result.append(rec)
 
         return result
@@ -652,6 +676,7 @@ class SignalCombiner:
                 )
             rec = dict(rec)
             rec["confidence"] = conf
+            _trail(rec, "sentiment_filter", conf)
             result.append(rec)
 
         return result
@@ -804,6 +829,7 @@ class SignalCombiner:
                         "stop_loss": sl,
                         "take_profit": tp,
                         "reasoning": reason,
+                        "conf_trail": [["context_signal", confidence]],
                     }
                 )
 
@@ -837,6 +863,8 @@ class SignalCombiner:
                 existing[i]["confidence"] = round(
                     min(0.95, existing[i]["confidence"] + 0.05), 3
                 )
+                existing[i]["context_boost"] = True
+                _trail(existing[i], "context_merge", existing[i]["confidence"])
                 self.logger.debug(
                     "Context boosted existing %s %s conf → %.3f",
                     key[0],

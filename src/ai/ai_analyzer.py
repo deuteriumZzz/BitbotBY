@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -460,6 +461,9 @@ class AIAnalyzer:
             return []
 
         prompt = self._build_prompt(snapshots, balance)
+        prompt_hash = hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:16]
+        # Цепочка попыток этого вызова — для Decision Ledger (кто отказал, кто ответил).
+        attempts: List[Dict[str, Any]] = []
         now = time.time()
         queue = list(chain)
         while queue:
@@ -469,7 +473,11 @@ class AIAnalyzer:
                 self.logger.debug(
                     "Provider %s on cooldown for %ds — skipping", provider, wait
                 )
+                attempts.append(
+                    {"provider": provider, "model": model, "status": "cooldown"}
+                )
                 continue
+            t_call = time.monotonic()
             try:
                 raw = await self._call(provider, model, prompt)
                 valid = self._parse_response(raw)
@@ -478,9 +486,15 @@ class AIAnalyzer:
                     "AI [%s] JSON parse error — trying next: %s", provider, e
                 )
                 self._mark(provider, model, "bad_format")
+                attempts.append(
+                    {"provider": provider, "model": model, "status": "bad_format"}
+                )
                 continue
             except Exception as e:
                 status, pause = _classify(e)
+                attempts.append(
+                    {"provider": provider, "model": model, "status": status}
+                )
                 default = catalog.BY_ID[provider].default_model
                 if status == "bad_model" and model != default:
                     # Модели из .env или приложения у провайдера больше нет —
@@ -515,9 +529,34 @@ class AIAnalyzer:
             if getattr(self, "_down_since", None) is not None:
                 self._down_since = None
                 await self._notify_recovered(provider)
+            # Происхождение решения: какое звено цепочки ответило (H-2). Fallback
+            # меняет источник решения, и без этого оценить AI по провайдерам нельзя.
+            for rec in valid:
+                rec["ai_provider"] = provider
+                rec["ai_model"] = model
+            self._ledger_write(
+                "ai_call",
+                status="ok",
+                provider=provider,
+                model=model,
+                latency_ms=round((time.monotonic() - t_call) * 1000),
+                prompt_sha256=prompt_hash,
+                n_symbols=len(snapshots),
+                n_signals=len(valid),
+                attempts=attempts,
+                raw=raw,
+            )
             return valid
 
         self.logger.error("All AI providers exhausted")
+        self._ledger_write(
+            "ai_call",
+            status="exhausted",
+            provider=None,
+            prompt_sha256=prompt_hash,
+            n_symbols=len(snapshots),
+            attempts=attempts,
+        )
         self.unavailable = True
         if getattr(self, "_down_since", None) is None:
             self._down_since = time.time()
@@ -528,6 +567,12 @@ class AIAnalyzer:
                 pass
         await self._notify_all_exhausted()
         return []
+
+    def _ledger_write(self, kind: str, **fields: Any) -> None:
+        """Запись в Decision Ledger, если он подключён (TradingBot ставит _ledger)."""
+        ledger = getattr(self, "_ledger", None)
+        if ledger is not None:
+            ledger.write(kind, **fields)
 
     async def _notify_provider_failure(
         self, provider: str, status: str, model: str = "", last: bool = False

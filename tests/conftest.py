@@ -43,6 +43,12 @@ def make_ohlcv(
     return df
 
 
+@pytest.fixture(autouse=True)
+def _disable_decision_ledger(monkeypatch):
+    """Тесты не пишут в реальный data/decision_ledger.jsonl."""
+    monkeypatch.setenv("DECISION_LEDGER_ENABLED", "0")
+
+
 @pytest.fixture
 def ohlcv_uptrend():
     return make_ohlcv(n=100, trend=0.002)

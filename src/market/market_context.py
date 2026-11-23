@@ -84,6 +84,18 @@ class MarketContext:
             (0.0, "neutral"),
             0.0,
         )
+        # {источник: monotonic-время последнего сбоя}. Источник при сбое отдаёт
+        # «нейтраль» — без этой отметки это неотличимо от настоящего нейтрального
+        # рынка (AUDIT_REPORT H-8). Решений не меняет, только прозрачность.
+        self._source_errors: Dict[str, float] = {}
+
+    def _mark_failed(self, source: str) -> None:
+        self._source_errors[source] = time.monotonic()
+
+    def _failed_sources(self) -> List[str]:
+        """Источники, падавшие за последние _CACHE_TTL секунд."""
+        now = time.monotonic()
+        return sorted(s for s, t in self._source_errors.items() if now - t < _CACHE_TTL)
 
     async def get_context(self, symbol: str, current_price: float) -> dict:
         """
@@ -156,6 +168,7 @@ class MarketContext:
             "etf_signal": etf_signal,
             "reddit_signal": reddit_signal,
             "stablecoin_signal": stablecoin_signal,
+            "data_status": {"failed_sources": self._failed_sources()},
         }
         self._cache[symbol] = (ctx, now)
         logger.info(
@@ -195,7 +208,14 @@ class MarketContext:
         results = await asyncio.gather(*tasks.values(), return_exceptions=True)
         out: Dict[str, dict] = {}
         for sym, res in zip(tasks.keys(), results):
-            out[sym] = res if isinstance(res, dict) else self._neutral_context()
+            out[sym] = (
+                res
+                if isinstance(res, dict)
+                else {
+                    **self._neutral_context(),
+                    "data_status": {"failed_sources": ["all"]},
+                }
+            )
         return out
 
     def _neutral_context(self) -> dict:
@@ -262,6 +282,7 @@ class MarketContext:
             raise
         except Exception as e:
             logger.debug("Funding rate fetch failed for %s: %s", symbol, e)
+            self._mark_failed("funding")
             return 0.0, "neutral"
 
     # ── Open Interest + Liquidation Pressure ──────────────────────────────────
@@ -341,6 +362,7 @@ class MarketContext:
             raise
         except Exception as e:
             logger.debug("OI fetch failed for %s: %s", symbol, e)
+            self._mark_failed("oi")
             return "oi_neutral", "neutral"
 
     # ── Basis (futures - spot premium) ────────────────────────────────────────
@@ -389,6 +411,7 @@ class MarketContext:
             raise
         except Exception as e:
             logger.debug("Basis fetch failed for %s: %s", symbol, e)
+            self._mark_failed("basis")
             return 0.0, "neutral"
 
     # ── Fear & Greed ──────────────────────────────────────────────────────────
@@ -421,6 +444,7 @@ class MarketContext:
             raise
         except Exception as e:
             logger.debug("Fear&Greed fetch failed: %s", e)
+            self._mark_failed("fear_greed")
             return 50, "neutral"
 
     @staticmethod
@@ -469,6 +493,7 @@ class MarketContext:
             raise
         except Exception as e:
             logger.debug("Google Trends failed: %s", e)
+            self._mark_failed("google_trends")
             return 50, "neutral"
 
     # ── Deribit options (PCR + IV Skew) ──────────────────────────────────────
@@ -558,6 +583,7 @@ class MarketContext:
             raise
         except Exception as e:
             logger.debug("Deribit options fetch failed for %s: %s", base, e)
+            self._mark_failed("deribit_options")
             return 1.0, "neutral", 0.0, "neutral"
 
     # ── Orderbook imbalance ───────────────────────────────────────────────────
@@ -617,6 +643,7 @@ class MarketContext:
             raise
         except Exception as e:
             logger.debug("Orderbook imbalance fetch failed for %s: %s", symbol, e)
+            self._mark_failed("orderbook")
             return 0.0, "balanced"
 
     # ── Glassnode / CoinGecko macro ───────────────────────────────────────────
@@ -695,6 +722,7 @@ class MarketContext:
             raise
         except Exception as e:
             logger.debug("Glassnode/CoinGecko macro fetch failed for %s: %s", base, e)
+            self._mark_failed("macro")
             return 0.0, "neutral"
 
     # ── BTC ETF flows ─────────────────────────────────────────────────────────
@@ -790,6 +818,7 @@ class MarketContext:
             raise
         except Exception as e:
             logger.debug("ETF flows fetch failed: %s", e)
+            self._mark_failed("etf")
             return 0.0, "neutral"
 
     # ── Reddit sentiment ──────────────────────────────────────────────────────
@@ -845,6 +874,7 @@ class MarketContext:
             raise
         except Exception as e:
             logger.debug("Reddit sentiment fetch failed for %s: %s", base, e)
+            self._mark_failed("reddit")
             return 0.0, "neutral"
 
     # ── Stablecoin supply change ──────────────────────────────────────────────
@@ -892,4 +922,5 @@ class MarketContext:
             raise
         except Exception as e:
             logger.debug("Stablecoin supply fetch failed: %s", e)
+            self._mark_failed("stablecoin")
             return 0.0, "neutral"

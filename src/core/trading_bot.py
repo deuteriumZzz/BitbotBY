@@ -24,6 +24,7 @@ from src.ai.online_learner import OnlineLearner
 from src.core.bot_commands import BotCommands
 from src.core.constants import REDIS_TTL_MARKET_DATA, SILENT_DEATH_ALERT_COOLDOWN
 from src.core.cycle import CycleRunner
+from src.core.decision_ledger import DecisionLedger
 from src.core.decision_trace import DecisionTrace
 from src.core.order_executor import OrderExecutor
 from src.core.portfolio_manager import PortfolioManager
@@ -80,6 +81,34 @@ _REGIME_RU = {
 # файл (включая тесты), импортирующий src.core.trading_bot, незаметно цеплял
 # RotatingFileHandler на общий logs/trading.log.
 logger = logging.getLogger(__name__)
+
+# Поля рекомендации, которые идут в Decision Ledger (без тяжёлых служебных ключей).
+_LEDGER_REC_KEYS = (
+    "symbol",
+    "action",
+    "strategy",
+    "confidence",
+    "entry",
+    "stop_loss",
+    "take_profit",
+    "ai_provider",
+    "ai_model",
+    "chronos_signal",
+    "context_flags",
+    "ctx_penalty",
+    "ctx_penalty_raw",
+    "context_boost",
+    "conf_trail",
+    "_regime",
+)
+
+
+def _compact_rec(rec: Dict[str, Any]) -> Dict[str, Any]:
+    """Компактный вид рекомендации для журнала решений."""
+    out = {k: rec[k] for k in _LEDGER_REC_KEYS if k in rec}
+    if rec.get("reasoning"):
+        out["reasoning"] = str(rec["reasoning"])[:300]
+    return out
 
 
 def _opened_at(entry_time: Optional[str]) -> Optional[float]:
@@ -168,6 +197,9 @@ class TradingBot:
         self.telegram.gate = self._runtime_config.should_notify
         self.ai._telegram = self.telegram
         self.ai._emit = self._publish_event  # статусы AI-провайдеров для приложения
+        # Постоянный журнал решений (AUDIT_REPORT H-2/H-5): только запись.
+        self.ledger = DecisionLedger()
+        self.ai._ledger = self.ledger
         self._paper_balance: float = Config.INITIAL_BALANCE
         self._live_balance_cache: float = Config.INITIAL_BALANCE
         # Equity (баланс + unrealized PnL) для drawdown halt
@@ -946,6 +978,19 @@ class TradingBot:
                 )
                 continue
             await self._executor.execute(rec, market_data, balance)
+            async with self._monitored_lock:
+                opened = self._monitored.get(sym) is not None
+            self._ledger_write(
+                "execution",
+                symbol=sym,
+                action=rec.get("action"),
+                opened=opened,
+                reject="" if opened else self._executor.last_reject.get(sym, ""),
+                confidence=rec.get("confidence"),
+                ai_provider=rec.get("ai_provider"),
+                ai_model=rec.get("ai_model"),
+                conf_trail=rec.get("conf_trail"),
+            )
 
     async def _close_all_open_positions(self, reason: str) -> None:
         """Принудительно закрывает все открытые позиции — делегирует PositionMonitor."""
@@ -1000,6 +1045,12 @@ class TradingBot:
     def _guards_off(self) -> bool:
         """Paper-only переключатель «без защит портфеля»; в Live всегда False."""
         return self._runtime_config.paper_guards_off() is True
+
+    def _ledger_write(self, kind: str, **fields: Any) -> None:
+        """Запись в Decision Ledger; не бросает и не требует, чтобы он был создан."""
+        ledger = getattr(self, "ledger", None)
+        if ledger is not None:
+            ledger.write(kind, **fields)
 
     async def _sleep_rest_of_cycle(self, t0: float) -> None:
         """Допаузивает цикл до TRADING_INTERVAL.
@@ -1473,6 +1524,13 @@ class TradingBot:
             if "_regime" not in rec:
                 sym = rec.get("symbol", "")
                 rec["_regime"] = regimes.get(sym, self._current_regime)
+        self._ledger_write(
+            "signals",
+            mode=_mode,
+            n_snapshots=len(snapshots),
+            decider_unavailable=bool(_down),
+            recs=[_compact_rec(r) for r in recs],
+        )
         return recs
 
     def _prescore_snapshots(
@@ -1697,6 +1755,9 @@ class TradingBot:
             cycle += 1
             loop = asyncio.get_running_loop()
             t0 = loop.time()
+            _led = getattr(self, "ledger", None)
+            if _led is not None:
+                _led.begin_cycle(cycle)
 
             if self._runtime_config.is_paused():
                 self._publish_event("cycle", {"state": "paused"})

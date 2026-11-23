@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
@@ -342,4 +342,22 @@ class MarketScanner:
             "social_sentiment": social,
             "top_headlines": headlines[:3],
             "timestamp": datetime.now().isoformat(),
+            # Время последней свечи и момент построения в UTC — чтобы проверять
+            # свежесть данных и воспроизводить снэпшот (AUDIT_REPORT H-13).
+            "candle_time": self._candle_time(df),
+            "snapshot_utc": datetime.now(timezone.utc).isoformat(),
         }
+
+    @staticmethod
+    def _candle_time(df: pd.DataFrame) -> Optional[str]:
+        """ISO-время последней свечи (UTC) или None, если индекс не временной."""
+        try:
+            idx = df.index[-1]
+            if hasattr(idx, "isoformat"):
+                return str(idx.isoformat())
+            value = float(idx)  # int, numpy.int64 и т.п.: время в миллисекундах
+            if value > 1e11:
+                return datetime.fromtimestamp(value / 1000, tz=timezone.utc).isoformat()
+        except Exception:
+            pass
+        return None
