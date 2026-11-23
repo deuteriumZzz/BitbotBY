@@ -16,6 +16,7 @@ from config import Config
 from src.ai import chronos_analyzer
 from src.ai.ai_analyzer import AIAnalyzer
 from src.ai.dqn_signal import SACSignal
+from src.core.trading_modes import requires_sac
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +121,7 @@ class SignalCombiner:
         # не должна ни решать, ни молча подменяться контекстными сигналами.
         # Локальный запасной путь (если включён) подхватит цикл через
         # decider_unavailable().
-        if mode in ("dqn", "hybrid") and not getattr(self.sac, "loaded", False):
+        if requires_sac(mode) and not getattr(self.sac, "loaded", False):
             if not self._sac_missing_logged:
                 self._sac_missing_logged = True
                 self.logger.warning(

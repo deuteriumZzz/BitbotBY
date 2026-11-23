@@ -312,6 +312,19 @@ C-9 (reduceOnly), C-8 (защиты без паузы), C-1/C-2 (двойной 
 
 **Что ещё НЕ покрыто блоком 1 (ограничения):** полный snapshot входов не сохраняется (в журнале только хэш промпта — для воспроизведения нужен отдельный snapshot-store, Phase 1/2); `temperature`/`seed` LLM не заданы; валидация `entry/SL/TP` ответа по snapshot (H-3) не добавлена — это изменение поведения; журнал растёт на каждый AI-вызов (в режиме «слоты заняты» это каждый цикл — см. M-8), при 50 МБ + одной ротации хватит на часы–сутки, а не недели.
 
+**Phase 1 — контракты и режимы (поведение торговли не менялось):**
+
+| Элемент | Что сделано | Файлы |
+|---|---|---|
+| Контракты | `ModelOutput` (предложение политики) и `TradingDecision` (итог по символу: статус LONG/SHORT/NO_TRADE/INSUFFICIENT_DATA, `outputs`, `conf_trail`, `reason_codes`, детерминированный `decision_id`). Каждый confidence помечен `confidence_kind`: `llm_self_report`, `sac_action_magnitude`, `heuristic_constant`, `strategy_score`, `combined_heuristic`, `direction_only` — закрывает смысловую часть H-1 (разные числа больше не выглядят сравнимыми). Строятся адаптером `decision_from_rec` над существующими рекомендациями, ничего в них не меняя. | `src/core/contracts.py` (новый) |
+| Trading Mode Manager | Таблица режимов `MODE_SPECS` (какие политики активны, нужны ли SAC/AI), `readiness(mode)` → (готов, причина), `requires_sac`. Combiner-guard (блок 2) использует её. Состояние бота отдаёт `mode_readiness` (аддитивный ключ) — приложение сможет показать «SAC не допущен». | `src/core/trading_modes.py` (новый), `src/core/signal_combiner.py`, `src/core/trading_bot.py` |
+| Ledger | «signals» теперь содержит `TradingDecision` (вместо урезанных словарей), рекомендации получают `decision_id`, «execution» его пишет — сигнал и исполнение связаны. | `src/core/trading_bot.py` |
+| Документы | `TARGET_ARCHITECTURE.md` и `IMPLEMENTATION_PLAN.md` (критерии приёмки Phase 1, риски совместимости, ворота следующих фаз) — обязательные результаты Phase 0 по ТЗ. | `docs/architecture/`, `docs/implementation/` |
+
+Тесты: `tests/core/test_contracts.py` (12). Полный прогон: см. ниже в коммите.
+
+**Не вошло в Phase 1 намеренно:** новый Decision Engine (сейчас роль у `SignalCombiner`), Portfolio Context, Strategy Registry (есть `STRATEGY_REGISTRY`), Decision Router (по `mode` внутри `combine`), показ `mode_readiness` в UI, политика перехода между режимами при открытых позициях.
+
 **Тесты первого пакета:** новые `tests/exchange/test_bybit_reduce_only.py` (3), `tests/core/test_guard_fixes.py` (4); обновлены ожидаемые аргументы закрывающего вызова в `tests/core/test_position_monitor_new.py` (2 места) и `tests/core/test_monitor_positions.py` (1) — проверка осталась строгой, добавлен `reduce_only=True`. Полный прогон: **2019 passed, 13 skipped**.
 
 **Оставшиеся известные ограничения:** ветки с `continue` проверены юнит-тестом хелпера, а не прогоном `trading_loop`; гонка SL/TP и поведение `reduceOnly` на реальной бирже не проверялись (нужен testnet); H-7 (запись сделки при удалении устаревшей позиции в reconcile) не исправлялся — затрагивает учёт PnL и требует решения о формате записи.

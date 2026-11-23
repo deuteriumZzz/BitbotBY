@@ -23,6 +23,7 @@ from src.ai.experience_buffer import LOCAL_REASONING_PREFIX
 from src.ai.online_learner import OnlineLearner
 from src.core.bot_commands import BotCommands
 from src.core.constants import REDIS_TTL_MARKET_DATA, SILENT_DEATH_ALERT_COOLDOWN
+from src.core.contracts import decision_from_rec
 from src.core.cycle import CycleRunner
 from src.core.decision_ledger import DecisionLedger
 from src.core.decision_trace import DecisionTrace
@@ -32,6 +33,7 @@ from src.core.position_monitor import PositionMonitor
 from src.core.risk_management import RiskManager
 from src.core.signal_combiner import SignalCombiner
 from src.core.trade_history import TradeHistory
+from src.core.trading_modes import all_readiness
 from src.core.trusted_trader import TrustedTrader
 from src.core.types import PositionRecord
 from src.exchange.bybit_api import BybitAPI
@@ -81,34 +83,6 @@ _REGIME_RU = {
 # файл (включая тесты), импортирующий src.core.trading_bot, незаметно цеплял
 # RotatingFileHandler на общий logs/trading.log.
 logger = logging.getLogger(__name__)
-
-# Поля рекомендации, которые идут в Decision Ledger (без тяжёлых служебных ключей).
-_LEDGER_REC_KEYS = (
-    "symbol",
-    "action",
-    "strategy",
-    "confidence",
-    "entry",
-    "stop_loss",
-    "take_profit",
-    "ai_provider",
-    "ai_model",
-    "chronos_signal",
-    "context_flags",
-    "ctx_penalty",
-    "ctx_penalty_raw",
-    "context_boost",
-    "conf_trail",
-    "_regime",
-)
-
-
-def _compact_rec(rec: Dict[str, Any]) -> Dict[str, Any]:
-    """Компактный вид рекомендации для журнала решений."""
-    out = {k: rec[k] for k in _LEDGER_REC_KEYS if k in rec}
-    if rec.get("reasoning"):
-        out["reasoning"] = str(rec["reasoning"])[:300]
-    return out
 
 
 def _opened_at(entry_time: Optional[str]) -> Optional[float]:
@@ -870,6 +844,12 @@ class TradingBot:
             "positions": positions,
             "paper_trading": Config.PAPER_TRADING,
             "strategies": strategies,
+            # Готовность режимов: почему режим сейчас не может принимать решения
+            # (например, нет допущенной SAC-модели). Аддитивный ключ.
+            "mode_readiness": all_readiness(
+                sac_loaded=bool(getattr(self.combiner.sac, "loaded", False)),
+                ai_available=bool(getattr(self.ai, "enabled", True)),
+            ),
         }
 
     def _set_paper_balance(self, value: float) -> None:
@@ -983,6 +963,7 @@ class TradingBot:
             self._ledger_write(
                 "execution",
                 symbol=sym,
+                decision_id=rec.get("decision_id"),
                 action=rec.get("action"),
                 opened=opened,
                 reject="" if opened else self._executor.last_reject.get(sym, ""),
@@ -1524,12 +1505,24 @@ class TradingBot:
             if "_regime" not in rec:
                 sym = rec.get("symbol", "")
                 rec["_regime"] = regimes.get(sym, self._current_regime)
+        # Единый контракт решения (Phase 1): адаптер над рекомендациями, значения
+        # не меняет; decision_id связывает «signals» и «execution» в журнале.
+        _trace = str(getattr(getattr(self, "ledger", None), "trace_id", "") or "")
+        decisions = []
+        for rec in recs:
+            try:
+                decision = decision_from_rec(rec, _mode, _trace)
+            except Exception as exc:  # журнал не должен ломать торговый цикл
+                logger.debug("decision_from_rec failed for %s: %s", rec, exc)
+                continue
+            rec["decision_id"] = decision.decision_id
+            decisions.append(decision.to_dict())
         self._ledger_write(
             "signals",
             mode=_mode,
             n_snapshots=len(snapshots),
             decider_unavailable=bool(_down),
-            recs=[_compact_rec(r) for r in recs],
+            decisions=decisions,
         )
         return recs
 
