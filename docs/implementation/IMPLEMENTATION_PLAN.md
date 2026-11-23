@@ -21,7 +21,7 @@
 | 8. Forecast/Meta-Model/Drift | калибровка, Meta-Model с вердиктом `usable`, PSI/KS/Mahalanobis/CUSUM, conformal с измерением покрытия, harness сравнения прогнозистов | ✅ измерительная часть (AUDIT_REPORT §10h); прогон Chronos vs TimesFM и обучение на исходах — нужны данные/модели |
 | 9. Risk | единый Risk Gate (чистая функция), CVaR/бета/стресс, четыре уровня breaker, распределение капитала с лимитом скорости | ✅ модули (AUDIT_REPORT §10i); **не подключены к исполнителю** — сначала теневой режим |
 | 10. AI infra | строгая валидация ответа LLM, защита от prompt injection, таблица отказов, здоровье провайдеров; теневой аудит в `ai_call` | ✅ (AUDIT_REPORT §10j); шлюз/RAG/оркестратор — решения без кода, включение строгой валидации — после данных аудита |
-| 11 | Observability | ⏳ |
+| 11. Observability/Ops | Decision Audit, Daily Health Digest, Emergency Control (4 уровня), стадии выкатки Shadow→Paper→Canary→Production | ✅ модули (AUDIT_REPORT §10k); в бот/Telegram не подключены |
 
 ## 2. Phase 1 — состав и файлы
 
