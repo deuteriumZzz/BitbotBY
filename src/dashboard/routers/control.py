@@ -138,6 +138,8 @@ def build_state() -> Dict[str, Any]:
         "cycle": _redis_json(r, "bot:last_cycle"),
         # Готов ли выбранный режим решать (нет модели SAC, не допущена, AI недоступен).
         "mode_readiness": _redis_json(r, "bot:mode_readiness"),
+        # Что включено и как работает наблюдение (WS, копия БД, аварийный уровень).
+        "ops_status": _redis_json(r, "bot:ops_status"),
         # Последний пост доверенного канала: вход или почему нет (trusted_trader).
         "trusted": _redis_json(r, TRUSTED_LAST_KEY),
         "balance": portfolio.get("balance", Config.INITIAL_BALANCE),

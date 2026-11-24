@@ -46,6 +46,19 @@ export interface Position {
   trace?: TraceStep[];
 }
 
+/** Состояние защиты и наблюдения (Redis bot:ops_status, пишет src/core/ops_tasks.ops_status). */
+export interface OpsStatus {
+  mode: "paper" | "live";
+  prompt_version: string;
+  flags: Record<string, boolean>;
+  forecaster: string;
+  ws: { streams: number; silent: string[]; reconnects: number; lag_p99_ms: number | null; gaps: number } | null;
+  backup: { ok: boolean; at: string; path: string | null; error: string | null } | null;
+  /** 0 — норма, 1–4 — аварийный уровень. */
+  emergency: number;
+  ts: string;
+}
+
 export interface BotState {
   bot: {
     alive: boolean;
@@ -65,6 +78,8 @@ export interface BotState {
   cycle?: CycleTrace | null;
   /** Готовность режимов решать: reason — код причины, пусто если готов; null — бот ещё не публиковал. */
   mode_readiness?: Record<string, { ready: boolean; reason: string }> | null;
+  /** Что включено и как работает наблюдение; null — бот ещё не публиковал. */
+  ops_status?: OpsStatus | null;
   /** Последний пост доверенного канала Telegram; null — постов ещё не было. */
   trusted?: TrustedPost | null;
   timestamp: string;

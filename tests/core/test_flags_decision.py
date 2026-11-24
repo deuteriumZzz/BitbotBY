@@ -44,9 +44,10 @@ def rec(**kw):
 
 
 # ── промпт AI: флаги выключены по умолчанию ───────────────────────────────────
-def test_flags_default_off_prompt_unchanged():
-    for flag in ("AI_SANITIZE_PROMPT", "AI_RAG_CONTEXT", "AI_STRICT_VALIDATION", "SAC_V2_ENABLED",
-                 "FUNDING_IN_PNL", "WS_SHADOW_ENABLED"):
+def test_flags_default_off_prompt_unchanged(monkeypatch):
+    monkeypatch.setattr(Config, "AI_SANITIZE_PROMPT", False)
+    # AI_SANITIZE_PROMPT и WS_SHADOW_ENABLED по умолчанию следуют PAPER_TRADING — см. test_ops_status.py
+    for flag in ("AI_RAG_CONTEXT", "AI_STRICT_VALIDATION", "SAC_V2_ENABLED", "FUNDING_IN_PNL"):
         assert getattr(Config, flag) is False, flag
     assert Config.FORECASTER == "chronos"
     p = AIAnalyzer()._build_prompt([snap()], 1000.0)

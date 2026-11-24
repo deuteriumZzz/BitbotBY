@@ -19,7 +19,7 @@
 | Риск | `DAILY_LOSS_LIMIT`, `DRAWDOWN_HALT_HOURS`, `MAX_CORRELATION`, `MAX_SPREAD_PCT` |
 | Telegram | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `TELEGRAM_CONFIRM_TIMEOUT` |
 | Инфра | `REDIS_HOST/PASSWORD`, `DASHBOARD_USER/PASSWORD` |
-| Новые источники решения | `AI_RAG_CONTEXT`, `AI_SANITIZE_PROMPT`, `AI_STRICT_VALIDATION`, `FORECASTER`, `FUNDING_IN_PNL`, `SAC_V2_ENABLED` — **все выключены по умолчанию**, см. раздел «Новые источники решения и эксплуатация» |
+| Новые источники решения | `AI_RAG_CONTEXT`, `AI_STRICT_VALIDATION`, `FORECASTER`, `FUNDING_IN_PNL`, `SAC_V2_ENABLED` — **выключены по умолчанию**; `AI_SANITIZE_PROMPT` и `WS_SHADOW_ENABLED` следуют `PAPER_TRADING` (в paper включены, явная переменная окружения главнее). Состояние флагов бот каждый цикл публикует в `bot:ops_status` (карточка «Защита и наблюдение» на странице риска), при старте пишет `run_config` в журнал, см. раздел «Новые источники решения и эксплуатация» |
 | Эксплуатация | `RISK_GATE_SHADOW`, `DB_BACKUP_*`, `WS_SHADOW_*`, `EVENT_STREAM_ENABLED`, `HEAVY_JOB_*`, `BOT_CPUS`, `BOT_MEM_LIMIT`, `TRAINER_*` |
 
 Большинство параметров (режим, стратегии, риск-профиль, часы торговли, число позиций) меняются
@@ -427,7 +427,7 @@ REDIS_PASSWORD=          # Рекомендуется задать в production
 
 ```env
 # ── Меняют решение (по умолчанию ВЫКЛЮЧЕНЫ) ───────────────────────────────────
-AI_SANITIZE_PROMPT=false   # заголовки новостей очищаются от управляющих символов и разметки ролей,
+AI_SANITIZE_PROMPT=<как PAPER_TRADING>   # по умолчанию включён в paper, выключен в live; заголовки новостей очищаются от управляющих символов и разметки ролей,
                            # в промпте пометка «недоверенный текст»
 AI_RAG_CONTEXT=false       # в промпт AI добавляется «что было в похожих случаях» из журнала решений
                            # (индекс обновляется раз в 10 минут; сбой RAG → решение без него)
@@ -448,7 +448,7 @@ RISK_GATE_SHADOW=true      # после каждого входа в журна�
 DB_BACKUP_ENABLED=true     # ежедневная проверенная копия БД сделок в data/backups/
 DB_BACKUP_INTERVAL_H=24
 DB_BACKUP_KEEP=7           # сколько последних копий хранить
-WS_SHADOW_ENABLED=false    # публичный WebSocket Bybit параллельно REST: метрики Prometheus
+WS_SHADOW_ENABLED=<как PAPER_TRADING>    # по умолчанию включён в paper, выключен в live; публичный WebSocket Bybit параллельно REST: метрики Prometheus
                            # (bitbot_ws_*), тревога при тишине, сверка свечей WS и REST раз в 15 минут
 WS_SHADOW_SYMBOLS=BTC/USDT,ETH/USDT
 EVENT_STREAM_ENABLED=false # копии записей журнала как компактные отметки в Redis Stream bot:stream:events

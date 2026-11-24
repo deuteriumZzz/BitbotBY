@@ -1,3 +1,5 @@
+import type { OpsStatus } from "./types";
+
 // Числа в стиле терминала: узкий неразрывный пробел между разрядами, точка в дробной части.
 
 export const fmtN = (n: number, d = 2): string =>
@@ -64,6 +66,48 @@ const READINESS_REASON: Record<string, string> = {
   ai_unavailable: "AI недоступен — ни один провайдер цепочки не отвечает",
   unknown_mode: "неизвестный режим",
 };
+
+/** Подписи функций защиты и наблюдения: [ключ флага, название, что делает]. */
+const OPS_FLAG_INFO: Array<[string, string, string]> = [
+  ["WS_SHADOW_ENABLED", "WS-наблюдение за рынком", "Публичный поток Bybit параллельно REST: только метрики и тревоги, решений не принимает."],
+  ["AI_SANITIZE_PROMPT", "Очистка новостей для AI", "Заголовки новостей очищаются от управляющих символов и разметки ролей и помечаются как недоверенный текст."],
+  ["AI_STRICT_VALIDATION", "Строгая проверка ответов AI", "Ответ с лишними полями, выдуманными ценами или SL/TP не с той стороны отбрасывается."],
+  ["AI_RAG_CONTEXT", "Память решений в промпте", "В запрос к AI добавляется, чем заканчивались похожие решения бота."],
+  ["RISK_GATE_SHADOW", "Единый Risk Gate (тень)", "Вердикт общего риск-шлюза по каждому входу пишется в журнал, но сделки не блокирует."],
+  ["DB_BACKUP_ENABLED", "Ежедневная копия базы сделок", "Проверенная копия базы раз в сутки, хранятся последние 7."],
+  ["FUNDING_IN_PNL", "Funding в результате сделки", "Выплаты funding входят в итог сделки."],
+  ["SAC_V2_ENABLED", "SAC v2", "Новая версия нейросети SAC; торгует только после допуска в реестре."],
+  ["EVENT_STREAM_ENABLED", "Шина событий", "Копии записей журнала как отметки в Redis Stream."],
+  ["DATA_QUALITY_GATE", "Блокировка входа при плохих данных", "Нет входа по снимкам со статусом STALE/INVALID."],
+];
+
+export interface OpsLine {
+  key: string;
+  label: string;
+  hint: string;
+  on: boolean;
+}
+
+/** Готовые к показу строки карточки «Защита и наблюдение». Неизвестные боту флаги пропускаются. */
+export function opsSummary(ops: OpsStatus): {
+  flags: OpsLine[];
+  ws: string | null;
+  wsAlarm: boolean;
+  backup: string | null;
+  backupAlarm: boolean;
+  emergency: number;
+} {
+  const flags = OPS_FLAG_INFO.filter(([k]) => k in ops.flags).map(([key, label, hint]) => ({ key, label, hint, on: !!ops.flags[key] }));
+  const w = ops.ws;
+  const ws = w
+    ? w.silent.length
+      ? `молчат ${w.silent.length} из ${w.streams} потоков`
+      : `${w.streams} потоков в норме, p99 задержки ${w.lag_p99_ms === null ? "—" : `${Math.round(w.lag_p99_ms)} мс`}, переподключений ${w.reconnects}, пропусков ${w.gaps}`
+    : null;
+  const b = ops.backup;
+  const backup = b ? (b.ok ? `последняя копия ${b.at.slice(0, 16).replace("T", " ")} UTC` : `копия не создана: ${b.error ?? "ошибка"}`) : null;
+  return { flags, ws, wsAlarm: !!w && w.silent.length > 0, backup, backupAlarm: !!b && !b.ok, emergency: ops.emergency };
+}
 
 export const readinessReason = (code?: string | null): string =>
   code ? (READINESS_REASON[code] ?? code) : "";

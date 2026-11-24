@@ -100,6 +100,8 @@ export interface Store {
   lastCycle: CycleTrace | null;
   /** Готовность режимов решать (причина — код из бота); null, пока бот не публиковал. */
   modeReadiness: BotState["mode_readiness"];
+  /** Что включено и состояние наблюдения (WS, копия БД, аварийный уровень); null, пока бот не публиковал. */
+  opsStatus: BotState["ops_status"];
   /** Последний пост доверенного канала: вход по нему или причина отказа. */
   trusted: TrustedPost | null;
   balance: number;
@@ -255,6 +257,7 @@ export const useStore = create<Store>((set, get) => {
       bot: st.bot,
       lastCycle: st.cycle ?? null,
       modeReadiness: st.mode_readiness ?? null,
+      opsStatus: st.ops_status ?? null,
       trusted: st.trusted ?? null,
       alive: st.bot.alive,
       balance: st.balance,
@@ -271,6 +274,7 @@ export const useStore = create<Store>((set, get) => {
     bot: null,
     lastCycle: null,
     modeReadiness: null,
+    opsStatus: null,
     trusted: null,
     balance: 0,
     slots: { used: 0, max: 0 },

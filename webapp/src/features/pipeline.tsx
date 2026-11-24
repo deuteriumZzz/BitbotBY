@@ -9,7 +9,7 @@ import { actions, useStore } from "../store";
 import { Q, Seg } from "../ui";
 import { AiPane } from "./ai";
 import { Lane, isStep, useLanes } from "./blocks";
-import { ConfirmCard, RiskCard, StrategiesCard, TrackCard, WhatCard, cfg, levText, presetName, presetOf, profileName } from "./bots";
+import { ConfirmCard, OpsCard, RiskCard, StrategiesCard, TrackCard, WhatCard, cfg, levText, presetName, presetOf, profileName } from "./bots";
 import { chosenId } from "./chainops";
 import { ModelCard } from "./jobs";
 import { RulesCard } from "./rules";
@@ -475,6 +475,7 @@ export function Pipeline() {
             </div>
             <div className="col">
               <RulesCard />
+              <OpsCard />
             </div>
           </div>
         )}

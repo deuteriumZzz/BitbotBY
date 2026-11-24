@@ -20,6 +20,7 @@ import contextlib
 import logging
 import os
 import time
+from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from config import Config
@@ -122,6 +123,10 @@ async def backup_once(bot: Any, path: Optional[str] = None) -> Dict[str, Any]:
     if not os.path.exists(path) or os.path.getsize(path) == 0:
         return {"ok": True, "skipped": True, "source": path}
     res = await asyncio.to_thread(db_health.backup, path, BACKUP_DIR, Config.DB_BACKUP_KEEP)
+    bot._last_backup = {  # для карточки «Защита и наблюдение» в приложении
+        "ok": res["ok"], "at": datetime.now(timezone.utc).isoformat(),
+        "path": res.get("backup"), "error": res.get("error"),
+    }
     with contextlib.suppress(Exception):
         bot._ledger_write("db_backup", ok=res["ok"], backup=res.get("backup"), error=res.get("error"))
     if not res["ok"]:
@@ -143,6 +148,62 @@ async def db_backup_loop(
         except Exception as exc:  # noqa: BLE001 — задача бэкапа не должна падать насовсем
             logger.warning("DB backup failed: %s", exc)
         await sleep(max(1.0, Config.DB_BACKUP_INTERVAL_H) * 3600)
+
+
+# ── Состояние защиты и наблюдения (для приложения и журнала) ───────────────────
+OPS_FLAGS = (
+    "WS_SHADOW_ENABLED", "AI_SANITIZE_PROMPT", "AI_STRICT_VALIDATION", "AI_RAG_CONTEXT",
+    "RISK_GATE_SHADOW", "DB_BACKUP_ENABLED", "FUNDING_IN_PNL", "SAC_V2_ENABLED",
+    "EVENT_STREAM_ENABLED", "DATA_QUALITY_GATE",
+)
+
+
+def ops_status(bot: Any) -> Dict[str, Any]:
+    """Что сейчас включено и как себя чувствует наблюдение: флаги, WS, копия БД, аварийный уровень.
+
+    Публикуется в Redis `bot:ops_status` каждый цикл; приложение показывает это карточкой
+    «Защита и наблюдение». Только чтение состояния, ничего не меняет.
+    """
+    from src.ai.ai_analyzer import PROMPT_VERSION  # noqa: PLC0415
+
+    ws: Optional[Dict[str, Any]] = None
+    stream = getattr(bot, "ws_stream", None)
+    if stream is not None:
+        snap = stream.health.snapshot()
+        lags = [s["lag_ms"]["p99"] for s in snap["streams"].values() if s["lag_ms"]["p99"] is not None]
+        ws = {
+            "streams": len(snap["streams"]),
+            "silent": stream.health.silent_streams(STALE_ALERT_S),
+            "reconnects": snap["reconnects"],
+            "lag_p99_ms": max(lags) if lags else None,
+            "gaps": sum(s["gaps"] for s in snap["streams"].values()),
+        }
+    try:
+        level = int(emergency_ctl(bot).level)
+    except Exception:  # noqa: BLE001 — статус не должен падать из-за файла аварии
+        level = 0
+    return {
+        "mode": "paper" if Config.PAPER_TRADING else "live",
+        "prompt_version": PROMPT_VERSION,
+        "flags": {name: getattr(Config, name, False) is True for name in OPS_FLAGS},
+        "forecaster": Config.FORECASTER,
+        "ws": ws,
+        "backup": getattr(bot, "_last_backup", None),
+        "emergency": level,
+        "ts": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def run_config_record(bot: Any) -> Dict[str, Any]:
+    """Запись `run_config` в журнал при старте: какие флаги были включены с этого момента.
+
+    По ней статистику «до» и «после» включения флагов можно разделить (журнал append-only).
+    """
+    st = ops_status(bot)
+    rec = {k: st[k] for k in ("mode", "prompt_version", "flags", "forecaster")}
+    with contextlib.suppress(Exception):
+        bot._ledger_write("run_config", **rec)
+    return rec
 
 
 # ── RAG по Ledger ─────────────────────────────────────────────────────────────

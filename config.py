@@ -210,11 +210,17 @@ class Config:
     SAC_V2_MODEL_PATH: str = os.getenv("SAC_V2_MODEL_PATH", "models/sac_v2.zip")
     FUNDING_IN_PNL: bool = os.getenv("FUNDING_IN_PNL", "false").lower() == "true"
     PAPER_FUNDING_RATE_8H: float = float(os.getenv("PAPER_FUNDING_RATE_8H", "0.0001"))
-    AI_SANITIZE_PROMPT: bool = os.getenv("AI_SANITIZE_PROMPT", "false").lower() == "true"
+    # AI_SANITIZE_PROMPT и WS_SHADOW_ENABLED по умолчанию равны PAPER_TRADING: в paper включены,
+    # в live выключены. Явная переменная окружения (true/false) перекрывает умолчание.
+    AI_SANITIZE_PROMPT: bool = (
+        os.getenv("AI_SANITIZE_PROMPT", os.getenv("PAPER_TRADING", "false")).lower() == "true"
+    )
     AI_RAG_CONTEXT: bool = os.getenv("AI_RAG_CONTEXT", "false").lower() == "true"
     AI_STRICT_VALIDATION: bool = os.getenv("AI_STRICT_VALIDATION", "false").lower() == "true"
     FORECASTER: str = os.getenv("FORECASTER", "chronos").strip().lower()
-    WS_SHADOW_ENABLED: bool = os.getenv("WS_SHADOW_ENABLED", "false").lower() == "true"
+    WS_SHADOW_ENABLED: bool = (
+        os.getenv("WS_SHADOW_ENABLED", os.getenv("PAPER_TRADING", "false")).lower() == "true"
+    )
     WS_SHADOW_SYMBOLS: str = os.getenv("WS_SHADOW_SYMBOLS", "BTC/USDT,ETH/USDT")
     # Ежедневная проверенная копия БД сделок (src/infra/db_health.py); защитная мера.
     DB_BACKUP_ENABLED: bool = os.getenv("DB_BACKUP_ENABLED", "true").lower() != "false"

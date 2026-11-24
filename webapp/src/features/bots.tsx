@@ -3,7 +3,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import { fmtN, plural, readinessReason, tone } from "../lib/format";
+import { fmtN, opsSummary, plural, readinessReason, tone } from "../lib/format";
 import { reducedMotion } from "../lib/platform";
 import type { ConfigValues, RiskPreset, Strategy } from "../lib/types";
 import { actions, useStore } from "../store";
@@ -182,6 +182,49 @@ const LEV: Record<string, string[]> = {
 const CONF = ["MIN_SIGNAL_CONFIDENCE", "MIN_SIGNAL_CONFIDENCE_PAPER"];
 const FILTERS = ["MAX_CORRELATION", "MAX_CORRELATION_PAPER", "CORRELATION_WINDOW", "MAX_SPREAD_PCT", "MAX_POSITION_SIZE"];
 const KILL = ["LIVE_ALPHA_KILL_ENABLED", "LIVE_ALPHA_KILL_MIN_TRADES", "LIVE_ALPHA_KILL_EV_THRESHOLD"];
+
+/** Что из защиты и наблюдения включено; только показ, переключается через .env/конфиг бота. */
+export function OpsCard() {
+  const ops = useStore((s) => s.opsStatus);
+  if (!ops) {
+    return (
+      <article className="card">
+        <div className="card-h">
+          <h2>Защита и наблюдение</h2>
+        </div>
+        <p className="note-soon">Бот ещё не прислал статус — появится после первого цикла.</p>
+      </article>
+    );
+  }
+  const v = opsSummary(ops);
+  return (
+    <article className="card">
+      <div className="card-h">
+        <h2>Защита и наблюдение</h2>
+        <span className="pill">{ops.mode === "paper" ? "Paper" : "Live"}</span>
+      </div>
+      {v.emergency > 0 && (
+        <div className="honest">
+          {Icon.warn}
+          <div>
+            <b>Аварийный режим, уровень {v.emergency}.</b> Новые сделки ограничены.
+          </div>
+        </div>
+      )}
+      {v.flags.map((f) => (
+        <div className="row-tgl" key={f.key}>
+          <span>
+            {f.label} <Q tip={f.hint} />
+          </span>
+          <span className="pill">{f.on ? "включено" : "выключено"}</span>
+        </div>
+      ))}
+      {v.ws && <p className={v.wsAlarm ? "honest" : "note-soon"}>WS-поток: {v.ws}</p>}
+      {v.backup && <p className={v.backupAlarm ? "honest" : "note-soon"}>База сделок: {v.backup}</p>}
+      <p className="note-soon">Версия промпта AI: {ops.prompt_version}</p>
+    </article>
+  );
+}
 
 export function RiskCard({ simple = false }: { simple?: boolean }) {
   const c = useStore((s) => s.config);

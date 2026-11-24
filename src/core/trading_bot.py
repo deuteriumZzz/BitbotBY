@@ -894,6 +894,7 @@ class TradingBot:
             r.set("bot:last_cycle", json.dumps(summary, ensure_ascii=False))
             # Готовность режимов — приложению (оно в другом процессе и читает Redis).
             r.set("bot:mode_readiness", json.dumps(self._mode_readiness()))
+            r.set("bot:ops_status", json.dumps(ops_tasks.ops_status(self)))
         except Exception as e:
             logger.debug("last cycle not stored: %s", e)
         emit(r, "trace.cycle", summary)
@@ -2084,6 +2085,7 @@ class TradingBot:
         if Config.AI_RAG_CONTEXT:
             self._rag_task = asyncio.create_task(ops_tasks.rag_refresh_loop(self))
         await ops_tasks.apply_emergency_on_start(self)
+        ops_tasks.run_config_record(self)  # отметка в журнале: какие флаги включены с этого запуска
         asyncio.create_task(self._season_check_loop())
         # Команды из приложения (MiniApp / Desktop) — через очередь в Redis.
         self._command_task = asyncio.create_task(
