@@ -8,9 +8,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pandas as pd
 import pytest
 
-from bitbot.domain.signals.combiner import SignalCombiner
 from bitbot.market.market_context import MarketContext
 from bitbot.market.market_scanner import MarketScanner
+from bitbot.signals.combiner import SignalCombiner
 from bitbot.storage.decision_ledger import DecisionLedger
 from tests.ai.test_ai_analyzer import TestAnalyze, _http_error, _make_config
 from tests.core.test_signal_combiner import make_rec, make_snapshot
@@ -142,7 +142,7 @@ async def test_conf_trail_records_each_stage_and_merge_boost() -> None:
     ai = MagicMock()
     ai.analyze = AsyncMock(return_value=[make_rec(confidence=0.8)])
     ctx = {"BTC/USDT": {"funding_signal": "short_overheated", "funding_rate": -0.002}}
-    with patch("bitbot.domain.signals.combiner.SACSignal"):
+    with patch("bitbot.signals.combiner.SACSignal"):
         result = await SignalCombiner(ai=ai, rc=_rc(0.5)).combine(
             [make_snapshot()], balance=10_000, market_context=ctx
         )
@@ -166,7 +166,7 @@ async def test_context_penalty_is_recorded_raw_and_capped() -> None:
             "basis_signal": "greed_premium",
         }
     }
-    with patch("bitbot.domain.signals.combiner.SACSignal"):
+    with patch("bitbot.signals.combiner.SACSignal"):
         result = await SignalCombiner(ai=ai, rc=_rc(0.1)).combine(
             [make_snapshot()], balance=10_000, market_context=ctx
         )

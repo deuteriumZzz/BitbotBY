@@ -37,8 +37,8 @@ if TYPE_CHECKING:
     from bitbot.adapters.exchange.bybit import BybitAPI
     from bitbot.adapters.telegram.notifier import TelegramNotifier
     from bitbot.market.correlation_filter import CorrelationFilter
-    from bitbot.research.portfolio_optimizer import PortfolioOptimizer
     from bitbot.risk.manager import RiskManager
+    from bitbot.risk.portfolio_optimizer import PortfolioOptimizer
     from bitbot.storage.trade_history import TradeHistory
 
 logger = logging.getLogger(__name__)

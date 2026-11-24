@@ -3,6 +3,7 @@
 import json
 import os
 
+from bitbot.domain.contracts import LOCAL_REASONING_PREFIX
 from bitbot.ml import experience_buffer as eb
 
 # ---------------------------------------------------------------------------
@@ -48,7 +49,7 @@ class TestSave:
     def test_source_local_for_new_and_legacy_reasoning(self, tmp_path):
         path = str(tmp_path / "exp.jsonl")
         for reasoning, source in (
-            (f"{eb.LOCAL_REASONING_PREFIX} «breakout»: сигнал на покупку", "local"),
+            (f"{LOCAL_REASONING_PREFIX} «breakout»: сигнал на покупку", "local"),
             ("Local analysis", "local"),  # записи до переименования
             ("RSI перепродан (28).", "ai"),
         ):

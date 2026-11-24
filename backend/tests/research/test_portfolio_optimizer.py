@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from bitbot.research.portfolio_optimizer import PortfolioOptimizer
+from bitbot.risk.portfolio_optimizer import PortfolioOptimizer
 
 
 def _returns_df(n: int = 60, seed: int = 0) -> pd.DataFrame:

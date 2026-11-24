@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from bitbot.config.settings import Config
-from bitbot.domain.signals.combiner import SignalCombiner
+from bitbot.signals.combiner import SignalCombiner
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -66,7 +66,7 @@ def mock_ai():
 @pytest.fixture
 def mock_dqn_signal():
     """Патчит SACSignal внутри signal_combiner на время каждого теста."""
-    with patch("bitbot.domain.signals.combiner.SACSignal") as MockSAC:  # noqa: N806
+    with patch("bitbot.signals.combiner.SACSignal") as MockSAC:  # noqa: N806
         instance = MagicMock()
         instance.get_signal.return_value = {
             "action": "hold",
@@ -95,7 +95,7 @@ class TestInit:
 
     def test_init_no_rc_uses_config_mode(self, mock_ai, mock_dqn_signal, caplog):
         cfg = _make_config(MODE="hybrid")
-        with patch("bitbot.domain.signals.combiner.Config", cfg):
+        with patch("bitbot.signals.combiner.Config", cfg):
             combiner = SignalCombiner(ai=mock_ai)
         assert combiner._rc is None
 
@@ -305,31 +305,31 @@ class TestSacOnly:
     def _make_combiner(self, sac_signal, min_conf=0.65):
         mock_ai = MagicMock()
         cfg = _make_config(MIN_SIGNAL_CONFIDENCE=min_conf)
-        with patch("bitbot.domain.signals.combiner.SACSignal") as MockSAC:
+        with patch("bitbot.signals.combiner.SACSignal") as MockSAC:
             instance = MagicMock()
             instance.get_signal.return_value = sac_signal
             MockSAC.return_value = instance
-            with patch("bitbot.domain.signals.combiner.Config", cfg):
+            with patch("bitbot.signals.combiner.Config", cfg):
                 return SignalCombiner(ai=mock_ai)
 
     def test_hold_signal_skipped(self):
         c = self._make_combiner({"action": "hold", "confidence": 0.9})
         cfg = _make_config(MIN_SIGNAL_CONFIDENCE=0.65)
-        with patch("bitbot.domain.signals.combiner.Config", cfg):
+        with patch("bitbot.signals.combiner.Config", cfg):
             result = c._sac_only([make_snapshot()], balance=10000)
         assert result == []
 
     def test_low_confidence_skipped(self):
         c = self._make_combiner({"action": "buy", "confidence": 0.3})
         cfg = _make_config(MIN_SIGNAL_CONFIDENCE=0.65)
-        with patch("bitbot.domain.signals.combiner.Config", cfg):
+        with patch("bitbot.signals.combiner.Config", cfg):
             result = c._sac_only([make_snapshot()], balance=10000)
         assert result == []
 
     def test_buy_signal_included(self):
         c = self._make_combiner({"action": "buy", "confidence": 0.80})
         cfg = _make_config(MIN_SIGNAL_CONFIDENCE=0.65)
-        with patch("bitbot.domain.signals.combiner.Config", cfg):
+        with patch("bitbot.signals.combiner.Config", cfg):
             result = c._sac_only([make_snapshot()], balance=10000)
         assert len(result) == 1
         assert result[0]["action"] == "buy"
@@ -339,7 +339,7 @@ class TestSacOnly:
     def test_sell_signal_included(self):
         c = self._make_combiner({"action": "sell", "confidence": 0.85})
         cfg = _make_config(MIN_SIGNAL_CONFIDENCE=0.65)
-        with patch("bitbot.domain.signals.combiner.Config", cfg):
+        with patch("bitbot.signals.combiner.Config", cfg):
             result = c._sac_only([make_snapshot()], balance=10000)
         assert len(result) == 1
         assert result[0]["action"] == "sell"
@@ -348,7 +348,7 @@ class TestSacOnly:
         c = self._make_combiner({"action": "buy", "confidence": 0.80})
         snap = make_snapshot(price=30000.0, atr=300.0)
         cfg = _make_config(MIN_SIGNAL_CONFIDENCE=0.65)
-        with patch("bitbot.domain.signals.combiner.Config", cfg):
+        with patch("bitbot.signals.combiner.Config", cfg):
             result = c._sac_only([snap], balance=10000)
         assert result[0]["stop_loss"] == pytest.approx(30000.0 - 1.5 * 300.0)
         assert result[0]["take_profit"] == pytest.approx(30000.0 + 3.0 * 300.0)
@@ -358,7 +358,7 @@ class TestSacOnly:
         c = self._make_combiner({"action": "buy", "confidence": 0.80})
         snap = {"symbol": "BTC/USDT", "price": 10000.0}  # no atr
         cfg = _make_config(MIN_SIGNAL_CONFIDENCE=0.65)
-        with patch("bitbot.domain.signals.combiner.Config", cfg):
+        with patch("bitbot.signals.combiner.Config", cfg):
             result = c._sac_only([snap], balance=10000)
         assert len(result) == 1
         expected_atr = 10000.0 * 0.02
@@ -377,15 +377,15 @@ class TestSacOnly:
                 return {"action": "buy", "confidence": 0.80}
             return {"action": "hold", "confidence": 0.0}
 
-        with patch("bitbot.domain.signals.combiner.SACSignal") as MockSAC:
+        with patch("bitbot.signals.combiner.SACSignal") as MockSAC:
             instance = MagicMock()
             instance.get_signal.side_effect = side_effect
             MockSAC.return_value = instance
-            with patch("bitbot.domain.signals.combiner.Config", cfg):
+            with patch("bitbot.signals.combiner.Config", cfg):
                 c = SignalCombiner(ai=mock_ai)
 
         snaps = [make_snapshot("BTC/USDT"), make_snapshot("ETH/USDT", price=2000.0)]
-        with patch("bitbot.domain.signals.combiner.Config", cfg):
+        with patch("bitbot.signals.combiner.Config", cfg):
             result = c._sac_only(snaps, balance=10000)
 
         assert len(result) == 1
@@ -394,14 +394,14 @@ class TestSacOnly:
     def test_reasoning_contains_confidence(self):
         c = self._make_combiner({"action": "buy", "confidence": 0.82})
         cfg = _make_config(MIN_SIGNAL_CONFIDENCE=0.65)
-        with patch("bitbot.domain.signals.combiner.Config", cfg):
+        with patch("bitbot.signals.combiner.Config", cfg):
             result = c._sac_only([make_snapshot()], balance=10000)
         assert "82%" in result[0]["reasoning"]
 
     def test_empty_snapshots_returns_empty(self):
         c = self._make_combiner({"action": "buy", "confidence": 0.80})
         cfg = _make_config(MIN_SIGNAL_CONFIDENCE=0.65)
-        with patch("bitbot.domain.signals.combiner.Config", cfg):
+        with patch("bitbot.signals.combiner.Config", cfg):
             result = c._sac_only([], balance=10000)
         assert result == []
 
@@ -565,7 +565,7 @@ class TestHybrid:
         mock_ai.analyze.return_value = [make_rec(action="buy", confidence=0.50)]
         snap = make_snapshot()
         cfg = _make_config(MIN_SIGNAL_CONFIDENCE=0.65)
-        with patch("bitbot.domain.signals.combiner.Config", cfg):
+        with patch("bitbot.signals.combiner.Config", cfg):
             result = await_sync(combiner._hybrid([snap], balance=10000))
         assert result == []
 
@@ -577,7 +577,7 @@ class TestHybrid:
             make_rec(action="buy", confidence=0.80, reasoning="uptrend detected")
         ]
         cfg = _make_config(MIN_SIGNAL_CONFIDENCE=0.65)
-        with patch("bitbot.domain.signals.combiner.Config", cfg):
+        with patch("bitbot.signals.combiner.Config", cfg):
             result = await_sync(
                 combiner._hybrid([make_snapshot()], balance=10000, regime="ranging")
             )
@@ -590,7 +590,7 @@ class TestHybrid:
         mock_dqn_signal.get_signal.return_value = {"action": "sell", "confidence": 0.85}
         mock_ai.analyze.return_value = []
         cfg = _make_config(MIN_SIGNAL_CONFIDENCE=0.65)
-        with patch("bitbot.domain.signals.combiner.Config", cfg):
+        with patch("bitbot.signals.combiner.Config", cfg):
             result = await_sync(combiner._hybrid([make_snapshot()], balance=10000))
         assert "AI silent" in result[0]["reasoning"]
 
@@ -602,7 +602,7 @@ class TestHybrid:
             make_rec(action="buy", confidence=0.80, strategy="ema_cross")
         ]
         cfg = _make_config(MIN_SIGNAL_CONFIDENCE=0.65)
-        with patch("bitbot.domain.signals.combiner.Config", cfg):
+        with patch("bitbot.signals.combiner.Config", cfg):
             result = await_sync(combiner._hybrid([make_snapshot()], balance=10000))
         assert result[0]["strategy"].startswith("hybrid(")
         assert "sac" in result[0]["strategy"]
@@ -623,8 +623,8 @@ class TestHybrid:
 
         cfg = _make_config(PAPER_TRADING=True, MIN_SIGNAL_CONFIDENCE=0.65)
         with (
-            patch("bitbot.domain.signals.combiner.Config", cfg),
-            patch("bitbot.domain.signals.combiner.chronos_analyzer") as mock_chronos,
+            patch("bitbot.signals.combiner.Config", cfg),
+            patch("bitbot.signals.combiner.chronos_analyzer") as mock_chronos,
         ):
             mock_chronos.predict_direction.return_value = "up"
             c = SignalCombiner(ai=mock_ai, rc=rc)
@@ -655,8 +655,8 @@ class TestHybrid:
 
         cfg = _make_config(PAPER_TRADING=False, MIN_SIGNAL_CONFIDENCE=0.65)
         with (
-            patch("bitbot.domain.signals.combiner.Config", cfg),
-            patch("bitbot.domain.signals.combiner.chronos_analyzer") as mock_chronos,
+            patch("bitbot.signals.combiner.Config", cfg),
+            patch("bitbot.signals.combiner.chronos_analyzer") as mock_chronos,
         ):
             mock_chronos.predict_direction.return_value = "down"  # buy expects "up"
             c = SignalCombiner(ai=mock_ai, rc=rc)
@@ -687,8 +687,8 @@ class TestHybrid:
 
         cfg = _make_config(PAPER_TRADING=False, MIN_SIGNAL_CONFIDENCE=0.65)
         with (
-            patch("bitbot.domain.signals.combiner.Config", cfg),
-            patch("bitbot.domain.signals.combiner.chronos_analyzer") as mock_chronos,
+            patch("bitbot.signals.combiner.Config", cfg),
+            patch("bitbot.signals.combiner.chronos_analyzer") as mock_chronos,
         ):
             mock_chronos.predict_direction.return_value = "down"  # buy expects "up"
             c = SignalCombiner(ai=mock_ai, rc=rc)
@@ -714,8 +714,8 @@ class TestHybrid:
 
         cfg = _make_config(PAPER_TRADING=False, MIN_SIGNAL_CONFIDENCE=0.65)
         with (
-            patch("bitbot.domain.signals.combiner.Config", cfg),
-            patch("bitbot.domain.signals.combiner.chronos_analyzer") as mock_chronos,
+            patch("bitbot.signals.combiner.Config", cfg),
+            patch("bitbot.signals.combiner.chronos_analyzer") as mock_chronos,
         ):
             mock_chronos.predict_direction.return_value = "up"  # buy expects "up"
             c = SignalCombiner(ai=mock_ai, rc=rc)
@@ -743,8 +743,8 @@ class TestHybrid:
 
         cfg = _make_config(PAPER_TRADING=False, MIN_SIGNAL_CONFIDENCE=0.65)
         with (
-            patch("bitbot.domain.signals.combiner.Config", cfg),
-            patch("bitbot.domain.signals.combiner.chronos_analyzer") as mock_chronos,
+            patch("bitbot.signals.combiner.Config", cfg),
+            patch("bitbot.signals.combiner.chronos_analyzer") as mock_chronos,
         ):
             mock_chronos.predict_direction.return_value = "neutral"
             c = SignalCombiner(ai=mock_ai, rc=rc)
@@ -767,11 +767,11 @@ class TestApplyMarketContextFilter:
         mock_ai = MagicMock()
         cfg = _make_config(MIN_SIGNAL_CONFIDENCE=min_conf)
         with (
-            patch("bitbot.domain.signals.combiner.SACSignal"),
-            patch("bitbot.domain.signals.combiner.Config", cfg),
+            patch("bitbot.signals.combiner.SACSignal"),
+            patch("bitbot.signals.combiner.Config", cfg),
         ):
             c = SignalCombiner(ai=mock_ai, rc=rc)
-        with patch("bitbot.domain.signals.combiner.Config", cfg):
+        with patch("bitbot.signals.combiner.Config", cfg):
             return c._apply_market_context_filter(recs, ctx)
 
     # ── funding ──────────────────────────────────────────────────────────────
@@ -1087,11 +1087,11 @@ class TestApplySentimentFilter:
         mock_ai = MagicMock()
         cfg = _make_config(MIN_SIGNAL_CONFIDENCE=min_conf)
         with (
-            patch("bitbot.domain.signals.combiner.SACSignal"),
-            patch("bitbot.domain.signals.combiner.Config", cfg),
+            patch("bitbot.signals.combiner.SACSignal"),
+            patch("bitbot.signals.combiner.Config", cfg),
         ):
             c = SignalCombiner(ai=mock_ai)
-        with patch("bitbot.domain.signals.combiner.Config", cfg):
+        with patch("bitbot.signals.combiner.Config", cfg):
             return c._apply_sentiment_filter(recs, sentiment)
 
     def test_very_negative_drops_buy(self):
@@ -1174,11 +1174,11 @@ class TestGenerateContextSignals:
         mock_ai = MagicMock()
         cfg = _make_config(MIN_SIGNAL_CONFIDENCE=min_conf)
         with (
-            patch("bitbot.domain.signals.combiner.SACSignal"),
-            patch("bitbot.domain.signals.combiner.Config", cfg),
+            patch("bitbot.signals.combiner.SACSignal"),
+            patch("bitbot.signals.combiner.Config", cfg),
         ):
             c = SignalCombiner(ai=mock_ai)
-        with patch("bitbot.domain.signals.combiner.Config", cfg):
+        with patch("bitbot.signals.combiner.Config", cfg):
             return c._generate_context_signals(snapshots, ctx)
 
     def test_funding_long_overheated_generates_sell(self):
@@ -1404,8 +1404,8 @@ class TestMergeWithContext:
         mock_ai = MagicMock()
         cfg = _make_config()
         with (
-            patch("bitbot.domain.signals.combiner.SACSignal"),
-            patch("bitbot.domain.signals.combiner.Config", cfg),
+            patch("bitbot.signals.combiner.SACSignal"),
+            patch("bitbot.signals.combiner.Config", cfg),
         ):
             c = SignalCombiner(ai=mock_ai)
         return c._merge_with_context(existing, context_recs)

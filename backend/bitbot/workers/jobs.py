@@ -1,12 +1,9 @@
-"""Фоновые задачи бота, которые запускаются из приложения.
+"""Запуск фоновых задач бота (каталог задач — `bitbot.ops.jobs`).
 
-Те же скрипты, что и в Telegram-меню (бэктест, обучение SAC, тюнинг, отчёты),
-отдельными процессами: бот продолжает торговать. Прогресс уходит событиями
-`job.progress`, итог — событием `job.done`; короткое уведомление приходит и в Telegram.
-
-Telegram и приложение делят замок `RuntimeConfig.try_start_job`: одну и ту же
-группу задач (например, обучение SAC) нельзя запустить дважды, откуда бы
-ни пришёл запуск.
+Бэктест, обучение и тюнинг SAC, отчёты — отдельными процессами: бот продолжает
+торговать. Прогресс уходит событиями `job.progress`, итог — событием `job.done`;
+короткое уведомление приходит и в Telegram. Замок `RuntimeConfig.try_start_job`
+не даёт запустить одну группу задач (например, обучение SAC) дважды.
 """
 
 import asyncio
@@ -14,38 +11,17 @@ import json
 import logging
 import os
 import shutil
-from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from bitbot.config import entrypoints
 from bitbot.infra.heavy_job import limit_env, lower_priority
+from bitbot.ops.jobs import JOBS, JobSpec
 from bitbot.storage.bot_bus import emit, error
 
 logger = logging.getLogger(__name__)
 
 REPORT_LIMIT = 3500  # столько хвоста отчёта показываем (как в Telegram)
 
-
-@dataclass(frozen=True)
-class JobSpec:
-    id: str
-    group: str  # задачи одной группы не идут одновременно
-    title: str
-    ttl: int  # страховка замка на случай падения бота, секунды
-
-
-JOBS: Dict[str, JobSpec] = {
-    s.id: s
-    for s in (
-        JobSpec("backtest", "backtest", "Бэктест стратегий", 3 * 3600),
-        JobSpec("train", "sac", "Обучение SAC", 4 * 3600),
-        JobSpec("tune", "sac", "Тюнинг и обучение SAC", 8 * 3600),
-        JobSpec("alpha_report", "alpha_report", "Значимость альфы", 1800),
-        JobSpec("live_divergence", "live_divergence", "Live vs бэктест", 1800),
-        JobSpec("ai_isolation", "ai_isolation", "AI без индикаторов", 3600),
-    )
-}
-GROUPS = sorted({j.group for j in JOBS.values()})
 
 _REPORT_SCRIPTS = {
     "alpha_report": entrypoints.ALPHA_REPORT,
@@ -75,22 +51,6 @@ def _is_worse(result: "Dict[str, Any] | None") -> bool:
     if not result:
         return False
     return result.get("sac_pct", 0) < result.get("bh_pct", 0) - 10
-
-
-def status(rc: Any) -> Dict[str, Any]:
-    """Что идёт сейчас, прогресс и можно ли откатить модель (читает Redis)."""
-    backup = rc.get_sac_backup_path()
-    return {
-        "profiles": rc.get_training_profiles(),
-        "backup_profile": rc.get_sac_backup_profile() or None,
-        "running": rc.running_jobs(GROUPS),
-        "progress": {
-            "backtest": rc.get_backtest_progress(),
-            "train": rc.get_train_progress(),
-            "tune": rc.get_tune_progress(),
-        },
-        "rollback_available": bool(backup and os.path.exists(backup)),
-    }
 
 
 class JobRunner:

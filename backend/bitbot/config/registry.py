@@ -24,7 +24,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from bitbot.ai import providers as ai_providers
+from bitbot.config import ai_providers
 from bitbot.config.runtime import CONFIRM_TIMEOUT_MAX, CONFIRM_TIMEOUT_MIN
 
 logger = logging.getLogger(__name__)

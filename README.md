@@ -185,12 +185,12 @@ flowchart LR
 | 1 | **Снэпшоты** ([cycle.py](backend/bitbot/workers/cycle.py)) | OHLCV → индикаторы (RSI/MACD/BB/ATR/тренд) + новостной сентимент на монету |
 | 2 | **Prescore** | `score = vol×0.35 + rsi×0.30 + atr×0.20 + regime_bonus×0.15` → топ-30 в AI |
 | 3 | **Рыночный контекст** ([market_context.py](backend/bitbot/market/market_context.py)) | 13 сигналов: funding, OI+ликвидации, F&G, basis, orderbook, Deribit PCR/IV, Google Trends, Glassnode, ETF flows, Reddit (CryptoBERT), stablecoin supply |
-| 4 | **SignalCombiner** ([signal_combiner.py](backend/bitbot/domain/signals/combiner.py)) | `local` / `ai` / `dqn` / **`hybrid`** (SAC+AI согласие, вес зависит от режима: trending 50/50, ranging 40/60) / **`hybrid+Chronos`** (±0.05…0.15 модификатор) |
+| 4 | **SignalCombiner** ([signal_combiner.py](backend/bitbot/signals/combiner.py)) | `local` / `ai` / `dqn` / **`hybrid`** (SAC+AI согласие, вес зависит от режима: trending 50/50, ranging 40/60) / **`hybrid+Chronos`** (±0.05…0.15 модификатор) |
 | 5 | **Контекстный фильтр** | Каждый из 13 сигналов двигает confidence на ±0.05…0.15 (напр. F&G ≤15 + каскад ликвидаций → confidence = 0) |
 | 6 | **Прямые контекстные сигналы** | Экстремумы (funding overheated, squeeze, imbalance >0.4, F&G ≤10/≥92) генерируют отдельные сигналы |
 | 7 | **Локальный fallback** | Если сигналов нет — индикаторная стратегия, TP шире в тренде, уже в боковике |
 | 8 | **Приоритизация** | `composite_score = confidence × (1+tp_bonus) × (1+volume_bonus) × regime_mult` |
-| 9 | **Portfolio allocation** | CVaR/Markowitz ([portfolio_optimizer.py](backend/bitbot/research/portfolio_optimizer.py)) при ≥2 сигналах, cap ×3 |
+| 9 | **Portfolio allocation** | CVaR/Markowitz ([portfolio_optimizer.py](backend/bitbot/risk/portfolio_optimizer.py)) при ≥2 сигналах, cap ×3 |
 | 10 | **Execution guards** ([order_executor.py](backend/bitbot/execution/order_executor.py)) | macro blackout → слоты/cooldown → торговые часы → дубликат символа → **correlation guard** → подтверждение в Telegram → **liquidity filter** → валидация SL/TP → **Kelly sizing** → drawdown scaling → **Almgren-Chriss** → dynamic leverage → ордер |
 | 11 | **После открытия** | PositionMonitor каждые 5с: те же 13 сигналов контекста управляют выходом (force_close / tighten_sl) |
 

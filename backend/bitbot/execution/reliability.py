@@ -1,13 +1,12 @@
 """Надёжность исполнения (Phase 5, MASTER_SPEC §5): чистая логика без сети.
 
-1. Машина состояний ордера: допустимые переходы и классификация ответа ccxt.
-   Событие, нарушающее переходы (повтор уведомления, откат из финального
-   состояния), отбрасывается — оно не должно менять состояние ордера.
-2. Сравнение позиций бота и биржи (`diff_positions`): позиции без наблюдения
+Машина состояний ордера — в `bitbot.domain.order_states`.
+
+1. Сравнение позиций бота и биржи (`diff_positions`): позиции без наблюдения
    (нет мониторинга SL/TP — самый опасный случай), «призраки», расхождения
    объёма и стороны. Символы с ордером «в полёте» (плейсхолдер `None`) не
    сравниваются: исполнитель ещё не закончил.
-3. `ConfirmTracker`: проблема считается подтверждённой, только если видна на двух
+2. `ConfirmTracker`: проблема считается подтверждённой, только если видна на двух
    проверках подряд, — иначе гонка с открытием/закрытием даёт ложные тревоги.
 
 Модуль ничего не отправляет и не меняет: решения принимает вызывающий код.
@@ -16,75 +15,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
-from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
-
-
-class OrderState(str, Enum):
-    CREATED = "CREATED"
-    SUBMITTED = "SUBMITTED"
-    PARTIALLY_FILLED = "PARTIALLY_FILLED"
-    FILLED = "FILLED"
-    CANCELED = "CANCELED"
-    REJECTED = "REJECTED"
-    EXPIRED = "EXPIRED"
-    UNKNOWN = "UNKNOWN"
-
-
-TERMINAL = frozenset(
-    {OrderState.FILLED, OrderState.CANCELED, OrderState.REJECTED, OrderState.EXPIRED}
-)
-
-_TRANSITIONS: Dict[OrderState, Set[OrderState]] = {
-    OrderState.CREATED: {OrderState.SUBMITTED, OrderState.REJECTED},
-    OrderState.SUBMITTED: {
-        OrderState.PARTIALLY_FILLED,
-        OrderState.FILLED,
-        OrderState.CANCELED,
-        OrderState.REJECTED,
-        OrderState.EXPIRED,
-    },
-    OrderState.PARTIALLY_FILLED: {
-        OrderState.PARTIALLY_FILLED,  # ещё одно частичное исполнение
-        OrderState.FILLED,
-        OrderState.CANCELED,  # остаток отменён
-        OrderState.EXPIRED,
-    },
-}
-
-
-def can_transition(current: OrderState, incoming: OrderState) -> bool:
-    return incoming in _TRANSITIONS.get(current, set())
-
-
-def next_state(current: OrderState, incoming: OrderState) -> Tuple[OrderState, bool]:
-    """(состояние, принято ли событие). Недопустимое событие не меняет состояние."""
-    if can_transition(current, incoming):
-        return incoming, True
-    return current, False
-
-
-def classify_order(order: Optional[Dict[str, Any]]) -> OrderState:
-    """Состояние по ответу ccxt (`status`, `filled`)."""
-    if not order:
-        return OrderState.UNKNOWN
-    status = str(order.get("status") or "").lower()
-    try:
-        filled = float(order.get("filled") or 0)
-    except (TypeError, ValueError):
-        filled = 0.0
-    if status == "closed":
-        return OrderState.FILLED
-    if status in ("canceled", "cancelled"):
-        return OrderState.CANCELED
-    if status == "rejected":
-        return OrderState.REJECTED
-    if status == "expired":
-        return OrderState.EXPIRED
-    if status == "open":
-        return OrderState.PARTIALLY_FILLED if filled > 0 else OrderState.SUBMITTED
-    return OrderState.UNKNOWN
-
+from typing import Any, Dict, Iterable, List, Set, Tuple
 
 # ── Сверка позиций ────────────────────────────────────────────────────────────
 

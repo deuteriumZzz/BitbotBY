@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from bitbot.domain.signals.combiner import SignalCombiner
 from bitbot.risk.manager import RiskManager
+from bitbot.signals.combiner import SignalCombiner
 from tests.core.test_reconciliation import make_bot
 from tests.core.test_signal_combiner import make_snapshot
 
@@ -100,7 +100,7 @@ async def test_sac_modes_do_not_trade_without_model(mode: str) -> None:
     rc.get_mode.return_value = mode
     rc.get_signal_confidence.return_value = 0.5
     rc.get_chronos_enabled.return_value = False
-    with patch("bitbot.domain.signals.combiner.SACSignal") as sac_cls:
+    with patch("bitbot.signals.combiner.SACSignal") as sac_cls:
         sac_cls.return_value.loaded = False
         combiner = SignalCombiner(ai=ai, rc=rc)
         ctx = {"BTC/USDT": {"funding_signal": "long_overheated", "funding_rate": 0.01}}
@@ -118,7 +118,7 @@ async def test_ai_mode_unaffected_by_missing_sac() -> None:
     rc = MagicMock()
     rc.get_mode.return_value = "ai"
     rc.get_signal_confidence.return_value = 0.5
-    with patch("bitbot.domain.signals.combiner.SACSignal") as sac_cls:
+    with patch("bitbot.signals.combiner.SACSignal") as sac_cls:
         sac_cls.return_value.loaded = False
         combiner = SignalCombiner(ai=ai, rc=rc)
         await combiner.combine([make_snapshot()], balance=10_000)

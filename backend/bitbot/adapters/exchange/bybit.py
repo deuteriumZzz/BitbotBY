@@ -19,7 +19,7 @@ import pandas as pd
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from bitbot.config.settings import Config
-from bitbot.execution.reliability import classify_order
+from bitbot.domain.order_states import classify_order
 from bitbot.storage.redis_client import RedisClient
 
 

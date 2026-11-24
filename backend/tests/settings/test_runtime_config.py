@@ -321,22 +321,22 @@ class TestRuntimeConfigStrategies:
 
     def test_reset_strategies(self, rc_bundle):
         rc, redis_mock, _ = rc_bundle
-        rc.reset_strategies()
+        rc.reset_strategies([])
         redis_mock.redis_client.delete.assert_called_once()
 
     def test_reset_strategies_keeps_experimental_off(self, rc_bundle):
-        from bitbot.domain.strategies import STRATEGY_REGISTRY
+        from bitbot.domain.strategies import experimental_names
 
         rc, redis_mock, _ = rc_bundle
-        rc.reset_strategies()
+        rc.reset_strategies(experimental_names())
         disabled = {c.args[1] for c in redis_mock.redis_client.sadd.call_args_list}
-        experimental = {n for n, c in STRATEGY_REGISTRY.items() if c.experimental}
+        experimental = set(experimental_names())
         assert experimental and experimental <= disabled
         assert not disabled - experimental
 
     def test_reset_strategies_can_include_experimental(self, rc_bundle):
         rc, redis_mock, _ = rc_bundle
-        rc.reset_strategies(include_experimental=True)
+        rc.reset_strategies([])
         redis_mock.redis_client.sadd.assert_not_called()
 
     def test_toggle_strategy_disables_when_enabled(self, rc_bundle):
@@ -699,7 +699,9 @@ def test_reset_keeps_experimental_strategies_off(rc_bundle):
     rc, redis_mock, _ = rc_bundle
     client = redis_mock.redis_client
     client.smembers.return_value = set()
-    rc.reset_to_defaults()
+    from bitbot.domain.strategies import experimental_names
+
+    rc.reset_to_defaults(experimental_names())
     # метка «уже видели» стирается вместе с остальным и экспериментальные
     # стратегии выключаются заново, а не остаются включёнными после сброса
     deleted = [a for c in client.delete.call_args_list for a in c.args]

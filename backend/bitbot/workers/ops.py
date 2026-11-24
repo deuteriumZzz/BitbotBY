@@ -247,7 +247,7 @@ async def rag_refresh_loop(
     path: Optional[str] = None,
 ) -> None:
     """Раз в 10 минут пересобирает индекс по журналу в потоке (чтение до 50 МБ не должно блокировать цикл)."""
-    from bitbot.ai.ledger_rag import LedgerRAG  # noqa: PLC0415
+    from bitbot.research.ledger_rag import LedgerRAG  # noqa: PLC0415
 
     while True:
         try:
@@ -264,7 +264,7 @@ async def rag_refresh_loop(
 
 def rag_context(bot: Any, symbols: List[str]) -> str:
     """Синхронный провайдер для `AIAnalyzer._rag_block`: только чтение готового индекса (быстро)."""
-    from bitbot.ai.ledger_rag import safe_context  # noqa: PLC0415
+    from bitbot.research.ledger_rag import safe_context  # noqa: PLC0415
 
     rag = getattr(bot, "rag", None)
     if rag is None:

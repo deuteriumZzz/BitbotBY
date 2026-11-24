@@ -6,9 +6,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from bitbot.ai import providers as ai_providers
 from bitbot.ai.analyzer import AIAnalyzer
 from bitbot.ai.provider_health import estimate_cost, provider_health, tokens_by_model
+from bitbot.config import ai_providers
 from bitbot.ops.daily_digest import build_digest, format_digest
 
 OPENAI_KIND = next(p.id for p in ai_providers.PROVIDERS if p.kind != "anthropic")

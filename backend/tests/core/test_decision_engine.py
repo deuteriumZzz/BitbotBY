@@ -12,9 +12,9 @@ from bitbot.domain.contracts import decision_from_rec
 from bitbot.domain.decision import engine as DE
 from bitbot.domain.decision import explain as EX
 from bitbot.domain.decision.engine import Proposal, Views
-from bitbot.domain.signals import combiner as SC
-from bitbot.domain.signals.combiner import SignalCombiner
 from bitbot.research import signal_intelligence_report as R
+from bitbot.signals import combiner as SC
+from bitbot.signals.combiner import SignalCombiner
 from bitbot.storage.decision_ledger import DecisionLedger
 from tests.core.test_reconciliation import make_bot
 from tests.core.test_replay import _AI, _SAC, _Fc, _rc

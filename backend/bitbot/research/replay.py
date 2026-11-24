@@ -25,7 +25,7 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
-from bitbot.domain.signals.combiner import SignalCombiner
+from bitbot.signals.combiner import SignalCombiner
 
 SCHEMA = 1
 COMPARE_KEYS = (

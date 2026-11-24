@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from bitbot.adapters.sentiment.news_analyzer import NewsAnalyzer
     from bitbot.adapters.telegram.notifier import TelegramNotifier
     from bitbot.market.market_scanner import MarketScanner
-    from bitbot.research.portfolio_optimizer import PortfolioOptimizer
+    from bitbot.risk.portfolio_optimizer import PortfolioOptimizer
 
 logger = logging.getLogger(__name__)
 

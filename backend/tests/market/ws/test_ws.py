@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from bitbot.execution.reliability import OrderState
+from bitbot.domain.order_states import OrderState
 from bitbot.market.ws.book import IGNORED, OK, RESYNC, OrderBook
 from bitbot.market.ws.candles import CandleAssembler, compare_with_rest
 from bitbot.market.ws.client import (

@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from bitbot.domain import contracts as C
-from bitbot.domain.signals.combiner import SignalCombiner
 from bitbot.domain.trading_modes import (
     REASON_AI_UNAVAILABLE,
     REASON_SAC_MISSING,
@@ -17,6 +16,7 @@ from bitbot.domain.trading_modes import (
     readiness,
     requires_sac,
 )
+from bitbot.signals.combiner import SignalCombiner
 from bitbot.storage.decision_ledger import DecisionLedger
 from tests.core.test_reconciliation import make_bot
 from tests.core.test_signal_combiner import make_rec, make_snapshot
@@ -101,7 +101,7 @@ async def test_real_hybrid_recommendation_maps_to_ai_and_sac_outputs() -> None:
     rc.get_mode.return_value = "hybrid"
     rc.get_signal_confidence.return_value = 0.5
     rc.get_chronos_enabled.return_value = False
-    with patch("bitbot.domain.signals.combiner.SACSignal") as sac_cls:
+    with patch("bitbot.signals.combiner.SACSignal") as sac_cls:
         sac = sac_cls.return_value
         sac.loaded = True
         sac.get_signal.return_value = {"action": "buy", "confidence": 0.75}

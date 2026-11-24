@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import quote, unquote
 
-from bitbot.ai import providers as ai_providers
+from bitbot.config import ai_providers
 
 logger = logging.getLogger(__name__)
 audit = logging.getLogger("audit")
@@ -62,7 +62,7 @@ def _key(env: str, label: str = "API Key", **kw: Any) -> Field:
 
 
 def _ai_service(p: ai_providers.Provider) -> Service:
-    """Карточка ключа AI-провайдера — из каталога bitbot.ai.providers.
+    """Карточка ключа AI-провайдера — из каталога bitbot.config.ai_providers.
 
     Модель выбирается в разделе «AI» приложения, поэтому поля модели здесь нет.
     """

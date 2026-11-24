@@ -140,7 +140,7 @@ omit = [
     "*/bitbot/market/market_scanner.py",
     "*/bitbot/market/data_loader.py",
     "*/bitbot/infra/logger.py",
-    "*/bitbot/research/portfolio_optimizer.py",
+    "*/bitbot/risk/portfolio_optimizer.py",
     "*/bitbot/market/regime_detector.py",
     "*/bitbot/research/backtest.py",
     "*/bitbot/research/ai_signal_isolation_backtest.py",
@@ -153,9 +153,10 @@ skip_empty = true
 show_missing = true
 
 # ── правила слоёв (lint-imports) ─────────────────────────────────────────────
-# Верхний слой может импортировать нижний, нижний верхний — нет. Новое нарушение
-# роняет CI. ignore_imports — известный долг: каждое разбирается в фазе 4
-# (внутренняя структура) и удаляется отсюда.
+# Верхний слой может импортировать нижний, нижний верхний — нет; новое нарушение
+# роняет CI. domain — чистая предметная логика (стратегии, контракты, ордера):
+# зависит только от storage/config/infra, поэтому стоит ниже ai/ml/адаптеров.
+# signals собирает ai + ml + стратегии в одну рекомендацию.
 
 [tool.importlinter]
 root_package = "bitbot"
@@ -170,25 +171,13 @@ layers = [
     "bitbot.research",
     "bitbot.execution",
     "bitbot.risk",
-    "bitbot.domain",
+    "bitbot.signals",
     "bitbot.ml",
     "bitbot.ai",
     "bitbot.market",
     "bitbot.adapters",
+    "bitbot.domain",
     "bitbot.storage",
     "bitbot.config",
     "bitbot.infra",
-]
-ignore_imports = [
-    "bitbot.adapters.exchange.bybit -> bitbot.execution.reliability",
-    "bitbot.market.ws.private -> bitbot.execution.reliability",
-    "bitbot.ai.analyzer -> bitbot.domain.strategies",
-    "bitbot.ai.ledger_rag -> bitbot.domain.decision.explain",
-    "bitbot.ai.ledger_rag -> bitbot.research.signal_intelligence_report",
-    "bitbot.api.routers.control -> bitbot.workers.jobs",
-    "bitbot.config.registry -> bitbot.ai.providers",
-    "bitbot.config.runtime -> bitbot.ai.providers",
-    "bitbot.config.runtime -> bitbot.domain.strategies",
-    "bitbot.config.secrets -> bitbot.ai.providers",
-    "bitbot.execution.order_executor -> bitbot.research.portfolio_optimizer",
 ]

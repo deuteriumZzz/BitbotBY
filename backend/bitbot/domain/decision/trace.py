@@ -19,8 +19,8 @@ import time
 from collections import Counter
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
-from bitbot.ai.providers import BY_ID
-from bitbot.ml.experience_buffer import LOCAL_REASONING_PREFIX
+from bitbot.config.ai_providers import BY_ID
+from bitbot.domain.contracts import LOCAL_REASONING_PREFIX
 
 logger = logging.getLogger(__name__)
 

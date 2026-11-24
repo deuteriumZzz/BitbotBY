@@ -33,17 +33,17 @@ from starlette.requests import HTTPConnection
 
 from bitbot.adapters.sentiment import telegram_login
 from bitbot.adapters.sentiment.telegram_sentiment import STATUS_KEY as TG_STATUS_KEY
-from bitbot.ai import providers as ai_providers
 from bitbot.api import auth, data
-from bitbot.config import registry
+from bitbot.config import ai_providers, registry
 from bitbot.config import secrets as secrets_store
 from bitbot.config.runtime import RISK_PRESETS, RuntimeConfig
 from bitbot.config.settings import Config
+from bitbot.domain import strategies
 from bitbot.domain.types import is_trusted
 from bitbot.execution.trusted_trader import LAST_KEY as TRUSTED_LAST_KEY
 from bitbot.ops import emergency, reports
+from bitbot.ops import jobs as background_jobs
 from bitbot.storage import bot_bus
-from bitbot.workers import jobs as background_jobs
 
 
 async def _owner_only(conn: HTTPConnection) -> None:
@@ -378,7 +378,7 @@ async def cmd_panic(request: Request) -> JSONResponse:
 
 @router.post("/api/jobs/{job}")
 async def cmd_job(job: str, request: Request) -> JSONResponse:
-    """Фоновая задача из меню Telegram (список — background_jobs.JOBS)."""
+    """Запуск фоновой задачи (список — bitbot.ops.jobs.JOBS)."""
     if job not in background_jobs.JOBS:
         return _err(404, "unknown_job", "Такой задачи нет.")
     body = await _body(request)
@@ -637,11 +637,11 @@ def _rc_or_error(
 
 @router.post("/api/config/reset")
 async def reset_config(request: Request) -> JSONResponse:
-    """Сброс runtime-настроек к значениям из .env (как «Сброс настроек» в Telegram)."""
+    """Сброс runtime-настроек к значениям по умолчанию («Сброс настроек»)."""
     rc, r, denied = _rc_or_error(request)
     if denied is not None:
         return denied
-    rc.reset_to_defaults()
+    rc.reset_to_defaults(strategies.experimental_names())
     bot_bus.emit(
         r,
         "config.changed",
@@ -685,7 +685,7 @@ async def reset_strategies(request: Request) -> JSONResponse:
     rc, r, denied = _rc_or_error(request)
     if denied is not None:
         return denied
-    rc.reset_strategies()
+    rc.reset_strategies(strategies.experimental_names())
     bot_bus.emit(r, "config.changed", {"keys": ["STRATEGIES"]})
     return JSONResponse({"ok": True})
 
@@ -875,7 +875,7 @@ async def post_launcher(request: Request) -> JSONResponse:
     return JSONResponse({"id": req["id"]})
 
 
-# ── AI-провайдеры (backend/bitbot/ai/providers.py) ───────────────────────────────────────
+# ── AI-провайдеры (backend/bitbot/config/ai_providers.py) ───────────────────────────────────────
 
 
 def _model_env(p: ai_providers.Provider) -> str:

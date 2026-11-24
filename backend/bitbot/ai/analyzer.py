@@ -12,7 +12,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import pandas as pd
 
-from bitbot.ai import providers as catalog
+from bitbot.config import ai_providers as catalog
 from bitbot.config.settings import Config
 from bitbot.domain.strategies import (
     STRATEGY_REGISTRY,
@@ -81,7 +81,7 @@ def _classify(exc: Exception) -> Tuple[str, float]:
 
 class AIAnalyzer:
     """
-    Анализирует рынок через цепочку AI-провайдеров (каталог — backend/bitbot/ai/providers.py).
+    Анализирует рынок через цепочку AI-провайдеров (каталог — backend/bitbot/config/ai_providers.py).
 
     Порядок, режим (только бесплатные / сначала бесплатные / только платные),
     модели и включённые провайдеры задаются в приложении и действуют со

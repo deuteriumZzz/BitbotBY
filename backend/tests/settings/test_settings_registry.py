@@ -91,7 +91,7 @@ def test_hot_settings_apply_at_once_and_survive_old_overrides():
     assert out["applied_hot"] == ["TELEGRAM_WINDOW_MIN"]
     assert rc.hot("TELEGRAM_WINDOW_MIN") == 15
     assert reg.current_values(Config, rc, r)["TELEGRAM_WINDOW_MIN"]["value"] == 15
-    rc.reset_to_defaults()  # «Сброс настроек» стирает и их
+    rc.reset_to_defaults([])  # «Сброс настроек» стирает и их
     assert rc.hot("TELEGRAM_WINDOW_MIN") == Config.TELEGRAM_WINDOW_MIN
 
 

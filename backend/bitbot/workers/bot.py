@@ -29,9 +29,8 @@ from bitbot.adapters.telegram.notifier import (
     SCREEN_PIPELINE,
     TelegramNotifier,
 )
-from bitbot.ai import providers as ai_providers
 from bitbot.ai.analyzer import AIAnalyzer
-from bitbot.config import login_link
+from bitbot.config import ai_providers, login_link
 from bitbot.config.constants import REDIS_TTL_MARKET_DATA, SILENT_DEATH_ALERT_COOLDOWN
 from bitbot.config.registry import apply_overrides as apply_config_overrides
 from bitbot.config.registry import effective_config
@@ -39,10 +38,9 @@ from bitbot.config.runtime import RuntimeConfig
 from bitbot.config.secrets import SERVICES as SECRET_SERVICES
 from bitbot.config.secrets import apply_secrets
 from bitbot.config.settings import Config
-from bitbot.domain.contracts import decision_from_rec
+from bitbot.domain.contracts import LOCAL_REASONING_PREFIX, decision_from_rec
 from bitbot.domain.decision.trace import DecisionTrace
-from bitbot.domain.signals.combiner import SignalCombiner
-from bitbot.domain.strategies import STRATEGY_REGISTRY, TradingStrategy
+from bitbot.domain.strategies import TradingStrategy, experimental_names
 from bitbot.domain.trading_modes import all_readiness
 from bitbot.domain.types import PositionRecord
 from bitbot.execution.order_executor import OrderExecutor
@@ -61,11 +59,11 @@ from bitbot.market.market_scanner import MarketScanner
 from bitbot.market.pumpfun_tracker import PumpfunTracker
 from bitbot.market.regime_detector import RegimeDetector
 from bitbot.market.season_detector import SeasonDetector
-from bitbot.ml.experience_buffer import LOCAL_REASONING_PREFIX
 from bitbot.ml.online_learner import OnlineLearner
-from bitbot.research.portfolio_optimizer import PortfolioOptimizer
 from bitbot.research.replay import build_replay_input
 from bitbot.risk.manager import RiskManager
+from bitbot.risk.portfolio_optimizer import PortfolioOptimizer
+from bitbot.signals.combiner import SignalCombiner
 from bitbot.storage.bot_bus import CommandConsumer, emit
 from bitbot.storage.decision_ledger import DecisionLedger
 from bitbot.storage.redis_client import RedisClient
@@ -2046,9 +2044,7 @@ class TradingBot:
         mode = "paper" if Config.PAPER_TRADING else "live"
         self._runtime_config.ensure_first_start_date()
         self._runtime_config.ensure_default_market_profile()
-        _off = self._runtime_config.ensure_experimental_disabled(
-            n for n, c in STRATEGY_REGISTRY.items() if c.experimental
-        )
+        _off = self._runtime_config.ensure_experimental_disabled(experimental_names())
         if _off:
             logger.info("Экспериментальные стратегии выключены по умолчанию: %s", _off)
         # Синхронизируем os.environ["MARKET_TYPE"] из Redis при старте —

@@ -3,8 +3,8 @@
 import json
 
 from bitbot.api.data import _steps
+from bitbot.domain.contracts import LOCAL_REASONING_PREFIX
 from bitbot.domain.decision.trace import DecisionTrace, takes_part
-from bitbot.ml.experience_buffer import LOCAL_REASONING_PREFIX
 from bitbot.storage.trade_history import TradeHistory
 
 

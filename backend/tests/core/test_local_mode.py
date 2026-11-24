@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pandas as pd
 import pytest
 
-from bitbot.ml.experience_buffer import LOCAL_REASONING_PREFIX, is_local_reasoning
+from bitbot.domain.contracts import LOCAL_REASONING_PREFIX, is_local_reasoning
 from bitbot.workers.bot import TradingBot
 
 
@@ -76,7 +76,7 @@ async def test_local_fallback_only_when_decider_is_down(mode, fallback, down, tr
 def test_decider_unavailable_by_mode():
     from types import SimpleNamespace
 
-    from bitbot.domain.signals.combiner import SignalCombiner
+    from bitbot.signals.combiner import SignalCombiner
 
     c = SignalCombiner.__new__(SignalCombiner)
     c.ai = SimpleNamespace(unavailable=True)

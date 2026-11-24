@@ -17,7 +17,7 @@ from __future__ import annotations
 from collections import OrderedDict
 from typing import Any, Dict, Optional, Tuple
 
-from bitbot.execution.reliability import OrderState, next_state
+from bitbot.domain.order_states import OrderState, next_state
 
 _STATUS = {
     "Created": OrderState.SUBMITTED,

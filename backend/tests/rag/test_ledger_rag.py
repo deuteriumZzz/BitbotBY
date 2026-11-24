@@ -3,8 +3,8 @@
 import json
 from types import SimpleNamespace
 
-from bitbot.ai.ledger_rag import BM25, LedgerRAG, main, safe_context, tokenize
 from bitbot.execution.position_monitor import PositionMonitor
+from bitbot.research.ledger_rag import BM25, LedgerRAG, main, safe_context, tokenize
 
 
 def dec(did, symbol, status, strategy, regime="trending_up", **kw):

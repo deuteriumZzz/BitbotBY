@@ -1,8 +1,8 @@
-"""Каталог AI-провайдеров и правила цепочки (backend/bitbot/ai/providers.py)."""
+"""Каталог AI-провайдеров и правила цепочки (backend/bitbot/config/ai_providers.py)."""
 
 import pytest
 
-from bitbot.ai import providers as ap
+from bitbot.config import ai_providers as ap
 
 
 def test_catalog_is_consistent():

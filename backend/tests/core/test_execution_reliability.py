@@ -8,12 +8,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import ccxt.async_support as ccxt
 import pytest
 
+from bitbot.domain import order_states as OS
 from bitbot.execution import reliability as ER
 from bitbot.storage.decision_ledger import DecisionLedger
 from tests.core.test_reconciliation import make_bot
 from tests.exchange.test_bybit_api_errors import _make_api
 
-S = ER.OrderState
+S = OS.OrderState
 
 # ── Машина состояний ──────────────────────────────────────────────────────────
 
@@ -35,25 +36,25 @@ S = ER.OrderState
     ],
 )
 def test_classify_order(order, state) -> None:
-    assert ER.classify_order(order) == state
+    assert OS.classify_order(order) == state
 
 
 def test_transitions_accept_forward_events_only() -> None:
-    assert ER.next_state(S.CREATED, S.SUBMITTED) == (S.SUBMITTED, True)
-    assert ER.next_state(S.SUBMITTED, S.PARTIALLY_FILLED) == (S.PARTIALLY_FILLED, True)
-    assert ER.next_state(S.PARTIALLY_FILLED, S.PARTIALLY_FILLED)[1] is True
-    assert ER.next_state(S.PARTIALLY_FILLED, S.FILLED) == (S.FILLED, True)
+    assert OS.next_state(S.CREATED, S.SUBMITTED) == (S.SUBMITTED, True)
+    assert OS.next_state(S.SUBMITTED, S.PARTIALLY_FILLED) == (S.PARTIALLY_FILLED, True)
+    assert OS.next_state(S.PARTIALLY_FILLED, S.PARTIALLY_FILLED)[1] is True
+    assert OS.next_state(S.PARTIALLY_FILLED, S.FILLED) == (S.FILLED, True)
 
 
 def test_late_or_duplicate_events_do_not_change_terminal_orders() -> None:
-    for terminal in ER.TERMINAL:
+    for terminal in OS.TERMINAL:
         for incoming in S:
-            state, accepted = ER.next_state(terminal, incoming)
+            state, accepted = OS.next_state(terminal, incoming)
             assert (state, accepted) == (terminal, False)
     # повтор «исполнен» и откат к частичному — отброшены
-    assert ER.next_state(S.FILLED, S.FILLED) == (S.FILLED, False)
-    assert ER.next_state(S.FILLED, S.PARTIALLY_FILLED) == (S.FILLED, False)
-    assert ER.next_state(S.SUBMITTED, S.CREATED) == (S.SUBMITTED, False)
+    assert OS.next_state(S.FILLED, S.FILLED) == (S.FILLED, False)
+    assert OS.next_state(S.FILLED, S.PARTIALLY_FILLED) == (S.FILLED, False)
+    assert OS.next_state(S.SUBMITTED, S.CREATED) == (S.SUBMITTED, False)
 
 
 # ── Сверка позиций ────────────────────────────────────────────────────────────

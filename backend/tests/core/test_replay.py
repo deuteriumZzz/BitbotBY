@@ -9,8 +9,8 @@ from unittest.mock import MagicMock
 import pandas as pd
 import pytest
 
-from bitbot.domain.signals.combiner import SignalCombiner
 from bitbot.research import replay as RP
+from bitbot.signals.combiner import SignalCombiner
 from bitbot.storage.decision_ledger import DecisionLedger
 from tests.core.test_reconciliation import make_bot
 from tests.core.test_signal_combiner import make_rec, make_snapshot

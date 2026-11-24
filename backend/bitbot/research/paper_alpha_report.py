@@ -57,7 +57,7 @@ def load_closed_returns_by_profile(db_path: str) -> List[Tuple[str, float]]:
     """Читает (profile, pnl_pct) закрытых сделок, читая profile из context_flags.
 
     SignalCombiner тегирует активный рыночный профиль (bluechip/altcoin/meme)
-    в context_flags["profile"] на момент входа (см. backend/bitbot/domain/signals/combiner.py).
+    в context_flags["profile"] на момент входа (см. backend/bitbot/signals/combiner.py).
     Это даёт реализованный PnL/Sharpe за периоды активного профиля вместо
     голого счётчика срабатываний "Season check: ... signal=meme"
     (п.6 роадмапа). Сделки без тега (до появления этой инструментации, или
@@ -95,7 +95,7 @@ def load_closed_returns_by_market_type(db_path: str) -> List[Tuple[str, float]]:
     """Читает (market_type, pnl_pct) закрытых сделок из context_flags.
 
     SignalCombiner тегирует активный тип рынка (spot/linear) в
-    context_flags["market_type"] на момент входа (см. backend/bitbot/domain/signals/combiner.py)
+    context_flags["market_type"] на момент входа (см. backend/bitbot/signals/combiner.py)
     — та же логика, что и load_closed_returns_by_profile, но для spot/futures:
     механика сделки (плечо, шорт, funding, ликвидация) настолько разная, что
     смешивать их в одну win_rate/EV-выборку так же некорректно, как смешивать

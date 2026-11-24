@@ -11,7 +11,7 @@
 Сбой RAG не должен влиять на решение: `safe_context` возвращает пустой блок
 (политика `rag_failure` из `backend/bitbot/ai/failure_policy.py`).
 В промпт AI не подключён — это изменит вход модели; включается отдельным решением.
-CLI:  python -m bitbot.ai.ledger_rag "rsi перепродан BTC" [--symbol BTC/USDT] [--k 5]
+CLI:  python -m bitbot.research.ledger_rag "rsi перепродан BTC" [--symbol BTC/USDT] [--k 5]
 """
 
 from __future__ import annotations
@@ -217,7 +217,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     if not args:
         print(
-            'Использование: python -m bitbot.ai.ledger_rag "запрос" [--symbol X] [--k N]'
+            'Использование: python -m bitbot.research.ledger_rag "запрос" [--symbol X] [--k N]'
         )
         return 2
     opts: Dict[str, str] = {}

@@ -7,7 +7,7 @@ import json
 import pytest
 
 from bitbot.domain import contracts as C
-from bitbot.domain.signals import intelligence as SI
+from bitbot.domain import signal_intelligence as SI
 from bitbot.domain.strategies import STRATEGY_REGISTRY
 from bitbot.research import signal_intelligence_report as R
 from tests.core.test_signal_combiner import make_rec

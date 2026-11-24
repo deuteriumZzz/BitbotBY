@@ -31,20 +31,13 @@ import threading
 from datetime import datetime, timezone
 from typing import Any, Dict
 
+from bitbot.domain.contracts import is_local_reasoning
+
 logger = logging.getLogger(__name__)
 
 _DEFAULT_PATH = os.getenv("EXPERIENCES_PATH", "data/experiences.jsonl")
 _MAX_LINES = int(os.getenv("EXPERIENCES_MAX", "10000"))
 _lock = threading.Lock()
-
-
-# Сигнал сгенерирован локальной стратегией, без AI. Старые записи в истории
-# опыта помечены английским «Local analysis» — их тоже считаем локальными.
-LOCAL_REASONING_PREFIX = "Локальная стратегия"
-
-
-def is_local_reasoning(reasoning: str) -> bool:
-    return LOCAL_REASONING_PREFIX in reasoning or "Local analysis" in reasoning
 
 
 def save(

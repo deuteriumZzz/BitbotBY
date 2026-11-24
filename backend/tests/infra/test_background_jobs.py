@@ -3,6 +3,7 @@
 import json
 from unittest.mock import AsyncMock, MagicMock
 
+from bitbot.ops import jobs as oj
 from bitbot.workers import jobs as bj
 from bitbot.workers.commands import BotCommands
 from tests.infra.test_bot_bus import FakeRedis
@@ -244,11 +245,11 @@ def test_status_reports_rollback_and_running(tmp_path):
     backup.write_text("x")
     rc.backup = str(backup)
     rc.locks["sac"] = "telegram"
-    st = bj.status(rc)
+    st = oj.status(rc)
     assert st["running"] == {"sac": "telegram"} and st["rollback_available"] is True
 
 
 def test_job_groups_exclude_each_other_only_where_needed():
-    assert bj.JOBS["train"].group == bj.JOBS["tune"].group == "sac"
-    groups = {j.group for j in bj.JOBS.values()}
+    assert oj.JOBS["train"].group == oj.JOBS["tune"].group == "sac"
+    groups = {j.group for j in oj.JOBS.values()}
     assert len(groups) == 5

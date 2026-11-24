@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple, Type
 
 import pandas as pd
 
+from bitbot.config.runtime import active_profile
 from bitbot.config.settings import Config
 from bitbot.domain.strategies.base import BaseStrategy
 from bitbot.domain.strategies.ported import PORTED_STRATEGIES
@@ -512,17 +513,6 @@ _VOLUME_SPIKE_BY_PROFILE: Dict[str, float] = {
 }
 
 
-# Профиль монет, под который сейчас настроен бот. Ставит RuntimeConfig при смене
-# профиля и при старте (из Redis) — SAC_PROFILE при рестарте не восстанавливается.
-_active_profile: str = ""
-
-
-def set_active_profile(name: str) -> None:
-    """Запоминает профиль монет для порога volume_spike."""
-    global _active_profile
-    _active_profile = name or ""
-
-
 class VolumeSpikeStrategy(BaseStrategy):
     """
     Стратегия на аномальном всплеске объёма.
@@ -550,7 +540,7 @@ class VolumeSpikeStrategy(BaseStrategy):
     def threshold() -> float:
         """Порог всплеска для текущего профиля монет."""
         return (
-            _VOLUME_SPIKE_BY_PROFILE.get(_active_profile)
+            _VOLUME_SPIKE_BY_PROFILE.get(active_profile())
             or Config.VOLUME_SPIKE_THRESHOLD
         )
 
@@ -1440,3 +1430,8 @@ class TradingStrategy:
     def get_current_strategy_info(self) -> Dict[str, Any]:
         """Возвращает информацию об активной стратегии."""
         return self.strategy.get_info()
+
+
+def experimental_names() -> List[str]:
+    """Стратегии без доказанного преимущества: выключены по умолчанию."""
+    return [n for n, c in STRATEGY_REGISTRY.items() if c.experimental]

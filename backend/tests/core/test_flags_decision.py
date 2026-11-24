@@ -9,14 +9,14 @@ from unittest.mock import AsyncMock, MagicMock
 import pandas as pd
 import pytest
 
-from bitbot.ai import providers as ai_providers
 from bitbot.ai.analyzer import AIAnalyzer
 from bitbot.ai.forecast.timesfm_client import TimesFMForecaster
+from bitbot.config import ai_providers
 from bitbot.config.settings import Config
-from bitbot.domain.signals.combiner import SignalCombiner
 from bitbot.execution import funding as fd
 from bitbot.execution.position_monitor import PositionMonitor
 from bitbot.ml.sac_v2_policy import SACV2Signal
+from bitbot.signals.combiner import SignalCombiner
 from bitbot.storage.trade_history import TradeHistory
 from bitbot.workers import ops as ot
 from bitbot.workers.bot import TradingBot

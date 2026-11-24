@@ -19,7 +19,16 @@ import json
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
-from bitbot.domain.signals.intelligence import analyze_signal
+from bitbot.domain.signal_intelligence import analyze_signal
+
+# Сигнал сгенерирован локальной стратегией, без AI. Старые записи в истории
+# опыта помечены английским «Local analysis» — их тоже считаем локальными.
+LOCAL_REASONING_PREFIX = "Локальная стратегия"
+
+
+def is_local_reasoning(reasoning: str) -> bool:
+    return LOCAL_REASONING_PREFIX in reasoning or "Local analysis" in reasoning
+
 
 # Статусы решения (MASTER_SPEC §12.3).
 LONG = "LONG"
@@ -115,8 +124,6 @@ def _reason_codes(rec: Dict[str, Any]) -> Tuple[str, ...]:
 
 
 def _outputs(rec: Dict[str, Any], trail: List[Any]) -> List[ModelOutput]:
-    from bitbot.ml.experience_buffer import is_local_reasoning  # noqa: PLC0415
-
     strategy = str(rec.get("strategy", ""))
     action = str(rec.get("action", "hold"))
     conf = float(rec.get("confidence", 0.0) or 0.0)

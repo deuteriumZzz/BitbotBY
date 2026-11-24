@@ -12,7 +12,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Set
 
-from bitbot.ai import providers as ai_providers
+from bitbot.config import ai_providers
 from bitbot.config.settings import Config
 
 logger = logging.getLogger(__name__)
@@ -201,6 +201,21 @@ _MARKET_PROFILES = {
 }
 
 _VALID_MODES = {"ai", "local", "hybrid", "dqn"}
+
+
+# Профиль монет, под который сейчас настроен бот: от него порог volume_spike.
+# Ставится при смене профиля и при старте (из Redis) — SAC_PROFILE в окружении
+# после рестарта не восстанавливается.
+_active_profile: str = ""
+
+
+def set_active_profile(name: str) -> None:
+    global _active_profile
+    _active_profile = name or ""
+
+
+def active_profile() -> str:
+    return _active_profile
 
 
 class RuntimeConfig:
@@ -795,12 +810,13 @@ class RuntimeConfig:
             logger.warning("RuntimeConfig experimental seeding failed: %s", e)
             return []
 
-    def reset_strategies(self, include_experimental: bool = False) -> None:
-        """Включить основные стратегии (очистить список отключённых).
+    def reset_strategies(self, keep_off: Iterable[str]) -> None:
+        """Включить все стратегии, кроме `keep_off` (очистить список отключённых).
 
-        Экспериментальные (без доказанного преимущества) остаются выключенными,
-        если явно не попросили include_experimental: одно нажатие не должно
-        включать десятки стратегий, которые мы держим выключенными нарочно.
+        `keep_off` — обычно экспериментальные (без доказанного преимущества,
+        `strategies.experimental_names()`): одно нажатие не должно включать
+        десятки стратегий, которые мы держим выключенными нарочно. Список
+        передаёт вызывающий: настройки не знают о стратегиях (слой ниже).
         """
         try:
             self._r.redis_client.delete(_KEY_DISABLED_STRATS)
@@ -808,13 +824,8 @@ class RuntimeConfig:
         except Exception as e:
             logger.warning("RuntimeConfig delete failed: %s", e)
             return
-        if include_experimental:
-            return
-        from bitbot.domain.strategies import STRATEGY_REGISTRY  # noqa: PLC0415
-
-        for name, cls in STRATEGY_REGISTRY.items():
-            if cls.experimental:
-                self.disable_strategy(name)
+        for name in keep_off:
+            self.disable_strategy(name)
 
     def toggle_strategy(self, name: str) -> bool:
         """Переключает стратегию. Возвращает True если теперь включена."""
@@ -936,8 +947,6 @@ class RuntimeConfig:
         или после очистки Redis). Возвращает действующий профиль."""
         current = self.get_market_profile()
         if current:
-            from bitbot.domain.strategies import set_active_profile  # noqa: PLC0415
-
             set_active_profile(current)  # порог volume_spike после рестарта
             return current
         self.apply_market_profile(default)
@@ -997,8 +1006,6 @@ class RuntimeConfig:
         # Переключаем профиль-специфичные стратегии. volume_spike одна для всех
         # профилей: порог берётся из SAC_PROFILE внутри стратегии. Старые
         # профильные имена из списка отключённых убираем — их больше нет.
-        from bitbot.domain.strategies import set_active_profile  # noqa: PLC0415
-
         set_active_profile(name)
         # sentiment — во всех профилях: Telegram-каналы читаются по монетам
         # любого скана (Twitter по-прежнему только в meme).
@@ -1349,10 +1356,11 @@ class RuntimeConfig:
         _KEY_MAX_VOLUME,
     )
 
-    def reset_to_defaults(self) -> None:
-        """
-        Сбрасывает все Runtime-настройки, возвращая управление .env.
-        Вызывается при старте бота — каждый запуск начинается чисто.
+    def reset_to_defaults(self, experimental: Iterable[str]) -> None:
+        """Сбрасывает все Runtime-настройки к значениям по умолчанию.
+
+        Кнопка «Сброс настроек» в приложении. `experimental` — имена
+        экспериментальных стратегий: после сброса они снова выключены.
         """
         from bitbot.config.registry import HOT_KEYS  # noqa: PLC0415
 
@@ -1363,12 +1371,7 @@ class RuntimeConfig:
         except Exception as e:
             logger.warning("RuntimeConfig reset failed: %s", e)
             return
-        # Экспериментальные стратегии после сброса снова выключены по умолчанию.
-        from bitbot.domain.strategies import STRATEGY_REGISTRY  # noqa: PLC0415
-
-        self.ensure_experimental_disabled(
-            n for n, c in STRATEGY_REGISTRY.items() if c.experimental
-        )
+        self.ensure_experimental_disabled(experimental)
 
     # ── Summary ───────────────────────────────────────────────────────────────
 

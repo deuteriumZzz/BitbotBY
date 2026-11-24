@@ -55,7 +55,7 @@ def _make_strategy(name: str) -> dict:
 @pytest.fixture(autouse=True)
 def _no_ai_keys_in_env(monkeypatch):
     """Ключи из окружения разработчика не должны попадать в цепочку тестов."""
-    from bitbot.ai import providers as ai_providers
+    from bitbot.config import ai_providers
 
     for p in ai_providers.PROVIDERS:
         for env in (p.key_env, p.model_env, p.url_env):
@@ -101,7 +101,7 @@ def anthropic_analyzer():
 
 
 # ---------------------------------------------------------------------------
-# Цепочка провайдеров из ключей и настроек (каталог backend/bitbot/ai/providers.py)
+# Цепочка провайдеров из ключей и настроек (каталог backend/bitbot/config/ai_providers.py)
 # ---------------------------------------------------------------------------
 
 
