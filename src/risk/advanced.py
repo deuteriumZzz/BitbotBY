@@ -24,17 +24,23 @@ import numpy as np
 
 
 # ── Динамический CVaR ─────────────────────────────────────────────────────────
-def ewma_sigma(returns: Sequence[float], lam: float = 0.94, warmup: int = 20) -> np.ndarray:
+def ewma_sigma(
+    returns: "Sequence[float] | np.ndarray", lam: float = 0.94, warmup: int = 20
+) -> np.ndarray:
     """Условная σ_t по RiskMetrics: σ_t² = λσ_{t-1}² + (1−λ)r_{t-1}²; старт — выборочная σ первых `warmup`."""
     r = np.asarray(returns, float)
     s2 = np.empty(len(r) + 1)
     s2[0] = np.var(r[:warmup]) if len(r) >= warmup else np.var(r)
     for t in range(len(r)):
         s2[t + 1] = lam * s2[t] + (1 - lam) * r[t] ** 2
-    return np.sqrt(np.maximum(s2, 1e-18))  # [t] — прогноз σ для шага t; последний — на следующий шаг
+    return np.sqrt(
+        np.maximum(s2, 1e-18)
+    )  # [t] — прогноз σ для шага t; последний — на следующий шаг
 
 
-def dynamic_cvar(returns: Sequence[float], alpha: float = 0.95, lam: float = 0.94) -> Dict[str, float]:
+def dynamic_cvar(
+    returns: Sequence[float], alpha: float = 0.95, lam: float = 0.94
+) -> Dict[str, float]:
     r = np.asarray(returns, float)
     if len(r) < 30:
         raise ValueError("нужно ≥ 30 наблюдений")
@@ -72,7 +78,9 @@ def stress_btc_shock(
     if equity <= 0:
         raise ValueError("equity > 0")
     systematic = sum(p.notional * p.beta * shock for p in positions)
-    idio = sum(abs(p.notional) * p.idio_vol * idio_mult for p in positions)  # всегда против нас
+    idio = sum(
+        abs(p.notional) * p.idio_vol * idio_mult for p in positions
+    )  # всегда против нас
     pnl = systematic - idio
     loss_pct = max(0.0, -pnl / equity)
     return {
@@ -87,7 +95,9 @@ def stress_btc_shock(
 # ── Black–Litterman ───────────────────────────────────────────────────────────
 @dataclass(frozen=True)
 class View:
-    assets: Dict[str, float]  # строка матрицы P: {символ: вес}, напр. {"ETH": 1} или {"ETH": 1, "BTC": -1}
+    assets: Dict[
+        str, float
+    ]  # строка матрицы P: {символ: вес}, напр. {"ETH": 1} или {"ETH": 1, "BTC": -1}
     expected_return: float  # q: ожидаемая доходность портфеля взгляда за горизонт
     confidence: float  # (0, 1]
 
@@ -96,13 +106,19 @@ def _finite_number(x: Any) -> bool:
     return not isinstance(x, bool) and isinstance(x, (int, float)) and math.isfinite(x)
 
 
-def validate_views(raw: Any, universe: Sequence[str], max_abs_q: float = 0.5) -> List[View]:
+def validate_views(
+    raw: Any, universe: Sequence[str], max_abs_q: float = 0.5
+) -> List[View]:
     """Строгая проверка структурированных взглядов (в т.ч. от LLM): неизвестный актив/NaN/уверенность вне (0,1] — отказ."""
     if not isinstance(raw, list):
         raise ValueError("взгляды должны быть списком")
     known, out = set(universe), []
     for i, v in enumerate(raw):
-        if not isinstance(v, dict) or set(v) - {"assets", "expected_return", "confidence"}:
+        if not isinstance(v, dict) or set(v) - {
+            "assets",
+            "expected_return",
+            "confidence",
+        }:
             raise ValueError(f"взгляд {i}: неизвестные поля или не объект")
         assets, q, c = v.get("assets"), v.get("expected_return"), v.get("confidence")
         if not isinstance(assets, dict) or not assets or not set(assets) <= known:
@@ -110,7 +126,9 @@ def validate_views(raw: Any, universe: Sequence[str], max_abs_q: float = 0.5) ->
         if not all(_finite_number(w) for w in assets.values()):
             raise ValueError(f"взгляд {i}: веса должны быть конечными числами")
         if not _finite_number(q) or not _finite_number(c):
-            raise ValueError(f"взгляд {i}: expected_return и confidence — конечные числа")
+            raise ValueError(
+                f"взгляд {i}: expected_return и confidence — конечные числа"
+            )
         if abs(q) > max_abs_q or not 0 < c <= 1:
             raise ValueError(f"взгляд {i}: |q| ≤ {max_abs_q}, 0 < confidence ≤ 1")
         out.append(View({k: float(w) for k, w in assets.items()}, float(q), float(c)))
@@ -141,7 +159,10 @@ def black_litterman(
             P[k, idx[a]] = wt
     tS = tau * S
     omega = np.diag(
-        [((1 - v.confidence) / v.confidence) * float(P[k] @ tS @ P[k]) + 1e-12 for k, v in enumerate(views)]
+        [
+            ((1 - v.confidence) / v.confidence) * float(P[k] @ tS @ P[k]) + 1e-12
+            for k, v in enumerate(views)
+        ]
     )
     inv_tS, inv_om = np.linalg.inv(tS), np.linalg.inv(omega)
     M = np.linalg.inv(inv_tS + P.T @ inv_om @ P)
@@ -150,7 +171,11 @@ def black_litterman(
 
 
 def mv_weights(
-    mu: np.ndarray, cov: np.ndarray, risk_aversion: float = 2.5, cap: float = 0.3, long_only: bool = True
+    mu: np.ndarray,
+    cov: np.ndarray,
+    risk_aversion: float = 2.5,
+    cap: float = 0.3,
+    long_only: bool = True,
 ) -> np.ndarray:
     """w ∝ Σ⁻¹μ/λ с потолком на актив и суммарной экспозицией ≤ 1. Исследовательская функция."""
     w = np.linalg.solve(np.asarray(cov, float), np.asarray(mu, float)) / risk_aversion

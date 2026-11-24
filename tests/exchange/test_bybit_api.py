@@ -552,7 +552,9 @@ class TestPlaceExchangeSlTp:
         sl_id, _ = await self.api.place_exchange_sl_tp(
             "BTC/USDT", "sell", 0.01, sl_price=29000.0, tp_price=0
         )
-        ids = [c.kwargs["params"]["clientOrderId"] for c in ex.create_order.call_args_list]
+        ids = [
+            c.kwargs["params"]["clientOrderId"] for c in ex.create_order.call_args_list
+        ]
         assert sl_id == "sl-2"
         assert len(ids) == 2 and ids[0] == ids[1]
 
@@ -563,9 +565,11 @@ class TestPlaceExchangeSlTp:
         ex.create_order.side_effect = ccxt.NetworkError("net")
         ex.fetch_open_orders.return_value = []
         ex.fetch_closed_orders.return_value = []
-        assert (await self.api.place_exchange_sl_tp(
-            "BTC/USDT", "sell", 0.01, sl_price=29000.0, tp_price=0
-        ))[0] is None
+        assert (
+            await self.api.place_exchange_sl_tp(
+                "BTC/USDT", "sell", 0.01, sl_price=29000.0, tp_price=0
+            )
+        )[0] is None
         lost_id = ex.create_order.call_args.kwargs["params"]["clientOrderId"]
         assert lost_id in self.api.ambiguous_orders
 
@@ -611,3 +615,36 @@ class TestFetchOrderStatus:
         result = await self.api.fetch_order_status("ord-1", "BTC/USDT")
 
         assert result is None
+
+
+# ---------------------------------------------------------------------------
+# BybitAPI.initialize — подпись запросов устойчива к расхождению часов
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("testnet", [False, True])
+async def test_initialize_sets_clock_drift_recv_window_and_timeout(
+    monkeypatch, testnet
+):
+    """ccxt сверяет время с биржей, окно подписи 5 с, таймаут 15 с — и в тестнете."""
+    from unittest.mock import patch
+
+    captured = {}
+
+    def fake_bybit(cfg):
+        captured.update(cfg)
+        ex = MagicMock()
+        ex.load_markets = AsyncMock()
+        return ex
+
+    api = BybitAPI.__new__(BybitAPI)
+    api.logger = logging.getLogger("test")
+    api._runtime_config = None
+    with patch("src.exchange.bybit_api.ccxt.bybit", side_effect=fake_bybit):
+        await api.initialize("key", "secret", testnet=testnet)
+
+    assert captured["options"]["adjustForTimeDifference"] is True
+    assert captured["options"]["recvWindow"] == 5000
+    assert captured["timeout"] == 15_000
+    assert captured["enableRateLimit"] is True

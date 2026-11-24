@@ -51,7 +51,9 @@ async def test_level_requires_confirmation_then_pauses_entries(tmp_path):
     assert "уровень: 1" in (await ot.emergency_command(bot, [], "owner")).lower()
 
 
-async def test_level_three_runs_levels_in_order_and_never_cancels_exchange_orders(tmp_path):
+async def test_level_three_runs_levels_in_order_and_never_cancels_exchange_orders(
+    tmp_path,
+):
     bot = make_bot(tmp_path)
     out = await ot.emergency_command(bot, ["3", "confirm"], "owner")
     assert "block_entries, cancel_orders, reduce_positions" in out
@@ -76,16 +78,22 @@ async def test_lower_level_and_reset_do_not_unpause(tmp_path):
     assert "понижать можно только" in await ot.emergency_command(bot, ["1"], "owner")
     out = await ot.emergency_command(bot, ["reset"], "owner")
     assert "/resume" in out and bot._emergency_ctl.level == 0
-    assert all(c.args != (False,) for c in bot._runtime_config.set_paused.call_args_list)
+    assert all(
+        c.args != (False,) for c in bot._runtime_config.set_paused.call_args_list
+    )
 
 
 async def test_failed_action_is_reported_and_level_is_still_persisted(tmp_path):
     bot = make_bot(tmp_path)
-    bot._position_monitor.close_losers_tighten_winners.side_effect = RuntimeError("биржа")
+    bot._position_monitor.close_losers_tighten_winners.side_effect = RuntimeError(
+        "биржа"
+    )
     out = await ot.emergency_command(bot, ["3", "confirm"], "owner")
     assert "Ошибки" in out and "reduce_positions" in out
     assert bot._emergency_ctl.level == 3
-    bot._runtime_config.set_paused.assert_called_once_with(True)  # уровень 1 сработал до сбоя
+    bot._runtime_config.set_paused.assert_called_once_with(
+        True
+    )  # уровень 1 сработал до сбоя
 
 
 async def test_restart_keeps_trading_paused_while_emergency_is_active(tmp_path):
@@ -130,11 +138,16 @@ async def test_backup_once_creates_verified_copy_and_logs(tmp_path, monkeypatch)
     bot = make_bot(tmp_path)
     res = await ot.backup_once(bot, db)
     assert res["ok"] and os.path.exists(res["backup"])
-    assert bot._ledger_write.call_args.args[0] == "db_backup" and bot._ledger_write.call_args.kwargs["ok"]
+    assert (
+        bot._ledger_write.call_args.args[0] == "db_backup"
+        and bot._ledger_write.call_args.kwargs["ok"]
+    )
     bot.telegram.notify.assert_not_awaited()
 
 
-async def test_backup_skips_empty_or_missing_and_alerts_on_corruption(tmp_path, monkeypatch):
+async def test_backup_skips_empty_or_missing_and_alerts_on_corruption(
+    tmp_path, monkeypatch
+):
     monkeypatch.setattr(ot, "BACKUP_DIR", str(tmp_path / "bk"))
     bot = make_bot(tmp_path)
     empty = tmp_path / "live.db"
@@ -158,7 +171,9 @@ async def test_backup_loop_survives_failures_and_uses_configured_interval(monkey
         if len(sleeps) >= 3:
             raise asyncio.CancelledError
 
-    monkeypatch.setattr(ot, "backup_once", AsyncMock(side_effect=[RuntimeError("x"), {"ok": True}]))
+    monkeypatch.setattr(
+        ot, "backup_once", AsyncMock(side_effect=[RuntimeError("x"), {"ok": True}])
+    )
     monkeypatch.setattr(ot.Config, "DB_BACKUP_INTERVAL_H", 6.0)
     with pytest.raises(asyncio.CancelledError):
         await ot.db_backup_loop(SimpleNamespace(), sleep=sleep, first_delay=5.0)
@@ -171,8 +186,12 @@ class FakeWS:
         self.sent = []
         self.msgs = [
             json.dumps(
-                {"topic": "orderbook.50.BTCUSDT", "type": "snapshot", "ts": 1,
-                 "data": {"u": 1, "b": [["100", "1"]], "a": [["101", "1"]]}}
+                {
+                    "topic": "orderbook.50.BTCUSDT",
+                    "type": "snapshot",
+                    "ts": 1,
+                    "data": {"u": 1, "b": [["100", "1"]], "a": [["101", "1"]]},
+                }
             )
         ]
 
@@ -183,6 +202,7 @@ class FakeWS:
         if self.msgs:
             return self.msgs.pop(0)
         await asyncio.sleep(3600)
+        return None
 
     async def close(self):
         pass
@@ -208,7 +228,9 @@ async def test_ws_shadow_publishes_metrics_and_alerts_on_silence(monkeypatch):
     async def connect():
         return ws
 
-    await asyncio.wait_for(ot.ws_shadow_loop(bot, connect=connect, sleep=sleep, stop=stop), 10)
+    await asyncio.wait_for(
+        ot.ws_shadow_loop(bot, connect=connect, sleep=sleep, stop=stop), 10
+    )
     assert bot.ws_stream.books["BTCUSDT"].ready and published
     assert bot.telegram.notify.await_count == 1  # кулдаун: повторов за три такта нет
     assert "замолчали" in bot.telegram.notify.await_args.args[0]
@@ -216,22 +238,35 @@ async def test_ws_shadow_publishes_metrics_and_alerts_on_silence(monkeypatch):
 
 def test_publish_ws_metrics_exposes_gauges(monkeypatch):
     # prometheus_client в тестах подменён заглушкой (tests/conftest.py) — проверяем вызовы gauge
-    g = {n: MagicMock() for n in ("_g_ws_gaps", "_g_ws_lag_p99", "_g_ws_silence", "_g_ws_reconnects")}
+    g = {
+        n: MagicMock()
+        for n in ("_g_ws_gaps", "_g_ws_lag_p99", "_g_ws_silence", "_g_ws_reconnects")
+    }
     for name, mock in g.items():
         monkeypatch.setattr(health_server, name, mock)
     health_server.publish_ws_metrics(
         {
             "reconnects": 2,
             "streams": {
-                "orderbook.BTCUSDT": {"gaps": 3, "seconds_since_last": 1.5, "lag_ms": {"p99": 42.0}},
-                "kline.BTCUSDT": {"gaps": 0, "seconds_since_last": None, "lag_ms": {"p99": None}},
+                "orderbook.BTCUSDT": {
+                    "gaps": 3,
+                    "seconds_since_last": 1.5,
+                    "lag_ms": {"p99": 42.0},
+                },
+                "kline.BTCUSDT": {
+                    "gaps": 0,
+                    "seconds_since_last": None,
+                    "lag_ms": {"p99": None},
+                },
             },
         }
     )
     g["_g_ws_reconnects"].set.assert_called_once_with(2)
     g["_g_ws_gaps"].labels.assert_any_call("orderbook.BTCUSDT")
     g["_g_ws_gaps"].labels.return_value.set.assert_any_call(3)
-    g["_g_ws_lag_p99"].labels.assert_called_once_with("orderbook.BTCUSDT")  # None не публикуется
+    g["_g_ws_lag_p99"].labels.assert_called_once_with(
+        "orderbook.BTCUSDT"
+    )  # None не публикуется
     g["_g_ws_lag_p99"].labels.return_value.set.assert_called_once_with(42.0)
     g["_g_ws_silence"].labels.assert_called_once_with("orderbook.BTCUSDT")
 

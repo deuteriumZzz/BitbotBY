@@ -118,7 +118,8 @@ def test_invalid_beats_stale() -> None:
 
 def test_millisecond_integer_index_is_supported() -> None:
     df = _df(age_s=100)
-    df.index = pd.Index(df.index.asi8 // 10**6)
+    # as_unit("ms"): в pandas 3 разрешение времени по умолчанию уже не наносекунды
+    df.index = pd.Index(df.index.as_unit("ms").asi8)
     q = _check(df)
     assert q.status == dq.VALID and q.age_s == 100.0
 
@@ -147,7 +148,9 @@ def test_snapshot_id_deterministic_and_input_sensitive() -> None:
     t = "2026-01-01T00:00:00+00:00"
     a = dq.make_snapshot_id("BTC/USDT", "15m", t, 100.5)
     assert a == dq.make_snapshot_id("BTC/USDT", "15m", t, 100.5)
-    assert a != dq.make_snapshot_id("BTC/USDT", "15m", "2026-01-01T00:15:00+00:00", 100.5)
+    assert a != dq.make_snapshot_id(
+        "BTC/USDT", "15m", "2026-01-01T00:15:00+00:00", 100.5
+    )
     assert a != dq.make_snapshot_id("BTC/USDT", "15m", t, 100.6)
     assert a != dq.make_snapshot_id("ETH/USDT", "15m", t, 100.5)
 

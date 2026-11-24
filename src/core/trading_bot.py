@@ -21,25 +21,24 @@ from src.ai import ai_providers
 from src.ai.ai_analyzer import AIAnalyzer
 from src.ai.experience_buffer import LOCAL_REASONING_PREFIX
 from src.ai.online_learner import OnlineLearner
+from src.core import ops_tasks
 from src.core.bot_commands import BotCommands
 from src.core.constants import REDIS_TTL_MARKET_DATA, SILENT_DEATH_ALERT_COOLDOWN
 from src.core.contracts import decision_from_rec
 from src.core.cycle import CycleRunner
-from src.core import ops_tasks
 from src.core.decision_ledger import DecisionLedger
-from src.core.execution_reliability import ConfirmTracker, diff_positions
 from src.core.decision_trace import DecisionTrace
+from src.core.execution_reliability import ConfirmTracker, diff_positions
 from src.core.order_executor import OrderExecutor
 from src.core.portfolio_manager import PortfolioManager
-from src.core.replay import build_replay_input
 from src.core.position_monitor import PositionMonitor
+from src.core.replay import build_replay_input
 from src.core.risk_management import RiskManager
 from src.core.signal_combiner import SignalCombiner
 from src.core.trade_history import TradeHistory
 from src.core.trading_modes import all_readiness
 from src.core.trusted_trader import TrustedTrader
 from src.core.types import PositionRecord
-from src.market.data_quality import VALID
 from src.exchange.bybit_api import BybitAPI
 from src.infra.bot_bus import CommandConsumer, emit
 from src.infra.health_server import cycles_counter
@@ -47,6 +46,7 @@ from src.infra.logger import _SecretFilter
 from src.infra.redis_client import RedisClient
 from src.market.correlation_filter import CorrelationFilter
 from src.market.data_loader import DataLoader
+from src.market.data_quality import VALID
 from src.market.funding_arb_detector import FundingArbDetector
 from src.market.macro_calendar import MacroCalendar
 from src.market.market_context import MarketContext
@@ -640,7 +640,9 @@ class TradingBot:
             side_mismatch=list(diff.side_mismatch),
         )
         now = time.time()
-        fresh = sorted(k for k in confirmed if now - self._reconcile_alerted.get(k, 0) > 1800)
+        fresh = sorted(
+            k for k in confirmed if now - self._reconcile_alerted.get(k, 0) > 1800
+        )
         for key in fresh:
             self._reconcile_alerted[key] = now
         autofix = getattr(Config, "RECONCILE_AUTOFIX", False) is True
@@ -660,7 +662,9 @@ class TradingBot:
                     bot_q, ex_q = next(
                         (b, e) for s, b, e in diff.qty_mismatch if s == sym
                     )
-                    lines.append(f"• {sym}: объём бота {bot_q} ≠ объёму на бирже {ex_q}")
+                    lines.append(
+                        f"• {sym}: объём бота {bot_q} ≠ объёму на бирже {ex_q}"
+                    )
                 else:
                     lines.append(f"• {sym}: сторона позиции у бота и биржи разная")
             await self.telegram.notify(
@@ -1118,12 +1122,14 @@ class TradingBot:
                 )
                 continue
             async with self._monitored_lock:
-                before = {s: dict(p) for s, p in self._monitored.items() if p is not None}
+                before = {
+                    s: dict(p) for s, p in self._monitored.items() if p is not None
+                }
             await self._executor.execute(rec, market_data, balance)
             async with self._monitored_lock:
-                new_pos = self._monitored.get(sym)
-                opened = new_pos is not None
-                new_pos = dict(new_pos) if new_pos else None
+                pos_now = self._monitored.get(sym)
+                opened = pos_now is not None
+                new_pos = dict(pos_now) if pos_now else None
             if opened and new_pos is not None:
                 self._shadow_risk_gate(rec, before, new_pos, balance)
             self._ledger_write(
@@ -1236,7 +1242,9 @@ class TradingBot:
         if base <= 0:
             return 0.0, 0.0
         sign = 1.0 if pos.get("side", "buy") == "buy" else -1.0
-        exposure = sign * float(pos.get("qty") or 0) * float(pos.get("entry") or 0) / base
+        exposure = (
+            sign * float(pos.get("qty") or 0) * float(pos.get("entry") or 0) / base
+        )
         return max(-1.0, min(1.0, exposure)), 0.0
 
     async def _handle_emergency_cmd(self, args: list, who: str) -> str:
@@ -2085,7 +2093,9 @@ class TradingBot:
         if Config.AI_RAG_CONTEXT:
             self._rag_task = asyncio.create_task(ops_tasks.rag_refresh_loop(self))
         await ops_tasks.apply_emergency_on_start(self)
-        ops_tasks.run_config_record(self)  # отметка в журнале: какие флаги включены с этого запуска
+        ops_tasks.run_config_record(
+            self
+        )  # отметка в журнале: какие флаги включены с этого запуска
         asyncio.create_task(self._season_check_loop())
         # Команды из приложения (MiniApp / Desktop) — через очередь в Redis.
         self._command_task = asyncio.create_task(

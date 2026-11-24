@@ -43,6 +43,8 @@ class PositionMonitor:
     позволяет сбрасывать счётчик в тестах без перестройки всего бота.
     """
 
+    ledger: Any = None  # журнал решений; подключает TradingBot после создания
+
     def __init__(
         self,
         api: "BybitAPI",
@@ -434,7 +436,11 @@ class PositionMonitor:
             margin = qty * entry / max(float(pos.get("lev") or 1.0), 1.0)
             if Config.PAPER_TRADING:
                 eff = fd.estimate_effect(
-                    pos.get("side", "buy"), qty, entry, price, _t.time() - opened,
+                    pos.get("side", "buy"),
+                    qty,
+                    entry,
+                    price,
+                    _t.time() - opened,
                     Config.PAPER_FUNDING_RATE_8H,
                 )
             else:
@@ -443,10 +449,17 @@ class PositionMonitor:
                     return 0.0
                 eff = live
             if not fd.is_sane(eff, margin):
-                logger.warning("Funding %.4f for %s отклонён как аномалия (маржа %.2f)", eff, sym, margin)
+                logger.warning(
+                    "Funding %.4f for %s отклонён как аномалия (маржа %.2f)",
+                    eff,
+                    sym,
+                    margin,
+                )
                 return 0.0
             return eff
-        except Exception as exc:  # noqa: BLE001 — учёт funding не должен ломать закрытие
+        except (
+            Exception
+        ) as exc:  # noqa: BLE001 — учёт funding не должен ломать закрытие
             logger.debug("Funding effect failed for %s: %s", sym, exc)
             return 0.0
 

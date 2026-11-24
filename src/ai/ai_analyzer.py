@@ -88,6 +88,10 @@ class AIAnalyzer:
     возвращает список торговых рекомендаций с reasoning на русском.
     """
 
+    # Подключает TradingBot после создания: контекст RAG и журнал решений.
+    _rag_provider: "Callable[[List[str]], str] | None" = None
+    _ledger: Any = None
+
     def __init__(
         self,
         runtime_config: "Any | None" = None,
@@ -365,7 +369,9 @@ class AIAnalyzer:
         kept = [r for r in valid if r.get("symbol") in known]
         for r in valid:
             if r.get("symbol") not in known:
-                self.logger.warning("AI rec for unknown symbol %r dropped", r.get("symbol"))
+                self.logger.warning(
+                    "AI rec for unknown symbol %r dropped", r.get("symbol")
+                )
         return kept
 
     @staticmethod
@@ -400,7 +406,9 @@ class AIAnalyzer:
         for rec in valid:
             clean, why = validate_recommendation(rec, by_symbol)
             if clean is None:
-                self.logger.warning("AI rec %s rejected by strict schema: %s", rec.get("symbol"), why)
+                self.logger.warning(
+                    "AI rec %s rejected by strict schema: %s", rec.get("symbol"), why
+                )
                 self._strict_dropped = getattr(self, "_strict_dropped", 0) + 1
             else:
                 kept.append(clean)
@@ -577,7 +585,9 @@ class AIAnalyzer:
                 continue
             t_call = time.monotonic()
             try:
-                self._last_usage = None  # токены именно этого вызова (None — провайдер их не вернул)
+                self._last_usage = (
+                    None  # токены именно этого вызова (None — провайдер их не вернул)
+                )
                 raw = await self._call(provider, model, prompt)
                 valid = self._only_known_symbols(self._parse_response(raw), snapshots)
                 self._strict_dropped = 0

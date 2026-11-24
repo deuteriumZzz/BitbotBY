@@ -20,7 +20,12 @@ def test_limit_env_caps_all_thread_vars_and_does_not_mutate_input(monkeypatch):
     monkeypatch.setenv("HEAVY_JOB_THREADS", "3")
     base = {"A": "1"}
     env = hj.limit_env(base)
-    assert env["OMP_NUM_THREADS"] == env["MKL_NUM_THREADS"] == env["TORCH_NUM_THREADS"] == "3"
+    assert (
+        env["OMP_NUM_THREADS"]
+        == env["MKL_NUM_THREADS"]
+        == env["TORCH_NUM_THREADS"]
+        == "3"
+    )
     assert env["A"] == "1" and "OMP_NUM_THREADS" not in base
     assert hj.limit_env({}, threads=2)["TIMESFM_THREADS"] == "2"
 
@@ -38,7 +43,9 @@ def test_child_process_runs_with_lower_priority(monkeypatch):
     monkeypatch.setenv("HEAVY_JOB_NICE", "10")
     out = subprocess.run(
         [sys.executable, "-c", "import os; print(os.nice(0))"],
-        capture_output=True, text=True, preexec_fn=hj.lower_priority(),
+        capture_output=True,
+        text=True,
+        preexec_fn=hj.lower_priority(),
     )
     assert int(out.stdout.strip()) >= 10  # приоритет ребёнка ниже; родитель не затронут
 
@@ -48,7 +55,9 @@ class FakeModel:
     def forecast(self, horizon, inputs):
         x = inputs[0]
         point = np.full((1, horizon), float(x[-1]), dtype=np.float32)
-        q = np.stack([np.full(horizon, x[-1] + d) for d in np.linspace(-1, 1, 10)], axis=1)[None]
+        q = np.stack(
+            [np.full(horizon, x[-1] + d) for d in np.linspace(-1, 1, 10)], axis=1
+        )[None]
         return point, q
 
 
@@ -95,8 +104,12 @@ def test_serve_protocol_over_streams():
     stdin = io.StringIO("\n".join([json.dumps(req(id=7)), "not json", ""]) + "\n")
     stdout = io.StringIO()
     tw.serve(FakeModel(), stdin, stdout)
-    lines = [json.loads(l) for l in stdout.getvalue().splitlines()]
-    assert lines[0] == {"ready": True} and lines[1]["id"] == 7 and lines[2]["error"] == "bad json"
+    lines = [json.loads(line) for line in stdout.getvalue().splitlines()]
+    assert (
+        lines[0] == {"ready": True}
+        and lines[1]["id"] == 7
+        and lines[2]["error"] == "bad json"
+    )
 
 
 # ── клиент (фейковый воркер-процесс) ──────────────────────────────────────────
@@ -118,7 +131,9 @@ for line in sys.stdin:
 
 
 def test_client_roundtrip_and_reuse_of_one_process(tmp_path):
-    w = TimesFMWorker(cmd=worker_script(tmp_path, GOOD), start_timeout_s=10, request_timeout_s=10)
+    w = TimesFMWorker(
+        cmd=worker_script(tmp_path, GOOD), start_timeout_s=10, request_timeout_s=10
+    )
     try:
         a = w.forecast([1.0, 2.0, 3.0], 3)
         pid = w._proc.pid
@@ -140,15 +155,24 @@ def test_client_returns_none_when_worker_never_ready_and_respects_cooldown(tmp_p
 
 
 def test_client_handles_timeout_crash_and_error_response(tmp_path):
-    hang = worker_script(tmp_path, GOOD.replace("h = r[", "import time; time.sleep(30); h = r["))
-    w = TimesFMWorker(cmd=hang, start_timeout_s=10, request_timeout_s=0.3, cooldown_s=60)
+    hang = worker_script(
+        tmp_path, GOOD.replace("h = r[", "import time; time.sleep(30); h = r[")
+    )
+    w = TimesFMWorker(
+        cmd=hang, start_timeout_s=10, request_timeout_s=0.3, cooldown_s=60
+    )
     assert w.forecast([1.0] * 10, 2) is None and not w.alive()
 
     crash = worker_script(tmp_path, GOOD.replace("h = r[", "sys.exit(1); h = r["))
-    w2 = TimesFMWorker(cmd=crash, start_timeout_s=10, request_timeout_s=5, cooldown_s=60)
+    w2 = TimesFMWorker(
+        cmd=crash, start_timeout_s=10, request_timeout_s=5, cooldown_s=60
+    )
     assert w2.forecast([1.0] * 10, 2) is None
 
-    err = worker_script(tmp_path, GOOD.replace('"median": [last]*h,', '"error": "boom", "median": [last]*h,'))
+    err = worker_script(
+        tmp_path,
+        GOOD.replace('"median": [last]*h,', '"error": "boom", "median": [last]*h,'),
+    )
     w3 = TimesFMWorker(cmd=err, start_timeout_s=10, request_timeout_s=5)
     try:
         assert w3.forecast([1.0] * 10, 2) is None
@@ -174,6 +198,9 @@ def test_real_timesfm_beats_naive_on_seasonal_series():
     try:
         r = w.forecast(x.tolist(), 24)
         assert r is not None
-        assert np.abs(np.array(r["median"]) - truth).mean() < np.abs(x[-1] - truth).mean() / 5
+        assert (
+            np.abs(np.array(r["median"]) - truth).mean()
+            < np.abs(x[-1] - truth).mean() / 5
+        )
     finally:
         w.close()

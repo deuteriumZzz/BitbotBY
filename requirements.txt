@@ -8,8 +8,12 @@ twscrape>=0.16.0
 # Чтение Telegram-каналов: вход по коду из приложения, сессия — в шифрованном хранилище
 telethon>=1.36
 ccxt==4.3.47
-numpy>=2.2.6
-pandas>=2.3.2
+# Intel-Mac: последний torch для него (2.2.2) собран под numpy 1.x — там numpy<2.
+numpy>=2.2.6; sys_platform != "darwin" or platform_machine != "x86_64"
+numpy>=1.26,<2; sys_platform == "darwin" and platform_machine == "x86_64"
+# pandas 3 меняет поведение (copy-on-write, строки, разрешение времени) —
+# переход только осознанно, с прогоном golden replay.
+pandas>=2.3.2,<3
 python-dotenv==1.0.0
 newsapi-python==0.2.7
 redis==5.0.1
@@ -41,5 +45,6 @@ mypy>=1.9.0
 cryptography>=41.0
 httpx>=0.25
 # Датасеты SAC: Parquet + ZSTD (ADR-001, Phase 7)
-pyarrow>=21.0
+pyarrow>=21.0; sys_platform != "darwin" or platform_machine != "x86_64"
+pyarrow>=17,<20; sys_platform == "darwin" and platform_machine == "x86_64"
 zstandard>=0.25

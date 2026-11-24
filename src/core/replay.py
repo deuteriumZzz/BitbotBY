@@ -158,7 +158,8 @@ async def replay_combine(inp: Dict[str, Any]) -> List[Dict[str, Any]]:
     )
     market_data = {sym: pd.DataFrame({"close": [markers[sym]] * 3}) for sym in symbols}
     combiner = SignalCombiner(
-        ai=_ReplayAI(inp.get("ai_recs") or []),
+        # Подставной AI повторяет только analyze() — этого комбинатору достаточно.
+        ai=_ReplayAI(inp.get("ai_recs") or []),  # type: ignore[arg-type]
         rc=_ReplayRC(st),
         sac=_ReplaySAC(inp.get("sac") or {}),
         forecaster=forecaster,

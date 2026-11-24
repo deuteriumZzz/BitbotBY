@@ -98,7 +98,9 @@ def breaker_levels(pf: Portfolio, lim: GateLimits, ood: bool = False) -> dict:
     """Независимые признаки уровней 1–4 (могут быть истинны в любой комбинации)."""
     dd = 1 - pf.equity / pf.peak_equity if pf.peak_equity > 0 else 0.0
     day_loss = (
-        (pf.day_start_equity - pf.equity) / pf.day_start_equity if pf.day_start_equity > 0 else 0.0
+        (pf.day_start_equity - pf.equity) / pf.day_start_equity
+        if pf.day_start_equity > 0
+        else 0.0
     )
     return {
         1: bool(
@@ -123,10 +125,10 @@ def evaluate(p: Proposal, pf: Portfolio, lim: GateLimits) -> Verdict:
     lv = breaker_levels(pf, lim, p.ood)
     level = max((k for k, v in lv.items() if v), default=0)
     if level >= 1:
-        reasons = ["circuit_breaker_l%d" % level]
+        breaker = ["circuit_breaker_l%d" % level]
         if p.ood and lim.block_on_ood:
-            reasons.append("ood")
-        return Verdict("deny", 0.0, reasons, level)
+            breaker.append("ood")
+        return Verdict("deny", 0.0, breaker, level)
 
     if p.max_corr_with_open > lim.max_correlation:
         return Verdict("deny", 0.0, ["correlation"], 0)
@@ -144,12 +146,17 @@ def evaluate(p: Proposal, pf: Portfolio, lim: GateLimits) -> Verdict:
             reasons.append(code)
 
     cur = {x.symbol: x.notional for x in pf.positions}
-    limit(lim.max_symbol_exposure * pf.equity - abs(cur.get(p.symbol, 0.0)), "symbol_exposure")
+    limit(
+        lim.max_symbol_exposure * pf.equity - abs(cur.get(p.symbol, 0.0)),
+        "symbol_exposure",
+    )
     gross = sum(abs(x.notional) for x in pf.positions)
     limit(lim.max_gross_exposure * pf.equity - gross, "gross_exposure")
 
     # бета: нужный запас до лимита |Σ n·β| с учётом направления новой позиции
-    net_beta = net_beta_exposure([x.notional for x in pf.positions], [x.beta for x in pf.positions])
+    net_beta = net_beta_exposure(
+        [x.notional for x in pf.positions], [x.beta for x in pf.positions]
+    )
     per_unit = sign * p.beta
     if per_unit != 0:
         limit_money = lim.max_net_beta_exposure * pf.equity
@@ -157,7 +164,9 @@ def evaluate(p: Proposal, pf: Portfolio, lim: GateLimits) -> Verdict:
         limit(room_money / abs(per_unit), "net_beta")
 
     # стресс-CVaR: Σ|n|·cvar растёт линейно с размером новой позиции
-    base = stress_cvar([x.notional for x in pf.positions], [x.cvar for x in pf.positions])
+    base = stress_cvar(
+        [x.notional for x in pf.positions], [x.cvar for x in pf.positions]
+    )
     if p.cvar > 0:
         limit((lim.max_stress_cvar * pf.equity - base) / p.cvar, "stress_cvar")
 
