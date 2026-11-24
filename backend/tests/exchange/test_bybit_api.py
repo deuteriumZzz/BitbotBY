@@ -10,6 +10,7 @@ import pandas as pd
 import pytest
 
 from bitbot.adapters.exchange.bybit import BybitAPI, _is_retryable
+from bitbot.domain.order_states import Placed, Rejected
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -409,13 +410,13 @@ class TestCreateOrder:
         self.api = make_api_with_mock_exchange()
 
     @pytest.mark.asyncio
-    async def test_create_order_lock_fails_returns_none(self):
+    async def test_create_order_lock_fails_is_rejected(self):
         """acquire_lock возвращает False → create_order немедленно возвращает None."""
         self.api.redis.acquire_lock.return_value = False
 
         result = await self.api.create_order("BTC/USDT", "market", "buy", 0.01)
 
-        assert result is None
+        assert isinstance(result, Rejected)
         self.api.exchange.create_order.assert_not_called()
 
     @pytest.mark.asyncio
@@ -427,18 +428,18 @@ class TestCreateOrder:
 
         result = await self.api.create_order("BTC/USDT", "market", "buy", 0.01)
 
-        assert result is order
+        assert result == Placed(order)
         self.api.redis.release_lock.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_create_order_insufficient_funds_returns_none(self):
+    async def test_create_order_insufficient_funds_is_rejected(self):
         """InsufficientFunds → возвращается None, блокировка снимается."""
         self.api.redis.acquire_lock.return_value = True
         self.api.exchange.create_order.side_effect = ccxt.InsufficientFunds("no funds")
 
         result = await self.api.create_order("BTC/USDT", "market", "buy", 0.01)
 
-        assert result is None
+        assert isinstance(result, Rejected)
         self.api.redis.release_lock.assert_called_once()
 
     @pytest.mark.asyncio

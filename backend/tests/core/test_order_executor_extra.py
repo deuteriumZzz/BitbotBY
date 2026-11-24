@@ -32,6 +32,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pandas as pd
 import pytest
 
+from bitbot.domain.order_states import Placed, Rejected
 from bitbot.execution.order_executor import OrderExecutor, _calc_dynamic_leverage
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -82,7 +83,9 @@ def _make_executor(monitored: dict | None = None, runtime_config=None):
 
     api = MagicMock()
     api.round_quantity = MagicMock(side_effect=lambda sym, qty: round(qty, 6))
-    api.create_order = AsyncMock(return_value={"id": "ORDER123", "fee": {"cost": 0}})
+    api.create_order = AsyncMock(
+        return_value=Placed({"id": "ORDER123", "fee": {"cost": 0}})
+    )
     api.place_exchange_sl_tp = AsyncMock(return_value=("SL_ID", "TP_ID"))
     api.set_leverage = AsyncMock(return_value=True)
     api.exchange = MagicMock()
@@ -1008,9 +1011,9 @@ class TestLiveTrading:
 
     @pytest.mark.asyncio
     async def test_live_create_order_returns_none_skips(self):
-        """create_order returns None → skip (lines 473-475)."""
+        """create_order: биржа отказала → вход пропускается."""
         executor, monitored, _ = _make_executor()
-        executor._api.create_order = AsyncMock(return_value=None)
+        executor._api.create_order = AsyncMock(return_value=Rejected("отказ"))
         cfg = _make_cfg(paper=False)
         with patch("bitbot.execution.order_executor.Config", cfg):
             with patch("bitbot.execution.order_executor._ac_impact", return_value=0.0):
@@ -1027,7 +1030,7 @@ class TestLiveTrading:
         """When order has fee.cost > 0, commission is overridden (lines 479-480)."""
         executor, monitored, _ = _make_executor()
         executor._api.create_order = AsyncMock(
-            return_value={"id": "ORD1", "fee": {"cost": 0.75}}
+            return_value=Placed({"id": "ORD1", "fee": {"cost": 0.75}})
         )
         cfg = _make_cfg(paper=False)
         with patch("bitbot.execution.order_executor.Config", cfg):

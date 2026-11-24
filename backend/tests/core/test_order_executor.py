@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from bitbot.domain.order_states import Placed
 from bitbot.execution.order_executor import OrderExecutor
 
 # ── Вспомогательные функции ───────────────────────────────────────────────────
@@ -53,7 +54,7 @@ def _make_executor(monitored: dict | None = None) -> tuple[OrderExecutor, dict]:
 
     api = MagicMock()
     api.round_quantity = MagicMock(side_effect=lambda sym, qty: round(qty, 6))
-    api.create_order = AsyncMock(return_value={"id": "ORDER123"})
+    api.create_order = AsyncMock(return_value=Placed({"id": "ORDER123"}))
     api.place_exchange_sl_tp = AsyncMock(return_value=("SL_ID", "TP_ID"))
     api.set_leverage = AsyncMock(return_value=True)
 
@@ -324,7 +325,7 @@ class TestExecutionRecording:
     async def _open(self, paper: bool, impact: float, order=None):
         executor, _ = _make_executor()
         if order is not None:
-            executor._api.create_order = AsyncMock(return_value=order)
+            executor._api.create_order = AsyncMock(return_value=Placed(order))
         with patch("bitbot.execution.order_executor.Config", _make_cfg(paper=paper)):
             with patch(
                 "bitbot.execution.order_executor._ac_impact", return_value=impact

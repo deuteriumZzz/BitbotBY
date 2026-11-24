@@ -30,6 +30,7 @@ import pandas as pd
 from bitbot.config.constants import KELLY_MIN_TRADES, TRADE_HISTORY_LOOKBACK
 from bitbot.config.runtime import confirm_policy
 from bitbot.config.settings import Config
+from bitbot.domain.order_states import Placed
 from bitbot.domain.types import PositionRecord, is_trusted
 from bitbot.market.market_impact import estimate_from_df as _ac_impact
 
@@ -625,10 +626,12 @@ class OrderExecutor:
                         # Плечо на бирже не то, что посчитал риск — не входим вслепую.
                         self._stage(sym, "rejected", "не удалось выставить плечо")
                         return
-                order = await self._api.create_order(sym, "market", action, quantity)
-                if not order:
-                    logger.error("Order creation failed for %s", sym)
+                outcome = await self._api.create_order(sym, "market", action, quantity)
+                if not isinstance(outcome, Placed):
+                    # Unknown: сверка по clientOrderId найдёт ордер, если он прошёл.
+                    logger.error("Order creation failed for %s: %s", sym, outcome)
                     return
+                order = outcome.order
                 order_filled_at = time.time()
                 # Реальная цена исполнения, если биржа её вернула.
                 fill_price = float(

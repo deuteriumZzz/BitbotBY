@@ -19,7 +19,13 @@ import pandas as pd
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from bitbot.config.settings import Config
-from bitbot.domain.order_states import classify_order
+from bitbot.domain.order_states import (
+    OrderOutcome,
+    Placed,
+    Rejected,
+    Unknown,
+    classify_order,
+)
 from bitbot.storage.redis_client import RedisClient
 
 
@@ -290,7 +296,7 @@ class BybitAPI:
         price: Optional[float] = None,
         lock_suffix: str = "trade",
         reduce_only: bool = False,
-    ) -> Optional[dict]:
+    ) -> OrderOutcome:
         """
         Создаёт ордер с Redis-блокировкой для предотвращения конфликтов.
 
@@ -308,7 +314,8 @@ class BybitAPI:
         :param reduce_only: Ордер только закрывает позицию. На фьючерсах
             ставит reduceOnly — если позицию уже закрыл биржевой SL/TP, ордер
             не откроет встречную. На споте не применяется.
-        :return: Словарь с данными ордера или None при неудаче.
+        :return: Placed(ответ биржи) | Rejected(причина) — ордера точно нет |
+            Unknown(clientOrderId) — сеть оборвалась, исход выяснит сверка.
         """
         order_params: dict = {}
         if reduce_only and self._current_market_type() != "spot":
@@ -316,7 +323,7 @@ class BybitAPI:
         lock_name = f"order_{lock_suffix}:{symbol}"
         if not self.redis.acquire_lock(lock_name):
             self.logger.warning("Не удалось захватить блокировку для %s", symbol)
-            return None
+            return Rejected("по символу уже идёт другой ордер (блокировка)")
         client_order_id = _new_client_order_id()
         try:
             last_error: Optional[Exception] = None
@@ -343,7 +350,7 @@ class BybitAPI:
                     }
                     self.redis.save_trading_state(symbol, order_data)
                     self.logger.info("Ордер создан: %s", order_data)
-                    return order
+                    return Placed(order)
                 except asyncio.CancelledError:
                     raise
                 except ccxt.AuthenticationError as e:
@@ -355,7 +362,7 @@ class BybitAPI:
                     self.logger.error(
                         "Недостаточно средств для ордера %s: %s", symbol, e
                     )
-                    return None
+                    return Rejected(f"недостаточно средств: {e}")
                 except (ccxt.BadRequest, ccxt.InvalidOrder) as e:
                     last_error = e
                     if "duplicate" in str(e).lower():
@@ -388,7 +395,7 @@ class BybitAPI:
                                 "Найден существующий ордер по clientOrderId: %s",
                                 existing,
                             )
-                            return existing
+                            return Placed(existing)
                         self.logger.error(
                             "Дубликат clientOrderId %s, но ордер не найден ни в "
                             "открытых, ни в закрытых — не повторяю с тем же id",
@@ -427,7 +434,7 @@ class BybitAPI:
                             "повтор не требуется: %s",
                             existing,
                         )
-                        return existing
+                        return Placed(existing)
                     wait = 2**attempt
                     self.logger.warning(
                         "Попытка %d/3 создания ордера не удалась: %s. Повтор через %dс",
@@ -448,10 +455,11 @@ class BybitAPI:
                 "Ордер не создан после 3 попыток: %s", last_error, exc_info=True
             )
             if isinstance(last_error, ccxt.NetworkError):
-                # Сеть оборвалась, а биржа могла принять ордер: исход неизвестен.
-                # «None» здесь НЕ значит «ордера нет» — сверка выяснит по clientOrderId.
+                # Сеть оборвалась, а биржа могла принять ордер: исход неизвестен,
+                # сверка выяснит по clientOrderId.
                 self._note_ambiguous(symbol, client_order_id, side, amount)
-            return None
+                return Unknown(client_order_id)
+            return Rejected(str(last_error) or "ордер не создан после 3 попыток")
         finally:
             self.redis.release_lock(lock_name)
 

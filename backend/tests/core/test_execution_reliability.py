@@ -9,6 +9,7 @@ import ccxt.async_support as ccxt
 import pytest
 
 from bitbot.domain import order_states as OS
+from bitbot.domain.order_states import Placed, Unknown
 from bitbot.execution import reliability as ER
 from bitbot.storage.decision_ledger import DecisionLedger
 from tests.core.test_reconciliation import make_bot
@@ -131,7 +132,8 @@ async def test_network_failure_after_all_retries_marks_order_ambiguous() -> None
     api = _chaos_api()
     api.exchange.create_order.side_effect = ccxt.RequestTimeout("t/o")
     with patch("asyncio.sleep", new_callable=AsyncMock):
-        assert await api.create_order("BTC/USDT", "market", "buy", 0.1) is None
+        out = await api.create_order("BTC/USDT", "market", "buy", 0.1)
+    assert isinstance(out, Unknown)
     pending = api.ambiguous_orders
     assert len(pending) == 1
     info = next(iter(pending.values()))
@@ -202,7 +204,7 @@ async def test_accepted_order_with_lost_response_is_not_duplicated() -> None:
     api.exchange.fetch_closed_orders.return_value = [existing]
     with patch("asyncio.sleep", new_callable=AsyncMock):
         result = await api.create_order("BTC/USDT", "market", "buy", 0.1)
-    assert result is existing and len(calls) == 1  # повторной отправки нет
+    assert result == Placed(existing) and len(calls) == 1  # повторной отправки нет
     assert not api.__dict__.get("ambiguous_orders")
 
 

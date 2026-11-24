@@ -21,6 +21,7 @@ import ccxt
 
 from bitbot.config.constants import MONITOR_MAX_ERRORS
 from bitbot.config.settings import Config
+from bitbot.domain.order_states import Placed, Rejected
 from bitbot.domain.types import PositionRecord, is_trusted
 
 if TYPE_CHECKING:
@@ -327,6 +328,64 @@ class PositionMonitor:
 
         return None, ""
 
+    # ── Закрытие на бирже ─────────────────────────────────────────────────────
+
+    async def _send_close(
+        self,
+        sym: str,
+        pos: PositionRecord,
+        qty: float,
+        label: str,
+        monitored: Dict[str, PositionRecord],
+        lock: asyncio.Lock,
+    ) -> Optional[Dict[str, Any]]:
+        """Рыночное reduce-only закрытие `qty`; не прошло — вернуть защиту позиции.
+
+        Вызывается после отмены биржевых SL/TP. Если биржа ордер не приняла
+        (Rejected) или исход неизвестен (Unknown — выяснит сверка по clientOrderId),
+        SL/TP ставятся заново на весь объём, а позиция остаётся в мониторе для
+        следующей попытки: иначе на бирже осталась бы открытая позиция без защиты
+        и без наблюдения.
+
+        :return: ответ биржи, если ордер принят; None — закрытие не подтверждено.
+        """
+        close_side = "sell" if pos.get("side", "buy") == "buy" else "buy"
+        try:
+            outcome = await self._api.create_order(
+                sym, "market", close_side, qty, lock_suffix=label, reduce_only=True
+            )
+        except Exception as exc:  # noqa: BLE001 — ордер не отправлен, защиту вернуть
+            outcome = Rejected(f"ошибка отправки: {exc}")
+        if isinstance(outcome, Placed):
+            return outcome.order
+        logger.critical(
+            "%s %s не прошло (%s) — восстанавливаем биржевые SL/TP,"
+            " позиция остаётся в мониторе",
+            label,
+            sym,
+            outcome,
+        )
+        sl = float(pos.get("stop_loss") or 0)
+        tp = float(pos.get("take_profit") or 0)
+        if not (sl or tp):
+            return None
+        try:
+            re_sl, re_tp = await self._api.place_exchange_sl_tp(
+                sym, close_side, pos.get("qty", 0.0), sl, tp
+            )
+        except Exception as exc:  # noqa: BLE001 — сообщить владельцу, не падать
+            logger.critical("%s: restore SL/TP for %s failed: %s", label, sym, exc)
+            await self._telegram.notify(
+                f"🚨 *{sym}*: закрытие не прошло, и SL/TP восстановить не удалось — "
+                f"позиция БЕЗ защиты на бирже! Требуется ручное вмешательство."
+            )
+            return None
+        async with lock:
+            if sym in monitored and monitored[sym] is not None:
+                monitored[sym]["exchange_sl_id"] = re_sl
+                monitored[sym]["exchange_tp_id"] = re_tp
+        return None
+
     # ── Emergency close ───────────────────────────────────────────────────────
 
     async def close_all_positions(
@@ -349,7 +408,6 @@ class PositionMonitor:
             qty = pos.get("qty", 0.0)
             if qty <= 0:
                 continue
-            close_side = "sell" if side == "buy" else "buy"
             logger.warning(
                 "Emergency close %s qty=%.6f side=%s reason=%s",
                 sym,
@@ -365,14 +423,11 @@ class PositionMonitor:
                         await self._api.cancel_order(order_id=oid, symbol=sym)
                     except Exception as _e:
                         logger.debug("Cancel order %s failed: %s", oid, _e)
-                await self._api.create_order(
-                    sym,
-                    "market",
-                    close_side,
-                    qty,
-                    lock_suffix="close",
-                    reduce_only=True,
-                )
+                if (
+                    await self._send_close(sym, pos, qty, "close", monitored, lock)
+                    is None
+                ):
+                    continue
             async with lock:
                 monitored.pop(sym, None)
             try:
@@ -541,14 +596,11 @@ class PositionMonitor:
                             await self._api.cancel_order(order_id=oid, symbol=sym)
                         except Exception as _e:
                             logger.debug("Cancel order %s failed: %s", oid, _e)
-                    await self._api.create_order(
-                        sym,
-                        "market",
-                        close_side,
-                        qty,
-                        lock_suffix="close",
-                        reduce_only=True,
+                    closed = await self._send_close(
+                        sym, pos, qty, "close", monitored, lock
                     )
+                    if closed is None:
+                        continue
                 async with lock:
                     monitored.pop(sym, None)
                 await self._book_close(sym, pos, current, reason)
@@ -745,38 +797,10 @@ class PositionMonitor:
                         logger.warning(
                             "%s: cancel %s %s failed: %s", label, kind, oid, exc
                         )
-            try:
-                await self._api.create_order(
-                    sym,
-                    "market",
-                    close_side,
-                    partial_qty,
-                    lock_suffix=label,
-                    reduce_only=True,
-                )
-            except Exception as exc:
-                logger.error("%s order failed for %s: %s", label, sym, exc)
-                # SL/TP уже отменены — восстанавливаем защиту для полного объёма
-                sl_orig = float(pos.get("stop_loss") or 0)
-                tp_orig = float(pos.get("take_profit") or 0)
-                if sl_orig or tp_orig:
-                    try:
-                        r_sl, r_tp = await self._api.place_exchange_sl_tp(
-                            sym, close_side, qty, sl_orig, tp_orig
-                        )
-                        async with lock:
-                            if sym in monitored and monitored[sym] is not None:
-                                monitored[sym]["exchange_sl_id"] = r_sl
-                                monitored[sym]["exchange_tp_id"] = r_tp
-                    except Exception as re_exc:
-                        logger.critical(
-                            "%s: restore SL/TP for %s failed: %s", label, sym, re_exc
-                        )
-                        await self._telegram.notify(
-                            f"🚨 *{sym}*: не удалось восстановить SL/TP после "
-                            f"неудачного частичного закрытия — позиция БЕЗ защиты "
-                            f"на бирже! Требуется ручное вмешательство."
-                        )
+            if (
+                await self._send_close(sym, pos, partial_qty, label, monitored, lock)
+                is None
+            ):
                 return None, False
             # Выставляем SL и TP для оставшегося объёма
             tp_price = float(pos.get("take_profit") or 0)
@@ -1008,13 +1032,7 @@ class PositionMonitor:
                     await self._api.cancel_order(order_id=oid, symbol=sym)
                 except Exception as _e:
                     logger.debug("Cancel order %s failed: %s", oid, _e)
-            close_order = await self._api.create_order(
-                sym, "market", close_side, qty, lock_suffix="close", reduce_only=True
-            )
-            if close_order is None:
-                logger.error(
-                    "Force-close order failed for %s — position left open", sym
-                )
+            if await self._send_close(sym, pos, qty, "close", monitored, lock) is None:
                 return
 
         await self._portfolio_manager.update_portfolio(
@@ -1143,26 +1161,10 @@ class PositionMonitor:
 
             # Шаг 2: программное закрытие позиции (lock_suffix="close" не конкурирует
             # с order_open:{sym} при открытии новой позиции).
-            close_order = await self._api.create_order(
-                sym, "market", close_side, qty, lock_suffix="close", reduce_only=True
+            close_order = await self._send_close(
+                sym, pos, qty, "close", monitored, lock
             )
-
             if close_order is None:
-                # Закрытие не удалось после всех повторов — восстанавливаем биржевую
-                # защиту (SL/TP) и оставляем позицию в мониторе для повторной попытки.
-                logger.critical(
-                    "Программное закрытие %s не удалось — восстанавливаем"
-                    " биржевые SL/TP, позиция остаётся в мониторе",
-                    sym,
-                )
-                if sl or tp:
-                    re_sl_id, re_tp_id = await self._api.place_exchange_sl_tp(
-                        sym, close_side, qty, sl, tp
-                    )
-                    async with lock:
-                        if sym in monitored and monitored[sym] is not None:
-                            monitored[sym]["exchange_sl_id"] = re_sl_id
-                            monitored[sym]["exchange_tp_id"] = re_tp_id
                 return False
 
             # Используем реальную комиссию из ответа биржи (зависит от уровня аккаунта).

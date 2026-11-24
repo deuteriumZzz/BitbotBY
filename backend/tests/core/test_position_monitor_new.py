@@ -21,6 +21,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import ccxt
 import pytest
 
+from bitbot.domain.order_states import Placed, Rejected
+
 # ---------------------------------------------------------------------------
 # Factory helpers
 # ---------------------------------------------------------------------------
@@ -58,7 +60,7 @@ def _make_monitor(
 
     api = MagicMock()
     api.get_current_price = AsyncMock(return_value=50000.0)
-    api.create_order = AsyncMock(return_value={"fee": {"cost": 0.0}})
+    api.create_order = AsyncMock(return_value=Placed({"fee": {"cost": 0.0}}))
     api.cancel_order = AsyncMock()
     api.place_exchange_sl_tp = AsyncMock(return_value=("sl_id_new", "tp_id_new"))
 
@@ -807,10 +809,10 @@ class TestCheckAndCloseLive:
 
     @pytest.mark.asyncio
     async def test_close_order_none_restores_sl_tp(self):
-        """If create_order returns None, position stays in monitored and SL/TP restored."""
+        """Биржа не приняла закрытие → позиция остаётся в мониторе, SL/TP восстановлены."""
         cfg = _make_cfg(paper=False)
         monitor = _make_monitor(cfg=cfg)
-        monitor._api.create_order = AsyncMock(return_value=None)
+        monitor._api.create_order = AsyncMock(return_value=Rejected("отказ"))
         pos = _open_pos(side="buy", sl=49000, tp=55000, qty=0.01)
         lock = asyncio.Lock()
         monitored = {"BTC/USDT": dict(pos)}
@@ -827,7 +829,9 @@ class TestCheckAndCloseLive:
         """If close_order has fee.cost, it overrides default exit_commission."""
         cfg = _make_cfg(paper=False)
         monitor = _make_monitor(cfg=cfg)
-        monitor._api.create_order = AsyncMock(return_value={"fee": {"cost": 0.99}})
+        monitor._api.create_order = AsyncMock(
+            return_value=Placed({"fee": {"cost": 0.99}})
+        )
         pos = _open_pos(side="buy", sl=49000, tp=55000, qty=0.01, trade_id=77)
         lock = asyncio.Lock()
         monitored = {"BTC/USDT": dict(pos)}

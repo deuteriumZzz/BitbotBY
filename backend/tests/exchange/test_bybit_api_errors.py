@@ -26,6 +26,7 @@ import ccxt.async_support as ccxt
 import pytest
 
 from bitbot.adapters.exchange.bybit import BybitAPI
+from bitbot.domain.order_states import Placed, Rejected, Unknown
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -184,11 +185,11 @@ class TestGetOhlcvErrors:
 
 class TestCreateOrderErrors:
     @pytest.mark.asyncio
-    async def test_lock_not_acquired_returns_none(self):
+    async def test_lock_not_acquired_is_rejected(self):
         api = _make_api()
         api.redis.acquire_lock.return_value = False
         result = await api.create_order("BTC/USDT", "market", "buy", 0.1)
-        assert result is None
+        assert isinstance(result, Rejected)
 
     @pytest.mark.asyncio
     async def test_cancelled_error_propagates(self):
@@ -205,28 +206,28 @@ class TestCreateOrderErrors:
             await api.create_order("BTC/USDT", "market", "buy", 0.1)
 
     @pytest.mark.asyncio
-    async def test_insufficient_funds_returns_none(self):
+    async def test_insufficient_funds_is_rejected(self):
         api = _make_api()
         api.exchange.create_order.side_effect = ccxt.InsufficientFunds("broke")
         result = await api.create_order("BTC/USDT", "market", "buy", 0.1)
-        assert result is None
+        assert isinstance(result, Rejected)
 
     @pytest.mark.asyncio
-    async def test_network_error_retries_and_returns_none(self):
+    async def test_network_error_retries_and_is_unknown(self):
         api = _make_api()
         api.exchange.create_order.side_effect = ccxt.NetworkError("net")
         with patch("asyncio.sleep", new_callable=AsyncMock):
             result = await api.create_order("BTC/USDT", "market", "buy", 0.1)
-        assert result is None
+        assert isinstance(result, Unknown)  # биржа могла принять ордер
         assert api.exchange.create_order.call_count == 3
 
     @pytest.mark.asyncio
-    async def test_generic_error_retries_and_returns_none(self):
+    async def test_generic_error_retries_and_is_rejected(self):
         api = _make_api()
         api.exchange.create_order.side_effect = RuntimeError("crash")
         with patch("asyncio.sleep", new_callable=AsyncMock):
             result = await api.create_order("BTC/USDT", "market", "buy", 0.1)
-        assert result is None
+        assert isinstance(result, Rejected)
         assert api.exchange.create_order.call_count == 3
 
     @pytest.mark.asyncio
@@ -236,7 +237,7 @@ class TestCreateOrderErrors:
         api.exchange.create_order.side_effect = [ccxt.NetworkError("net"), order]
         with patch("asyncio.sleep", new_callable=AsyncMock):
             result = await api.create_order("BTC/USDT", "market", "buy", 0.1)
-        assert result == order
+        assert result == Placed(order)
 
 
 # ---------------------------------------------------------------------------
@@ -258,7 +259,7 @@ class TestCreateOrderIdempotency:
         api.exchange.fetch_closed_orders.return_value = []
         with patch("asyncio.sleep", new_callable=AsyncMock):
             result = await api.create_order("BTC/USDT", "market", "buy", 0.1)
-        assert result == order
+        assert result == Placed(order)
         assert api.exchange.create_order.call_count == 3
         coids = {
             call.kwargs["params"]["clientOrderId"]
@@ -280,8 +281,8 @@ class TestCreateOrderIdempotency:
             api.exchange.fetch_closed_orders.return_value = []
             with patch("asyncio.sleep", new_callable=AsyncMock):
                 result = await api.create_order("BTC/USDT", "market", "buy", 0.1)
-        assert result is not None
-        assert result["id"] == "existing-1"
+        assert isinstance(result, Placed)
+        assert result.order["id"] == "existing-1"
         assert api.exchange.create_order.call_count == 1
 
     @pytest.mark.asyncio
@@ -300,8 +301,8 @@ class TestCreateOrderIdempotency:
         ):
             with patch("asyncio.sleep", new_callable=AsyncMock):
                 result = await api.create_order("BTC/USDT", "market", "buy", 0.1)
-        assert result is not None
-        assert result["id"] == "existing-2"
+        assert isinstance(result, Placed)
+        assert result.order["id"] == "existing-2"
 
     @pytest.mark.asyncio
     async def test_duplicate_error_not_found_anywhere_stops_retrying(self):
@@ -313,7 +314,7 @@ class TestCreateOrderIdempotency:
         api.exchange.fetch_closed_orders.return_value = []
         with patch("asyncio.sleep", new_callable=AsyncMock):
             result = await api.create_order("BTC/USDT", "market", "buy", 0.1)
-        assert result is None
+        assert isinstance(result, Rejected)
         assert api.exchange.create_order.call_count == 1
 
     @pytest.mark.asyncio
@@ -323,10 +324,10 @@ class TestCreateOrderIdempotency:
         # fetch_open_orders/fetch_closed_orders left unconfigured (plain
         # AsyncMock) — iterating the awaited result raises TypeError, which
         # _find_order_by_client_id must swallow (fail-open) so the pre-existing
-        # retry behavior (3 attempts, then None) is unaffected.
+        # retry behavior (3 attempts, then Unknown) is unaffected.
         with patch("asyncio.sleep", new_callable=AsyncMock):
             result = await api.create_order("BTC/USDT", "market", "buy", 0.1)
-        assert result is None
+        assert isinstance(result, Unknown)
         assert api.exchange.create_order.call_count == 3
 
 

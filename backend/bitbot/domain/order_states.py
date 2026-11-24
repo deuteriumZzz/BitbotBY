@@ -7,8 +7,9 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, Optional, Set, Tuple
+from typing import Any, Dict, Optional, Set, Tuple, Union
 
 
 class OrderState(str, Enum):
@@ -75,3 +76,32 @@ def classify_order(order: Optional[Dict[str, Any]]) -> OrderState:
     if status == "open":
         return OrderState.PARTIALLY_FILLED if filled > 0 else OrderState.SUBMITTED
     return OrderState.UNKNOWN
+
+
+# ── Исход отправки ордера ─────────────────────────────────────────────────────
+# Вместо «словарь или None»: None смешивал «ордера точно нет» и «сеть оборвалась,
+# биржа могла его принять». Вызывающий обязан разобрать все три случая.
+
+
+@dataclass(frozen=True)
+class Placed:
+    """Биржа приняла ордер; `order` — её ответ (ccxt)."""
+
+    order: Dict[str, Any]
+
+
+@dataclass(frozen=True)
+class Rejected:
+    """Ордера на бирже нет: отказ биржи, нет средств или ордер не отправлен."""
+
+    reason: str
+
+
+@dataclass(frozen=True)
+class Unknown:
+    """Сеть оборвалась после отправки: ордер мог исполниться. Выяснит сверка по id."""
+
+    client_order_id: str
+
+
+OrderOutcome = Union[Placed, Rejected, Unknown]
