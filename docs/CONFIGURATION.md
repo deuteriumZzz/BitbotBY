@@ -19,6 +19,8 @@
 | Риск | `DAILY_LOSS_LIMIT`, `DRAWDOWN_HALT_HOURS`, `MAX_CORRELATION`, `MAX_SPREAD_PCT` |
 | Telegram | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `TELEGRAM_CONFIRM_TIMEOUT` |
 | Инфра | `REDIS_HOST/PASSWORD`, `DASHBOARD_USER/PASSWORD` |
+| Новые источники решения | `AI_RAG_CONTEXT`, `AI_SANITIZE_PROMPT`, `AI_STRICT_VALIDATION`, `FORECASTER`, `FUNDING_IN_PNL`, `SAC_V2_ENABLED` — **все выключены по умолчанию**, см. раздел «Новые источники решения и эксплуатация» |
+| Эксплуатация | `RISK_GATE_SHADOW`, `DB_BACKUP_*`, `WS_SHADOW_*`, `EVENT_STREAM_ENABLED`, `HEAVY_JOB_*`, `BOT_CPUS`, `BOT_MEM_LIMIT`, `TRAINER_*` |
 
 Большинство параметров (режим, стратегии, риск-профиль, часы торговли, число позиций) меняются
 **прямо из приложения и Telegram без перезапуска** — хранятся в Redis с AOF-персистентностью.
@@ -413,6 +415,79 @@ REDIS_HOST=localhost     # В Docker автоматически переопре
 REDIS_PORT=6379
 REDIS_PASSWORD=          # Рекомендуется задать в production.
 ```
+
+</details>
+
+<details>
+<summary><b>🧪 Новые источники решения и эксплуатация</b></summary>
+
+Значения по умолчанию безопасны: всё, что меняет вход или выход решения, **выключено**. Включайте по одному,
+после недели в paper и по отчёту (`python -m src.research.signal_intelligence_report`, Telegram `/digest`).
+Подробности и откат — [MIGRATION_GUIDE](implementation/MIGRATION_GUIDE.md).
+
+```env
+# ── Меняют решение (по умолчанию ВЫКЛЮЧЕНЫ) ───────────────────────────────────
+AI_SANITIZE_PROMPT=false   # заголовки новостей очищаются от управляющих символов и разметки ролей,
+                           # в промпте пометка «недоверенный текст»
+AI_RAG_CONTEXT=false       # в промпт AI добавляется «что было в похожих случаях» из журнала решений
+                           # (индекс обновляется раз в 10 минут; сбой RAG → решение без него)
+AI_STRICT_VALIDATION=false # ответ LLM проходит строгую схему: лишние поля, выдуманные цены (>2% от
+                           # снимка), SL/TP не с той стороны — рекомендация отбрасывается
+FORECASTER=chronos         # chronos | timesfm. timesfm — поправка считается изолированным воркером
+                           # TimesFM (.venv-timesfm); работает при включённом переключателе Chronos
+FUNDING_IN_PNL=false       # funding входит в результат сделки (paper — оценка, live — выплаты биржи).
+                           # Знак выплат Bybit не проверен на реальной бирже — проверить на testnet
+PAPER_FUNDING_RATE_8H=0.0001  # ставка funding за 8 ч для оценки в paper (при FUNDING_IN_PNL=true)
+SAC_V2_ENABLED=false       # SAC v2 (train_sac_v2) вместо v1; допуск через реестр моделей
+SAC_V2_MODEL_PATH=models/sac_v2.zip
+SAC_REQUIRE_APPROVAL=true  # модель торгует только после допуска в реестре: Paper — стадии
+                           # paper/canary/production, Live — только production
+
+# ── Наблюдение и защита (ничего не меняют в торговых решениях) ────────────────
+RISK_GATE_SHADOW=true      # после каждого входа в журнал пишется вердикт единого Risk Gate (без применения)
+DB_BACKUP_ENABLED=true     # ежедневная проверенная копия БД сделок в data/backups/
+DB_BACKUP_INTERVAL_H=24
+DB_BACKUP_KEEP=7           # сколько последних копий хранить
+WS_SHADOW_ENABLED=false    # публичный WebSocket Bybit параллельно REST: метрики Prometheus
+                           # (bitbot_ws_*), тревога при тишине, сверка свечей WS и REST раз в 15 минут
+WS_SHADOW_SYMBOLS=BTC/USDT,ETH/USDT
+EVENT_STREAM_ENABLED=false # копии записей журнала как компактные отметки в Redis Stream bot:stream:events
+DATA_QUALITY_GATE=false    # true — не входить по снимкам с плохим статусом данных (STALE/INVALID…)
+RECONCILE_INTERVAL_S=60    # период сверки позиций с биржей (live)
+RECONCILE_AUTOFIX=false    # true — сверка сама исправляет расхождения (по умолчанию только сообщает)
+ONLINE_LEARNING_MODE=disabled   # онлайн-дообучение SAC выключено
+
+# ── Журнал решений ─────────────────────────────────────────────────────────────
+DECISION_LEDGER_ENABLED=1           # 0 — не писать журнал
+DECISION_LEDGER_PATH=data/decision_ledger.jsonl
+DECISION_LEDGER_MAX_BYTES=52428800  # ротация (50 МБ)
+
+# ── Нагрузка тяжёлых процессов (обучение, воркер TimesFM, фоновые задачи) ─────
+HEAVY_JOB_NICE=10          # приоритет ниже боевого процесса (0–19)
+HEAVY_JOB_THREADS=         # потолок потоков BLAS/OpenMP/torch; пусто = половина ядер
+```
+
+**Лимиты контейнеров (docker compose).** Переменные читает `docker compose`, а не бот; `0` — без лимита:
+
+```env
+BOT_CPUS=0               # потолок CPU контейнера бота (напр. 3). Обучение и фоновые задачи идут
+                         # подпроцессами внутри него, поэтому потолок ограничивает и их
+BOT_MEM_LIMIT=0          # потолок памяти контейнера бота (напр. 4g)
+TRAINER_CPUS=0           # то же для контейнера обучения: docker compose --profile train run --rm trainer
+TRAINER_MEM_LIMIT=0
+TRAINER_THREADS=2
+TRAIN_CSV=data/ohlcv.csv TRAIN_SYMBOL=BTC/USDT TRAIN_TIMEFRAME=15m TRAIN_TIMESTEPS=100000 TRAIN_FOLDS=4
+```
+
+**Команды Telegram для эксплуатации:** `/digest [часы]` — сводка по журналу и тревоги; `/audit <decision_id>` —
+цепочка данные → решение → исполнение → исход; `/dbcheck` — целостность БД; `/emergency [1-4 [confirm] | reset]` —
+аварийные уровни (1 пауза входов · 2 отмена отложенных ордеров, сейчас ничего не отменяет · 3 закрыть убыточные ·
+4 закрыть все). Подтверждение обязательно; `reset` пауза не снимает — только `/resume`.
+
+**Что записывается в журнал по каждому вызову AI** (`ai_call`): провайдер, модель, задержка, цепочка отказов,
+`prompt_sha256`, `prompt_version`, **токены** (`tokens: {input, output, total}`, `null`, если провайдер их не вернул),
+результат строгой проверки схемы. По токенам и таблице цен считается стоимость
+(`src/ai_infra/health.estimate_cost`); модель без цены даёт `None`, а не 0.
 
 </details>
 

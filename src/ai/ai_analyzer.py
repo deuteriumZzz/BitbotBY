@@ -438,11 +438,10 @@ class AIAnalyzer:
             )
             usage = getattr(message, "usage", None)
             if usage is not None:
-                self._record_usage(
-                    provider,
-                    getattr(usage, "input_tokens", 0)
-                    + getattr(usage, "output_tokens", 0),
-                )
+                tin = int(getattr(usage, "input_tokens", 0) or 0)
+                tout = int(getattr(usage, "output_tokens", 0) or 0)
+                self._last_usage = {"input": tin, "output": tout, "total": tin + tout}
+                self._record_usage(provider, tin + tout)
             block = message.content[0]
             return block.text if hasattr(block, "text") else ""
         response = await client.chat.completions.create(
@@ -454,7 +453,14 @@ class AIAnalyzer:
             ],
         )
         usage = getattr(response, "usage", None)
-        self._record_usage(provider, getattr(usage, "total_tokens", None))
+        total = getattr(usage, "total_tokens", None)
+        if usage is not None and total:
+            self._last_usage = {
+                "input": int(getattr(usage, "prompt_tokens", 0) or 0),
+                "output": int(getattr(usage, "completion_tokens", 0) or 0),
+                "total": int(total),
+            }
+        self._record_usage(provider, total)
         return response.choices[0].message.content or ""
 
     def _mark(self, provider: str, model: str, status: str, until: float = 0.0) -> None:
@@ -558,6 +564,7 @@ class AIAnalyzer:
                 continue
             t_call = time.monotonic()
             try:
+                self._last_usage = None  # токены именно этого вызова (None — провайдер их не вернул)
                 raw = await self._call(provider, model, prompt)
                 valid = self._parse_response(raw)
                 self._strict_dropped = 0
@@ -624,6 +631,7 @@ class AIAnalyzer:
                 latency_ms=round((time.monotonic() - t_call) * 1000),
                 prompt_sha256=prompt_hash,
                 prompt_version=PROMPT_VERSION,
+                tokens=getattr(self, "_last_usage", None),
                 n_symbols=len(snapshots),
                 n_signals=len(valid),
                 attempts=attempts,

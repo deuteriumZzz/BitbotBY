@@ -85,7 +85,10 @@ def format_digest(d: Dict[str, Any]) -> str:
         f"AI: вызовов {d['ai']['n_calls']}, ответили {d['ai']['ok']}, цепочка исчерпана {d['ai']['exhausted']}",
     ]
     for name, p in d["providers"].items():
-        lines.append(f"  {name}: ответов {p['answered']}, успех {p['success_rate']}, p95 {p['latency_ms_p95']} мс")
+        lines.append(
+            f"  {name}: ответов {p['answered']}, успех {p['success_rate']}, "
+            f"p95 {p['latency_ms_p95']} мс, токенов {p.get('tokens', 0)}"
+        )
     lines.append(f"Данные: {d['data_quality'] or 'нет записей'}")
     lines.append("Тревоги: " + ("; ".join(d["alerts"]) if d["alerts"] else "нет"))
     return "\n".join(lines)

@@ -23,7 +23,7 @@ def _p95(values: List[float]) -> Optional[float]:
 
 def provider_health(records: Iterable[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
     stats: Dict[Any, Dict[str, Any]] = defaultdict(
-        lambda: {"answered": 0, "failed": Counter(), "latency": [], "last_ok_ts": None}
+        lambda: {"answered": 0, "failed": Counter(), "latency": [], "last_ok_ts": None, "tokens": 0}
     )
     for r in records:
         if r.get("kind") != "ai_call":
@@ -33,6 +33,7 @@ def provider_health(records: Iterable[Dict[str, Any]]) -> Dict[str, Dict[str, An
         if r.get("status") == "ok" and r.get("provider"):
             s = stats[r["provider"]]
             s["answered"] += 1
+            s["tokens"] += int((r.get("tokens") or {}).get("total") or 0)
             if r.get("latency_ms") is not None:
                 s["latency"].append(float(r["latency_ms"]))
             s["last_ok_ts"] = r.get("ts", s["last_ok_ts"])
@@ -48,8 +49,20 @@ def provider_health(records: Iterable[Dict[str, Any]]) -> Dict[str, Dict[str, An
             "latency_ms_mean": round(sum(lat) / len(lat), 1) if lat else None,
             "latency_ms_p95": _p95(lat),
             "last_ok_ts": s["last_ok_ts"],
+            "tokens": s["tokens"],
         }
     return out
+
+
+def tokens_by_model(records: Iterable[Dict[str, Any]]) -> Dict[str, int]:
+    """Токены по моделям из `ai_call.tokens.total` — вход для `estimate_cost` (модель без токенов не попадает)."""
+    out: Dict[str, int] = defaultdict(int)
+    for r in records:
+        if r.get("kind") == "ai_call" and r.get("status") == "ok":
+            total = int((r.get("tokens") or {}).get("total") or 0)
+            if total:
+                out[str(r.get("model"))] += total
+    return dict(out)
 
 
 def estimate_cost(
