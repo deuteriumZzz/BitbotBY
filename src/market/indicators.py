@@ -150,20 +150,3 @@ def calculate_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
 
 # Public alias used by tests and data_loader
 calculate_technical_indicators = add_indicators
-
-
-def normalize_data(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Нормализует данные для моделей машинного обучения путем стандартизации (z-score).
-
-    Вычитает среднее и делит на стандартное отклонение для каждой колонки.
-    Заполняет NaN значения нулями.
-
-    :param df: DataFrame с числовыми данными.
-    :return: Нормализованный DataFrame.
-    """
-    df_normalized = df.copy()
-    for column in df.columns:
-        if df[column].std() != 0:
-            df_normalized[column] = (df[column] - df[column].mean()) / df[column].std()
-    return df_normalized.fillna(0)

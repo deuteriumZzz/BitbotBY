@@ -122,18 +122,3 @@ class RegimeDetector:
         except Exception as exc:
             logger.warning("RegimeDetector predict failed: %s", exc)
             return "unknown"
-
-    def regime_weights(self, regime: str) -> dict[str, float]:
-        """
-        Возвращает множители весов SAC/AI для заданного режима рынка.
-
-        :param regime: "trending_up", "trending_down", "ranging" или "unknown".
-        :return: Словарь с ключами "sac_weight", "ai_weight".
-        """
-        if regime == "trending_up":
-            return {"sac_weight": 0.5, "ai_weight": 0.5}
-        if regime == "trending_down":
-            return {"sac_weight": 0.3, "ai_weight": 0.7}
-        if regime == "ranging":
-            return {"sac_weight": 0.4, "ai_weight": 0.6}
-        return {"sac_weight": 0.4, "ai_weight": 0.6}

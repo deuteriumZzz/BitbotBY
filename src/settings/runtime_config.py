@@ -1499,34 +1499,3 @@ class RuntimeConfig:
             self._r.redis_client.delete(_KEY_AWAITING_ALERT_COOLDOWN)
         except Exception:
             pass
-
-    def format_full_status(self, balance: float, paper: bool, all_strats: list) -> str:
-        """Форматирует полный статус всех параметров для Telegram."""
-        mode = self.get_mode()
-        scan_n = self.get_scan_top_n()
-        auto = self.get_auto_execute()
-        paused = self.is_paused()
-        hours = self.get_trading_hours() or "24/7"
-        risk = self.get_risk_summary()
-        disabled = self.get_disabled_strategies()
-        enabled_count = len(all_strats) - len(disabled)
-
-        mode_icon = "paper" if paper else "live"
-        pause_line = "⏸ *НА ПАУЗЕ*\n" if paused else ""
-        auto_icon = "✅" if auto else "❌"
-        dd_icon = "✅" if risk["drawdown_scale_enabled"] else "❌"
-
-        return (
-            f"🤖 *BitbotBY запущен* \\[{mode_icon}\\]\n"
-            f"{pause_line}\n"
-            f"*Режим:* `{mode}` \\| *Символов:* `{scan_n}`\n"
-            f"*Баланс:* `${balance:,.2f}`\n\n"
-            f"*⚙️ Параметры:*\n"
-            f"  Авто\\-сделки: {auto_icon}\n"
-            f"  Макс позиций: `{risk['max_positions']}`\n"
-            f"  Риск/сделку: `{risk['risk_per_trade'] * 100:.1f}%`\n"
-            f"  Защита просадки: {dd_icon}\n"
-            f"  Часы торговли: `{hours}` UTC\n"
-            f"  Стратегий вкл: `{enabled_count}/{len(all_strats)}`\n\n"
-            f"_Нажми кнопку для изменения любого параметра:_"
-        )
