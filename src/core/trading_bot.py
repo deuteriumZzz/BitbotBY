@@ -202,6 +202,10 @@ class TradingBot:
         # Постоянный журнал решений (AUDIT_REPORT H-2/H-5): только запись.
         self.ledger = DecisionLedger()
         self.ai._ledger = self.ledger
+        if Config.EVENT_STREAM_ENABLED:
+            from src.infra.event_stream import EventStream  # noqa: PLC0415
+
+            self.ledger.sink = EventStream(self.redis.redis_client).ledger_sink
         self._paper_balance: float = Config.INITIAL_BALANCE
         self._live_balance_cache: float = Config.INITIAL_BALANCE
         # Equity (баланс + unrealized PnL) для drawdown halt

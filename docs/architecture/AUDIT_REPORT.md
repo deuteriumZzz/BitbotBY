@@ -647,6 +647,35 @@ C-9 (reduceOnly), C-8 (защиты без паузы), C-1/C-2 (двойной 
 
 **Остаётся (требует времени или решения, а не кода):** недельный замер WS и теневого гейта; обучение SAC v2 в боевом масштабе (месяцы истории, несколько активов, seed) и сравнение с v1; проверка знака funding на testnet; подтверждение допущений Bybit по документации (§14); сравнение Chronos и TimesFM (Chronos локально не импортируется); приватный WS (нужны ключи — только по явному «go»); вторая биржа и резервный ключ (ADR-004); включение флагов — решение владельца.
 
+### 10r. Реестр идей: оркестратор, продвинутый риск, умное исполнение, шина, ONNX, документы §13.8
+
+Всё ниже — чистая логика с тестами; в торговый путь **не подключено** (кроме `prompt_version` и необязательного `sink` Ledger, которые только добавляют поля/копии).
+
+| Пункт ТЗ | Что сделано | Файлы |
+|---|---|---|
+| AI Orchestrator L1–L4 | `plan()` по контексту и бюджету (L0 — безопасный отказ при плохих данных), `run_plan()`: параллельно в стадии, таймаут на компонент, отмена, дубли не запускаются, частичный сбой → политика отказов, `stop_after` для ранней остановки | `src/ai_infra/orchestrator.py` |
+| `prompt_version` | константа `PROMPT_VERSION` пишется в каждую запись `ai_call` рядом с `prompt_sha256` | `src/ai/ai_analyzer.py` |
+| ONNX-экспорт SAC | экспорт детерминированного актора, `verify` (ONNX Runtime против PyTorch, допуск 1e-4 — на тестовой модели совпало), `OnnxPolicy`, CLI | `reinforcement_learning/onnx_export.py` |
+| Шина событий | Redis Streams (`publish`/`read`/группы/`ack`, ограничение длины), `sink` Ledger → компактная отметка; флаг `EVENT_STREAM_ENABLED` (выкл.) | `src/infra/event_stream.py`, `src/core/decision_ledger.py` |
+| `orjson`/`uvloop` | решено по профилю: orjson — необязательный для шины (выигрыш ≈ 0.7 мс/цикл), uvloop не принят (0.03% CPU) | `src/infra/fastjson.py`, ADR-005 |
+| Riskfolio / Black–Litterman | Riskfolio не подключён (scipy/cvxpy), BL — в numpy: апостериорные ожидания, проверка структурированных взглядов (не «текст → вес»), `mv_weights` | `src/risk/advanced.py` |
+| Thompson Sampling | вес ≈ вероятность быть лучшей по Beta; только после OOS, пол веса, лимит скорости перелива, минимум исходов | `src/risk/allocation.py` |
+| Динамический CVaR | фильтрованная историческая симуляция по EWMA-σ: после скачка волатильности CVaR выше статического, после успокоения — ниже | `src/risk/advanced.py` |
+| Стресс BTC-беты | шок × бета + неблагоприятная идио-часть, флаг превышения лимита | `src/risk/advanced.py` |
+| Kelly от Meta-Model | только при `usable`, поправка на неопределённость, потолок 20% | `src/risk/advanced.py` |
+| Smart Execution | TWAP (сумма срезов = объёму, округление по шагу, не ниже минимума), Post-Only chase (place/hold/reprice/market_fallback/give_up) | `src/exchange/smart_exec.py` |
+| Partial Fill Manager | решение по частичному исполнению; защита (SL/TP) всегда равна фактически исполненному | `src/exchange/smart_exec.py` |
+| In-flight margin | резерв маржи под ордера в полёте, идемпотентен, потокобезопасен | `src/exchange/smart_exec.py` |
+| Документы §13.8 | `docs/research/`: CHRONOS_VS_TIMESFM, META_MODEL, AI_PERFORMANCE, SIGNAL_INTELLIGENCE; `docs/architecture/`: DATA_FLOW, DECISION_FLOW, MODEL_LIFECYCLE, FAILURE_HANDLING, ADR-005; `docs/implementation/`: MIGRATION_GUIDE, ACCEPTANCE_CRITERIA; `requirements-optional.txt` | `docs/*` |
+
+**Установлено:** `onnx 1.19.1`, `onnxruntime 1.19.2` (NumPy/protobuf/torch не менялись; установка проверена `pip --dry-run`). Свободно на диске ≈ 4.4 ГБ.
+
+Исправлено по ходу: `plan()` не доводил неубедительный L1 (вероятность 0.55) до LLM — теперь лестница идёт до L3, а `stop_after` останавливает её раньше; TWAP терял срез из-за ошибки плавающей точки в `//`.
+
+Тесты: `test_orchestrator` (11), `test_advanced` (19), `test_smart_exec` (11), `test_event_stream` (8), `test_onnx` (2).
+
+**Не подключено к бою (намеренно):** оркестратор, умное исполнение и резерв маржи (вход рыночный; сначала замер проскальзывания), Black–Litterman/Thompson/Kelly от Meta-Model (нет данных и доказательств), шина (флаг).
+
 ## 11. Критерии приёмки Phase 0
 
 - [x] Реальный путь решения прослежен по коду (§1–2).

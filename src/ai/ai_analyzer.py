@@ -25,6 +25,11 @@ _SYSTEM_PROMPT = (
 )
 
 
+# Версия промпта: менять при любом осознанном изменении текста/правил. Пишется в каждую
+# запись ai_call вместе с sha256 промпта — по ним ответы разных версий не смешиваются в статистике.
+PROMPT_VERSION = "v1-2026-11-24"
+
+
 def _env(name: str) -> str:
     """Значение настройки: Config (туда же попадают ключи из приложения) или env."""
     if not name:
@@ -618,6 +623,7 @@ class AIAnalyzer:
                 model=model,
                 latency_ms=round((time.monotonic() - t_call) * 1000),
                 prompt_sha256=prompt_hash,
+                prompt_version=PROMPT_VERSION,
                 n_symbols=len(snapshots),
                 n_signals=len(valid),
                 attempts=attempts,

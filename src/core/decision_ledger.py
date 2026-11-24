@@ -48,6 +48,8 @@ class DecisionLedger:
         )
         self.trace_id = ""
         self._lock = threading.Lock()
+        # Необязательный приёмник копий записей (шина событий): компактная отметка в Redis Stream.
+        self.sink: Any = None
 
     def begin_cycle(self, cycle: int) -> str:
         """Новый trace_id на торговый цикл; его получают все записи цикла."""
@@ -75,6 +77,11 @@ class DecisionLedger:
                 self._rotate_if_needed()
                 with open(self.path, "a", encoding="utf-8") as f:
                     f.write(line)
+            if self.sink is not None:
+                try:
+                    self.sink(kind, record)
+                except Exception as exc:  # приёмник не должен ломать запись журнала
+                    logger.debug("ledger sink failed: %s", exc)
         except Exception as exc:  # журнал не должен ломать торговлю
             logger.warning("DecisionLedger write failed (%s): %s", kind, exc)
 

@@ -203,6 +203,8 @@ class Config:
     #   AI_STRICT_VALIDATION — ответ LLM проходит строгую схему (лишние поля/выдуманные цены — отказ);
     #   FORECASTER           — chronos | timesfm (используется, если включён переключатель Chronos).
     # Funding в PnL сделки (src/core/funding.py): выключен — меняет учёт результата.
+    # Шина событий (Redis Streams, ADR-005): копии записей Ledger как компактные отметки.
+    EVENT_STREAM_ENABLED: bool = os.getenv("EVENT_STREAM_ENABLED", "false").lower() == "true"
     # SAC v2 вместо v1 (src/ai/sac_v2_policy.py): модель из train_sac_v2; допуск через реестр.
     SAC_V2_ENABLED: bool = os.getenv("SAC_V2_ENABLED", "false").lower() == "true"
     SAC_V2_MODEL_PATH: str = os.getenv("SAC_V2_MODEL_PATH", "models/sac_v2.zip")
