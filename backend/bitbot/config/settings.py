@@ -387,6 +387,9 @@ class Config:
     # Порт HTTP health-сервера (GET /health, GET /metrics)
     # 0 = выключен
     HEALTH_PORT: int = int(os.getenv("HEALTH_PORT", "8081"))
+    # Остановка (SIGTERM, docker stop): столько секунд даём текущему циклу
+    # дойти до конца, потом отменяем. stop_grace_period в compose — больше этого.
+    SHUTDOWN_GRACE_S: int = int(os.getenv("SHUTDOWN_GRACE_S", "45"))
 
     # ── Correlation filter ─────────────────────────────────────────────────
     # Максимальная |корреляция| log-returns между одновременными позициями.

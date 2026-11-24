@@ -27,6 +27,7 @@ services:
       retries: 5
 
   bot:
+    stop_grace_period: 60s  # бот доводит текущий цикл до конца (SHUTDOWN_GRACE_S=45)
     build: .
     restart: unless-stopped
     command: python -m bitbot.workers.supervisor

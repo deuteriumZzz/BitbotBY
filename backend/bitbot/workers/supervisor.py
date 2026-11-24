@@ -45,20 +45,32 @@ async def main() -> None:
     """
     Запускает торгового бота и обрабатывает завершение работы.
 
-    При SIGINT/SIGTERM (в т.ч. docker stop) корректно вызывает bot.stop().
+    При SIGINT/SIGTERM (в т.ч. docker stop) текущий цикл доходит до конца —
+    отмена посреди цикла может оборвать сделку между ордером на бирже и записью
+    в базу. Через SHUTDOWN_GRACE_S или по второму сигналу — отмена сразу; затем
+    bot.stop().
     При незапланированном исключении выжидает _RETRY_DELAY сек и перезапускает.
     """
     bot = TradingBot()
     loop = asyncio.get_running_loop()
     main_task = asyncio.current_task()
 
-    def _handle_signal(sig: int) -> None:
-        logger.info(
-            "Получен сигнал %s — завершаем работу",
-            signal.Signals(sig).name,
-        )
+    def _cancel_main() -> None:
         if main_task and not main_task.done():
             main_task.cancel()
+
+    def _handle_signal(sig: int) -> None:
+        if bot.stop_requested:
+            logger.info("Повторный сигнал — останавливаемся сразу")
+            _cancel_main()
+            return
+        logger.info(
+            "Получен сигнал %s — дожидаемся конца цикла (до %d с)",
+            signal.Signals(sig).name,
+            Config.SHUTDOWN_GRACE_S,
+        )
+        bot.request_stop()
+        loop.call_later(Config.SHUTDOWN_GRACE_S, _cancel_main)
 
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, _handle_signal, sig)
@@ -87,6 +99,8 @@ async def main() -> None:
                 except Exception:
                     pass
                 await asyncio.sleep(_RETRY_DELAY)
+                if bot.stop_requested:  # сигнал пришёл во время паузы перезапуска
+                    break
                 bot = TradingBot()
                 if Config.HEALTH_PORT > 0:
                     await start_health_server(bot, port=Config.HEALTH_PORT)

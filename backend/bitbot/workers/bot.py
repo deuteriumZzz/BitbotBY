@@ -171,6 +171,8 @@ class TradingBot:
             ),
         )
         self.is_running: bool = False
+        # Остановка по сигналу: цикл доходит до конца, паузы между циклами прерываются.
+        self._stop_event = asyncio.Event()
         # Явная схема через TypedDict — заменяет Dict[str, Any], чтобы ловить
         # отсутствующие поля при создании (mypy), а не как KeyError в мониторе.
         self._monitored: Dict[str, PositionRecord] = {}
@@ -348,6 +350,7 @@ class TradingBot:
         """
         # Действующие значения: с учётом настроек и ключей из приложения.
         effective_config(Config).validate()
+        self._check_dependencies()
         await self._connect_exchange()
         try:
             await self._connect_data_loader()
@@ -2012,7 +2015,7 @@ class TradingBot:
         Точный sleep: учитывает время выполнения итерации.
         При ошибке ждёт 10 сек и продолжает.
         """
-        self.is_running = True
+        self.is_running = not self._stop_event.is_set()
         self._monitor_task = asyncio.create_task(self._monitor_positions())
         if Config.PAPER_TRADING is not True:
             self._reconcile_task = asyncio.create_task(self._reconcile_loop())
@@ -2083,7 +2086,7 @@ class TradingBot:
 
             if self._runtime_config.is_paused():
                 self._publish_event("cycle", {"state": "paused"})
-                await asyncio.sleep(Config.TRADING_INTERVAL)
+                await self._pause(Config.TRADING_INTERVAL)
                 continue
 
             # Синхронизируем defaultType ccxt-клиента с рантайм-режимом каждый
@@ -2272,7 +2275,7 @@ class TradingBot:
                                 },
                             )
                             self._entries_blocked = "просадка: новые входы остановлены"
-                            await asyncio.sleep(halt_secs)
+                            await self._pause(halt_secs)
                             self._entries_blocked = ""
                             self._publish_event(
                                 "guard", {"kind": "drawdown_halt", "active": False}
@@ -2371,8 +2374,8 @@ class TradingBot:
                         _check_interval = 60
                         _elapsed = 0.0
                         self._entries_blocked = "дневной лимит убытка"
-                        while _elapsed < sleep_secs:
-                            await asyncio.sleep(_check_interval)
+                        while _elapsed < sleep_secs and self.is_running:
+                            await self._pause(_check_interval)
                             _elapsed += _check_interval
                             _recovery_eq = await self._get_balance_usdt()
                             _recovery_eq = self._live_equity_cache
@@ -2504,7 +2507,7 @@ class TradingBot:
                     cycles_counter.inc()
                     elapsed = loop.time() - t0
                     _interval = self._runtime_config.get_trading_interval()
-                    await asyncio.sleep(max(0, _interval - elapsed))
+                    await self._pause(max(0, _interval - elapsed))
                     continue
 
                 # РЕЖИМ ПОИСКА: есть свободные слоты — полный скан + AI
@@ -2588,7 +2591,7 @@ class TradingBot:
                     sleep_for,
                     _interval,
                 )
-                await asyncio.sleep(sleep_for)
+                await self._pause(sleep_for)
 
             except Exception as e:
                 # Перехват верхнего уровня: удерживает цикл живым при
@@ -2596,7 +2599,36 @@ class TradingBot:
                 # Специфические ошибки перехватываются ближе к источнику;
                 # здесь обрабатывается всё остальное непредвиденное.
                 logger.error("Error in trading loop: %s", e)
-                await asyncio.sleep(10)
+                await self._pause(10)
+
+    def _check_dependencies(self) -> None:
+        """Проверка на старте: без Redis нет блокировок ордеров и состояния.
+
+        База сделок проверяется раньше — при создании TradeHistory. Ошибка
+        здесь — понятная причина вместо падения в середине первого цикла;
+        супервизор повторит запуск.
+        """
+        try:
+            self.redis.redis_client.ping()
+        except Exception as exc:
+            where = f"{Config.REDIS_HOST}:{Config.REDIS_PORT}"
+            raise RuntimeError(f"Redis недоступен ({where}): {exc}") from exc
+
+    @property
+    def stop_requested(self) -> bool:
+        return self._stop_event.is_set()
+
+    def request_stop(self) -> None:
+        """Мягкая остановка: текущий цикл доходит до конца, новый не начинается."""
+        self.is_running = False
+        self._stop_event.set()
+
+    async def _pause(self, seconds: float) -> None:
+        """Пауза в цикле, которую прерывает request_stop()."""
+        try:
+            await asyncio.wait_for(self._stop_event.wait(), max(0.0, seconds))
+        except asyncio.TimeoutError:
+            pass
 
     async def stop(self) -> None:
         self.is_running = False
