@@ -1,4 +1,5 @@
 """ops_status / run_config и умолчания флагов «в paper»."""
+
 import os
 import subprocess
 import sys
@@ -8,11 +9,22 @@ from src.core import ops_tasks
 
 
 def _flag_defaults(**env):
-    e = {k: v for k, v in os.environ.items() if k not in ("PAPER_TRADING", "WS_SHADOW_ENABLED", "AI_SANITIZE_PROMPT")}
+    e = {
+        k: v
+        for k, v in os.environ.items()
+        if k not in ("PAPER_TRADING", "WS_SHADOW_ENABLED", "AI_SANITIZE_PROMPT")
+    }
     e.update(env)
     out = subprocess.run(
-        [sys.executable, "-c", "from config import Config as C; print(C.WS_SHADOW_ENABLED, C.AI_SANITIZE_PROMPT)"],
-        env=e, capture_output=True, text=True, check=True,
+        [
+            sys.executable,
+            "-c",
+            "from config import Config as C; print(C.WS_SHADOW_ENABLED, C.AI_SANITIZE_PROMPT)",
+        ],
+        env=e,
+        capture_output=True,
+        text=True,
+        check=True,
     ).stdout.split()
     return out
 
@@ -23,7 +35,10 @@ def test_flags_follow_paper_mode():
 
 
 def test_explicit_env_overrides_paper_default():
-    assert _flag_defaults(PAPER_TRADING="true", WS_SHADOW_ENABLED="false") == ["False", "True"]
+    assert _flag_defaults(PAPER_TRADING="true", WS_SHADOW_ENABLED="false") == [
+        "False",
+        "True",
+    ]
 
 
 def _bot(**kw):

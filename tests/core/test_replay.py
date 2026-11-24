@@ -58,7 +58,11 @@ def _rc(mode: str, min_conf: float = 0.4, chronos: bool = True) -> MagicMock:
 
 SYMS = ["BTC/USDT", "ETH/USDT", "SOL/USDT"]
 SNAPS = [make_snapshot(s, 100.0 + i, 2.0) for i, s in enumerate(SYMS)]
-REGIMES = {"BTC/USDT": "trending_down", "ETH/USDT": "trending_up", "SOL/USDT": "ranging"}
+REGIMES = {
+    "BTC/USDT": "trending_down",
+    "ETH/USDT": "trending_up",
+    "SOL/USDT": "ranging",
+}
 CTX = {
     "BTC/USDT": {"funding_signal": "long_overheated", "funding_rate": 0.002},
     "ETH/USDT": {"funding_signal": "short_overheated", "funding_rate": -0.002},
@@ -235,7 +239,11 @@ async def test_cli_ok_on_clean_record(tmp_path, capsys) -> None:
     path = tmp_path / "l.jsonl"
     path.write_text(
         json.dumps(
-            {"kind": "replay_input", "trace_id": "t-0", "input": _record(combiner, recs)}
+            {
+                "kind": "replay_input",
+                "trace_id": "t-0",
+                "input": _record(combiner, recs),
+            }
         )
         + "\n"
     )

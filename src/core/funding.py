@@ -26,7 +26,12 @@ MAX_SHARE_OF_MARGIN = 0.5  # предложение: funding > 50% маржи з
 
 
 def estimate_effect(
-    side: str, qty: float, entry: float, exit_price: float, hold_s: float, rate_8h: float
+    side: str,
+    qty: float,
+    entry: float,
+    exit_price: float,
+    hold_s: float,
+    rate_8h: float,
 ) -> float:
     """Оценка эффекта funding на PnL за срок удержания (минус — заплатили)."""
     if qty <= 0 or hold_s <= 0 or rate_8h == 0:
@@ -51,13 +56,19 @@ def is_sane(effect: float, margin: float) -> bool:
     return margin <= 0 or abs(effect) <= MAX_SHARE_OF_MARGIN * margin
 
 
-async def live_effect(api: Any, symbol: str, since_ms: int, limit: int = 100) -> Optional[float]:
+async def live_effect(
+    api: Any, symbol: str, since_ms: int, limit: int = 100
+) -> Optional[float]:
     """Выплаты funding по символу с момента открытия; None — биржа не ответила."""
     try:
-        entries = await api.exchange.fetch_funding_history(symbol, since=since_ms, limit=limit)
+        entries = await api.exchange.fetch_funding_history(
+            symbol, since=since_ms, limit=limit
+        )
     except asyncio.CancelledError:
         raise
-    except Exception as exc:  # noqa: BLE001 — отсутствие данных не должно ломать закрытие
+    except (
+        Exception
+    ) as exc:  # noqa: BLE001 — отсутствие данных не должно ломать закрытие
         logger.warning("funding history for %s unavailable: %s", symbol, exc)
         return None
     return effect_from_history(entries or [])

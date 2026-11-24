@@ -33,7 +33,9 @@ def beta(asset: np.ndarray, market: np.ndarray) -> float:
     return float(np.cov(a, m, ddof=1)[0, 1] / var) if var > 0 else 0.0
 
 
-def portfolio_cvar(returns: np.ndarray, notionals: Sequence[float], alpha: float = 0.95) -> float:
+def portfolio_cvar(
+    returns: np.ndarray, notionals: Sequence[float], alpha: float = 0.95
+) -> float:
     """CVaR портфеля историческим сценарным методом, в деньгах.
 
     returns — матрица [время × актив]; notionals — знаковые позиции (минус = шорт).

@@ -36,7 +36,10 @@ class TimesFMWorker:
         threads: Optional[int] = None,
     ) -> None:
         self.cmd = list(cmd or DEFAULT_CMD)
-        self.start_timeout_s, self.request_timeout_s = start_timeout_s, request_timeout_s
+        self.start_timeout_s, self.request_timeout_s = (
+            start_timeout_s,
+            request_timeout_s,
+        )
         self.cooldown_s, self.threads = cooldown_s, threads
         self._proc: Optional[subprocess.Popen] = None
         self._out: "queue.Queue[str]" = queue.Queue()
@@ -71,7 +74,9 @@ class TimesFMWorker:
             self._failed_at = time.monotonic()
             return False
         self._out = queue.Queue()
-        threading.Thread(target=self._reader, args=(self._proc, self._out), daemon=True).start()
+        threading.Thread(
+            target=self._reader, args=(self._proc, self._out), daemon=True
+        ).start()
         try:
             ready = json.loads(self._out.get(timeout=self.start_timeout_s) or "{}")
         except (queue.Empty, ValueError):
@@ -107,7 +112,9 @@ class TimesFMWorker:
             self._proc = None
 
     # ── запросы ───────────────────────────────────────────────────────────────
-    def forecast(self, series: Sequence[float], horizon: int) -> Optional[Dict[str, List[float]]]:
+    def forecast(
+        self, series: Sequence[float], horizon: int
+    ) -> Optional[Dict[str, List[float]]]:
         """{"median","mean","lo","hi"} или None, если прогнозист недоступен/ответил ошибкой."""
         with self._lock:
             if not self.alive() and not self._start():
@@ -116,12 +123,18 @@ class TimesFMWorker:
             rid = self._next_id
             try:
                 assert self._proc and self._proc.stdin
-                payload = {"id": rid, "series": [float(v) for v in series], "horizon": int(horizon)}
+                payload = {
+                    "id": rid,
+                    "series": [float(v) for v in series],
+                    "horizon": int(horizon),
+                }
                 self._proc.stdin.write(json.dumps(payload) + "\n")
                 self._proc.stdin.flush()
                 line = self._out.get(timeout=self.request_timeout_s)
             except (queue.Empty, OSError):
-                logger.warning("TimesFM: таймаут или обрыв — воркер перезапустится после паузы")
+                logger.warning(
+                    "TimesFM: таймаут или обрыв — воркер перезапустится после паузы"
+                )
                 self._kill()
                 return None
             if not line:  # процесс умер
@@ -166,7 +179,9 @@ class TimesFMForecaster:
     def __init__(self, worker: Optional[TimesFMWorker] = None) -> None:
         self.worker = worker or TimesFMWorker()
 
-    def predict_direction(self, close_prices: Sequence[float], threshold_pct: float = 0.002) -> str:
+    def predict_direction(
+        self, close_prices: Sequence[float], threshold_pct: float = 0.002
+    ) -> str:
         if len(close_prices) < 10 or not close_prices[-1]:
             return "neutral"
         r = self.worker.forecast(list(close_prices[-512:]), 1)

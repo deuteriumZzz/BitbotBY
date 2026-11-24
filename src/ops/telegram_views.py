@@ -66,6 +66,8 @@ def dbcheck_text(paths: Optional[List[str]] = None) -> str:
             detail = ", ".join(f"{t}={n}" for t, n in r["tables"].items())
         else:
             detail = r["error"] or "; ".join(r["messages"])
-        lines.append(f"{mark} {os.path.basename(r['path'])}: {r.get('size_mb')} МБ, WAL {r.get('wal_mb')} МБ — {detail}")
+        lines.append(
+            f"{mark} {os.path.basename(r['path'])}: {r.get('size_mb')} МБ, WAL {r.get('wal_mb')} МБ — {detail}"
+        )
     lines.append("Проверка по снимку; боевой файл не затронут.")
     return _cut("\n".join(lines))

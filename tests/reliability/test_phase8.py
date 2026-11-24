@@ -28,7 +28,9 @@ def test_calibrators_fix_overconfidence(cls):
     overconf = np.clip(0.5 + (true_p - 0.5) * 2.0, 0.01, 0.99)  # раздуваем уверенность
     fit, test = slice(0, 2000), slice(2000, 4000)
     c = cls().fit(overconf[fit], y[fit])
-    assert cal.ece(c.predict(overconf[test]), y[test]) < cal.ece(overconf[test], y[test])
+    assert cal.ece(c.predict(overconf[test]), y[test]) < cal.ece(
+        overconf[test], y[test]
+    )
 
 
 def test_isotonic_is_monotone():
@@ -87,7 +89,10 @@ def test_metrics_known_values():
     assert fe.rmse([0, 0], [3, 4]) == pytest.approx(np.sqrt(12.5))
     assert fe.mase([3], [2], np.array([1.0, 2.0, 3.0])) == pytest.approx(1.0)
     assert fe.pinball(np.array([1.0]), np.array([0.0]), 0.9) == pytest.approx(0.9)
-    assert fe.directional_accuracy(np.array([2.0]), np.array([3.0]), np.array([1.0])) == 1.0
+    assert (
+        fe.directional_accuracy(np.array([2.0]), np.array([3.0]), np.array([1.0]))
+        == 1.0
+    )
 
 
 def test_evaluate_uses_only_past_and_same_origins():
@@ -109,8 +114,15 @@ def test_seasonal_naive_wins_on_seasonal_series():
     t = np.arange(400)
     s = np.sin(2 * np.pi * t / 24)
     res = fe.evaluate(
-        {"naive": fe.naive, "snaive": fe.seasonal_naive(24), "ma": fe.moving_average(24)},
-        s, [200, 250, 300], 12, season=24,
+        {
+            "naive": fe.naive,
+            "snaive": fe.seasonal_naive(24),
+            "ma": fe.moving_average(24),
+        },
+        s,
+        [200, 250, 300],
+        12,
+        season=24,
     )
     assert res["snaive"]["mae"] < 1e-9 < res["naive"]["mae"]
 
@@ -119,10 +131,16 @@ def test_interval_coverage_and_pinball_reported():
     s = rng.normal(0, 1, 600)
 
     def banded(history, h):
-        return {"median": np.zeros(h), "lo": np.full(h, -1.645), "hi": np.full(h, 1.645)}
+        return {
+            "median": np.zeros(h),
+            "lo": np.full(h, -1.645),
+            "hi": np.full(h, 1.645),
+        }
 
     r = fe.evaluate({"b": banded}, s, list(range(100, 500, 10)), 10)["b"]
-    assert r["coverage"] == pytest.approx(0.9, abs=0.03) and r["nominal_coverage"] == 0.9
+    assert (
+        r["coverage"] == pytest.approx(0.9, abs=0.03) and r["nominal_coverage"] == 0.9
+    )
     assert r["pinball"] > 0
 
 

@@ -51,7 +51,11 @@ def asset_risk(
         n = min(len(r), len(m))
         b = calc_beta(r[-n:], m[-n:])
     else:
-        return {"beta": DEFAULT_BETA, "cvar": cvar, "source": "computed_cvar_default_beta"}
+        return {
+            "beta": DEFAULT_BETA,
+            "cvar": cvar,
+            "source": "computed_cvar_default_beta",
+        }
     return {"beta": b, "cvar": cvar, "source": "computed"}
 
 
@@ -78,7 +82,11 @@ def shadow_verdict(
     for sym, p in positions_before.items():
         risk = asset_risk(sym, returns)
         sources.add(risk["source"])
-        notional = _sign(p.get("side", "buy")) * float(p.get("qty") or 0) * float(p.get("entry") or 0)
+        notional = (
+            _sign(p.get("side", "buy"))
+            * float(p.get("qty") or 0)
+            * float(p.get("entry") or 0)
+        )
         held.append(Position(sym, notional, risk["beta"], risk["cvar"]))
     new = asset_risk(symbol, returns)
     sources.add(new["source"])

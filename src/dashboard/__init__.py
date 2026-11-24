@@ -87,7 +87,9 @@ class _BodyLimit:
         if scope["type"] != "http":
             return await self.inner(scope, receive, send)
         length = dict(scope.get("headers") or []).get(b"content-length")
-        if length is not None and (not length.isdigit() or int(length) > MAX_BODY_BYTES):
+        if length is not None and (
+            not length.isdigit() or int(length) > MAX_BODY_BYTES
+        ):
             resp = JSONResponse({"error": "Payload too large"}, status_code=413)
             return await resp(scope, receive, send)
         seen = 0

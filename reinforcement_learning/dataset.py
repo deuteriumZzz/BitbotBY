@@ -20,7 +20,9 @@ FEATURE_VERSION = "v2.0"  # менять при любом изменении р
 
 def check_causal(df: pd.DataFrame) -> None:
     """Индекс — время: строго возрастает, без дублей и NaN в признаках."""
-    if not isinstance(df.index, pd.DatetimeIndex) and not np.issubdtype(df.index.dtype, np.number):
+    if not isinstance(df.index, pd.DatetimeIndex) and not np.issubdtype(
+        df.index.dtype, np.number
+    ):
         raise ValueError("индекс должен быть временем или числом")
     if not df.index.is_monotonic_increasing or df.index.has_duplicates:
         raise ValueError("индекс должен строго возрастать без дублей")
@@ -36,11 +38,17 @@ def content_hash(df: pd.DataFrame) -> str:
     return h.hexdigest()
 
 
-def build_manifest(df: pd.DataFrame, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def build_manifest(
+    df: pd.DataFrame, params: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
     check_causal(df)
     params = params or {}
     digest = hashlib.sha256(
-        (content_hash(df) + FEATURE_VERSION + json.dumps(params, sort_keys=True, default=str)).encode()
+        (
+            content_hash(df)
+            + FEATURE_VERSION
+            + json.dumps(params, sort_keys=True, default=str)
+        ).encode()
     ).hexdigest()[:16]
     return {
         "dataset_version": digest,
@@ -81,7 +89,9 @@ def fit_normalizer(train: pd.DataFrame) -> Dict[str, Dict[str, float]]:
     }
 
 
-def apply_normalizer(df: pd.DataFrame, stats: Dict[str, Dict[str, float]]) -> pd.DataFrame:
+def apply_normalizer(
+    df: pd.DataFrame, stats: Dict[str, Dict[str, float]]
+) -> pd.DataFrame:
     out = df.copy()
     for c, s in stats.items():
         out[c] = (out[c] - s["mean"]) / s["std"]

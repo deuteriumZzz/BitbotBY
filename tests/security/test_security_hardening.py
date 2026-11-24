@@ -34,7 +34,10 @@ def _keep_secrets():
         (f"POST https://api.telegram.org/bot{BOT_TOKEN}/sendMessage 401", BOT_TOKEN),
         ("headers={'Authorization': 'Bearer abcdefghijklmnop'}", "abcdefghijklmnop"),
         ('{"api_key": "AKIA1234567890XYZ"}', "AKIA1234567890XYZ"),
-        ("X-BAPI-SIGN: 9f86d081884c7d659a2feaa0c55ad015", "9f86d081884c7d659a2feaa0c55ad015"),
+        (
+            "X-BAPI-SIGN: 9f86d081884c7d659a2feaa0c55ad015",
+            "9f86d081884c7d659a2feaa0c55ad015",
+        ),
         ("password=hunter2hunter2", "hunter2hunter2"),
     ],
 )
@@ -185,7 +188,9 @@ async def test_set_leverage_real_failure_returns_false():
 async def test_set_leverage_not_modified_is_success():
     with patch("src.exchange.bybit_api.Config") as cfg:
         cfg.PAPER_TRADING, cfg.MARKET_TYPE = False, "linear"
-        api = _api(Exception('bybit {"retCode":110043,"retMsg":"leverage not modified"}'))
+        api = _api(
+            Exception('bybit {"retCode":110043,"retMsg":"leverage not modified"}')
+        )
         assert await api.set_leverage("BTC/USDT", 3) is True
 
 

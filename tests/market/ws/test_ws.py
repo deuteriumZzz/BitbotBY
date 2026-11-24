@@ -8,7 +8,13 @@ import pytest
 from src.core.execution_reliability import OrderState
 from src.market.ws.book import IGNORED, OK, RESYNC, OrderBook
 from src.market.ws.candles import CandleAssembler, compare_with_rest
-from src.market.ws.client import MarketStream, backoff_delay, run_stream, to_bybit, topics
+from src.market.ws.client import (
+    MarketStream,
+    backoff_delay,
+    run_stream,
+    to_bybit,
+    topics,
+)
 from src.market.ws.health import StreamHealth
 from src.market.ws.private import ExecutionDedup, OrderEvents
 
@@ -21,7 +27,12 @@ def snap(u=10, b=(("100", "5"), ("99", "3")), a=(("101", "4"), ("102", "2"))):
 def test_snapshot_then_deltas_apply_and_remove():
     ob = OrderBook("BTCUSDT")
     assert ob.apply("snapshot", snap()) == OK and ob.ready
-    assert ob.apply("delta", {"u": 11, "b": [["100", "0"], ["98", "7"]], "a": [["101", "9"]]}) == OK
+    assert (
+        ob.apply(
+            "delta", {"u": 11, "b": [["100", "0"], ["98", "7"]], "a": [["101", "9"]]}
+        )
+        == OK
+    )
     assert ob.best_bid == 99 and ob.bids[98] == 7 and ob.asks[101] == 9
     assert ob.spread_bps() == pytest.approx(2 / 100 * 1e4, rel=0.01)
 
@@ -31,7 +42,9 @@ def test_gap_requires_resync_and_blocks_until_snapshot():
     ob.apply("snapshot", snap(u=10))
     assert ob.apply("delta", {"u": 12, "b": [], "a": []}) == RESYNC
     assert not ob.ready and ob.gaps == 1
-    assert ob.apply("delta", {"u": 13, "b": [], "a": []}) == IGNORED  # до нового snapshot
+    assert (
+        ob.apply("delta", {"u": 13, "b": [], "a": []}) == IGNORED
+    )  # до нового snapshot
     assert ob.imbalance() is None
     assert ob.apply("snapshot", snap(u=20)) == OK and ob.ready
 
@@ -60,7 +73,9 @@ def test_delta_before_snapshot_ignored_and_reset():
 
 def test_imbalance_and_trim():
     ob = OrderBook("X", depth=2)
-    ob.apply("snapshot", snap(b=(("100", "9"), ("99", "1")), a=(("101", "1"), ("102", "1"))))
+    ob.apply(
+        "snapshot", snap(b=(("100", "9"), ("99", "1")), a=(("101", "1"), ("102", "1")))
+    )
     assert ob.imbalance(2) == pytest.approx((10 - 2) / 12)
     ob.apply("delta", {"u": 11, "b": [[str(90 - i), "1"] for i in range(10)], "a": []})
     assert len(ob.bids) <= 4  # depth*2
@@ -94,12 +109,22 @@ def test_silent_stream_detected_and_snapshot_shape():
 
 # ── свечи ─────────────────────────────────────────────────────────────────────
 def k(start, confirm=True, close=1.0, vol=10):
-    return {"start": start, "open": 1, "high": 2, "low": 0.5, "close": close, "volume": vol, "confirm": confirm}
+    return {
+        "start": start,
+        "open": 1,
+        "high": 2,
+        "low": 0.5,
+        "close": close,
+        "volume": vol,
+        "confirm": confirm,
+    }
 
 
 def test_only_confirmed_candles_enter_history():
     c = CandleAssembler(900_000)
-    assert not c.on_kline(k(0, confirm=False)) and c.confirmed == [] and c.forming[0] == 0
+    assert (
+        not c.on_kline(k(0, confirm=False)) and c.confirmed == [] and c.forming[0] == 0
+    )
     assert c.on_kline(k(0)) and c.forming is None
     assert not c.on_kline(k(0))  # дубликат
     assert c.on_kline(k(900_000))
@@ -110,9 +135,17 @@ def test_only_confirmed_candles_enter_history():
 
 
 def test_compare_with_rest_detects_mismatch_and_missing():
-    ws = [[0, 1, 2, 0.5, 1.0, 10], [900, 1, 2, 0.5, 1.0, 10], [3600, 1, 2, 0.5, 1.0, 10]]
-    rest = [[0, 1, 2, 0.5, 1.0, 10], [900, 1, 2, 0.5, 1.1, 10], [1800, 1, 2, 0.5, 1.0, 10],
-            [3600, 1, 2, 0.5, 1.0, 10]]
+    ws = [
+        [0, 1, 2, 0.5, 1.0, 10],
+        [900, 1, 2, 0.5, 1.0, 10],
+        [3600, 1, 2, 0.5, 1.0, 10],
+    ]
+    rest = [
+        [0, 1, 2, 0.5, 1.0, 10],
+        [900, 1, 2, 0.5, 1.1, 10],
+        [1800, 1, 2, 0.5, 1.0, 10],
+        [3600, 1, 2, 0.5, 1.0, 10],
+    ]
     r = compare_with_rest(ws, rest)
     assert r["mismatched"] == [900] and r["missing_in_ws"] == [1800] and not r["ok"]
     assert compare_with_rest(ws[:1], rest[:1])["ok"]
@@ -125,11 +158,18 @@ def ev(status, t, oid="o1"):
 
 def test_order_events_dedupe_reorder_and_terminal():
     oe = OrderEvents()
-    assert oe.on_event(ev("PartiallyFilled", 2)) == (OrderState.PARTIALLY_FILLED, "accepted")
+    assert oe.on_event(ev("PartiallyFilled", 2)) == (
+        OrderState.PARTIALLY_FILLED,
+        "accepted",
+    )
     assert oe.on_event(ev("PartiallyFilled", 2))[1] == "duplicate"
     assert oe.on_event(ev("Filled", 4))[0] == OrderState.FILLED
-    assert oe.on_event(ev("PartiallyFilled", 3))[1] == "out_of_order"  # пришло позже, чем Filled
-    assert oe.on_event(ev("Cancelled", 5))[1] == "invalid_transition"  # из финального не выходим
+    assert (
+        oe.on_event(ev("PartiallyFilled", 3))[1] == "out_of_order"
+    )  # пришло позже, чем Filled
+    assert (
+        oe.on_event(ev("Cancelled", 5))[1] == "invalid_transition"
+    )  # из финального не выходим
     assert oe.state_of("o1") == OrderState.FILLED
     assert oe.dropped["duplicate"] == 1 and oe.dropped["out_of_order"] == 1
 
@@ -159,7 +199,11 @@ def test_execution_dedup_bounded():
 def test_topics_and_symbol_mapping():
     assert to_bybit("BTC/USDT:USDT") == "BTCUSDT"
     assert topics(["BTC/USDT"], "15m", 50) == [
-        "kline.15.BTCUSDT", "orderbook.50.BTCUSDT", "tickers.BTCUSDT", "publicTrade.BTCUSDT"]
+        "kline.15.BTCUSDT",
+        "orderbook.50.BTCUSDT",
+        "tickers.BTCUSDT",
+        "publicTrade.BTCUSDT",
+    ]
 
 
 def test_backoff_has_jitter_and_cap():
@@ -169,8 +213,19 @@ def test_backoff_has_jitter_and_cap():
 
 
 def ob_msg(typ, u, b=(), a=()):
-    return json.dumps({"topic": "orderbook.50.BTCUSDT", "type": typ, "ts": 1,
-                       "data": {"s": "BTCUSDT", "u": u, "b": [list(x) for x in b], "a": [list(x) for x in a]}})
+    return json.dumps(
+        {
+            "topic": "orderbook.50.BTCUSDT",
+            "type": typ,
+            "ts": 1,
+            "data": {
+                "s": "BTCUSDT",
+                "u": u,
+                "b": [list(x) for x in b],
+                "a": [list(x) for x in a],
+            },
+        }
+    )
 
 
 def test_stream_routes_and_requests_resubscribe_on_gap():
@@ -181,7 +236,15 @@ def test_stream_routes_and_requests_resubscribe_on_gap():
     assert ms.health.gaps["orderbook.BTCUSDT"] == 1
     ms.handle(json.dumps({"topic": "kline.15.BTCUSDT", "ts": 1, "data": [k(0)]}))
     assert ms.candles["BTCUSDT"].ohlcv()[0][0] == 0
-    ms.handle(json.dumps({"topic": "tickers.BTCUSDT", "ts": 1, "data": {"fundingRate": "0.0001", "x": ""}}))
+    ms.handle(
+        json.dumps(
+            {
+                "topic": "tickers.BTCUSDT",
+                "ts": 1,
+                "data": {"fundingRate": "0.0001", "x": ""},
+            }
+        )
+    )
     assert ms.tickers["BTCUSDT"] == {"fundingRate": "0.0001"}
 
 
@@ -209,7 +272,9 @@ class FakeWS:
 
 async def test_reconnects_with_backoff_and_resets_book():
     stop = asyncio.Event()
-    ws1 = FakeWS([ob_msg("snapshot", 1, [("100", "1")], [("101", "1")]), ConnectionError("drop")])
+    ws1 = FakeWS(
+        [ob_msg("snapshot", 1, [("100", "1")], [("101", "1")]), ConnectionError("drop")]
+    )
     ws2 = FakeWS([ob_msg("snapshot", 7, [("100", "2")], [("101", "1")]), "STOP"], stop)
     conns, sleeps = [ws1, ws2], []
 
@@ -221,20 +286,35 @@ async def test_reconnects_with_backoff_and_resets_book():
 
     ms = MarketStream(["BTC/USDT"])
     await asyncio.wait_for(
-        run_stream(connect, ms, ["orderbook.50.BTCUSDT"], stop, sleep=sleep, rng=lambda: 1.0), 5)
+        run_stream(
+            connect, ms, ["orderbook.50.BTCUSDT"], stop, sleep=sleep, rng=lambda: 1.0
+        ),
+        5,
+    )
     assert sleeps == [2.0] and ms.health.reconnects == 1 and ws1.closed and ws2.closed
-    assert ws1.sent[0]["op"] == "subscribe" and ws2.sent[0]["op"] == "subscribe"  # повторная подписка
+    assert (
+        ws1.sent[0]["op"] == "subscribe" and ws2.sent[0]["op"] == "subscribe"
+    )  # повторная подписка
     assert ms.books["BTCUSDT"].ready and ms.books["BTCUSDT"].last_u == 7
 
 
 async def test_gap_triggers_unsubscribe_subscribe_pair():
     stop = asyncio.Event()
-    ws = FakeWS([ob_msg("snapshot", 1, [("100", "1")], [("101", "1")]), ob_msg("delta", 9), "STOP"], stop)
+    ws = FakeWS(
+        [
+            ob_msg("snapshot", 1, [("100", "1")], [("101", "1")]),
+            ob_msg("delta", 9),
+            "STOP",
+        ],
+        stop,
+    )
 
     async def connect():
         return ws
 
-    await asyncio.wait_for(run_stream(connect, MarketStream(["BTC/USDT"]), ["t"], stop), 5)
+    await asyncio.wait_for(
+        run_stream(connect, MarketStream(["BTC/USDT"]), ["t"], stop), 5
+    )
     assert [m["op"] for m in ws.sent][:3] == ["subscribe", "unsubscribe", "subscribe"]
 
 
@@ -251,9 +331,20 @@ async def test_silent_connection_is_dropped_and_ping_sent():
         return None
 
     await asyncio.wait_for(
-        run_stream(connect, MarketStream(["BTC/USDT"]), ["t"], stop, sleep=sleep,
-                   stale_after=0.06, ping_every=0.02), 5)
-    assert {"op": "ping"} in ws1.sent and ws1.closed  # пинговали, затем бросили молчащее соединение
+        run_stream(
+            connect,
+            MarketStream(["BTC/USDT"]),
+            ["t"],
+            stop,
+            sleep=sleep,
+            stale_after=0.06,
+            ping_every=0.02,
+        ),
+        5,
+    )
+    assert {
+        "op": "ping"
+    } in ws1.sent and ws1.closed  # пинговали, затем бросили молчащее соединение
     assert not conns
 
 
@@ -271,5 +362,7 @@ async def test_connect_failure_is_retried():
     async def sleep(_):
         return None
 
-    await asyncio.wait_for(run_stream(connect, MarketStream(["BTC/USDT"]), ["t"], stop, sleep=sleep), 5)
+    await asyncio.wait_for(
+        run_stream(connect, MarketStream(["BTC/USDT"]), ["t"], stop, sleep=sleep), 5
+    )
     assert len(attempts) == 3

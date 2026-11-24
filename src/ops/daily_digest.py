@@ -28,7 +28,9 @@ def _parse(ts: Any) -> Optional[datetime]:
 
 
 def in_window(
-    records: Iterable[Dict[str, Any]], hours: float = 24.0, now: Optional[datetime] = None
+    records: Iterable[Dict[str, Any]],
+    hours: float = 24.0,
+    now: Optional[datetime] = None,
 ) -> List[Dict[str, Any]]:
     now = now or datetime.now(timezone.utc)
     start = now - timedelta(hours=hours)
@@ -41,7 +43,9 @@ def in_window(
 
 
 def build_digest(
-    records: Iterable[Dict[str, Any]], hours: float = 24.0, now: Optional[datetime] = None
+    records: Iterable[Dict[str, Any]],
+    hours: float = 24.0,
+    now: Optional[datetime] = None,
 ) -> Dict[str, Any]:
     recs = in_window(records, hours, now)
     rep = build_report(recs)
@@ -49,16 +53,22 @@ def build_digest(
     total_snaps = sum(dq.values())
     bad = total_snaps - dq.get("VALID", 0)
     ai = rep["ai"]
-    reconciles = sum(1 for r in recs if r.get("kind") in ("reconcile", "reconcile_order"))
+    reconciles = sum(
+        1 for r in recs if r.get("kind") in ("reconcile", "reconcile_order")
+    )
     cycles = len({r.get("trace_id") for r in recs if r.get("trace_id")})
 
     alerts: List[str] = []
     if ai["n_calls"] and ai["exhausted"] / ai["n_calls"] > AI_EXHAUSTED_ALERT:
-        alerts.append(f"AI: цепочка провайдеров исчерпана в {ai['exhausted']}/{ai['n_calls']} вызовов")
+        alerts.append(
+            f"AI: цепочка провайдеров исчерпана в {ai['exhausted']}/{ai['n_calls']} вызовов"
+        )
     if total_snaps and bad / total_snaps > BAD_DATA_ALERT:
         alerts.append(f"Данные: {bad}/{total_snaps} снимков не VALID")
     if reconciles >= RECONCILE_ALERT:
-        alerts.append(f"Биржа: {reconciles} событий сверки (расхождение/неизвестный исход)")
+        alerts.append(
+            f"Биржа: {reconciles} событий сверки (расхождение/неизвестный исход)"
+        )
     if not recs:
         alerts.append("Журнал за окно пуст: бот не писал решений")
 

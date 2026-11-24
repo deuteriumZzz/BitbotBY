@@ -60,11 +60,18 @@ def _requirements(src: str, dst: str, ev: Dict[str, Any]) -> List[str]:
     if (src, dst) == ("candidate", "validated"):
         wf = ev.get("walk_forward") or {}
         need(bool(wf.get("passed")), "walk_forward.passed")
-        need(int(wf.get("n_folds", 0)) >= MIN_WF_FOLDS, f"walk_forward.n_folds>={MIN_WF_FOLDS}")
+        need(
+            int(wf.get("n_folds", 0)) >= MIN_WF_FOLDS,
+            f"walk_forward.n_folds>={MIN_WF_FOLDS}",
+        )
         need(bool(ev.get("dataset_version")), "dataset_version")
     else:
         need(bool(ev.get("approved_by")), "approved_by")
-        key = {"paper": "paper_days", "shadow": "shadow_days", "canary": "canary_days"}.get(src)
+        key = {
+            "paper": "paper_days",
+            "shadow": "shadow_days",
+            "canary": "canary_days",
+        }.get(src)
         if key:  # выходя из стадии, нужно отработать на ней минимум дней
             need(float(ev.get(key, 0)) >= MIN_DAYS[src], f"{key}>={MIN_DAYS[src]}")
     return problems
@@ -81,7 +88,9 @@ class ModelRegistry:
         try:
             with open(self.path, encoding="utf-8") as f:
                 data = json.load(f)
-            return data if isinstance(data, dict) and "models" in data else {"models": {}}
+            return (
+                data if isinstance(data, dict) and "models" in data else {"models": {}}
+            )
         except (OSError, ValueError):
             return {"models": {}}
 
@@ -144,9 +153,13 @@ class ModelRegistry:
         return entry["stage"] if entry else UNREGISTERED
 
     def is_executable(self, model_path: str, *, paper: bool) -> bool:
-        return self.stage_of_path(model_path) in EXECUTABLE["paper" if paper else "live"]
+        return (
+            self.stage_of_path(model_path) in EXECUTABLE["paper" if paper else "live"]
+        )
 
-    def promote(self, model_id: str, evidence: Dict[str, Any], by: str) -> Dict[str, Any]:
+    def promote(
+        self, model_id: str, evidence: Dict[str, Any], by: str
+    ) -> Dict[str, Any]:
         """Шаг на следующую стадию при выполненных требованиях."""
         with self._lock:
             data = self._load()
@@ -159,17 +172,25 @@ class ModelRegistry:
             dst = STAGES[STAGES.index(src) + 1]
             problems = _requirements(src, dst, evidence)
             if problems:
-                raise PromotionError(f"{src}→{dst}: не выполнено: {', '.join(problems)}")
-            if dst == "production":  # прежняя production-версия уходит в резерв для отката
+                raise PromotionError(
+                    f"{src}→{dst}: не выполнено: {', '.join(problems)}"
+                )
+            if (
+                dst == "production"
+            ):  # прежняя production-версия уходит в резерв для отката
                 for other in data["models"].values():
                     if other["stage"] == "production":
-                        self._move(other, "retired", {"reason": f"заменена {model_id}"}, by)
+                        self._move(
+                            other, "retired", {"reason": f"заменена {model_id}"}, by
+                        )
                         other["retired_from"] = "production"
             self._move(entry, dst, evidence, by)
             self._save(data)
             return entry
 
-    def demote(self, model_id: str, to_stage: str, reason: str, by: str) -> Dict[str, Any]:
+    def demote(
+        self, model_id: str, to_stage: str, reason: str, by: str
+    ) -> Dict[str, Any]:
         """Понижение или отклонение: всегда разрешено, причина обязательна."""
         if not reason:
             raise PromotionError("причина обязательна")
@@ -202,8 +223,16 @@ class ModelRegistry:
             return target
 
     @staticmethod
-    def _move(entry: Dict[str, Any], dst: str, evidence: Dict[str, Any], by: str) -> None:
+    def _move(
+        entry: Dict[str, Any], dst: str, evidence: Dict[str, Any], by: str
+    ) -> None:
         entry["history"].append(
-            {"ts": _now(), "from": entry["stage"], "to": dst, "evidence": evidence, "by": by}
+            {
+                "ts": _now(),
+                "from": entry["stage"],
+                "to": dst,
+                "evidence": evidence,
+                "by": by,
+            }
         )
         entry["stage"] = dst

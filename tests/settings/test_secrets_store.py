@@ -206,7 +206,12 @@ def test_x_account_replace_and_remove(store):
 def test_x_accounts_keep_official_status(store, monkeypatch):
     # Ключ — в хранилище: из окружения ключи сервисов больше не берутся.
     ss.save(
-        ss.BY_ID["twitter"], {"TWITTER_BEARER_TOKEN": "AAAA" * 10}, None, "ok", "Ключ рабочий.", "test"
+        ss.BY_ID["twitter"],
+        {"TWITTER_BEARER_TOKEN": "AAAA" * 10},
+        None,
+        "ok",
+        "Ключ рабочий.",
+        "test",
     )
     ss.x_add_account("alice", "pw", "a@m.com", "x", "test")
     assert _x_status() == "ok"
@@ -301,7 +306,14 @@ def test_telegram_chats_by_link_code_only_the_sender_of_the_code():
 def test_service_key_from_env_is_ignored(store, monkeypatch):
     monkeypatch.setenv("BYBIT_API_KEY", "env-key-should-not-work")
     assert ss.get_value("BYBIT_API_KEY") is None
-    ss.save(ss.BY_ID["bybit"], {"BYBIT_API_KEY": "stored-key-123456"}, None, "ok", "", "test")
+    ss.save(
+        ss.BY_ID["bybit"],
+        {"BYBIT_API_KEY": "stored-key-123456"},
+        None,
+        "ok",
+        "",
+        "test",
+    )
     assert ss.get_value("BYBIT_API_KEY") == "stored-key-123456"
 
 
@@ -320,7 +332,9 @@ def test_apply_secrets_strips_env_only_keys(store, monkeypatch):
 
     monkeypatch.setenv("BYBIT_API_KEY", "from-env-at-import")
     monkeypatch.setenv("DASHBOARD_API_KEY", "panel-key")
-    ss.save(ss.BY_ID["groq"], {"GROQ_API_KEY": "gsk_" + "a" * 40}, None, "ok", "", "test")
+    ss.save(
+        ss.BY_ID["groq"], {"GROQ_API_KEY": "gsk_" + "a" * 40}, None, "ok", "", "test"
+    )
     ss.apply_secrets(Cfg)
     assert Cfg.BYBIT_API_KEY == "" and "BYBIT_API_KEY" not in os.environ
     assert Cfg.GROQ_API_KEY.startswith("gsk_")

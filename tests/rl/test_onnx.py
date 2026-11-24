@@ -18,8 +18,16 @@ def tiny_model(tmp_path_factory):
     n = 200
     close = 100 * np.exp(np.cumsum(rng.normal(0, 0.002, n)))
     env = TradingEnvV2(rng.normal(size=(n, 13)).astype(np.float32), close, close.copy())
-    model = SAC("MlpPolicy", env, seed=0, verbose=0, device="cpu", learning_starts=20, batch_size=16,
-                buffer_size=1000)
+    model = SAC(
+        "MlpPolicy",
+        env,
+        seed=0,
+        verbose=0,
+        device="cpu",
+        learning_starts=20,
+        batch_size=16,
+        buffer_size=1000,
+    )
     model.learn(60)
     path = str(tmp_path_factory.mktemp("onnx") / "tiny.zip")
     model.save(path[:-4])

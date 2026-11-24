@@ -51,14 +51,24 @@ def audit_decision(
         if kind == "execution" and r.get("decision_id") == decision_id:
             chain["execution"] = r
         elif kind == "outcome" and r.get("decision_id") == decision_id:
-            chain["outcome"] = r  # исход пишется при закрытии, в другом цикле — связь по decision_id
-        elif r.get("trace_id") == trace_id and kind in STAGES and kind not in ("signals", "execution"):
+            chain["outcome"] = (
+                r  # исход пишется при закрытии, в другом цикле — связь по decision_id
+            )
+        elif (
+            r.get("trace_id") == trace_id
+            and kind in STAGES
+            and kind not in ("signals", "execution")
+        ):
             chain.setdefault(kind, r)  # первая запись цикла этого типа
     if outcome is not None:
         chain["outcome"] = outcome
 
     gaps: List[str] = [s for s in REQUIRED if s not in chain]
-    if "execution" in chain and chain["execution"].get("opened") and "outcome" not in chain:
+    if (
+        "execution" in chain
+        and chain["execution"].get("opened")
+        and "outcome" not in chain
+    ):
         gaps.append("outcome")  # позиция открыта, исхода нет
     return {
         "decision_id": decision_id,
@@ -79,7 +89,9 @@ def format_audit(a: Dict[str, Any]) -> str:
     ex = a["chain"].get("execution")
     if ex:
         lines.append(
-            "Исполнение: открыто" if ex.get("opened") else f"Исполнение: нет — {ex.get('reject') or '?'}"
+            "Исполнение: открыто"
+            if ex.get("opened")
+            else f"Исполнение: нет — {ex.get('reject') or '?'}"
         )
     out = a["chain"].get("outcome")
     if out:

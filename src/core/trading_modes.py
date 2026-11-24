@@ -14,7 +14,7 @@ from typing import Dict, Tuple
 
 REASON_SAC_MISSING = "sac_model_missing"
 REASON_SAC_NOT_APPROVED = "sac_not_approved"
-REASON_AI_UNAVAILABLE ="ai_unavailable"
+REASON_AI_UNAVAILABLE = "ai_unavailable"
 REASON_UNKNOWN_MODE = "unknown_mode"
 
 

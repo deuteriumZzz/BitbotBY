@@ -23,8 +23,14 @@ class CandleAssembler:
 
     @staticmethod
     def _row(k: Dict[str, Any]) -> List[float]:
-        return [int(k["start"]), float(k["open"]), float(k["high"]), float(k["low"]),
-                float(k["close"]), float(k["volume"])]
+        return [
+            int(k["start"]),
+            float(k["open"]),
+            float(k["high"]),
+            float(k["low"]),
+            float(k["close"]),
+            float(k["volume"]),
+        ]
 
     def on_kline(self, k: Dict[str, Any]) -> bool:
         """True, если принята новая подтверждённая свеча."""
@@ -68,7 +74,13 @@ def compare_with_rest(
             continue
         compared += 1
         bad = False
-        for i, tol in ((1, price_tol), (2, price_tol), (3, price_tol), (4, price_tol), (5, volume_tol)):
+        for i, tol in (
+            (1, price_tol),
+            (2, price_tol),
+            (3, price_tol),
+            (4, price_tol),
+            (5, volume_tol),
+        ):
             base = abs(r[i]) or 1.0
             rel = abs(w[i] - r[i]) / base
             max_rel = max(max_rel, rel)

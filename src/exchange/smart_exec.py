@@ -26,12 +26,16 @@ def twap_plan(
     total = math.floor(total_qty / step + 1e-9) * step
     if total < min_qty:
         raise ValueError("объём меньше минимального ордера")
-    n = max(1, min(slices, int(total / max(min_qty, step) + 1e-9)))  # не дробим ниже минимума
+    n = max(
+        1, min(slices, int(total / max(min_qty, step) + 1e-9))
+    )  # не дробим ниже минимума
     base = math.floor(total / n / step + 1e-9) * step
     qtys = [base] * n
     qtys[-1] = round(total - base * (n - 1), 12)
     gap = duration_s / n if n > 1 else 0.0
-    return [{"at_s": round(i * gap, 6), "qty": round(q, 12)} for i, q in enumerate(qtys)]
+    return [
+        {"at_s": round(i * gap, 6), "qty": round(q, 12)} for i, q in enumerate(qtys)
+    ]
 
 
 # ── Post-Only chase ───────────────────────────────────────────────────────────
@@ -71,8 +75,15 @@ def chase_next(
         st.order_price = target
         return {"action": "place", "price": target}
     if now - st.started_at >= prm.max_wait_s or st.reprices >= prm.max_reprices:
-        return {"action": "market_fallback" if prm.allow_market_fallback else "give_up", "price": None}
-    away = (target - st.order_price) / tick if side == "buy" else (st.order_price - target) / tick
+        return {
+            "action": "market_fallback" if prm.allow_market_fallback else "give_up",
+            "price": None,
+        }
+    away = (
+        (target - st.order_price) / tick
+        if side == "buy"
+        else (st.order_price - target) / tick
+    )
     if away >= prm.reprice_ticks:  # рынок убежал от нашей заявки
         st.order_price, st.reprices = target, st.reprices + 1
         return {"action": "reprice", "price": target}
@@ -109,8 +120,16 @@ def partial_fill_decision(
     if age_s < max_age_s:
         return {"action": "wait", "protect_qty": filled_qty, "cancel_remainder": False}
     if ratio >= min_fill_ratio:
-        return {"action": "accept_partial", "protect_qty": filled_qty, "cancel_remainder": True}
-    return {"action": "cancel_and_close_filled", "protect_qty": filled_qty, "cancel_remainder": True}
+        return {
+            "action": "accept_partial",
+            "protect_qty": filled_qty,
+            "cancel_remainder": True,
+        }
+    return {
+        "action": "cancel_and_close_filled",
+        "protect_qty": filled_qty,
+        "cancel_remainder": True,
+    }
 
 
 # ── Резерв маржи под ордера «в полёте» ────────────────────────────────────────
@@ -129,7 +148,9 @@ class InflightMargin:
         if notional < 0 or leverage <= 0:
             raise ValueError("notional ≥ 0, leverage > 0")
         with self._lock:
-            self._r[order_id] = notional / leverage  # повтор с тем же id — заменяет, не суммирует
+            self._r[order_id] = (
+                notional / leverage
+            )  # повтор с тем же id — заменяет, не суммирует
             return self._r[order_id]
 
     def release(self, order_id: str) -> None:

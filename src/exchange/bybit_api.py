@@ -707,7 +707,11 @@ class BybitAPI:
                 )
                 oid = order.get("id")
                 self.logger.info(
-                    "Exchange %s placed: %s @ %s id=%s", label, symbol, price or params.get("stopPrice"), oid
+                    "Exchange %s placed: %s @ %s id=%s",
+                    label,
+                    symbol,
+                    price or params.get("stopPrice"),
+                    oid,
                 )
                 return oid
             except asyncio.CancelledError:
@@ -715,25 +719,37 @@ class BybitAPI:
             except (ccxt.NetworkError, ccxt.InvalidOrder, ccxt.BadRequest) as e:
                 network = isinstance(e, ccxt.NetworkError)
                 if not network and "duplicate" not in str(e).lower():
-                    self.logger.error("Failed to place exchange %s for %s: %s", label, symbol, e)
+                    self.logger.error(
+                        "Failed to place exchange %s for %s: %s", label, symbol, e
+                    )
                     return None
                 existing = await self._find_order_by_client_id(symbol, client_order_id)
                 if existing is not None:
                     self.logger.info(
-                        "Exchange %s for %s already placed (found by clientOrderId)", label, symbol
+                        "Exchange %s for %s already placed (found by clientOrderId)",
+                        label,
+                        symbol,
                     )
                     return existing.get("id")
                 if not network:
                     self.logger.error(
-                        "Duplicate %s clientOrderId for %s but order not found", label, symbol
+                        "Duplicate %s clientOrderId for %s but order not found",
+                        label,
+                        symbol,
                     )
                     return None
                 self.logger.warning(
-                    "Exchange %s for %s: attempt %d/2 failed: %s", label, symbol, attempt + 1, e
+                    "Exchange %s for %s: attempt %d/2 failed: %s",
+                    label,
+                    symbol,
+                    attempt + 1,
+                    e,
                 )
                 await asyncio.sleep(0.5)
             except Exception as e:
-                self.logger.error("Failed to place exchange %s for %s: %s", label, symbol, e)
+                self.logger.error(
+                    "Failed to place exchange %s for %s: %s", label, symbol, e
+                )
                 return None
         self._note_ambiguous(symbol, client_order_id, side, qty)
         pending[(symbol, label)] = client_order_id
@@ -870,7 +886,9 @@ class BybitAPI:
             # 110043 «leverage not modified» — плечо уже такое, это не ошибка.
             if "110043" not in str(e) and "not modified" not in str(e).lower():
                 # Иначе на бирже осталось прежнее плечо: позиция с ним — другой риск.
-                self.logger.warning("set_leverage %s → %dx failed: %s", symbol, leverage, e)
+                self.logger.warning(
+                    "set_leverage %s → %dx failed: %s", symbol, leverage, e
+                )
                 return False
             self.logger.debug("set_leverage %s: %s", symbol, e)
         self._leverage_cache[symbol] = leverage

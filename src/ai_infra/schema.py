@@ -16,7 +16,16 @@ from collections import Counter
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 ALLOWED_KEYS = frozenset(
-    {"symbol", "action", "strategy", "confidence", "entry", "stop_loss", "take_profit", "reasoning"}
+    {
+        "symbol",
+        "action",
+        "strategy",
+        "confidence",
+        "entry",
+        "stop_loss",
+        "take_profit",
+        "reasoning",
+    }
 )
 REQUIRED_KEYS = ("symbol", "action", "strategy", "confidence")
 ACTIONS = ("buy", "sell", "hold")
@@ -72,7 +81,9 @@ def validate_recommendation(
         if not ok:
             reasons.append("sl_tp_wrong_side")
     reasoning = rec.get("reasoning")
-    if reasoning is not None and (not isinstance(reasoning, str) or len(reasoning) > MAX_REASONING):
+    if reasoning is not None and (
+        not isinstance(reasoning, str) or len(reasoning) > MAX_REASONING
+    ):
         reasons.append("bad_reasoning")
 
     if reasons:

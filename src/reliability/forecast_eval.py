@@ -24,7 +24,11 @@ def seasonal_naive(season: int) -> Forecaster:
     def f(history: np.ndarray, h: int) -> Dict[str, np.ndarray]:
         if len(history) < season:
             return naive(history, h)
-        return {"median": np.array([history[-season + (i % season)] for i in range(h)], float)}
+        return {
+            "median": np.array(
+                [history[-season + (i % season)] for i in range(h)], float
+            )
+        }
 
     return f
 
@@ -57,7 +61,9 @@ def pinball(y: np.ndarray, q: np.ndarray, tau: float) -> float:
 
 def directional_accuracy(y: np.ndarray, yhat: np.ndarray, last: np.ndarray) -> float:
     """Доля случаев, когда знак (прогноз − последнее наблюдение) совпал со знаком факта."""
-    return float(np.mean(np.sign(np.asarray(yhat) - last) == np.sign(np.asarray(y) - last)))
+    return float(
+        np.mean(np.sign(np.asarray(yhat) - last) == np.sign(np.asarray(y) - last))
+    )
 
 
 def evaluate(
@@ -95,7 +101,9 @@ def evaluate(
             "n": len(y),
             "mae": mae(y, p),
             "rmse": rmse(y, p),
-            "mase": float(np.mean([mase(a, b, c, season) for a, b, c in zip(ys, yh, ins)])),
+            "mase": float(
+                np.mean([mase(a, b, c, season) for a, b, c in zip(ys, yh, ins)])
+            ),
             "directional_accuracy": directional_accuracy(y, p, l),
         }
         if lo and len(lo) == len(ys):

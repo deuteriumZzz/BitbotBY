@@ -33,7 +33,12 @@ def ks(expected: np.ndarray, actual: np.ndarray) -> Tuple[float, float]:
     a, b = np.sort(np.asarray(expected, float)), np.sort(np.asarray(actual, float))
     grid = np.concatenate([a, b])
     d = float(
-        np.max(np.abs(np.searchsorted(a, grid, "right") / len(a) - np.searchsorted(b, grid, "right") / len(b)))
+        np.max(
+            np.abs(
+                np.searchsorted(a, grid, "right") / len(a)
+                - np.searchsorted(b, grid, "right") / len(b)
+            )
+        )
     )
     en = np.sqrt(len(a) * len(b) / (len(a) + len(b)))
     lam = (en + 0.12 + 0.11 / en) * d  # асимптотика Колмогорова с поправкой Стивенса

@@ -28,15 +28,33 @@ class FailurePolicy:
 
 
 POLICIES: Dict[str, FailurePolicy] = {
-    "llm_unavailable": FailurePolicy(NEUTRAL, True, "поправка AI пропускается; цикл не блокируется"),
-    "llm_invalid_output": FailurePolicy(REJECT, True, "ответ отбрасывается, повтор ≤N, затем нет голоса"),
-    "forecaster_unavailable": FailurePolicy(NEUTRAL, True, "прогнозная поправка нейтральна; Hybrid+Forecasting → Hybrid"),
+    "llm_unavailable": FailurePolicy(
+        NEUTRAL, True, "поправка AI пропускается; цикл не блокируется"
+    ),
+    "llm_invalid_output": FailurePolicy(
+        REJECT, True, "ответ отбрасывается, повтор ≤N, затем нет голоса"
+    ),
+    "forecaster_unavailable": FailurePolicy(
+        NEUTRAL, True, "прогнозная поправка нейтральна; Hybrid+Forecasting → Hybrid"
+    ),
     "sac_failure": FailurePolicy(NO_VOTE, True, "SAC-вклад отсутствует"),
-    "sac_failure_standalone": FailurePolicy(BLOCK_ENTRIES, True, "режим SAC Standalone без SAC: новых входов нет"),
-    "rag_failure": FailurePolicy(DEGRADE, True, "решение без RAG, контекст пуст, пометка"),
-    "stale_or_invalid_data": FailurePolicy(BLOCK_ENTRIES, True, "INSUFFICIENT_DATA, новых входов нет"),
-    "database_failure": FailurePolicy(BLOCK_ENTRIES, True, "позиции ведёт Risk Engine по последнему состоянию + reconcile"),
-    "redis_failure": FailurePolicy(DEGRADE, True, "in-memory/БД, критичное состояние не в Redis"),
+    "sac_failure_standalone": FailurePolicy(
+        BLOCK_ENTRIES, True, "режим SAC Standalone без SAC: новых входов нет"
+    ),
+    "rag_failure": FailurePolicy(
+        DEGRADE, True, "решение без RAG, контекст пуст, пометка"
+    ),
+    "stale_or_invalid_data": FailurePolicy(
+        BLOCK_ENTRIES, True, "INSUFFICIENT_DATA, новых входов нет"
+    ),
+    "database_failure": FailurePolicy(
+        BLOCK_ENTRIES,
+        True,
+        "позиции ведёт Risk Engine по последнему состоянию + reconcile",
+    ),
+    "redis_failure": FailurePolicy(
+        DEGRADE, True, "in-memory/БД, критичное состояние не в Redis"
+    ),
     "risk_validation_failure": FailurePolicy(REJECT, True, "отказ, причина в Ledger"),
 }
 
@@ -46,7 +64,10 @@ _NEVER_OPENS = {NEUTRAL, NO_VOTE, BLOCK_ENTRIES, DEGRADE, REJECT}
 
 def policy_for(failure: str) -> FailurePolicy:
     """Политика сбоя; неизвестный сбой — самый безопасный вариант (запрет входов)."""
-    return POLICIES.get(failure, FailurePolicy(BLOCK_ENTRIES, True, "неизвестный сбой: безопасный отказ"))
+    return POLICIES.get(
+        failure,
+        FailurePolicy(BLOCK_ENTRIES, True, "неизвестный сбой: безопасный отказ"),
+    )
 
 
 def never_confirms_trade(failure: str) -> bool:

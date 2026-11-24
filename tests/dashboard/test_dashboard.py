@@ -318,7 +318,9 @@ class TestWebhookAlerts:
     def test_webhook_without_configured_secret_is_forbidden(self, monkeypatch, client):
         monkeypatch.delenv("ALERTMANAGER_WEBHOOK_SECRET")
         with patch("src.dashboard.routers.ops._send_telegram_sync") as mock_tg:
-            resp = client.post("/webhook/alerts", json={"alerts": [{"status": "firing"}]})
+            resp = client.post(
+                "/webhook/alerts", json={"alerts": [{"status": "firing"}]}
+            )
         assert resp.status_code == 403
         mock_tg.assert_not_called()
 

@@ -31,7 +31,9 @@ def reliability(p: np.ndarray, y: np.ndarray, bins: int = 10) -> Dict[str, np.nd
 def ece(p: np.ndarray, y: np.ndarray, bins: int = 10) -> float:
     """Expected Calibration Error: взвешенный разрыв «уверенность — частота»."""
     r = reliability(p, y, bins)
-    return float(np.sum(r["n"] * np.abs(r["confidence"] - r["accuracy"])) / max(r["n"].sum(), 1))
+    return float(
+        np.sum(r["n"] * np.abs(r["confidence"] - r["accuracy"])) / max(r["n"].sum(), 1)
+    )
 
 
 def _logit(p: np.ndarray) -> np.ndarray:
@@ -44,6 +46,7 @@ class PlattCalibrator:
 
     def fit(self, p: np.ndarray, y: np.ndarray) -> "PlattCalibrator":
         x, y = _logit(np.asarray(p, float)), np.asarray(y, float)
+
         def nll(w: np.ndarray) -> float:
             z = w[0] * x + w[1]
             return float(np.mean(np.logaddexp(0, z) - y * z))
@@ -53,10 +56,14 @@ class PlattCalibrator:
             q = 1 / (1 + np.exp(-(w[0] * x + w[1])))
             g = np.array([np.mean((q - y) * x), np.mean(q - y)])
             s = q * (1 - q) + 1e-6
-            H = np.array([[np.mean(s * x * x), np.mean(s * x)], [np.mean(s * x), np.mean(s)]])
+            H = np.array(
+                [[np.mean(s * x * x), np.mean(s * x)], [np.mean(s * x), np.mean(s)]]
+            )
             step = np.linalg.solve(H + 1e-9 * np.eye(2), g)
             t, f0 = 1.0, nll(w)
-            while t > 1e-6 and nll(w - t * step) > f0:  # откат шага, пока правдоподобие не растёт
+            while (
+                t > 1e-6 and nll(w - t * step) > f0
+            ):  # откат шага, пока правдоподобие не растёт
                 t /= 2
             w = w - t * step
             if np.abs(t * step).max() < 1e-8:

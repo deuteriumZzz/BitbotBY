@@ -32,7 +32,16 @@ def _parse(entries: Any) -> List[Tuple[str, Dict[str, Any]]]:
             data = fastjson.loads(f.get("data", "{}"))
         except ValueError:
             data = {}
-        out.append((_t(eid), {"type": _t(f.get("type", "")), "ts": float(_t(f.get("ts", "0"))), "data": data}))
+        out.append(
+            (
+                _t(eid),
+                {
+                    "type": _t(f.get("type", "")),
+                    "ts": float(_t(f.get("ts", "0"))),
+                    "data": data,
+                },
+            )
+        )
     return out
 
 
@@ -40,13 +49,19 @@ class EventStream:
     def __init__(self, r: Any, key: str = STREAM_KEY, maxlen: int = 10_000) -> None:
         self.r, self.key, self.maxlen = r, key, maxlen
 
-    def publish(self, type_: str, data: Optional[Dict[str, Any]] = None) -> Optional[str]:
+    def publish(
+        self, type_: str, data: Optional[Dict[str, Any]] = None
+    ) -> Optional[str]:
         if self.r is None:
             return None
         try:
             eid = self.r.xadd(
                 self.key,
-                {"type": type_, "ts": f"{time.time():.6f}", "data": fastjson.dumps(data or {})},
+                {
+                    "type": type_,
+                    "ts": f"{time.time():.6f}",
+                    "data": fastjson.dumps(data or {}),
+                },
                 maxlen=self.maxlen,
                 approximate=True,
             )
@@ -70,7 +85,9 @@ class EventStream:
     def consume(
         self, group: str, consumer: str, count: int = 10, block_ms: Optional[int] = None
     ) -> List[Tuple[str, Dict[str, Any]]]:
-        res = self.r.xreadgroup(group, consumer, {self.key: ">"}, count=count, block=block_ms)
+        res = self.r.xreadgroup(
+            group, consumer, {self.key: ">"}, count=count, block=block_ms
+        )
         return _parse(res[0][1]) if res else []
 
     def ack(self, group: str, ids: List[str]) -> int:
@@ -80,6 +97,9 @@ class EventStream:
         """Подключается как `DecisionLedger.sink`: компактная отметка о записи журнала."""
         self.publish(
             f"ledger.{kind}",
-            {"trace_id": record.get("trace_id"), "decision_id": record.get("decision_id"),
-             "symbol": record.get("symbol")},
+            {
+                "trace_id": record.get("trace_id"),
+                "decision_id": record.get("decision_id"),
+                "symbol": record.get("symbol"),
+            },
         )

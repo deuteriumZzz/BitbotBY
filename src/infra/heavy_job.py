@@ -28,7 +28,9 @@ def nice_level() -> int:
         return 10
 
 
-def limit_env(base: Optional[Dict[str, str]] = None, threads: Optional[int] = None) -> Dict[str, str]:
+def limit_env(
+    base: Optional[Dict[str, str]] = None, threads: Optional[int] = None
+) -> Dict[str, str]:
     """Окружение процесса с потолком потоков (копия, исходный dict не меняется)."""
     n = str(threads if threads and threads > 0 else _threads())
     env = dict(base if base is not None else os.environ)

@@ -1729,12 +1729,18 @@ class TelegramCommander:
         if not self._authorized(update):
             return
         if self._on_emergency is None:
-            await self._reply_plain(update, "Аварийное управление недоступно: бот не передал обработчик.")
+            await self._reply_plain(
+                update, "Аварийное управление недоступно: бот не передал обработчик."
+            )
             return
         who = str(getattr(update.effective_chat, "id", "owner"))
         try:
-            text = await self._on_emergency(list(getattr(context, "args", None) or []), who)
-        except Exception as exc:  # аварийная команда обязана ответить, а не упасть молча
+            text = await self._on_emergency(
+                list(getattr(context, "args", None) or []), who
+            )
+        except (
+            Exception
+        ) as exc:  # аварийная команда обязана ответить, а не упасть молча
             text = f"Аварийная команда не выполнена: {type(exc).__name__}: {exc}"
         await self._reply_plain(update, text)
 

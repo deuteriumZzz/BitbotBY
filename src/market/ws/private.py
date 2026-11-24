@@ -38,7 +38,10 @@ class OrderEvents:
         self._orders: "OrderedDict[str, Dict[str, Any]]" = OrderedDict()
         self.max_orders = max_orders
         self.dropped: Dict[str, int] = {
-            "duplicate": 0, "out_of_order": 0, "invalid_transition": 0, "unknown_status": 0,
+            "duplicate": 0,
+            "out_of_order": 0,
+            "invalid_transition": 0,
+            "unknown_status": 0,
         }
 
     def state_of(self, order_id: str) -> Optional[OrderState]:

@@ -22,17 +22,22 @@ _PATTERNS = {
         re.I,
     ),
     "role_marker": re.compile(r"(^|\n)\s*(system|assistant|developer|user)\s*:", re.I),
-    "chat_tokens": re.compile(r"<\|?(im_start|im_end|system|endoftext)\|?>|\[/?INST\]", re.I),
-    "exfil_or_exec": re.compile(
-        r"(reveal|print|show)\s+(your\s+)?(system\s+)?(prompt|instructions|api[_ ]?key)", re.I
+    "chat_tokens": re.compile(
+        r"<\|?(im_start|im_end|system|endoftext)\|?>|\[/?INST\]", re.I
     ),
-    "forced_output": re.compile(r"(respond|reply|answer|return)\s+(only\s+)?with\b", re.I),
-    "trade_command": re.compile(r"\b(buy|sell|short|long)\s+(now|immediately|all)\b", re.I),
+    "exfil_or_exec": re.compile(
+        r"(reveal|print|show)\s+(your\s+)?(system\s+)?(prompt|instructions|api[_ ]?key)",
+        re.I,
+    ),
+    "forced_output": re.compile(
+        r"(respond|reply|answer|return)\s+(only\s+)?with\b", re.I
+    ),
+    "trade_command": re.compile(
+        r"\b(buy|sell|short|long)\s+(now|immediately|all)\b", re.I
+    ),
     "markdown_fence": re.compile(r"```"),
 }
-_CONTROL = re.compile(
-    "[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f​-‏‪-‮⁦-⁩]"
-)
+_CONTROL = re.compile("[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f​-‏‪-‮⁦-⁩]")
 
 
 def scan(text: str) -> List[str]:
@@ -47,7 +52,11 @@ def sanitize(text: str, max_len: int = 240) -> str:
     t = _CONTROL.sub("", t)
     t = _PATTERNS["chat_tokens"].sub(" ", t)
     t = t.replace("```", "'''").replace("<", "‹").replace(">", "›")
-    t = re.sub(r"(?im)^\s*(system|assistant|developer|user)\s*:", lambda m: m.group(1) + " -", t)
+    t = re.sub(
+        r"(?im)^\s*(system|assistant|developer|user)\s*:",
+        lambda m: m.group(1) + " -",
+        t,
+    )
     t = re.sub(r"\s+", " ", t).strip()
     return t[:max_len]
 

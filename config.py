@@ -191,7 +191,9 @@ class Config:
     # bluechip / пусто → sac_model.zip (дефолт), altcoin → sac_model_altcoin.zip
     # Модель торгует только после допуска в реестре (reinforcement_learning/
     # model_registry.py): Paper — стадии paper/canary/production, Live — production.
-    SAC_REQUIRE_APPROVAL: bool = os.getenv("SAC_REQUIRE_APPROVAL", "true").lower() != "false"
+    SAC_REQUIRE_APPROVAL: bool = (
+        os.getenv("SAC_REQUIRE_APPROVAL", "true").lower() != "false"
+    )
     # Теневой Risk Gate: после каждого фактического входа пишет в Ledger вердикт
     # единого гейта (src/risk/shadow.py). Ничего не блокирует и не меняет.
     RISK_GATE_SHADOW: bool = os.getenv("RISK_GATE_SHADOW", "true").lower() != "false"
@@ -204,7 +206,9 @@ class Config:
     #   FORECASTER           — chronos | timesfm (используется, если включён переключатель Chronos).
     # Funding в PnL сделки (src/core/funding.py): выключен — меняет учёт результата.
     # Шина событий (Redis Streams, ADR-005): копии записей Ledger как компактные отметки.
-    EVENT_STREAM_ENABLED: bool = os.getenv("EVENT_STREAM_ENABLED", "false").lower() == "true"
+    EVENT_STREAM_ENABLED: bool = (
+        os.getenv("EVENT_STREAM_ENABLED", "false").lower() == "true"
+    )
     # SAC v2 вместо v1 (src/ai/sac_v2_policy.py): модель из train_sac_v2; допуск через реестр.
     SAC_V2_ENABLED: bool = os.getenv("SAC_V2_ENABLED", "false").lower() == "true"
     SAC_V2_MODEL_PATH: str = os.getenv("SAC_V2_MODEL_PATH", "models/sac_v2.zip")
@@ -213,17 +217,20 @@ class Config:
     # AI_SANITIZE_PROMPT и WS_SHADOW_ENABLED по умолчанию равны PAPER_TRADING: в paper включены,
     # в live выключены. Явная переменная окружения (true/false) перекрывает умолчание.
     AI_SANITIZE_PROMPT: bool = (
-        os.getenv("AI_SANITIZE_PROMPT", os.getenv("PAPER_TRADING", "false")).lower() == "true"
+        os.getenv("AI_SANITIZE_PROMPT", os.getenv("PAPER_TRADING", "false")).lower()
+        == "true"
     )
     AI_RAG_CONTEXT: bool = os.getenv("AI_RAG_CONTEXT", "false").lower() == "true"
     # Как AI_SANITIZE_PROMPT: в paper включена (сколько ответов отброшено —
     # ai_call.strict_dropped), в live выключена до решения по этим данным.
     AI_STRICT_VALIDATION: bool = (
-        os.getenv("AI_STRICT_VALIDATION", os.getenv("PAPER_TRADING", "false")).lower() == "true"
+        os.getenv("AI_STRICT_VALIDATION", os.getenv("PAPER_TRADING", "false")).lower()
+        == "true"
     )
     FORECASTER: str = os.getenv("FORECASTER", "chronos").strip().lower()
     WS_SHADOW_ENABLED: bool = (
-        os.getenv("WS_SHADOW_ENABLED", os.getenv("PAPER_TRADING", "false")).lower() == "true"
+        os.getenv("WS_SHADOW_ENABLED", os.getenv("PAPER_TRADING", "false")).lower()
+        == "true"
     )
     WS_SHADOW_SYMBOLS: str = os.getenv("WS_SHADOW_SYMBOLS", "BTC/USDT,ETH/USDT")
     # Ежедневная проверенная копия БД сделок (src/infra/db_health.py); защитная мера.
@@ -337,7 +344,8 @@ class Config:
     # всегда; блокировка по умолчанию следует PAPER_TRADING: в paper включена
     # (отказы — data_quality_block в журнале), в live выключена; env главнее.
     DATA_QUALITY_GATE: bool = (
-        os.getenv("DATA_QUALITY_GATE", os.getenv("PAPER_TRADING", "false")).lower() == "true"
+        os.getenv("DATA_QUALITY_GATE", os.getenv("PAPER_TRADING", "false")).lower()
+        == "true"
     )
     # Периодическая сверка позиций с биржей (live, не спот): раз в N секунд.
     # Проблема подтверждается двумя проверками подряд. По умолчанию бот только

@@ -52,7 +52,9 @@ def lightgbm_estimator(**params: Any) -> Any:
     try:
         import lightgbm as lgb  # noqa: PLC0415
     except ImportError as e:  # pragma: no cover
-        raise ImportError("lightgbm не установлен; новая зависимость требует ADR") from e
+        raise ImportError(
+            "lightgbm не установлен; новая зависимость требует ADR"
+        ) from e
 
     class _LGB:
         def fit(self, X, y):
@@ -74,7 +76,9 @@ class MetaModel:
         if method not in ("isotonic", "platt"):
             raise ValueError("method: isotonic | platt")
         self.est = estimator_factory()
-        self.cal: Any = IsotonicCalibrator() if method == "isotonic" else PlattCalibrator()
+        self.cal: Any = (
+            IsotonicCalibrator() if method == "isotonic" else PlattCalibrator()
+        )
         self.method = method
         self.fitted = False
         self.n_cal = 0
@@ -109,7 +113,8 @@ class MetaModel:
         r["usable"] = bool(
             self.n_cal >= MIN_CALIBRATION_SAMPLES
             and r["brier_calibrated"] <= r["brier_raw"] + BRIER_TOLERANCE
-            and r["brier_calibrated"] < base  # хуже «всегда средняя частота» — модель бесполезна
+            and r["brier_calibrated"]
+            < base  # хуже «всегда средняя частота» — модель бесполезна
         )
         self.report = r
         return r

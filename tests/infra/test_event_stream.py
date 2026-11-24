@@ -19,15 +19,19 @@ class FakeRedis:
     def xadd(self, key, fields, maxlen=None, approximate=True):
         self.n += 1
         eid = f"{self.n}-0"
-        self.entries.append((eid.encode(), {k.encode(): v.encode() for k, v in fields.items()}))
+        self.entries.append(
+            (eid.encode(), {k.encode(): v.encode() for k, v in fields.items()})
+        )
         if maxlen:
             del self.entries[:-maxlen]
         return eid.encode()
 
     def xread(self, streams, count=None, block=None):
-        (_, last), = streams.items()
+        ((_, last),) = streams.items()
         after = int(last.split("-")[0])
-        out = [e for e in self.entries if int(e[0].decode().split("-")[0]) > after][:count]
+        out = [e for e in self.entries if int(e[0].decode().split("-")[0]) > after][
+            :count
+        ]
         return [(b"k", out)] if out else []
 
     def xgroup_create(self, key, group, id="0", mkstream=False):
@@ -37,7 +41,7 @@ class FakeRedis:
 
     def xreadgroup(self, group, consumer, streams, count=None, block=None):
         g = self.groups[group]
-        out = self.entries[g["pos"]:g["pos"] + count]
+        out = self.entries[g["pos"] : g["pos"] + count]
         g["pos"] += len(out)
         return [(b"k", out)] if out else []
 
@@ -98,9 +102,15 @@ def test_ledger_sink_publishes_compact_marker_and_never_breaks_the_journal(tmp_p
     es = EventStream(FakeRedis())
     led = DecisionLedger(path=str(tmp_path / "l.jsonl"), enabled=True)
     led.sink = es.ledger_sink
-    led.write("signals", decision_id="d1", symbol="BTC/USDT", decisions=[{"big": "x" * 1000}])
+    led.write(
+        "signals", decision_id="d1", symbol="BTC/USDT", decisions=[{"big": "x" * 1000}]
+    )
     ev = es.read("0-0")[0][1]
-    assert ev["type"] == "ledger.signals" and ev["data"]["decision_id"] == "d1" and "decisions" not in ev["data"]
+    assert (
+        ev["type"] == "ledger.signals"
+        and ev["data"]["decision_id"] == "d1"
+        and "decisions" not in ev["data"]
+    )
 
     def broken(kind, rec):
         raise RuntimeError("sink down")
@@ -108,7 +118,9 @@ def test_ledger_sink_publishes_compact_marker_and_never_breaks_the_journal(tmp_p
     led.sink = broken
     led.write("execution", decision_id="d2")
     lines = (tmp_path / "l.jsonl").read_text().splitlines()
-    assert len(lines) == 2 and json.loads(lines[1])["decision_id"] == "d2"  # запись в файл не пострадала
+    assert (
+        len(lines) == 2 and json.loads(lines[1])["decision_id"] == "d2"
+    )  # запись в файл не пострадала
 
 
 def test_ledger_without_sink_is_unchanged(tmp_path):
@@ -119,8 +131,14 @@ def test_ledger_without_sink_is_unchanged(tmp_path):
 
 
 def test_fastjson_roundtrip_unicode_and_unknown_types():
-    s = fastjson.dumps({"текст": "значение", "when": datetime.date(2026, 11, 24), "n": 1.5})
+    s = fastjson.dumps(
+        {"текст": "значение", "when": datetime.date(2026, 11, 24), "n": 1.5}
+    )
     back = fastjson.loads(s)
-    assert back["текст"] == "значение" and back["when"] == "2026-11-24" and back["n"] == 1.5
+    assert (
+        back["текст"] == "значение"
+        and back["when"] == "2026-11-24"
+        and back["n"] == 1.5
+    )
     assert fastjson.backend() in ("orjson", "json")
     assert fastjson.loads(b'{"a": 1}') == {"a": 1}

@@ -25,15 +25,27 @@ from src.ai_infra.policy import never_confirms_trade, policy_for
 
 # Оценка стоимости компонента, мс (предложение; уточняется замерами src/ops).
 COST_MS = {
-    "signal_intel": 5, "meta_model": 10, "sac": 20, "forecast": 1500,
-    "rag": 50, "llm": 8000, "recheck": 3000,
+    "signal_intel": 5,
+    "meta_model": 10,
+    "sac": 20,
+    "forecast": 1500,
+    "rag": 50,
+    "llm": 8000,
+    "recheck": 3000,
 }
 FAILURE_KEY = {
-    "llm": "llm_unavailable", "forecast": "forecaster_unavailable", "sac": "sac_failure",
-    "rag": "rag_failure", "meta_model": "database_failure", "signal_intel": "stale_or_invalid_data",
+    "llm": "llm_unavailable",
+    "forecast": "forecaster_unavailable",
+    "sac": "sac_failure",
+    "rag": "rag_failure",
+    "meta_model": "database_failure",
+    "signal_intel": "stale_or_invalid_data",
     "recheck": "llm_unavailable",
 }
-DECISIVE_HIGH, DECISIVE_LOW = 0.70, 0.30  # вероятность Meta-Model: «уверенно за / против»
+DECISIVE_HIGH, DECISIVE_LOW = (
+    0.70,
+    0.30,
+)  # вероятность Meta-Model: «уверенно за / против»
 MIN_GROUPS = 2  # независимых групп факторов, ниже которых L1 недостаточно
 
 
@@ -42,7 +54,9 @@ class OrchContext:
     data_ok: bool = True
     n_independent_groups: int = 0
     has_conflict: bool = False
-    meta_prob: Optional[float] = None  # калиброванная вероятность, только если Meta-Model usable
+    meta_prob: Optional[float] = (
+        None  # калиброванная вероятность, только если Meta-Model usable
+    )
     ai_available: bool = True
     sac_ready: bool = False
     forecaster_ready: bool = False
@@ -59,14 +73,19 @@ class Plan:
 
 
 def _l1_sufficient(c: OrchContext) -> bool:
-    decisive = c.meta_prob is not None and (c.meta_prob >= DECISIVE_HIGH or c.meta_prob <= DECISIVE_LOW)
+    decisive = c.meta_prob is not None and (
+        c.meta_prob >= DECISIVE_HIGH or c.meta_prob <= DECISIVE_LOW
+    )
     return decisive and c.n_independent_groups >= MIN_GROUPS and not c.has_conflict
 
 
 def plan(c: OrchContext) -> Plan:
     if not c.data_ok:
         return Plan("L0", reasons=["insufficient_data"])  # безопасный отказ
-    p = Plan("L1", stages=[["signal_intel"] + (["meta_model"] if c.meta_prob is not None else [])])
+    p = Plan(
+        "L1",
+        stages=[["signal_intel"] + (["meta_model"] if c.meta_prob is not None else [])],
+    )
     spent = max(COST_MS[x] for x in p.stages[0])
     if _l1_sufficient(c):
         p.reasons.append("l1_sufficient")
@@ -140,14 +159,20 @@ async def run_plan(
             return Result(False, error="no_runner", policy=policy_for(key).action)
         try:
             async with sem:
-                value = await asyncio.wait_for(runner(), timeouts.get(name, default_timeout))
+                value = await asyncio.wait_for(
+                    runner(), timeouts.get(name, default_timeout)
+                )
             return Result(True, value=value)
         except asyncio.TimeoutError:
             return Result(False, error="timeout", policy=policy_for(key).action)
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001 — частичный сбой не роняет остальных
-            return Result(False, error=f"{type(exc).__name__}: {exc}", policy=policy_for(key).action)
+            return Result(
+                False,
+                error=f"{type(exc).__name__}: {exc}",
+                policy=policy_for(key).action,
+            )
 
     def start(name: str) -> "asyncio.Future[Result]":
         if name not in inflight:  # дубль запроса: тот же компонент не запускаем дважды

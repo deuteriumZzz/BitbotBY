@@ -5,12 +5,25 @@ import asyncio
 import pytest
 
 from src.ai.ai_analyzer import PROMPT_VERSION
-from src.ai_infra.orchestrator import OrchContext, Plan, failures_never_confirm, plan, run_plan
+from src.ai_infra.orchestrator import (
+    OrchContext,
+    Plan,
+    failures_never_confirm,
+    plan,
+    run_plan,
+)
 
 
 def ctx(**kw):
-    base = dict(data_ok=True, n_independent_groups=3, has_conflict=False, meta_prob=0.8,
-                ai_available=True, sac_ready=True, forecaster_ready=True)
+    base = dict(
+        data_ok=True,
+        n_independent_groups=3,
+        has_conflict=False,
+        meta_prob=0.8,
+        ai_available=True,
+        sac_ready=True,
+        forecaster_ready=True,
+    )
     base.update(kw)
     return OrchContext(**base)
 
@@ -22,11 +35,17 @@ def test_bad_data_is_a_safe_refusal():
 
 def test_l1_is_enough_when_decisive_independent_and_unconflicted():
     p = plan(ctx())
-    assert p.level == "L1" and p.stages == [["signal_intel", "meta_model"]] and "l1_sufficient" in p.reasons
+    assert (
+        p.level == "L1"
+        and p.stages == [["signal_intel", "meta_model"]]
+        and "l1_sufficient" in p.reasons
+    )
     assert plan(ctx(meta_prob=0.2)).level == "L1"  # уверенное «против» тоже решает
 
 
-@pytest.mark.parametrize("kw", [dict(meta_prob=0.55), dict(n_independent_groups=1), dict(has_conflict=True)])
+@pytest.mark.parametrize(
+    "kw", [dict(meta_prob=0.55), dict(n_independent_groups=1), dict(has_conflict=True)]
+)
 def test_uncertainty_escalates(kw):
     assert plan(ctx(**kw)).level != "L1"
 
@@ -34,7 +53,12 @@ def test_uncertainty_escalates(kw):
 def test_full_escalation_with_conflict_reaches_l4_in_order():
     p = plan(ctx(meta_prob=0.5, has_conflict=True))
     assert p.level == "L4"
-    assert p.stages == [["signal_intel", "meta_model"], ["sac", "forecast"], ["llm", "rag"], ["recheck"]]
+    assert p.stages == [
+        ["signal_intel", "meta_model"],
+        ["sac", "forecast"],
+        ["llm", "rag"],
+        ["recheck"],
+    ]
     assert p.est_ms > 0
 
 
@@ -44,8 +68,14 @@ def test_no_meta_model_means_l1_has_only_signal_intel_and_llm_is_consulted():
 
 
 def test_unavailable_components_are_skipped_with_reasons():
-    p = plan(ctx(meta_prob=0.5, sac_ready=False, forecaster_ready=False, ai_available=False))
-    assert p.level == "L1" and p.skipped == {"sac": "not_ready", "forecast": "not_ready", "llm": "ai_unavailable"}
+    p = plan(
+        ctx(meta_prob=0.5, sac_ready=False, forecaster_ready=False, ai_available=False)
+    )
+    assert p.level == "L1" and p.skipped == {
+        "sac": "not_ready",
+        "forecast": "not_ready",
+        "llm": "ai_unavailable",
+    }
 
 
 def test_budget_limits_expensive_stages():
@@ -65,11 +95,22 @@ async def test_run_plan_runs_stage_in_parallel_and_collects_partial_failures():
         await asyncio.sleep(5)
 
     pl = Plan("L3", stages=[["signal_intel"], ["sac", "forecast", "llm"]])
-    res = await run_plan(pl, {"signal_intel": ok, "sac": boom, "forecast": slow, "llm": ok},
-                         timeouts={"forecast": 0.05})
+    res = await run_plan(
+        pl,
+        {"signal_intel": ok, "sac": boom, "forecast": slow, "llm": ok},
+        timeouts={"forecast": 0.05},
+    )
     assert res["signal_intel"].ok and res["llm"].ok and res["llm"].value == 1
-    assert not res["sac"].ok and "RuntimeError" in res["sac"].error and res["sac"].policy == "no_vote"
-    assert not res["forecast"].ok and res["forecast"].error == "timeout" and res["forecast"].policy == "neutral"
+    assert (
+        not res["sac"].ok
+        and "RuntimeError" in res["sac"].error
+        and res["sac"].policy == "no_vote"
+    )
+    assert (
+        not res["forecast"].ok
+        and res["forecast"].error == "timeout"
+        and res["forecast"].policy == "neutral"
+    )
     assert failures_never_confirm(res)
 
 
@@ -81,7 +122,9 @@ async def test_missing_runner_is_a_failure_not_a_crash_and_duplicates_run_once()
         await asyncio.sleep(0.01)
         return "v"
 
-    pl = Plan("L2", stages=[["llm"], ["llm", "rag"]])  # llm в двух стадиях — запрос не дублируется
+    pl = Plan(
+        "L2", stages=[["llm"], ["llm", "rag"]]
+    )  # llm в двух стадиях — запрос не дублируется
     res = await run_plan(pl, {"llm": once})
     assert calls == [1] and res["llm"].ok
     assert res["rag"].error == "no_runner" and res["rag"].policy == "degrade"
@@ -117,8 +160,13 @@ async def test_stop_after_skips_expensive_later_stages():
         return f
 
     p = plan(ctx(meta_prob=0.5))  # L1 → L2 → L3
-    runners = {n: runner(n, 1) for n in ("signal_intel", "meta_model", "sac", "forecast", "llm", "rag")}
-    res = await run_plan(p, runners, stop_after=lambda r: "sac" in r)  # SAC уже ответил — LLM не нужен
+    runners = {
+        n: runner(n, 1)
+        for n in ("signal_intel", "meta_model", "sac", "forecast", "llm", "rag")
+    }
+    res = await run_plan(
+        p, runners, stop_after=lambda r: "sac" in r
+    )  # SAC уже ответил — LLM не нужен
     assert "llm" not in ran and "rag" not in ran and res["sac"].ok
     ran.clear()
     await run_plan(p, runners)  # без условия остановки — вся лестница

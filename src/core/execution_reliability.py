@@ -149,7 +149,9 @@ def diff_positions(
         ex_side = _SIDE.get(str(active[s].get("side", "")).lower())
         if bot_side and ex_side and bot_side != ex_side:
             side_bad.append(s)
-    return ReconcileDiff(tuple(untracked), tuple(stale), tuple(qty_bad), tuple(side_bad))
+    return ReconcileDiff(
+        tuple(untracked), tuple(stale), tuple(qty_bad), tuple(side_bad)
+    )
 
 
 class ConfirmTracker:

@@ -62,10 +62,7 @@ def _p95(values: List[float]) -> Optional[float]:
 
 def _signals(records: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
     decisions = [
-        d
-        for r in records
-        if r.get("kind") == "signals"
-        for d in r.get("decisions", [])
+        d for r in records if r.get("kind") == "signals" for d in r.get("decisions", [])
     ]
     n = len(decisions)
     out: Dict[str, Any] = {"n_decisions": n}
@@ -122,7 +119,9 @@ def _ai(records: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
     calls = [r for r in records if r.get("kind") == "ai_call"]
     ok = [r for r in calls if r.get("status") == "ok"]
     latencies = [float(r["latency_ms"]) for r in ok if r.get("latency_ms") is not None]
-    statuses = Counter(a.get("status") for r in calls for a in (r.get("attempts") or []))
+    statuses = Counter(
+        a.get("status") for r in calls for a in (r.get("attempts") or [])
+    )
     return {
         "n_calls": len(calls),
         "ok": len(ok),
@@ -219,7 +218,9 @@ def _risk_gate(records: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
     return {
         "n": n,
         "by_action": dict(actions),
-        "would_block_share": round(sum(bool(r.get("would_block")) for r in items) / n, 3) if n else None,
+        "would_block_share": (
+            round(sum(bool(r.get("would_block")) for r in items) / n, 3) if n else None
+        ),
         "by_reason": dict(reasons.most_common()),
         "inputs_computed": sum(
             1 for r in items if (r.get("inputs") or {}).get("source") == "computed"

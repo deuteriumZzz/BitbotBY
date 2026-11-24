@@ -48,7 +48,9 @@ def snapshot(path: str, dest: str) -> None:
 def _check(path: str, quick: bool) -> Dict[str, Any]:
     conn = sqlite3.connect(path)
     try:
-        rows = conn.execute("PRAGMA quick_check" if quick else "PRAGMA integrity_check").fetchall()
+        rows = conn.execute(
+            "PRAGMA quick_check" if quick else "PRAGMA integrity_check"
+        ).fetchall()
         msgs = [str(r[0]) for r in rows]
         ok = msgs == ["ok"]
         tables: Dict[str, int] = {}
@@ -60,8 +62,12 @@ def _check(path: str, quick: bool) -> Dict[str, Any]:
                 )
             ]
             for name in names[:20]:
-                quoted = name.replace('"', '""')  # имя таблицы — идентификатор, не параметр
-                tables[name] = conn.execute(f'SELECT COUNT(*) FROM "{quoted}"').fetchone()[0]
+                quoted = name.replace(
+                    '"', '""'
+                )  # имя таблицы — идентификатор, не параметр
+                tables[name] = conn.execute(
+                    f'SELECT COUNT(*) FROM "{quoted}"'
+                ).fetchone()[0]
         return {"ok": ok, "messages": msgs[:MAX_MESSAGES], "tables": tables}
     finally:
         conn.close()
@@ -69,7 +75,13 @@ def _check(path: str, quick: bool) -> Dict[str, Any]:
 
 def integrity_report(path: str, quick: bool = False) -> Dict[str, Any]:
     """Целостность по снимку (боевой файл не пишется). Не бросает исключений."""
-    out: Dict[str, Any] = {"path": path, "ok": False, "messages": [], "tables": {}, "error": None}
+    out: Dict[str, Any] = {
+        "path": path,
+        "ok": False,
+        "messages": [],
+        "tables": {},
+        "error": None,
+    }
     if not os.path.exists(path):
         out["error"] = "файл не найден"
         return out
@@ -93,9 +105,17 @@ def _rm(path: str) -> None:
         pass
 
 
-def backup(path: str, dest_dir: str, keep: int = 7, now: Optional[datetime] = None) -> Dict[str, Any]:
+def backup(
+    path: str, dest_dir: str, keep: int = 7, now: Optional[datetime] = None
+) -> Dict[str, Any]:
     """Проверенная копия `<имя>.<UTC-метка>.db` + ротация (оставляет `keep` последних)."""
-    res: Dict[str, Any] = {"source": path, "ok": False, "backup": None, "error": None, "removed": []}
+    res: Dict[str, Any] = {
+        "source": path,
+        "ok": False,
+        "backup": None,
+        "error": None,
+        "removed": [],
+    }
     if not os.path.exists(path):
         res["error"] = "файл не найден"
         return res
@@ -111,7 +131,9 @@ def backup(path: str, dest_dir: str, keep: int = 7, now: Optional[datetime] = No
         res["error"] = f"{type(exc).__name__}: {exc}"
         return res
     if not verdict["ok"]:
-        _rm(target)  # негодная копия хуже отсутствия: создаёт ложное чувство безопасности
+        _rm(
+            target
+        )  # негодная копия хуже отсутствия: создаёт ложное чувство безопасности
         res["error"] = "копия не прошла проверку: " + "; ".join(verdict["messages"])
         return res
     res.update(ok=True, backup=target)
@@ -123,8 +145,14 @@ def backup(path: str, dest_dir: str, keep: int = 7, now: Optional[datetime] = No
     return res
 
 
-def check_all(paths: Optional[List[str]] = None, quick: bool = False) -> List[Dict[str, Any]]:
-    return [integrity_report(p, quick) for p in (paths or list(DEFAULT_DBS)) if os.path.exists(p)]
+def check_all(
+    paths: Optional[List[str]] = None, quick: bool = False
+) -> List[Dict[str, Any]]:
+    return [
+        integrity_report(p, quick)
+        for p in (paths or list(DEFAULT_DBS))
+        if os.path.exists(p)
+    ]
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -147,7 +175,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     for rep in check_all(paths or None):
         status = "OK" if rep["ok"] else "ПРОБЛЕМА"
         detail = rep["tables"] or rep["messages"] or rep["error"]
-        print(f"{status}  {rep['path']}  {rep.get('size_mb')} МБ (WAL {rep.get('wal_mb')} МБ)  {detail}")
+        print(
+            f"{status}  {rep['path']}  {rep.get('size_mb')} МБ (WAL {rep.get('wal_mb')} МБ)  {detail}"
+        )
         bad += 0 if rep["ok"] else 1
         if do_backup and rep["ok"]:
             b = backup(rep["path"], dest, keep)

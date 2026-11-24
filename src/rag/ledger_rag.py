@@ -67,12 +67,20 @@ class BM25:
         return out
 
 
-def _decision_text(d: Dict[str, Any], ex: Optional[Dict[str, Any]], oc: Optional[Dict[str, Any]]) -> str:
+def _decision_text(
+    d: Dict[str, Any], ex: Optional[Dict[str, Any]], oc: Optional[Dict[str, Any]]
+) -> str:
     parts = [explain_decision(d)]
     if ex:
-        parts.append("исполнено" if ex.get("opened") else f"не исполнено {ex.get('reject') or ''}")
+        parts.append(
+            "исполнено"
+            if ex.get("opened")
+            else f"не исполнено {ex.get('reject') or ''}"
+        )
     if oc:
-        parts.append(f"исход {oc.get('reason') or ''} {'прибыль' if (oc.get('pnl') or 0) > 0 else 'убыток'}")
+        parts.append(
+            f"исход {oc.get('reason') or ''} {'прибыль' if (oc.get('pnl') or 0) > 0 else 'убыток'}"
+        )
     return " ".join(parts)
 
 
@@ -84,8 +92,16 @@ class LedgerRAG:
     @classmethod
     def from_records(cls, records: Iterable[Dict[str, Any]]) -> "LedgerRAG":
         recs = list(records)
-        ex_by = {r["decision_id"]: r for r in recs if r.get("kind") == "execution" and r.get("decision_id")}
-        oc_by = {r["decision_id"]: r for r in recs if r.get("kind") == "outcome" and r.get("decision_id")}
+        ex_by = {
+            r["decision_id"]: r
+            for r in recs
+            if r.get("kind") == "execution" and r.get("decision_id")
+        }
+        oc_by = {
+            r["decision_id"]: r
+            for r in recs
+            if r.get("kind") == "outcome" and r.get("decision_id")
+        }
         rag = cls()
         for r in recs:
             if r.get("kind") != "signals":
@@ -136,17 +152,26 @@ class LedgerRAG:
                 and (not only_with_outcome or d["outcome"] is not None)
             )
 
-        ranked = sorted(((s, i) for i, s in enumerate(scores) if s > 0 and keep(self.docs[i])), reverse=True)
+        ranked = sorted(
+            ((s, i) for i, s in enumerate(scores) if s > 0 and keep(self.docs[i])),
+            reverse=True,
+        )
         return [{**self.docs[i], "score": round(s, 4)} for s, i in ranked[:k]]
 
     def similar_outcomes(self, query: str, k: int = 20, **kw: Any) -> Dict[str, Any]:
         """Агрегат по исходам похожих случаев (описательный, малые выборки)."""
         hits = self.search(query, k, only_with_outcome=True, **kw)
-        pnls = [float(h["outcome"].get("pnl")) for h in hits if h["outcome"].get("pnl") is not None]
+        pnls = [
+            float(h["outcome"].get("pnl"))
+            for h in hits
+            if h["outcome"].get("pnl") is not None
+        ]
         return {
             "n_similar": len(hits),
             "n_with_pnl": len(pnls),
-            "win_rate": round(sum(p > 0 for p in pnls) / len(pnls), 3) if pnls else None,
+            "win_rate": (
+                round(sum(p > 0 for p in pnls) / len(pnls), 3) if pnls else None
+            ),
             "mean_pnl": round(sum(pnls) / len(pnls), 4) if pnls else None,
             "caveat": "описательная статистика на малой выборке, не доказательство преимущества",
         }
@@ -172,20 +197,28 @@ class LedgerRAG:
         return wrap_untrusted("decision_ledger", lines, 240)
 
 
-def safe_context(rag: Optional[LedgerRAG], query: str, k: int = 3, **kw: Any) -> Dict[str, Any]:
+def safe_context(
+    rag: Optional[LedgerRAG], query: str, k: int = 3, **kw: Any
+) -> Dict[str, Any]:
     """Контекст или пустота при сбое: `rag_failure` → решение без RAG, с пометкой."""
     try:
         if rag is None:
             raise RuntimeError("RAG не инициализирован")
         return {"context": rag.context_block(query, k, **kw), "rag_failure": False}
     except Exception as exc:  # noqa: BLE001 — сбой памяти не должен менять решение
-        return {"context": "", "rag_failure": True, "error": f"{type(exc).__name__}: {exc}"}
+        return {
+            "context": "",
+            "rag_failure": True,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
 
 
 def main(argv: Optional[List[str]] = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     if not args:
-        print('Использование: python -m src.rag.ledger_rag "запрос" [--symbol X] [--k N]')
+        print(
+            'Использование: python -m src.rag.ledger_rag "запрос" [--symbol X] [--k N]'
+        )
         return 2
     opts: Dict[str, str] = {}
     words: List[str] = []

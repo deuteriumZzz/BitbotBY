@@ -45,7 +45,12 @@ class EmergencyControl:
         tmp = self.path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(
-                {"level": level, "by": by, "reason": reason, "ts": datetime.now(timezone.utc).isoformat()},
+                {
+                    "level": level,
+                    "by": by,
+                    "reason": reason,
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                },
                 f,
                 ensure_ascii=False,
             )

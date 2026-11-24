@@ -22,9 +22,18 @@ def ledger(opened=True):
         {"kind": "data_quality", "trace_id": "T1", "counts": {"VALID": 3}},
         {"kind": "ai_call", "trace_id": "T1", "status": "ok"},
         {"kind": "data_quality", "trace_id": "T2"},
-        {"kind": "signals", "trace_id": "T1", "decisions": [{"decision_id": "d1", "symbol": "BTC/USDT"}]},
-        {"kind": "execution", "trace_id": "T1", "decision_id": "d1", "opened": opened,
-         "reject": None if opened else "max_pos"},
+        {
+            "kind": "signals",
+            "trace_id": "T1",
+            "decisions": [{"decision_id": "d1", "symbol": "BTC/USDT"}],
+        },
+        {
+            "kind": "execution",
+            "trace_id": "T1",
+            "decision_id": "d1",
+            "opened": opened,
+            "reject": None if opened else "max_pos",
+        },
         {"kind": "execution", "trace_id": "T1", "decision_id": "other", "opened": True},
     ]
 
@@ -55,24 +64,61 @@ def test_audit_reports_missing_required_stage():
 
 # ── Daily Digest ──────────────────────────────────────────────────────────────
 def test_window_filters_by_time_and_handles_bad_ts():
-    recs = [{"ts": ts(1), "kind": "x"}, {"ts": ts(30), "kind": "x"}, {"ts": "junk", "kind": "x"},
-            {"ts": NOW.replace(tzinfo=None).isoformat(), "kind": "x"}]  # без таймзоны = UTC
+    recs = [
+        {"ts": ts(1), "kind": "x"},
+        {"ts": ts(30), "kind": "x"},
+        {"ts": "junk", "kind": "x"},
+        {"ts": NOW.replace(tzinfo=None).isoformat(), "kind": "x"},
+    ]  # без таймзоны = UTC
     assert len(in_window(recs, 24, NOW)) == 2
 
 
 def test_digest_counts_and_alerts():
     recs = [
-        {"ts": ts(1), "kind": "ai_call", "trace_id": "a", "status": "exhausted",
-         "attempts": [{"provider": "p", "status": "no_credit"}]},
-        {"ts": ts(2), "kind": "ai_call", "trace_id": "b", "status": "exhausted", "attempts": []},
-        {"ts": ts(2), "kind": "ai_call", "trace_id": "c", "status": "ok", "provider": "q",
-         "latency_ms": 100, "attempts": []},
-        {"ts": ts(3), "kind": "data_quality", "trace_id": "a", "counts": {"VALID": 2, "STALE": 2}},
+        {
+            "ts": ts(1),
+            "kind": "ai_call",
+            "trace_id": "a",
+            "status": "exhausted",
+            "attempts": [{"provider": "p", "status": "no_credit"}],
+        },
+        {
+            "ts": ts(2),
+            "kind": "ai_call",
+            "trace_id": "b",
+            "status": "exhausted",
+            "attempts": [],
+        },
+        {
+            "ts": ts(2),
+            "kind": "ai_call",
+            "trace_id": "c",
+            "status": "ok",
+            "provider": "q",
+            "latency_ms": 100,
+            "attempts": [],
+        },
+        {
+            "ts": ts(3),
+            "kind": "data_quality",
+            "trace_id": "a",
+            "counts": {"VALID": 2, "STALE": 2},
+        },
         {"ts": ts(3), "kind": "reconcile", "trace_id": "a"},
-        {"ts": ts(40), "kind": "ai_call", "status": "ok", "provider": "old", "attempts": []},  # вне окна
+        {
+            "ts": ts(40),
+            "kind": "ai_call",
+            "status": "ok",
+            "provider": "old",
+            "attempts": [],
+        },  # вне окна
     ]
     d = build_digest(recs, 24, NOW)
-    assert d["ai"]["n_calls"] == 3 and d["ai"]["exhausted"] == 2 and "old" not in d["providers"]
+    assert (
+        d["ai"]["n_calls"] == 3
+        and d["ai"]["exhausted"] == 2
+        and "old" not in d["providers"]
+    )
     assert d["cycles"] == 3 and d["reconcile_events"] == 1
     text = " ".join(d["alerts"])
     assert "AI" in text and "Данные" in text and "Биржа" in text
@@ -85,9 +131,18 @@ def test_digest_empty_window_is_an_alert_not_a_crash():
 
 
 def test_digest_healthy_has_no_alerts():
-    recs = [{"ts": ts(1), "kind": "ai_call", "trace_id": "a", "status": "ok", "provider": "p",
-             "latency_ms": 50, "attempts": []},
-            {"ts": ts(1), "kind": "data_quality", "trace_id": "a", "counts": {"VALID": 5}}]
+    recs = [
+        {
+            "ts": ts(1),
+            "kind": "ai_call",
+            "trace_id": "a",
+            "status": "ok",
+            "provider": "p",
+            "latency_ms": 50,
+            "attempts": [],
+        },
+        {"ts": ts(1), "kind": "data_quality", "trace_id": "a", "counts": {"VALID": 5}},
+    ]
     assert build_digest(recs, 24, NOW)["alerts"] == []
 
 
@@ -103,23 +158,42 @@ def make_control(tmp_path, fail=None):
 
         return f
 
-    return EmergencyControl(str(tmp_path / "em.json"), {n: act(n) for n in LEVELS.values()}), calls
+    return (
+        EmergencyControl(
+            str(tmp_path / "em.json"), {n: act(n) for n in LEVELS.values()}
+        ),
+        calls,
+    )
 
 
 def test_escalate_runs_new_levels_in_order_only_once(tmp_path):
     ec, calls = make_control(tmp_path)
     assert ec.entries_allowed() and ec.level == 0
     r = ec.escalate(2, "owner", "test")
-    assert calls == ["block_entries", "cancel_orders"] and r["level"] == 2 and not ec.entries_allowed()
-    assert ec.escalate(2, "owner", "again")["noop"] and ec.escalate(1, "o", "lower")["noop"]
+    assert (
+        calls == ["block_entries", "cancel_orders"]
+        and r["level"] == 2
+        and not ec.entries_allowed()
+    )
+    assert (
+        ec.escalate(2, "owner", "again")["noop"]
+        and ec.escalate(1, "o", "lower")["noop"]
+    )
     ec.escalate(4, "owner", "worse")
-    assert calls[2:] == ["reduce_positions", "full_stop"]  # прежние уровни не повторяются
+    assert calls[2:] == [
+        "reduce_positions",
+        "full_stop",
+    ]  # прежние уровни не повторяются
 
 
 def test_failed_action_does_not_stop_others_and_level_is_persisted(tmp_path):
     ec, calls = make_control(tmp_path, fail="cancel_orders")
     r = ec.escalate(3, "owner", "x")
-    assert "cancel_orders" in r["errors"] and calls == ["block_entries", "cancel_orders", "reduce_positions"]
+    assert "cancel_orders" in r["errors"] and calls == [
+        "block_entries",
+        "cancel_orders",
+        "reduce_positions",
+    ]
     assert EmergencyControl(ec.path, ec.actions).level == 3  # пережило «перезапуск»
 
 
@@ -166,7 +240,11 @@ def test_promotion_is_one_step_with_evidence(tmp_path):
     r.promote("owner", {"ok": True})
     with pytest.raises(RolloutError):
         r.promote("owner", {"ok": True})
-    assert [h["to"] for h in Rollout(r.path).history()] == ["paper", "canary", "production"]
+    assert [h["to"] for h in Rollout(r.path).history()] == [
+        "paper",
+        "canary",
+        "production",
+    ]
 
 
 def test_demote_to_earlier_stage_only_with_reason(tmp_path):

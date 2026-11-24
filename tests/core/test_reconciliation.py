@@ -156,7 +156,9 @@ class TestReconcilePositions:
         """При исключении в fetch_positions _monitored должен остаться нетронутым."""
         bot = make_bot()
         bot._monitored["SOL/USDT"] = {"qty": 10.0, "entry": 150.0, "side": "buy"}
-        bot.api.fetch_positions_checked = AsyncMock(side_effect=Exception("network error"))
+        bot.api.fetch_positions_checked = AsyncMock(
+            side_effect=Exception("network error")
+        )
         bot.telegram.notify = AsyncMock()
 
         await bot._reconcile_positions()

@@ -22,13 +22,18 @@ def _load(model_path: str) -> Any:
     return SAC.load(model_path, device="cpu")
 
 
-def export_actor(model_path: str, out_path: Optional[str] = None, opset: int = 17) -> str:
+def export_actor(
+    model_path: str, out_path: Optional[str] = None, opset: int = 17
+) -> str:
     import torch  # noqa: PLC0415
 
     model = _load(model_path)
     actor = model.policy.actor.eval()
     obs_dim = int(model.observation_space.shape[0])
-    out_path = out_path or (model_path[:-4] if model_path.endswith(".zip") else model_path) + ".onnx"
+    out_path = (
+        out_path
+        or (model_path[:-4] if model_path.endswith(".zip") else model_path) + ".onnx"
+    )
 
     class Deterministic(torch.nn.Module):
         def __init__(self, a: Any) -> None:
@@ -50,7 +55,9 @@ def export_actor(model_path: str, out_path: Optional[str] = None, opset: int = 1
     return out_path
 
 
-def verify(model_path: str, onnx_path: str, n: int = 200, atol: float = 1e-4, seed: int = 0) -> Dict[str, Any]:
+def verify(
+    model_path: str, onnx_path: str, n: int = 200, atol: float = 1e-4, seed: int = 0
+) -> Dict[str, Any]:
     import onnxruntime as ort  # noqa: PLC0415
     import torch  # noqa: PLC0415
 
@@ -63,7 +70,12 @@ def verify(model_path: str, onnx_path: str, n: int = 200, atol: float = 1e-4, se
     sess = ort.InferenceSession(onnx_path, providers=["CPUExecutionProvider"])
     got = sess.run(["action"], {"obs": obs})[0]
     max_diff = float(np.max(np.abs(ref - got)))
-    return {"n": n, "max_abs_diff": max_diff, "ok": bool(max_diff <= atol), "obs_dim": obs_dim}
+    return {
+        "n": n,
+        "max_abs_diff": max_diff,
+        "ok": bool(max_diff <= atol),
+        "obs_dim": obs_dim,
+    }
 
 
 class OnnxPolicy:
@@ -83,7 +95,9 @@ class OnnxPolicy:
 def main(argv: Optional[list] = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     if not args:
-        print("Использование: python -m reinforcement_learning.onnx_export <model.zip> [out.onnx]")
+        print(
+            "Использование: python -m reinforcement_learning.onnx_export <model.zip> [out.onnx]"
+        )
         return 2
     out = export_actor(args[0], args[1] if len(args) > 1 else None)
     res = verify(args[0], out)

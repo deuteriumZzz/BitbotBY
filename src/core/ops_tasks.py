@@ -63,6 +63,8 @@ async def candle_check(
         out[sym] = compare_with_rest(ws, rest)
     publish_candle_check(out)
     return out
+
+
 async def ws_shadow_loop(
     bot: Any,
     *,
@@ -73,13 +75,20 @@ async def ws_shadow_loop(
 ) -> None:
     """Публичный WS-поток параллельно REST: метрики в Prometheus, тревога при тишине. Решений не принимает."""
     from src.infra.health_server import publish_ws_metrics  # noqa: PLC0415
-    from src.market.ws.client import MarketStream, default_connect, run_stream, topics  # noqa: PLC0415
+    from src.market.ws.client import (  # noqa: PLC0415
+        MarketStream,
+        default_connect,
+        run_stream,
+        topics,
+    )
 
     symbols = [s.strip() for s in Config.WS_SHADOW_SYMBOLS.split(",") if s.strip()]
     stream = MarketStream(symbols)
     bot.ws_stream = stream
     stop = stop or asyncio.Event()
-    runner = asyncio.create_task(run_stream(connect or default_connect(), stream, topics(symbols), stop))
+    runner = asyncio.create_task(
+        run_stream(connect or default_connect(), stream, topics(symbols), stop)
+    )
     last_alert = -ALERT_COOLDOWN_S
     last_check = time.monotonic()
     last_check_alert = -ALERT_COOLDOWN_S * 2
@@ -93,14 +102,21 @@ async def ws_shadow_loop(
                 with contextlib.suppress(Exception):
                     res = await candle_check(bot, stream)
                     bad = sorted(s for s, r in res.items() if r.get("ok") is False)
-                    if bad and time.monotonic() - last_check_alert >= ALERT_COOLDOWN_S * 2:
+                    if (
+                        bad
+                        and time.monotonic() - last_check_alert >= ALERT_COOLDOWN_S * 2
+                    ):
                         last_check_alert = time.monotonic()
-                        await bot.telegram.notify("⚠️ WS≠REST: свечи расходятся: " + ", ".join(bad))
+                        await bot.telegram.notify(
+                            "⚠️ WS≠REST: свечи расходятся: " + ", ".join(bad)
+                        )
             silent = stream.health.silent_streams(STALE_ALERT_S)
             if silent and time.monotonic() - last_alert >= ALERT_COOLDOWN_S:
                 last_alert = time.monotonic()
                 with contextlib.suppress(Exception):
-                    await bot.telegram.notify("⚠️ WS-shadow: потоки замолчали: " + ", ".join(silent[:6]))
+                    await bot.telegram.notify(
+                        "⚠️ WS-shadow: потоки замолчали: " + ", ".join(silent[:6])
+                    )
     finally:
         stop.set()
         runner.cancel()
@@ -122,16 +138,24 @@ async def backup_once(bot: Any, path: Optional[str] = None) -> Dict[str, Any]:
     path = path or trades_db_path()
     if not os.path.exists(path) or os.path.getsize(path) == 0:
         return {"ok": True, "skipped": True, "source": path}
-    res = await asyncio.to_thread(db_health.backup, path, BACKUP_DIR, Config.DB_BACKUP_KEEP)
+    res = await asyncio.to_thread(
+        db_health.backup, path, BACKUP_DIR, Config.DB_BACKUP_KEEP
+    )
     bot._last_backup = {  # для карточки «Защита и наблюдение» в приложении
-        "ok": res["ok"], "at": datetime.now(timezone.utc).isoformat(),
-        "path": res.get("backup"), "error": res.get("error"),
+        "ok": res["ok"],
+        "at": datetime.now(timezone.utc).isoformat(),
+        "path": res.get("backup"),
+        "error": res.get("error"),
     }
     with contextlib.suppress(Exception):
-        bot._ledger_write("db_backup", ok=res["ok"], backup=res.get("backup"), error=res.get("error"))
+        bot._ledger_write(
+            "db_backup", ok=res["ok"], backup=res.get("backup"), error=res.get("error")
+        )
     if not res["ok"]:
         with contextlib.suppress(Exception):
-            await bot.telegram.notify(f"⚠️ Резервная копия БД не создана: {res['error']}")
+            await bot.telegram.notify(
+                f"⚠️ Резервная копия БД не создана: {res['error']}"
+            )
     return res
 
 
@@ -145,16 +169,25 @@ async def db_backup_loop(
     while True:
         try:
             await backup_once(bot)
-        except Exception as exc:  # noqa: BLE001 — задача бэкапа не должна падать насовсем
+        except (
+            Exception
+        ) as exc:  # noqa: BLE001 — задача бэкапа не должна падать насовсем
             logger.warning("DB backup failed: %s", exc)
         await sleep(max(1.0, Config.DB_BACKUP_INTERVAL_H) * 3600)
 
 
 # ── Состояние защиты и наблюдения (для приложения и журнала) ───────────────────
 OPS_FLAGS = (
-    "WS_SHADOW_ENABLED", "AI_SANITIZE_PROMPT", "AI_STRICT_VALIDATION", "AI_RAG_CONTEXT",
-    "RISK_GATE_SHADOW", "DB_BACKUP_ENABLED", "FUNDING_IN_PNL", "SAC_V2_ENABLED",
-    "EVENT_STREAM_ENABLED", "DATA_QUALITY_GATE",
+    "WS_SHADOW_ENABLED",
+    "AI_SANITIZE_PROMPT",
+    "AI_STRICT_VALIDATION",
+    "AI_RAG_CONTEXT",
+    "RISK_GATE_SHADOW",
+    "DB_BACKUP_ENABLED",
+    "FUNDING_IN_PNL",
+    "SAC_V2_ENABLED",
+    "EVENT_STREAM_ENABLED",
+    "DATA_QUALITY_GATE",
 )
 
 
@@ -170,7 +203,11 @@ def ops_status(bot: Any) -> Dict[str, Any]:
     stream = getattr(bot, "ws_stream", None)
     if stream is not None:
         snap = stream.health.snapshot()
-        lags = [s["lag_ms"]["p99"] for s in snap["streams"].values() if s["lag_ms"]["p99"] is not None]
+        lags = [
+            s["lag_ms"]["p99"]
+            for s in snap["streams"].values()
+            if s["lag_ms"]["p99"] is not None
+        ]
         ws = {
             "streams": len(snap["streams"]),
             "silent": stream.health.silent_streams(STALE_ALERT_S),
@@ -222,8 +259,12 @@ async def rag_refresh_loop(
     while True:
         try:
             ledger_path = path or getattr(getattr(bot, "ledger", None), "path", None)
-            bot.rag = await asyncio.to_thread(LedgerRAG.from_ledger, ledger_path or "data/decision_ledger.jsonl")
-        except Exception as exc:  # noqa: BLE001 — прежний индекс остаётся, цикл не падает
+            bot.rag = await asyncio.to_thread(
+                LedgerRAG.from_ledger, ledger_path or "data/decision_ledger.jsonl"
+            )
+        except (
+            Exception
+        ) as exc:  # noqa: BLE001 — прежний индекс остаётся, цикл не падает
             logger.warning("RAG refresh failed: %s", exc)
         await sleep(RAG_REFRESH_S)
 
@@ -249,7 +290,9 @@ def build_emergency(bot: Any, path: str = EMERGENCY_PATH) -> EmergencyControl:
         bot._runtime_config.set_paused(True)
 
     async def cancel_orders() -> None:
-        logger.info("Emergency L2: отложенных входных ордеров нет, биржевые SL/TP сохранены")
+        logger.info(
+            "Emergency L2: отложенных входных ордеров нет, биржевые SL/TP сохранены"
+        )
 
     async def reduce_positions() -> None:
         async with bot._monitored_lock:
@@ -318,12 +361,20 @@ async def emergency_command(bot: Any, args: List[str], who: str) -> str:
         return usage
     level = int(cmd)
     if level <= ctl.level:
-        return f"Уровень {ctl.level} уже активен — понижать можно только командой reset."
+        return (
+            f"Уровень {ctl.level} уже активен — понижать можно только командой reset."
+        )
     if len(args) < 2 or args[1].lower() != "confirm":
-        steps = "\n".join(f"  {lv}. {_LEVEL_TEXT[lv]}" for lv in range(ctl.level + 1, level + 1))
+        steps = "\n".join(
+            f"  {lv}. {_LEVEL_TEXT[lv]}" for lv in range(ctl.level + 1, level + 1)
+        )
         return f"Будет выполнено:\n{steps}\nПодтвердите: /emergency {level} confirm"
     res = await ctl.aescalate(level, who, "команда владельца")
-    lines = [f"Аварийный уровень {res['level']}: выполнено {', '.join(res['executed']) or 'ничего'}."]
+    lines = [
+        f"Аварийный уровень {res['level']}: выполнено {', '.join(res['executed']) or 'ничего'}."
+    ]
     if res["errors"]:
-        lines.append("Ошибки: " + "; ".join(f"{k}: {v}" for k, v in res["errors"].items()))
+        lines.append(
+            "Ошибки: " + "; ".join(f"{k}: {v}" for k, v in res["errors"].items())
+        )
     return "\n".join(lines)

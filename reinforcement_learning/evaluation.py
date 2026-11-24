@@ -68,7 +68,9 @@ def block_bootstrap_ci(
         starts = rng.integers(0, n - block + 1, n_blocks)
         sample = np.concatenate([x[s : s + block] for s in starts])[:n]
         stats[i] = stat(sample)
-    return float(np.quantile(stats, alpha / 2)), float(np.quantile(stats, 1 - alpha / 2))
+    return float(np.quantile(stats, alpha / 2)), float(
+        np.quantile(stats, 1 - alpha / 2)
+    )
 
 
 def baseline_returns(close: np.ndarray) -> Dict[str, np.ndarray]:

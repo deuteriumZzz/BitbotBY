@@ -17,18 +17,40 @@ from typing import List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
-from reinforcement_learning.dataset import FEATURE_VERSION  # noqa: F401 — единая версия пайплайна
+from reinforcement_learning.dataset import (  # noqa: F401 — единая версия пайплайна
+    FEATURE_VERSION,
+)
 
 WARMUP = 64  # первые строки недостоверны (окна/EWM не прогреты) и отбрасываются
 MIN_TAIL = 300  # достаточно для инференса: EWM-память к этому моменту ≈ 0
 CLIP = 5.0
 
 FEATURE_NAMES: List[str] = [
-    "ret_1", "ret_4", "ret_16", "vol_16", "vol_64", "rsi", "macd_hist", "bb_pos",
-    "atr_pct", "vol_z", "range_pct", "close_vs_ema50", "funding",
+    "ret_1",
+    "ret_4",
+    "ret_16",
+    "vol_16",
+    "vol_64",
+    "rsi",
+    "macd_hist",
+    "bb_pos",
+    "atr_pct",
+    "vol_z",
+    "range_pct",
+    "close_vs_ema50",
+    "funding",
 ]
 OBS_EXTRA = ["exposure", "equity_pnl"]  # добавляются средой/инференсом к признакам
-_PERCENT = ("ret_1", "ret_4", "ret_16", "vol_16", "vol_64", "atr_pct", "range_pct", "macd_hist")
+_PERCENT = (
+    "ret_1",
+    "ret_4",
+    "ret_16",
+    "vol_16",
+    "vol_64",
+    "atr_pct",
+    "range_pct",
+    "macd_hist",
+)
 
 
 def _rsi(close: pd.Series, n: int = 14) -> pd.Series:
@@ -48,11 +70,16 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
     if (c <= 0).any():
         raise ValueError("цены должны быть положительными")
     lr = np.log(c).diff()
-    ema12, ema26 = c.ewm(span=12, adjust=False).mean(), c.ewm(span=26, adjust=False).mean()
+    ema12, ema26 = (
+        c.ewm(span=12, adjust=False).mean(),
+        c.ewm(span=26, adjust=False).mean(),
+    )
     macd = ema12 - ema26
     hist = macd - macd.ewm(span=9, adjust=False).mean()
     sma20, sd20 = c.rolling(20).mean(), c.rolling(20).std()
-    tr = pd.concat([h - l, (h - c.shift()).abs(), (l - c.shift()).abs()], axis=1).max(axis=1)
+    tr = pd.concat([h - l, (h - c.shift()).abs(), (l - c.shift()).abs()], axis=1).max(
+        axis=1
+    )
     atr = tr.ewm(alpha=1 / 14, adjust=False).mean()
     vmean, vstd = v.rolling(48).mean(), v.rolling(48).std()
     if "funding_rate" in df:
@@ -85,7 +112,9 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
     return f.clip(-CLIP, CLIP).iloc[WARMUP:].astype(np.float32)
 
 
-def prepare(df: pd.DataFrame) -> Tuple[pd.DataFrame, np.ndarray, np.ndarray, np.ndarray]:
+def prepare(
+    df: pd.DataFrame,
+) -> Tuple[pd.DataFrame, np.ndarray, np.ndarray, np.ndarray]:
     """(признаки, open, close, funding) — выровнены по одним и тем же строкам для `TradingEnvV2`."""
     feats = build_features(df)
     aligned = df.loc[feats.index]

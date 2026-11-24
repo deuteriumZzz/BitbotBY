@@ -41,7 +41,9 @@ def thompson_weights(
     if not oos_validated or any(w + l < min_trials for w, l in stats.values()):
         return dict(prev)
     rng = np.random.default_rng(seed)
-    samples = np.column_stack([rng.beta(1 + stats[k][0], 1 + stats[k][1], draws) for k in names])
+    samples = np.column_stack(
+        [rng.beta(1 + stats[k][0], 1 + stats[k][1], draws) for k in names]
+    )
     p_best = np.bincount(samples.argmax(axis=1), minlength=len(names)) / draws
     free = 1.0 - floor * len(names)
     target = {k: floor + free * float(p_best[i]) for i, k in enumerate(names)}
@@ -79,7 +81,9 @@ def exp_weights(
     target = {k: floor + free * raw[k] / z for k in names}
 
     moved = sum(abs(target[k] - prev[k]) for k in names)
-    t = 1.0 if moved <= max_step else max_step / moved  # масштабируем шаг, а не обрезаем веса
+    t = (
+        1.0 if moved <= max_step else max_step / moved
+    )  # масштабируем шаг, а не обрезаем веса
     out = {k: prev[k] + t * (target[k] - prev[k]) for k in names}
     s = sum(out.values())
     return {k: v / s for k, v in out.items()}

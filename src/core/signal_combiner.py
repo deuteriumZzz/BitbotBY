@@ -266,7 +266,8 @@ class SignalCombiner:
             )
             self.last_inputs.setdefault("shadow", {})[sym] = {
                 "regime": regime,
-                "ai": ai_view and {"action": ai_view.action, "confidence": ai_view.confidence},
+                "ai": ai_view
+                and {"action": ai_view.action, "confidence": ai_view.confidence},
                 "sac": {"action": sac_view.action, "confidence": sac_view.confidence},
                 "verdicts": {
                     name: {

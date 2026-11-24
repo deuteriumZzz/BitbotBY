@@ -36,9 +36,26 @@ STALE_AFTER_S = 30.0  # нет сообщений дольше — соедин�
 BACKOFF_BASE_S, BACKOFF_MAX_S = 1.0, 60.0
 STABLE_AFTER_S = 60.0  # столько живое соединение сбрасывает backoff
 
-_INTERVALS = {"1m": "1", "3m": "3", "5m": "5", "15m": "15", "30m": "30", "1h": "60", "4h": "240", "1d": "D"}
-_INTERVAL_MS = {"1": 60_000, "3": 180_000, "5": 300_000, "15": 900_000, "30": 1_800_000,
-                "60": 3_600_000, "240": 14_400_000, "D": 86_400_000}
+_INTERVALS = {
+    "1m": "1",
+    "3m": "3",
+    "5m": "5",
+    "15m": "15",
+    "30m": "30",
+    "1h": "60",
+    "4h": "240",
+    "1d": "D",
+}
+_INTERVAL_MS = {
+    "1": 60_000,
+    "3": 180_000,
+    "5": 300_000,
+    "15": 900_000,
+    "30": 1_800_000,
+    "60": 3_600_000,
+    "240": 14_400_000,
+    "D": 86_400_000,
+}
 
 
 def to_bybit(symbol: str) -> str:
@@ -50,15 +67,25 @@ def topics(symbols: List[str], timeframe: str = "15m", depth: int = 50) -> List[
     iv = _INTERVALS[timeframe]
     out: List[str] = []
     for s in map(to_bybit, symbols):
-        out += [f"kline.{iv}.{s}", f"orderbook.{depth}.{s}", f"tickers.{s}", f"publicTrade.{s}"]
+        out += [
+            f"kline.{iv}.{s}",
+            f"orderbook.{depth}.{s}",
+            f"tickers.{s}",
+            f"publicTrade.{s}",
+        ]
     return out
 
 
 class MarketStream:
     """Состояние всех публичных потоков и разбор сообщений. Без сети и без часов."""
 
-    def __init__(self, symbols: List[str], timeframe: str = "15m", depth: int = 50,
-                 health: Optional[StreamHealth] = None) -> None:
+    def __init__(
+        self,
+        symbols: List[str],
+        timeframe: str = "15m",
+        depth: int = 50,
+        health: Optional[StreamHealth] = None,
+    ) -> None:
         self.depth, self.timeframe = depth, timeframe
         iv = _INTERVALS[timeframe]
         self.health = health or StreamHealth()
@@ -90,12 +117,16 @@ class MarketStream:
         if kind == "orderbook" and sym in self.books and isinstance(data, dict):
             if self.books[sym].apply(msg.get("type", ""), data) == RESYNC:
                 self.health.on_gap(stream)
-                actions.append(("resubscribe", topic))  # новая подписка даёт свежий snapshot
+                actions.append(
+                    ("resubscribe", topic)
+                )  # новая подписка даёт свежий snapshot
         elif kind == "kline" and sym in self.candles and isinstance(data, list):
             for k in data:
                 self.candles[sym].on_kline(k)
         elif kind == "tickers" and isinstance(data, dict):
-            self.tickers.setdefault(sym, {}).update({k: v for k, v in data.items() if v not in ("", None)})
+            self.tickers.setdefault(sym, {}).update(
+                {k: v for k, v in data.items() if v not in ("", None)}
+            )
         elif kind == "publicTrade" and isinstance(data, list):
             self.trades[sym] = self.trades.get(sym, 0) + len(data)
         return actions
@@ -108,14 +139,16 @@ def default_connect(url: str = PUBLIC_LINEAR) -> Connect:
     async def _c() -> Any:
         import websockets  # noqa: PLC0415
 
-        return await websockets.connect(url, ping_interval=None, max_queue=1024)  # ping — наш
+        return await websockets.connect(
+            url, ping_interval=None, max_queue=1024
+        )  # ping — наш
 
     return _c
 
 
 def backoff_delay(attempt: int, rng: Callable[[], float] = random.random) -> float:
     """Экспоненциальная пауза с полным jitter: U(0, min(max, base·2^n))."""
-    return rng() * min(BACKOFF_MAX_S, BACKOFF_BASE_S * (2 ** attempt))
+    return rng() * min(BACKOFF_MAX_S, BACKOFF_BASE_S * (2**attempt))
 
 
 async def run_stream(
@@ -157,14 +190,20 @@ async def run_stream(
                     last_rx = mono()
                     for action, topic in stream.handle(raw):
                         if action == "resubscribe":
-                            await ws.send(json.dumps({"op": "unsubscribe", "args": [topic]}))
-                            await ws.send(json.dumps({"op": "subscribe", "args": [topic]}))
+                            await ws.send(
+                                json.dumps({"op": "unsubscribe", "args": [topic]})
+                            )
+                            await ws.send(
+                                json.dumps({"op": "subscribe", "args": [topic]})
+                            )
                 if mono() - last_ping >= ping_every:
                     await ws.send(json.dumps({"op": "ping"}))
                     last_ping = mono()
         except asyncio.CancelledError:
             raise
-        except Exception as exc:  # noqa: BLE001 — любой сбой соединения → переподключение
+        except (
+            Exception
+        ) as exc:  # noqa: BLE001 — любой сбой соединения → переподключение
             logger.warning("WS: сбой %s: %s", type(exc).__name__, exc)
         finally:
             if ws is not None:
@@ -178,11 +217,15 @@ async def run_stream(
         await sleep(backoff_delay(attempt, rng))
 
 
-async def shadow(symbols: List[str], seconds: float, timeframe: str = "15m", testnet: bool = False) -> Dict[str, Any]:
+async def shadow(
+    symbols: List[str], seconds: float, timeframe: str = "15m", testnet: bool = False
+) -> Dict[str, Any]:
     stream = MarketStream(symbols, timeframe)
     stop = asyncio.Event()
     url = PUBLIC_LINEAR_TESTNET if testnet else PUBLIC_LINEAR
-    task = asyncio.create_task(run_stream(default_connect(url), stream, topics(symbols, timeframe), stop))
+    task = asyncio.create_task(
+        run_stream(default_connect(url), stream, topics(symbols, timeframe), stop)
+    )
     await asyncio.sleep(seconds)
     stop.set()
     try:
@@ -191,14 +234,24 @@ async def shadow(symbols: List[str], seconds: float, timeframe: str = "15m", tes
         task.cancel()
     return {
         "health": stream.health.snapshot(),
-        "books": {s: {"ready": b.ready, "gaps": b.gaps, "crossed": b.crossed, "snapshots": b.snapshots,
-                      "spread_bps": b.spread_bps()} for s, b in stream.books.items()},
+        "books": {
+            s: {
+                "ready": b.ready,
+                "gaps": b.gaps,
+                "crossed": b.crossed,
+                "snapshots": b.snapshots,
+                "spread_bps": b.spread_bps(),
+            }
+            for s, b in stream.books.items()
+        },
         "confirmed_candles": {s: len(c.confirmed) for s, c in stream.candles.items()},
     }
 
 
 def main(argv: Optional[List[str]] = None) -> int:
-    p = argparse.ArgumentParser(description="Shadow-замер публичного WS Bybit (без ключей)")
+    p = argparse.ArgumentParser(
+        description="Shadow-замер публичного WS Bybit (без ключей)"
+    )
     p.add_argument("--symbols", default="BTC/USDT")
     p.add_argument("--seconds", type=float, default=60)
     p.add_argument("--timeframe", default="15m")

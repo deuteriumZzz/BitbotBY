@@ -42,7 +42,9 @@ def test_beta_known_values():
 
 def test_hedge_reduces_portfolio_cvar_and_stress_is_upper_bound():
     m = rng.normal(0, 0.02, (1000, 1))
-    R = np.hstack([m, m + rng.normal(0, 0.005, (1000, 1))])  # два сильно коррелированных актива
+    R = np.hstack(
+        [m, m + rng.normal(0, 0.005, (1000, 1))]
+    )  # два сильно коррелированных актива
     same = mt.portfolio_cvar(R, [1000, 1000])
     hedge = mt.portfolio_cvar(R, [1000, -1000])
     assert hedge < same
@@ -58,7 +60,9 @@ def test_allow_normal_entry():
 
 
 def test_reduce_only_never_blocked():
-    v = evaluate(Proposal("ETH/USDT", -500.0, reduce_only=True), pf(kill_switch=True), LIM)
+    v = evaluate(
+        Proposal("ETH/USDT", -500.0, reduce_only=True), pf(kill_switch=True), LIM
+    )
     assert v.action == "allow" and v.reasons == ["reduce_only"]
 
 
@@ -72,7 +76,11 @@ def test_reduce_only_never_blocked():
 )
 def test_breaker_denies_entries(kw):
     v = evaluate(Proposal("ETH/USDT", 1000.0), pf(**kw), LIM)
-    assert v.action == "deny" and v.level >= 1 and v.reasons[0].startswith("circuit_breaker")
+    assert (
+        v.action == "deny"
+        and v.level >= 1
+        and v.reasons[0].startswith("circuit_breaker")
+    )
 
 
 def test_ood_blocks_entries_only_when_enabled():
@@ -89,7 +97,12 @@ def test_breaker_levels_are_independent_and_graded():
     assert not any(L().values())
     day = L(equity=9_400.0, peak_equity=9_400.0)  # дневной убыток без просадки от пика
     assert day[1] and not (day[2] or day[3] or day[4])
-    assert L(equity=8_400.0, day_start_equity=8_400.0) == {1: True, 2: True, 3: False, 4: False}
+    assert L(equity=8_400.0, day_start_equity=8_400.0) == {
+        1: True,
+        2: True,
+        3: False,
+        4: False,
+    }
     lv3 = L(equity=7_900.0, day_start_equity=7_900.0)
     assert lv3[3] and not lv3[4]
     assert all(L(equity=7_400.0, day_start_equity=7_400.0).values())
@@ -111,22 +124,32 @@ def test_symbol_exposure_reduces_to_cap():
 
 
 def test_gross_exposure_cap():
-    held = pf(positions=[Position(s, 2400.0, beta=0.0, cvar=0.0) for s in "ABCD"])  # 9600 из 10000
+    held = pf(
+        positions=[Position(s, 2400.0, beta=0.0, cvar=0.0) for s in "ABCD"]
+    )  # 9600 из 10000
     v = evaluate(Proposal("E", 2000.0, beta=0.0, cvar=0.0), held, LIM)
     assert v.action == "reduce" and v.approved_notional == pytest.approx(400.0)
 
 
 def test_net_beta_blocks_longs_but_allows_offsetting_short():
-    held = pf(positions=[Position(s, 2400.0, cvar=0.0) for s in "ABC"])  # бета-экспозиция 7200 при лимите 7500
+    held = pf(
+        positions=[Position(s, 2400.0, cvar=0.0) for s in "ABC"]
+    )  # бета-экспозиция 7200 при лимите 7500
     long_ = evaluate(Proposal("D", 2000.0, cvar=0.0), held, LIM)
-    assert long_.approved_notional == pytest.approx(300.0) and "net_beta" in long_.reasons
+    assert (
+        long_.approved_notional == pytest.approx(300.0) and "net_beta" in long_.reasons
+    )
     short = evaluate(Proposal("D", -2000.0, cvar=0.0), held, LIM)
     assert short.action == "reduce" or short.action == "allow"
-    assert short.approved_notional < 0 and "net_beta" not in short.reasons  # бету снижает
+    assert (
+        short.approved_notional < 0 and "net_beta" not in short.reasons
+    )  # бету снижает
 
 
 def test_stress_cvar_scales_position():
-    held = pf(positions=[Position("A", 1500.0, beta=0.0, cvar=0.4)])  # стресс-CVaR 600 из лимита 1000
+    held = pf(
+        positions=[Position("A", 1500.0, beta=0.0, cvar=0.4)]
+    )  # стресс-CVaR 600 из лимита 1000
     v = evaluate(Proposal("B", 2000.0, beta=0.0, cvar=0.4), held, LIM)
     assert v.action == "reduce" and v.approved_notional == pytest.approx(1000.0)
     assert "stress_cvar" in v.reasons
@@ -151,7 +174,12 @@ def test_from_config_reads_existing_thresholds():
         MAX_CORRELATION = 0.6
 
     lim = GateLimits.from_config(C)
-    assert (lim.daily_loss_limit, lim.max_drawdown, lim.max_consecutive_losses, lim.max_correlation) == (
+    assert (
+        lim.daily_loss_limit,
+        lim.max_drawdown,
+        lim.max_consecutive_losses,
+        lim.max_correlation,
+    ) == (
         0.03,
         0.1,
         5,
@@ -168,12 +196,18 @@ def test_allocation_unchanged_without_oos():
 
 
 def test_allocation_rate_limited_floor_and_sums_to_one():
-    w = al.exp_weights({"a": -5, "b": 5, "c": 0}, PREV, oos_validated=True, max_step=0.1)
+    w = al.exp_weights(
+        {"a": -5, "b": 5, "c": 0}, PREV, oos_validated=True, max_step=0.1
+    )
     assert sum(w.values()) == pytest.approx(1.0)
-    assert sum(abs(w[k] - PREV[k]) for k in PREV) <= 0.1 + 1e-9  # скорость перелива ограничена
+    assert (
+        sum(abs(w[k] - PREV[k]) for k in PREV) <= 0.1 + 1e-9
+    )  # скорость перелива ограничена
     assert w["b"] > PREV["b"] and w["a"] < PREV["a"]
     for _ in range(100):  # длительное давление не опускает вес ниже пола
-        w = al.exp_weights({"a": -50, "b": 50, "c": 0}, w, oos_validated=True, floor=0.05)
+        w = al.exp_weights(
+            {"a": -50, "b": 50, "c": 0}, w, oos_validated=True, floor=0.05
+        )
     assert min(w.values()) >= 0.05 - 1e-9 and sum(w.values()) == pytest.approx(1.0)
 
 
@@ -181,4 +215,6 @@ def test_allocation_input_checks():
     with pytest.raises(ValueError):
         al.exp_weights({"a": 1}, PREV, oos_validated=True)
     with pytest.raises(ValueError):
-        al.exp_weights({"a": 1, "b": 1, "c": 1}, {"a": 0.5, "b": 0.3, "c": 0.3}, oos_validated=True)
+        al.exp_weights(
+            {"a": 1, "b": 1, "c": 1}, {"a": 0.5, "b": 0.3, "c": 0.3}, oos_validated=True
+        )

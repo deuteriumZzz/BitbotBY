@@ -42,13 +42,19 @@ def test_cannot_skip_or_promote_without_evidence(reg, tmp_path):
     with pytest.raises(PromotionError):
         reg.promote("m1", {}, "t")  # нет walk-forward
     with pytest.raises(PromotionError):
-        reg.promote("m1", {"walk_forward": {"passed": True, "n_folds": 1}, "dataset_version": "x"}, "t")
+        reg.promote(
+            "m1",
+            {"walk_forward": {"passed": True, "n_folds": 1}, "dataset_version": "x"},
+            "t",
+        )
     reg.promote("m1", WF_OK, "t")  # validated
     with pytest.raises(PromotionError):
         reg.promote("m1", {}, "t")  # нет approved_by
     reg.promote("m1", {"approved_by": "o"}, "t")  # paper
     with pytest.raises(PromotionError):
-        reg.promote("m1", {"approved_by": "o", "paper_days": 3}, "t")  # мало дней на paper
+        reg.promote(
+            "m1", {"approved_by": "o", "paper_days": 3}, "t"
+        )  # мало дней на paper
 
 
 def test_executable_stages_paper_vs_live(reg, tmp_path):
@@ -92,7 +98,9 @@ def test_readiness_sac_not_approved():
         False,
         tm.REASON_SAC_NOT_APPROVED,
     )
-    assert tm.readiness("ai", sac_loaded=False, sac_approved=False)[0]  # без SAC не затронут
+    assert tm.readiness("ai", sac_loaded=False, sac_approved=False)[
+        0
+    ]  # без SAC не затронут
     assert tm.readiness("dqn", sac_loaded=True)[0]  # по умолчанию поведение прежнее
 
 
@@ -169,7 +177,9 @@ def test_gym_wrapper_terminated_on_ruin():
     from reinforcement_learning.env_v2 import TradingEnvV2
 
     o = np.array([100.0, 100.0, 1.0, 1.0, 1.0])
-    env = TradingEnvV2(np.zeros((5, 2)), o, o.copy(), fee=0, slippage=0, max_exposure=1.0)
+    env = TradingEnvV2(
+        np.zeros((5, 2)), o, o.copy(), fee=0, slippage=0, max_exposure=1.0
+    )
     env.reset()
     env.step([-1.0])  # шорт; цена падает → прибыль, не банкротство
     # шорт на росте: цена x100 → банкротство
@@ -199,7 +209,11 @@ def test_bootstrap_deterministic_and_contains_mean():
 def _fold(edge, n=200, seed=0):
     base = np.random.default_rng(seed).normal(0, 0.01, n)
     model = base + edge
-    return {"model": model, "baseline": base, "equity": 10_000 * np.cumprod(1 + model * 0.1)}
+    return {
+        "model": model,
+        "baseline": base,
+        "equity": 10_000 * np.cumprod(1 + model * 0.1),
+    }
 
 
 def test_promotion_verdict_gates():
@@ -217,7 +231,9 @@ def test_metrics_drawdown():
 # ── датасет ───────────────────────────────────────────────────────────────────
 def _df(n=50):
     idx = pd.date_range("2026-01-01", periods=n, freq="15min")
-    return pd.DataFrame({"a": np.arange(n, dtype=float), "b": np.sin(np.arange(n))}, index=idx)
+    return pd.DataFrame(
+        {"a": np.arange(n, dtype=float), "b": np.sin(np.arange(n))}, index=idx
+    )
 
 
 def test_parquet_roundtrip_and_tamper_detection(tmp_path):
@@ -252,4 +268,6 @@ def test_normalizer_fit_on_train_only():
     train, test = df.iloc[:60], df.iloc[60:]
     stats = ds.fit_normalizer(train)
     assert ds.apply_normalizer(train, stats)["a"].mean() == pytest.approx(0, abs=1e-9)
-    assert ds.apply_normalizer(test, stats)["a"].mean() > 1  # тест не центрируется по себе
+    assert (
+        ds.apply_normalizer(test, stats)["a"].mean() > 1
+    )  # тест не центрируется по себе

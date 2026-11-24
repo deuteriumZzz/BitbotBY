@@ -22,7 +22,11 @@ CANARY_CAPITAL_FRACTION = 0.05  # предложение владельцу
 _CAPS = {
     "shadow": {"real_orders": False, "paper_orders": False, "capital_fraction": 0.0},
     "paper": {"real_orders": False, "paper_orders": True, "capital_fraction": 0.0},
-    "canary": {"real_orders": True, "paper_orders": True, "capital_fraction": CANARY_CAPITAL_FRACTION},
+    "canary": {
+        "real_orders": True,
+        "paper_orders": True,
+        "capital_fraction": CANARY_CAPITAL_FRACTION,
+    },
     "production": {"real_orders": True, "paper_orders": True, "capital_fraction": 1.0},
 }
 

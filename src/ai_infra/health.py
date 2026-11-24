@@ -23,7 +23,13 @@ def _p95(values: List[float]) -> Optional[float]:
 
 def provider_health(records: Iterable[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
     stats: Dict[Any, Dict[str, Any]] = defaultdict(
-        lambda: {"answered": 0, "failed": Counter(), "latency": [], "last_ok_ts": None, "tokens": 0}
+        lambda: {
+            "answered": 0,
+            "failed": Counter(),
+            "latency": [],
+            "last_ok_ts": None,
+            "tokens": 0,
+        }
     )
     for r in records:
         if r.get("kind") != "ai_call":

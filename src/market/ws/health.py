@@ -75,7 +75,11 @@ class StreamHealth:
                 s: {
                     "messages": self.messages[s],
                     "gaps": self.gaps[s],
-                    "gap_rate": round(self.gaps[s] / self.messages[s], 5) if self.messages[s] else None,
+                    "gap_rate": (
+                        round(self.gaps[s] / self.messages[s], 5)
+                        if self.messages[s]
+                        else None
+                    ),
                     "resyncs": self.resyncs[s],
                     "lag_ms": self.lag(s),
                     "seconds_since_last": self.seconds_since_last(s),

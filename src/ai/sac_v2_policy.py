@@ -62,9 +62,14 @@ class SACV2Signal:
 
     @property
     def stage(self) -> str:
-        from reinforcement_learning.model_registry import ModelRegistry, default_registry_path  # noqa: PLC0415
+        from reinforcement_learning.model_registry import (  # noqa: PLC0415
+            ModelRegistry,
+            default_registry_path,
+        )
 
-        return ModelRegistry(default_registry_path(self.model_path)).stage_of_path(self.model_path)
+        return ModelRegistry(default_registry_path(self.model_path)).stage_of_path(
+            self.model_path
+        )
 
     @property
     def approved(self) -> bool:
@@ -78,8 +83,13 @@ class SACV2Signal:
     def tradable(self) -> bool:
         return bool(self.loaded and self.approved)
 
-    def get_signal(self, snap: Dict[str, Any], balance: float, position: float = 0.0,
-                   entry_price: float = 0.0) -> Dict[str, Any]:
+    def get_signal(
+        self,
+        snap: Dict[str, Any],
+        balance: float,
+        position: float = 0.0,
+        entry_price: float = 0.0,
+    ) -> Dict[str, Any]:
         sym = snap.get("symbol", "")
         hold = {"symbol": sym, "action": "hold", "confidence": 0.0, "source": "sac"}
         if not self.loaded or self.candles_provider is None:
@@ -88,16 +98,25 @@ class SACV2Signal:
             df = self.candles_provider(sym)
             if df is None or len(df) == 0:
                 return hold
-            exposure, pnl = self.position_provider(sym) if self.position_provider else (0.0, 0.0)
+            exposure, pnl = (
+                self.position_provider(sym) if self.position_provider else (0.0, 0.0)
+            )
             target = self.policy.target_exposure(df, exposure, pnl)
             if target is None:
                 return hold
             action = exposure_to_signal(target, exposure)
             if action == "hold":
                 return hold
-            return {"symbol": sym, "action": action, "confidence": round(min(1.0, abs(target - exposure)), 3),
-                    "source": "sac", "target_exposure": round(target, 3)}
-        except Exception:  # noqa: BLE001 — сбой инференса = нет сигнала, не исключение в цикле
+            return {
+                "symbol": sym,
+                "action": action,
+                "confidence": round(min(1.0, abs(target - exposure)), 3),
+                "source": "sac",
+                "target_exposure": round(target, 3),
+            }
+        except (
+            Exception
+        ):  # noqa: BLE001 — сбой инференса = нет сигнала, не исключение в цикле
             return hold
 
     def reload_if_updated(self) -> bool:
@@ -120,13 +139,20 @@ class SACV2Policy:
         self._load()
 
     def _load(self) -> None:
-        base = self.model_path[:-4] if self.model_path.endswith(".zip") else self.model_path
+        base = (
+            self.model_path[:-4]
+            if self.model_path.endswith(".zip")
+            else self.model_path
+        )
         try:
             with open(base + ".meta.json", encoding="utf-8") as f:
                 self.meta = json.load(f)
             with open(base + "_norm_stats.json", encoding="utf-8") as f:
                 self.stats = json.load(f)
-            if self.meta.get("env") != "v2" or self.meta.get("feature_names") != FEATURE_NAMES:
+            if (
+                self.meta.get("env") != "v2"
+                or self.meta.get("feature_names") != FEATURE_NAMES
+            ):
                 return  # модель обучена на другом наборе признаков — подавать нечего
             if not os.path.exists(self.model_path):
                 return
@@ -137,7 +163,9 @@ class SACV2Policy:
         except (OSError, ValueError, ImportError):
             self.loaded = False
 
-    def observation(self, df_tail: pd.DataFrame, exposure: float, equity_pnl: float) -> Optional[np.ndarray]:
+    def observation(
+        self, df_tail: pd.DataFrame, exposure: float, equity_pnl: float
+    ) -> Optional[np.ndarray]:
         feats = latest_features(df_tail)
         if feats is None:
             return None

@@ -15,12 +15,36 @@ from src.telegram_bot.commander import TelegramCommander
 NOW = datetime.now(timezone.utc).isoformat()
 RECS = [
     {"ts": NOW, "kind": "data_quality", "trace_id": "T1", "counts": {"VALID": 3}},
-    {"ts": NOW, "kind": "ai_call", "trace_id": "T1", "status": "ok", "provider": "p",
-     "latency_ms": 90, "attempts": []},
-    {"ts": NOW, "kind": "signals", "trace_id": "T1",
-     "decisions": [{"decision_id": "d1", "symbol": "BTC/USDT"}]},
-    {"ts": NOW, "kind": "execution", "trace_id": "T1", "decision_id": "d1", "opened": True},
-    {"ts": NOW, "kind": "outcome", "trace_id": "T9", "decision_id": "d1", "reason": "tp", "pnl": 4.2},
+    {
+        "ts": NOW,
+        "kind": "ai_call",
+        "trace_id": "T1",
+        "status": "ok",
+        "provider": "p",
+        "latency_ms": 90,
+        "attempts": [],
+    },
+    {
+        "ts": NOW,
+        "kind": "signals",
+        "trace_id": "T1",
+        "decisions": [{"decision_id": "d1", "symbol": "BTC/USDT"}],
+    },
+    {
+        "ts": NOW,
+        "kind": "execution",
+        "trace_id": "T1",
+        "decision_id": "d1",
+        "opened": True,
+    },
+    {
+        "ts": NOW,
+        "kind": "outcome",
+        "trace_id": "T9",
+        "decision_id": "d1",
+        "reason": "tp",
+        "pnl": 4.2,
+    },
 ]
 
 
@@ -34,14 +58,20 @@ def ledger(tmp_path, monkeypatch):
 
 def test_parse_hours_clamps_and_ignores_garbage():
     assert tv.parse_hours(None) == 24.0 and tv.parse_hours("6") == 6.0
-    assert tv.parse_hours("0") == 1.0 and tv.parse_hours("9999") == 168.0 and tv.parse_hours("abc") == 24.0
+    assert (
+        tv.parse_hours("0") == 1.0
+        and tv.parse_hours("9999") == 168.0
+        and tv.parse_hours("abc") == 24.0
+    )
 
 
 def test_audit_finds_outcome_in_another_cycle_by_decision_id(ledger):
     a = audit_decision(RECS, "d1")
     assert a["chain"]["outcome"]["pnl"] == 4.2 and a["complete"]
     assert "Исход" in tv.audit_text("d1", ledger)
-    assert "не найдено" in tv.audit_text("zzz", ledger) and "Использование" in tv.audit_text("  ")
+    assert "не найдено" in tv.audit_text(
+        "zzz", ledger
+    ) and "Использование" in tv.audit_text("  ")
 
 
 def test_digest_text_and_empty_ledger(ledger, tmp_path):
@@ -64,7 +94,9 @@ def test_dbcheck_text_ok_and_missing(tmp_path):
     c.close()
     out = tv.dbcheck_text([str(p)])
     assert "✅" in out and "trades=7" in out and "боевой файл не затронут" in out
-    assert tv.dbcheck_text([str(tmp_path / "none.db")]) == "Файлов БД сделок не найдено."
+    assert (
+        tv.dbcheck_text([str(tmp_path / "none.db")]) == "Файлов БД сделок не найдено."
+    )
 
 
 # ── обработчики командера ─────────────────────────────────────────────────────

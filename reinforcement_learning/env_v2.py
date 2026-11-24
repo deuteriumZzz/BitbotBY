@@ -39,7 +39,9 @@ class ExposureSim:
         if len(open_) != len(close) or len(open_) < 3:
             raise ValueError("нужны open и close одинаковой длины ≥ 3")
         self.o, self.c = np.asarray(open_, float), np.asarray(close, float)
-        self.f = np.zeros_like(self.c) if funding is None else np.asarray(funding, float)
+        self.f = (
+            np.zeros_like(self.c) if funding is None else np.asarray(funding, float)
+        )
         self.fee, self.slip, self.max_exp = fee, slippage, max_exposure
         self.initial = initial
         self.reset()
@@ -116,7 +118,9 @@ try:  # Gymnasium нужен только для обучения; симуля�
             self.sim = ExposureSim(open_, close, funding, **kw)
             self.action_space = spaces.Box(-1.0, 1.0, shape=(1,), dtype=np.float32)
             n = self.features.shape[1] + 2  # + экспозиция, накопленная доходность
-            self.observation_space = spaces.Box(-np.inf, np.inf, shape=(n,), dtype=np.float32)
+            self.observation_space = spaces.Box(
+                -np.inf, np.inf, shape=(n,), dtype=np.float32
+            )
 
         def _obs(self) -> np.ndarray:
             s = self.sim
@@ -132,7 +136,13 @@ try:  # Gymnasium нужен только для обучения; симуля�
             reward = self.sim.step(float(np.asarray(action).ravel()[0]))
             terminated = self.sim.equity <= 0  # банкротство — настоящий конец
             truncated = (not terminated) and self.sim.done  # конец данных — усечение
-            return self._obs(), reward, terminated, truncated, {"equity": self.sim.equity}
+            return (
+                self._obs(),
+                reward,
+                terminated,
+                truncated,
+                {"equity": self.sim.equity},
+            )
 
 except ImportError:  # pragma: no cover
     TradingEnvV2 = None  # type: ignore[assignment,misc]
