@@ -216,7 +216,11 @@ class Config:
         os.getenv("AI_SANITIZE_PROMPT", os.getenv("PAPER_TRADING", "false")).lower() == "true"
     )
     AI_RAG_CONTEXT: bool = os.getenv("AI_RAG_CONTEXT", "false").lower() == "true"
-    AI_STRICT_VALIDATION: bool = os.getenv("AI_STRICT_VALIDATION", "false").lower() == "true"
+    # Как AI_SANITIZE_PROMPT: в paper включена (сколько ответов отброшено —
+    # ai_call.strict_dropped), в live выключена до решения по этим данным.
+    AI_STRICT_VALIDATION: bool = (
+        os.getenv("AI_STRICT_VALIDATION", os.getenv("PAPER_TRADING", "false")).lower() == "true"
+    )
     FORECASTER: str = os.getenv("FORECASTER", "chronos").strip().lower()
     WS_SHADOW_ENABLED: bool = (
         os.getenv("WS_SHADOW_ENABLED", os.getenv("PAPER_TRADING", "false")).lower() == "true"
@@ -330,8 +334,11 @@ class Config:
     ATR_SPIKE_LOOKBACK: int = int(os.getenv("ATR_SPIKE_LOOKBACK", "20"))
     # Data Quality gate (Phase 2): не открывать новые позиции по символам, у которых
     # свечи не VALID (устарели, битые, неполные). Статусы пишутся в Decision Ledger
-    # всегда; сама блокировка по умолчанию выключена — сначала наблюдаем по журналу.
-    DATA_QUALITY_GATE: bool = os.getenv("DATA_QUALITY_GATE", "false").lower() == "true"
+    # всегда; блокировка по умолчанию следует PAPER_TRADING: в paper включена
+    # (отказы — data_quality_block в журнале), в live выключена; env главнее.
+    DATA_QUALITY_GATE: bool = (
+        os.getenv("DATA_QUALITY_GATE", os.getenv("PAPER_TRADING", "false")).lower() == "true"
+    )
     # Периодическая сверка позиций с биржей (live, не спот): раз в N секунд.
     # Проблема подтверждается двумя проверками подряд. По умолчанию бот только
     # сообщает о расхождении; RECONCILE_AUTOFIX=true разрешает ему самому
@@ -409,6 +416,9 @@ class Config:
     MAX_VOLUME_USDT: float = float(os.getenv("MAX_VOLUME_USDT", "0"))
     # Максимальный допустимый спред (ask-bid)/mid в процентах
     MAX_SPREAD_PCT: float = float(os.getenv("MAX_SPREAD_PCT", "0.3"))
+    # Вход отменяется, если цена сигнала дальше этого % от живой цены биржи
+    # (устаревшие данные, выброс, выдуманная LLM цена). 0 — проверка выключена.
+    MAX_ENTRY_DEVIATION_PCT: float = float(os.getenv("MAX_ENTRY_DEVIATION_PCT", "5.0"))
 
     # ── Drawdown scaling (УЛУЧШЕНИЕ 6) ────────────────────────────────────
     # Уменьшать размер позиции при просадке от пика баланса

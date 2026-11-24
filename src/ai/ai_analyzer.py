@@ -355,6 +355,19 @@ class AIAnalyzer:
             valid.append(r)
         return valid
 
+    def _only_known_symbols(
+        self, valid: List[Dict[str, Any]], snapshots: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """Всегда (не только в строгом режиме): монета должна быть из переданных
+        модели. Иначе новость с внедрённой инструкцией может завести бота в
+        монету, которую он не анализировал."""
+        known = {s.get("symbol") for s in snapshots}
+        kept = [r for r in valid if r.get("symbol") in known]
+        for r in valid:
+            if r.get("symbol") not in known:
+                self.logger.warning("AI rec for unknown symbol %r dropped", r.get("symbol"))
+        return kept
+
     @staticmethod
     def _headlines(s: Dict[str, Any]) -> List[Any]:
         """Заголовки для промпта; с `AI_SANITIZE_PROMPT` — очищенные от управляющих символов/разметки ролей."""
@@ -566,7 +579,7 @@ class AIAnalyzer:
             try:
                 self._last_usage = None  # токены именно этого вызова (None — провайдер их не вернул)
                 raw = await self._call(provider, model, prompt)
-                valid = self._parse_response(raw)
+                valid = self._only_known_symbols(self._parse_response(raw), snapshots)
                 self._strict_dropped = 0
                 if Config.AI_STRICT_VALIDATION:
                     valid = self._strict_filter(valid, snapshots)

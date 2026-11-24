@@ -1,5 +1,10 @@
+import os
 import sys
 from unittest.mock import MagicMock
+
+# TestClient шлёт Host: testserver; без ключа дашборд пускает только локальные
+# адреса (защита от DNS-rebinding) — тестовый хост считаем своим.
+os.environ.setdefault("DASHBOARD_ALLOWED_HOSTS", "testserver")
 
 # Мокаем redis до любых импортов из src, чтобы тесты запускались без живого Redis.
 _redis_mock = MagicMock()

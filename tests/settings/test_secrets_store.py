@@ -204,8 +204,10 @@ def test_x_account_replace_and_remove(store):
 
 
 def test_x_accounts_keep_official_status(store, monkeypatch):
-    monkeypatch.setenv("TWITTER_BEARER_TOKEN", "AAAA" * 10)
-    ss.save(ss.BY_ID["twitter"], {}, None, "ok", "Ключ рабочий.", "test")
+    # Ключ — в хранилище: из окружения ключи сервисов больше не берутся.
+    ss.save(
+        ss.BY_ID["twitter"], {"TWITTER_BEARER_TOKEN": "AAAA" * 10}, None, "ok", "Ключ рабочий.", "test"
+    )
     ss.x_add_account("alice", "pw", "a@m.com", "x", "test")
     assert _x_status() == "ok"
     ss.x_remove_account("alice", "test")
@@ -291,3 +293,35 @@ def test_telegram_chats_by_link_code_only_the_sender_of_the_code():
     payload = {"result": [msg(7, "/start"), msg(42, " 123456 "), msg(9, "123457")]}
     assert [c["id"] for c in ss.telegram_chats(payload, "123456")] == ["42"]
     assert ss.telegram_chats(payload, "000000") == []
+
+
+# ── Ключи сервисов только из хранилища (аудит 2026-11-24) ─────────────────────
+
+
+def test_service_key_from_env_is_ignored(store, monkeypatch):
+    monkeypatch.setenv("BYBIT_API_KEY", "env-key-should-not-work")
+    assert ss.get_value("BYBIT_API_KEY") is None
+    ss.save(ss.BY_ID["bybit"], {"BYBIT_API_KEY": "stored-key-123456"}, None, "ok", "", "test")
+    assert ss.get_value("BYBIT_API_KEY") == "stored-key-123456"
+
+
+def test_server_secrets_and_plain_fields_still_read_env(store, monkeypatch):
+    monkeypatch.setenv("DASHBOARD_API_KEY", "panel-key")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "42")
+    assert ss.get_value("DASHBOARD_API_KEY") == "panel-key"
+    assert ss.get_value("TELEGRAM_CHAT_ID") == "42"
+
+
+def test_apply_secrets_strips_env_only_keys(store, monkeypatch):
+    class Cfg:
+        BYBIT_API_KEY = "from-env-at-import"
+        GROQ_API_KEY = ""
+        DASHBOARD_API_KEY = "panel-key"
+
+    monkeypatch.setenv("BYBIT_API_KEY", "from-env-at-import")
+    monkeypatch.setenv("DASHBOARD_API_KEY", "panel-key")
+    ss.save(ss.BY_ID["groq"], {"GROQ_API_KEY": "gsk_" + "a" * 40}, None, "ok", "", "test")
+    ss.apply_secrets(Cfg)
+    assert Cfg.BYBIT_API_KEY == "" and "BYBIT_API_KEY" not in os.environ
+    assert Cfg.GROQ_API_KEY.startswith("gsk_")
+    assert Cfg.DASHBOARD_API_KEY == "panel-key"  # секрет сервера — из окружения

@@ -395,12 +395,23 @@ def tg_save_session(session: str, name: str, source: str) -> None:
     )
 
 
+# Ключи сервисов (биржа, AI, Telegram…) — только из зашифрованного хранилища:
+# значение из .env/окружения игнорируется. Секреты инфраструктуры (сервис
+# «server»: ключ панели, пароль Redis, секрет вебхука, PIN) задаёт окружение
+# compose/лаунчера, и они читаются оттуда, как раньше.
+STORE_ONLY = frozenset(
+    f.env for s in SERVICES if s.id != "server" for f in s.fields if f.secret
+)
+
+
 def get_value(env: str) -> Optional[str]:
-    """Значение из хранилища, иначе из окружения."""
+    """Значение из хранилища; несекретные поля и секреты сервера — ещё и из окружения."""
     try:
         v = load_values().get(env)
     except SecretsDisabled:
         v = None
+    if env in STORE_ONLY:
+        return v or None
     return v or os.getenv(env) or None
 
 
@@ -410,10 +421,24 @@ def apply_secrets(config_cls: Any) -> List[str]:
         values = load_values()
         models = _load_raw()["meta"].get("_models", {})
     except SecretsDisabled:
-        return []
+        values, models = {}, {}
     except Exception as e:
         logger.error("Secrets store unreadable: %s", e)
-        return []
+        values, models = {}, {}
+    # Ключ сервиса, которого нет в хранилище, не берём из .env/окружения:
+    # убираем и из Config, и из os.environ (его читают модули и подпроцессы).
+    ignored = []
+    for env in sorted(STORE_ONLY - set(values) - {TG_SESSION_ENV}):
+        if os.environ.pop(env, None) or getattr(config_cls, env, None):
+            ignored.append(env)
+        if hasattr(config_cls, env):
+            setattr(config_cls, env, "")
+    if ignored:
+        logger.warning(
+            "Ignored API keys from .env/environment (only the encrypted store is used; "
+            "add them in the app): %s",
+            ", ".join(ignored),
+        )
     for env, value in {**values, **models}.items():
         if env == TG_SESSION_ENV:
             continue  # бот читает сессию прямо из хранилища

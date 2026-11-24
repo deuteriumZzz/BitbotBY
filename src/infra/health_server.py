@@ -176,7 +176,8 @@ async def start_health_server(bot: "TradingBot", port: int = 8080) -> None:
 
     config = uvicorn.Config(
         app,
-        host="0.0.0.0",
+        # /health и /metrics показывают баланс и P&L: вне Docker — только локально.
+        host=os.getenv("BIND_HOST", "127.0.0.1"),
         port=port,
         loop="none",
         log_level="warning",

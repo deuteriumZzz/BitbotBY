@@ -60,7 +60,8 @@ def _check(path: str, quick: bool) -> Dict[str, Any]:
                 )
             ]
             for name in names[:20]:
-                tables[name] = conn.execute(f'SELECT COUNT(*) FROM "{name}"').fetchone()[0]
+                quoted = name.replace('"', '""')  # имя таблицы — идентификатор, не параметр
+                tables[name] = conn.execute(f'SELECT COUNT(*) FROM "{quoted}"').fetchone()[0]
         return {"ok": ok, "messages": msgs[:MAX_MESSAGES], "tables": tables}
     finally:
         conn.close()

@@ -937,8 +937,8 @@ class TestLiveTrading:
         executor._api.set_leverage.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_live_set_leverage_failure_does_not_stop_trade(self):
-        """set_leverage raises → warning logged, trade continues."""
+    async def test_live_set_leverage_failure_stops_trade(self):
+        """set_leverage raises → no order: the exchange keeps an unknown leverage."""
         executor, monitored, _ = _make_executor()
         executor._api.set_leverage = AsyncMock(side_effect=Exception("leverage error"))
         cfg = _make_cfg(paper=False, market_type="linear")
@@ -948,8 +948,36 @@ class TestLiveTrading:
                     "src.core.trade_history.get_backtest_stats", return_value=_BT_STATS
                 ):
                     await executor.execute(_TOP_BUY, {}, 10_000.0)
-        # Position should still be opened despite set_leverage failure
-        assert "BTC/USDT" in monitored
+        # Fail-closed: без подтверждённого плеча позицию не открываем.
+        assert "BTC/USDT" not in monitored
+        executor._api.create_order.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_live_set_leverage_false_stops_trade(self):
+        executor, monitored, _ = _make_executor()
+        executor._api.set_leverage = AsyncMock(return_value=False)
+        cfg = _make_cfg(paper=False, market_type="linear")
+        with patch("src.core.order_executor.Config", cfg):
+            with patch("src.core.order_executor._ac_impact", return_value=0.0):
+                with patch(
+                    "src.core.trade_history.get_backtest_stats", return_value=_BT_STATS
+                ):
+                    await executor.execute(_TOP_BUY, {}, 10_000.0)
+        assert "BTC/USDT" not in monitored
+        executor._api.create_order.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_entry_far_from_live_price_is_rejected(self):
+        """Цена сигнала на 20% от живой (устаревшие данные / выдумка LLM) → вход отменён."""
+        executor, _, _ = _make_executor()
+        executor._api.exchange.fetch_ticker = AsyncMock(
+            return_value={"bid": 119.9, "ask": 120.1, "quoteVolume": 5_000_000.0}
+        )
+        cfg = _make_cfg()
+        cfg.MAX_ENTRY_DEVIATION_PCT = 5.0
+        with patch("src.core.order_executor.Config", cfg):
+            assert await executor._check_liquidity("BTC/USDT", 100.0) is False
+            assert await executor._check_liquidity("BTC/USDT", 118.0) is True
 
     @pytest.mark.asyncio
     async def test_live_create_order_returns_none_skips(self):

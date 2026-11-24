@@ -32,6 +32,7 @@ CODE_RESEND_SEC = 30
 
 _CODE_KEY = "bot:desktop_code"
 _CODE_RESEND_KEY = "bot:desktop_code_sent"
+_CODE_TRIES_KEY = "bot:desktop_code_tries"
 
 
 def _sha(text: str) -> str:
@@ -134,24 +135,30 @@ def issue_desktop_code(r: Any) -> Optional[str]:
     if not r.set(_CODE_RESEND_KEY, "1", nx=True, ex=CODE_RESEND_SEC):
         return None
     code = f"{secrets.randbelow(10**6):06d}"
-    r.set(_CODE_KEY, json.dumps({"h": _sha(code), "tries": 0}), ex=CODE_TTL)
+    r.delete(_CODE_TRIES_KEY)
+    r.set(_CODE_KEY, json.dumps({"h": _sha(code)}), ex=CODE_TTL)
     return code
 
 
 def check_desktop_code(r: Any, code: str) -> str:
-    """ok | expired | locked | wrong."""
+    """ok | expired | locked | wrong.
+
+    Попытки считает INCR в Redis: параллельные запросы не обойдут лимит
+    (прочитать-изменить-записать давало каждому из них один и тот же счётчик).
+    """
     raw = r.get(_CODE_KEY)
     if not raw:
         return "expired"
     state = json.loads(raw.decode() if isinstance(raw, bytes) else raw)
-    if state["tries"] >= CODE_MAX_ATTEMPTS:
+    tries = int(r.incr(_CODE_TRIES_KEY))
+    if tries == 1:
+        r.expire(_CODE_TRIES_KEY, CODE_TTL)
+    if tries > CODE_MAX_ATTEMPTS:
         return "locked"
     if hmac.compare_digest(_sha(str(code).strip()), state["h"]):
-        r.delete(_CODE_KEY)
-        return "ok"
-    state["tries"] += 1
-    r.set(_CODE_KEY, json.dumps(state), keepttl=True)
-    return "locked" if state["tries"] >= CODE_MAX_ATTEMPTS else "wrong"
+        # Одноразовый: из двух одновременных верных запросов вход получит один.
+        return "ok" if r.delete(_CODE_KEY) else "expired"
+    return "locked" if tries >= CODE_MAX_ATTEMPTS else "wrong"
 
 
 # ── Локальный вход лаунчера ───────────────────────────────────────────────────

@@ -617,9 +617,14 @@ class OrderExecutor:
             else:
                 if _market_type != "spot":
                     try:
-                        await self._api.set_leverage(sym, dynamic_lev)
+                        lev_ok = await self._api.set_leverage(sym, dynamic_lev)
                     except Exception as _lev_err:
                         logger.warning("set_leverage failed for %s: %s", sym, _lev_err)
+                        lev_ok = False
+                    if lev_ok is False:
+                        # Плечо на бирже не то, что посчитал риск — не входим вслепую.
+                        self._stage(sym, "rejected", "не удалось выставить плечо")
+                        return
                 order = await self._api.create_order(sym, "market", action, quantity)
                 if not order:
                     logger.error("Order creation failed for %s", sym)
@@ -744,6 +749,25 @@ class OrderExecutor:
 
             mid = (bid + ask) / 2
             spread_pct = (ask - bid) / mid * 100 if mid > 0 else 999.0
+
+            # Цена входа должна быть близка к живой: иначе это устаревшие свечи,
+            # выброс или цена, придуманная LLM, — размер позиции считается от неё.
+            try:
+                max_dev = float(getattr(Config, "MAX_ENTRY_DEVIATION_PCT", 5.0))
+            except (TypeError, ValueError):
+                max_dev = 5.0
+            if mid > 0 and price > 0 and max_dev > 0:
+                dev_pct = abs(price / mid - 1) * 100
+                if dev_pct > max_dev:
+                    logger.warning(
+                        "Price guard: %s entry=%.6g vs live=%.6g (%.1f%% > %.1f%%) — skip",
+                        sym,
+                        price,
+                        mid,
+                        dev_pct,
+                        max_dev,
+                    )
+                    return False
 
             if spread_pct > Config.MAX_SPREAD_PCT:
                 logger.info(

@@ -309,6 +309,31 @@ class TestMetricsEndpoint:
 
 
 class TestWebhookAlerts:
+    @pytest.fixture(autouse=True)
+    def _secret(self, monkeypatch, client):
+        # Вебхук без секрета закрыт (fail-closed): тестам нужен секрет.
+        monkeypatch.setenv("ALERTMANAGER_WEBHOOK_SECRET", "hook-secret")
+        client.headers["X-Webhook-Secret"] = "hook-secret"
+
+    def test_webhook_without_configured_secret_is_forbidden(self, monkeypatch, client):
+        monkeypatch.delenv("ALERTMANAGER_WEBHOOK_SECRET")
+        with patch("src.dashboard.routers.ops._send_telegram_sync") as mock_tg:
+            resp = client.post("/webhook/alerts", json={"alerts": [{"status": "firing"}]})
+        assert resp.status_code == 403
+        mock_tg.assert_not_called()
+
+    def test_webhook_accepts_bearer_secret(self, monkeypatch):
+        monkeypatch.setenv("ALERTMANAGER_WEBHOOK_SECRET", "mysecret")
+        from src.dashboard import app
+
+        c = TestClient(app, raise_server_exceptions=False)
+        resp = c.post(
+            "/webhook/alerts",
+            json={"alerts": []},
+            headers={"Authorization": "Bearer mysecret"},
+        )
+        assert resp.status_code == 200
+
     def test_webhook_no_alerts_returns_no_alerts_status(self, client):
         resp = client.post("/webhook/alerts", json={"alerts": []})
         assert resp.status_code == 200

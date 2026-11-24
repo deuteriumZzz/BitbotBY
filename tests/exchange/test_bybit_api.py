@@ -525,6 +525,66 @@ class TestPlaceExchangeSlTp:
         assert sl_id is None
         assert tp_id is None
 
+    # ── идемпотентность SL/TP (аудит 2026-11-24) ──────────────────────────
+
+    @pytest.mark.asyncio
+    async def test_sl_timeout_but_placed_is_found_not_duplicated(self):
+        """Ответ потерян, ордер на бирже есть → id из поиска, второго ордера нет."""
+        ex = self.api.exchange
+        ex.create_order.side_effect = ccxt.RequestTimeout("timeout")
+
+        async def open_orders(symbol, params):
+            return [{"id": "sl-real", "clientOrderId": params["orderLinkId"]}]
+
+        ex.fetch_open_orders.side_effect = open_orders
+        sl_id, _ = await self.api.place_exchange_sl_tp(
+            "BTC/USDT", "sell", 0.01, sl_price=29000.0, tp_price=0
+        )
+        assert sl_id == "sl-real"
+        assert ex.create_order.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_retry_reuses_same_client_order_id(self):
+        ex = self.api.exchange
+        ex.create_order.side_effect = [ccxt.NetworkError("net"), {"id": "sl-2"}]
+        ex.fetch_open_orders.return_value = []
+        ex.fetch_closed_orders.return_value = []
+        sl_id, _ = await self.api.place_exchange_sl_tp(
+            "BTC/USDT", "sell", 0.01, sl_price=29000.0, tp_price=0
+        )
+        ids = [c.kwargs["params"]["clientOrderId"] for c in ex.create_order.call_args_list]
+        assert sl_id == "sl-2"
+        assert len(ids) == 2 and ids[0] == ids[1]
+
+    @pytest.mark.asyncio
+    async def test_unresolved_sl_is_cancelled_before_next_placement(self):
+        """Исход неизвестен → в следующий раз висящий старый стоп снимается."""
+        ex = self.api.exchange
+        ex.create_order.side_effect = ccxt.NetworkError("net")
+        ex.fetch_open_orders.return_value = []
+        ex.fetch_closed_orders.return_value = []
+        assert (await self.api.place_exchange_sl_tp(
+            "BTC/USDT", "sell", 0.01, sl_price=29000.0, tp_price=0
+        ))[0] is None
+        lost_id = ex.create_order.call_args.kwargs["params"]["clientOrderId"]
+        assert lost_id in self.api.ambiguous_orders
+
+        # Тот ордер всё-таки встал на бирже.
+        async def open_orders(symbol, params):
+            if params["orderLinkId"] == lost_id:
+                return [{"id": "ghost", "clientOrderId": lost_id, "status": "open"}]
+            return []
+
+        ex.fetch_open_orders.side_effect = open_orders
+        ex.create_order.side_effect = None
+        ex.create_order.return_value = {"id": "sl-new"}
+        self.api.cancel_order = AsyncMock(return_value=True)
+        sl_id, _ = await self.api.place_exchange_sl_tp(
+            "BTC/USDT", "sell", 0.01, sl_price=29100.0, tp_price=0
+        )
+        self.api.cancel_order.assert_awaited_once_with("ghost", "BTC/USDT")
+        assert sl_id == "sl-new"
+
 
 # ---------------------------------------------------------------------------
 # BybitAPI.fetch_order_status

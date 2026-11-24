@@ -304,5 +304,5 @@ async def test_exchange_sl_tp_prices_are_rounded_to_tick() -> None:
     api.exchange.create_order.return_value = {"id": "1"}
     await api.place_exchange_sl_tp("BTC/USDT", "sell", 0.01, 63000.04, 66000.06)
     sl_call, tp_call = api.exchange.create_order.await_args_list
-    assert sl_call.args[5]["stopPrice"] == 63000.0
+    assert sl_call.kwargs["params"]["stopPrice"] == 63000.0
     assert tp_call.args[4] == 66000.1

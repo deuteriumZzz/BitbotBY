@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse, Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from config import Config
+from src.dashboard.auth import bearer_token, owner_credentials
 from src.dashboard.data import (
     check_healthcheck,
     g_balance,
@@ -53,8 +54,7 @@ def _tg_escape(s: str) -> str:
 
 
 def _send_telegram_sync(text: str) -> None:
-    token = os.getenv("TELEGRAM_BOT_TOKEN", "")
-    chat_id = os.getenv("TELEGRAM_CHAT_ID", "")
+    token, chat_id = owner_credentials()  # хранилище ключей, иначе .env
     if not token or not chat_id:
         return
     try:
@@ -71,11 +71,15 @@ def _send_telegram_sync(text: str) -> None:
 @router.post("/webhook/alerts")
 async def alert_webhook(request: Request) -> JSONResponse:
     """Принимает вебхук Alertmanager и пересылает алерты в Telegram."""
+    # Без секрета вебхук закрыт: иначе любой, кто достучится до порта, пишет
+    # владельцу в Telegram от имени бота. Alertmanager шлёт секрет как
+    # Authorization: Bearer (http_config.authorization) или X-Webhook-Secret.
     expected = os.getenv("ALERTMANAGER_WEBHOOK_SECRET", "")
-    if expected:
-        provided = request.headers.get("X-Webhook-Secret", "")
-        if not hmac.compare_digest(provided.encode(), expected.encode()):
-            return JSONResponse({"error": "Forbidden"}, status_code=403)
+    provided = request.headers.get("X-Webhook-Secret", "") or bearer_token(
+        request.headers
+    )
+    if not expected or not hmac.compare_digest(provided.encode(), expected.encode()):
+        return JSONResponse({"error": "Forbidden"}, status_code=403)
 
     payload = await request.json()
     alerts = payload.get("alerts", [])

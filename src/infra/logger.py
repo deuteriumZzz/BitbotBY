@@ -11,8 +11,36 @@ import json
 import logging
 import logging.handlers
 import os
+import re
 import sys
 from datetime import datetime
+
+# Секреты по форме — ловят то, что не зарегистрировано: токен бота в URL Telegram
+# (его пишут ошибки httpx), Bearer-токены, пары «ключ=значение» с именами секретов.
+_SECRET_PATTERNS = (
+    (re.compile(r"\bbot\d{5,}:[A-Za-z0-9_-]{30,}"), "bot***"),
+    (re.compile(r"\bBearer\s+[A-Za-z0-9._~+/=-]{8,}", re.I), "Bearer ***"),
+    (
+        re.compile(
+            r"(?i)(\b(?:api[_-]?key|apikey|api[_-]?secret|secret|passphrase|password|"
+            r"passwd|token|access[_-]?token|sign|signature|x-bapi-api-key|x-bapi-sign|"
+            r"x-api-key|authorization)\b[\"']?\s*[:=]\s*[\"']?)([^\s\"'&,;}]{6,})"
+        ),
+        r"\1***",
+    ),
+)
+
+
+def mask_secrets(text: str) -> str:
+    """Текст без зарегистрированных секретов и без значений, похожих на секреты."""
+    if not text:
+        return text
+    for secret in _SecretFilter._secrets:
+        if secret in text:
+            text = text.replace(secret, "***")
+    for rx, repl in _SECRET_PATTERNS:
+        text = rx.sub(repl, text)
+    return text
 
 
 class _SecretFilter(logging.Filter):
@@ -23,27 +51,49 @@ class _SecretFilter(logging.Filter):
     @classmethod
     def register(cls, *values: str) -> None:
         """
-        Регистрирует секретные значения для маскировки в логах.
+        Добавляет секретные значения для маскировки в логах (прежние остаются).
 
         :param values: Строки длиннее 8 символов, которые нужно скрыть.
         """
-        cls._secrets = [v for v in values if v and len(v) > 8]
+        for v in values:
+            if v and len(v) > 8 and v not in cls._secrets:
+                cls._secrets.append(v)
 
     def filter(self, record: logging.LogRecord) -> bool:
         """
-        Заменяет секретные значения на *** в сообщении лога.
+        Заменяет секреты на *** в сообщении лога.
+
+        Трейсбеки и extra-поля маскирует _MaskingFormatter уже в готовой строке.
 
         :param record: Запись лога.
         :return: Всегда True (запись разрешена, но может быть изменена).
         """
-        if self._secrets:
-            msg = record.getMessage()
-            for secret in self._secrets:
-                if secret in msg:
-                    msg = msg.replace(secret, "***")
-                    record.msg = msg
-                    record.args = ()
+        msg = record.getMessage()
+        masked = mask_secrets(msg)
+        if masked != msg:
+            record.msg = masked
+            record.args = ()
         return True
+
+
+class _MaskingFormatter(logging.Formatter):
+    """Обёртка над форматтером: маскирует всю готовую строку, включая трейсбек."""
+
+    def __init__(self, inner: logging.Formatter) -> None:
+        super().__init__()
+        self._inner = inner
+
+    def format(self, record: logging.LogRecord) -> str:
+        return mask_secrets(self._inner.format(record))
+
+
+def install_masking(handler: logging.Handler) -> None:
+    """Включает маскировку секретов на обработчике (идемпотентно)."""
+    fmt = handler.formatter or logging.Formatter()
+    if not isinstance(fmt, _MaskingFormatter):
+        handler.setFormatter(_MaskingFormatter(fmt))
+    if not any(isinstance(f, _SecretFilter) for f in handler.filters):
+        handler.addFilter(_SecretFilter())
 
 
 class JSONFormatter(logging.Formatter):
@@ -127,8 +177,7 @@ def setup_logging(
             )
         )
 
-    secret_filter = _SecretFilter()
-    handler.addFilter(secret_filter)
+    install_masking(handler)
     root.handlers.clear()
     root.addHandler(handler)
 
@@ -141,5 +190,5 @@ def setup_logging(
         encoding="utf-8",
     )
     fh.setFormatter(JSONFormatter())
-    fh.addFilter(secret_filter)
+    install_masking(fh)
     root.addHandler(fh)

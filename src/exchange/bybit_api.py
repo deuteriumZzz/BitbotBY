@@ -77,6 +77,9 @@ async def _fetch_ohlcv_with_retry(
     return await exchange.fetch_ohlcv(symbol, timeframe, since=since, limit=limit)
 
 
+_CCXT_TIMEOUT_MS = 15_000  # любой вызов биржи — не дольше 15 с
+
+
 class BybitAPI:
     """
     Клиент Bybit API с поддержкой retry, кэширования через Redis и управления ордерами.
@@ -98,6 +101,15 @@ class BybitAPI:
         if rc is not None:
             return rc.get_market_type()
         return Config.MARKET_TYPE
+
+    def _ccxt_options(self) -> dict:
+        """Подпись запросов устойчива к расхождению часов: ccxt сверяет время с
+        биржей (adjustForTimeDifference), окно приёма подписи — 5 с (recvWindow)."""
+        return {
+            "defaultType": self._current_market_type(),
+            "adjustForTimeDifference": True,
+            "recvWindow": 5000,
+        }
 
     def market_type(self) -> str:
         """Текущий тип рынка (spot | linear | ...), публичный доступ для сверки."""
@@ -134,7 +146,8 @@ class BybitAPI:
                         "apiKey": api_key,
                         "secret": api_secret,
                         "enableRateLimit": True,
-                        "options": {"defaultType": self._current_market_type()},
+                        "timeout": _CCXT_TIMEOUT_MS,
+                        "options": self._ccxt_options(),
                         "urls": {
                             "api": {
                                 "public": "https://api-testnet.bybit.com",
@@ -149,7 +162,8 @@ class BybitAPI:
                         "apiKey": api_key,
                         "secret": api_secret,
                         "enableRateLimit": True,
-                        "options": {"defaultType": self._current_market_type()},
+                        "timeout": _CCXT_TIMEOUT_MS,
+                        "options": self._ccxt_options(),
                     }
                 )
             await self.exchange.load_markets()
@@ -637,35 +651,93 @@ class BybitAPI:
         )
 
         if sl_price and sl_price > 0:
-            try:
-                sl_order = await self.exchange.create_order(
-                    symbol,
-                    "stop_market",
-                    close_side,
-                    qty,
-                    None,
-                    {"stopPrice": sl_price, "triggerPrice": sl_price, **extra},
-                )
-                sl_id = sl_order.get("id")
-                self.logger.info(
-                    "Exchange SL placed: %s @ %s id=%s", symbol, sl_price, sl_id
-                )
-            except Exception as e:
-                self.logger.error("Failed to place exchange SL for %s: %s", symbol, e)
+            sl_id = await self._place_protective(
+                symbol,
+                "stop_market",
+                close_side,
+                qty,
+                None,
+                {"stopPrice": sl_price, "triggerPrice": sl_price, **extra},
+                "SL",
+            )
 
         if tp_price and tp_price > 0:
-            try:
-                tp_order = await self.exchange.create_order(
-                    symbol, "limit", close_side, qty, tp_price, extra
-                )
-                tp_id = tp_order.get("id")
-                self.logger.info(
-                    "Exchange TP placed: %s @ %s id=%s", symbol, tp_price, tp_id
-                )
-            except Exception as e:
-                self.logger.error("Failed to place exchange TP for %s: %s", symbol, e)
+            tp_id = await self._place_protective(
+                symbol, "limit", close_side, qty, tp_price, extra, "TP"
+            )
 
         return sl_id, tp_id
+
+    async def _place_protective(
+        self,
+        symbol: str,
+        order_type: str,
+        side: str,
+        qty: float,
+        price: Optional[float],
+        params: dict,
+        label: str,
+    ) -> Optional[str]:
+        """Ставит SL/TP идемпотентно: один clientOrderId на все попытки.
+
+        Если ответ потерялся (таймаут), но биржа ордер приняла, повтор с тем же
+        id Bybit отклонит как дубликат, а поиск по id вернёт уже стоящий ордер —
+        второго стопа на бирже не появится. Исход неизвестен → сверка
+        (resolve_ambiguous), а не «ордера нет».
+        """
+        # Прошлая постановка по этому символу кончилась неизвестностью: если тот
+        # ордер всё-таки стоит — снимаем его, чтобы не было двух стопов.
+        pending = self.__dict__.setdefault("_pending_protective", {})
+        stale = pending.pop((symbol, label), None)
+        if stale:
+            old = await self._find_order_by_client_id(symbol, stale)
+            if old is not None and old.get("status") == "open" and old.get("id"):
+                await self.cancel_order(old["id"], symbol)
+
+        client_order_id = _new_client_order_id()
+        for attempt in range(2):
+            try:
+                order = await self.exchange.create_order(
+                    symbol,
+                    order_type,
+                    side,
+                    qty,
+                    price,
+                    params={**params, "clientOrderId": client_order_id},
+                )
+                oid = order.get("id")
+                self.logger.info(
+                    "Exchange %s placed: %s @ %s id=%s", label, symbol, price or params.get("stopPrice"), oid
+                )
+                return oid
+            except asyncio.CancelledError:
+                raise
+            except (ccxt.NetworkError, ccxt.InvalidOrder, ccxt.BadRequest) as e:
+                network = isinstance(e, ccxt.NetworkError)
+                if not network and "duplicate" not in str(e).lower():
+                    self.logger.error("Failed to place exchange %s for %s: %s", label, symbol, e)
+                    return None
+                existing = await self._find_order_by_client_id(symbol, client_order_id)
+                if existing is not None:
+                    self.logger.info(
+                        "Exchange %s for %s already placed (found by clientOrderId)", label, symbol
+                    )
+                    return existing.get("id")
+                if not network:
+                    self.logger.error(
+                        "Duplicate %s clientOrderId for %s but order not found", label, symbol
+                    )
+                    return None
+                self.logger.warning(
+                    "Exchange %s for %s: attempt %d/2 failed: %s", label, symbol, attempt + 1, e
+                )
+                await asyncio.sleep(0.5)
+            except Exception as e:
+                self.logger.error("Failed to place exchange %s for %s: %s", label, symbol, e)
+                return None
+        self._note_ambiguous(symbol, client_order_id, side, qty)
+        pending[(symbol, label)] = client_order_id
+        return None
 
     async def cancel_order(self, order_id: str, symbol: str) -> bool:
         """
@@ -794,11 +866,14 @@ class BybitAPI:
         try:
             await self.exchange.set_leverage(leverage, symbol)
             self.logger.debug("Leverage set to %dx for %s", leverage, symbol)
-            self._leverage_cache[symbol] = leverage
         except Exception as e:
-            # Leverage already at this value — not an error
+            # 110043 «leverage not modified» — плечо уже такое, это не ошибка.
+            if "110043" not in str(e) and "not modified" not in str(e).lower():
+                # Иначе на бирже осталось прежнее плечо: позиция с ним — другой риск.
+                self.logger.warning("set_leverage %s → %dx failed: %s", symbol, leverage, e)
+                return False
             self.logger.debug("set_leverage %s: %s", symbol, e)
-            self._leverage_cache[symbol] = leverage
+        self._leverage_cache[symbol] = leverage
         return True
 
     async def close(self) -> None:

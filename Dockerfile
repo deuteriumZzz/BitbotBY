@@ -33,6 +33,8 @@ RUN mkdir -p data/cache models logs
 
 # Ensure imports work
 ENV PYTHONPATH=/app
+# В контейнере сервисы слушают все интерфейсы сети Docker; вне Docker — 127.0.0.1.
+ENV BIND_HOST=0.0.0.0
 
 EXPOSE 8080
 

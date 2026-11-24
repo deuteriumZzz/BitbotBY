@@ -19,7 +19,7 @@
 | Риск | `DAILY_LOSS_LIMIT`, `DRAWDOWN_HALT_HOURS`, `MAX_CORRELATION`, `MAX_SPREAD_PCT` |
 | Telegram | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `TELEGRAM_CONFIRM_TIMEOUT` |
 | Инфра | `REDIS_HOST/PASSWORD`, `DASHBOARD_USER/PASSWORD` |
-| Новые источники решения | `AI_RAG_CONTEXT`, `AI_STRICT_VALIDATION`, `FORECASTER`, `FUNDING_IN_PNL`, `SAC_V2_ENABLED` — **выключены по умолчанию**; `AI_SANITIZE_PROMPT` и `WS_SHADOW_ENABLED` следуют `PAPER_TRADING` (в paper включены, явная переменная окружения главнее). Состояние флагов бот каждый цикл публикует в `bot:ops_status` (карточка «Защита и наблюдение» на странице риска), при старте пишет `run_config` в журнал, см. раздел «Новые источники решения и эксплуатация» |
+| Новые источники решения | `AI_RAG_CONTEXT`, `FORECASTER`, `FUNDING_IN_PNL`, `SAC_V2_ENABLED` — **выключены по умолчанию**; `AI_SANITIZE_PROMPT`, `WS_SHADOW_ENABLED`, `AI_STRICT_VALIDATION` и `DATA_QUALITY_GATE` следуют `PAPER_TRADING` (в paper включены, явная переменная окружения главнее). Состояние флагов бот каждый цикл публикует в `bot:ops_status` (карточка «Защита и наблюдение» на странице риска), при старте пишет `run_config` в журнал, см. раздел «Новые источники решения и эксплуатация» |
 | Эксплуатация | `RISK_GATE_SHADOW`, `DB_BACKUP_*`, `WS_SHADOW_*`, `EVENT_STREAM_ENABLED`, `HEAVY_JOB_*`, `BOT_CPUS`, `BOT_MEM_LIMIT`, `TRAINER_*` |
 
 Большинство параметров (режим, стратегии, риск-профиль, часы торговли, число позиций) меняются
@@ -431,8 +431,8 @@ AI_SANITIZE_PROMPT=<как PAPER_TRADING>   # по умолчанию включ
                            # в промпте пометка «недоверенный текст»
 AI_RAG_CONTEXT=false       # в промпт AI добавляется «что было в похожих случаях» из журнала решений
                            # (индекс обновляется раз в 10 минут; сбой RAG → решение без него)
-AI_STRICT_VALIDATION=false # ответ LLM проходит строгую схему: лишние поля, выдуманные цены (>2% от
-                           # снимка), SL/TP не с той стороны — рекомендация отбрасывается
+AI_STRICT_VALIDATION=      # пусто = как PAPER_TRADING (paper — вкл.). Ответ LLM проходит строгую схему:
+                           # лишние поля, выдуманные цены (>2% от снимка), SL/TP не с той стороны — отказ
 FORECASTER=chronos         # chronos | timesfm. timesfm — поправка считается изолированным воркером
                            # TimesFM (.venv-timesfm); работает при включённом переключателе Chronos
 FUNDING_IN_PNL=false       # funding входит в результат сделки (paper — оценка, live — выплаты биржи).
@@ -452,7 +452,7 @@ WS_SHADOW_ENABLED=<как PAPER_TRADING>    # по умолчанию включ
                            # (bitbot_ws_*), тревога при тишине, сверка свечей WS и REST раз в 15 минут
 WS_SHADOW_SYMBOLS=BTC/USDT,ETH/USDT
 EVENT_STREAM_ENABLED=false # копии записей журнала как компактные отметки в Redis Stream bot:stream:events
-DATA_QUALITY_GATE=false    # true — не входить по снимкам с плохим статусом данных (STALE/INVALID…)
+DATA_QUALITY_GATE=         # пусто = как PAPER_TRADING; true — не входить по снимкам с плохим статусом данных (STALE/INVALID…)
 RECONCILE_INTERVAL_S=60    # период сверки позиций с биржей (live)
 RECONCILE_AUTOFIX=false    # true — сверка сама исправляет расхождения (по умолчанию только сообщает)
 ONLINE_LEARNING_MODE=disabled   # онлайн-дообучение SAC выключено

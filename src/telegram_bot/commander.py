@@ -1271,7 +1271,9 @@ class TelegramCommander:
 
     def _authorized(self, update: Any) -> bool:
         chat_id = str(getattr(update.effective_chat, "id", ""))
-        return chat_id == str(self._notifier._chat_id)
+        owner = str(self._notifier._chat_id or "")
+        # Пустой владелец и апдейт без чата — это не совпадение.
+        return bool(owner) and chat_id == owner
 
     async def _reply(self, update: Any, text: str, kb: Any = None) -> None:
         if kb is None:

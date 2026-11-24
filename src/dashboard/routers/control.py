@@ -1382,8 +1382,25 @@ async def _ws_authorized(ws: WebSocket) -> bool:
     return auth.check_session(data.get_redis(), token) is not None
 
 
+_WS_ORIGINS = {"tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"}
+
+
+def _ws_origin_ok(ws: WebSocket) -> bool:
+    """На WebSocket не действует CORS: без этой проверки любая открытая в
+    браузере страница подключится к локальному боту и прочитает события.
+    Пускаем свой origin (тот же Host), десктоп Tauri и клиентов без Origin."""
+    origin = ws.headers.get("origin", "")
+    if not origin or origin in _WS_ORIGINS:
+        return True
+    netloc = origin.split("://", 1)[-1].rstrip("/").lower()
+    return netloc == ws.headers.get("host", "").strip().lower()
+
+
 @router.websocket("/ws")
 async def ws_events(ws: WebSocket) -> None:
+    if not _ws_origin_ok(ws):
+        await ws.close(code=4403)
+        return
     await ws.accept()
     if not await _ws_authorized(ws):
         try:

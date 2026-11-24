@@ -46,8 +46,9 @@ def rec(**kw):
 # ── промпт AI: флаги выключены по умолчанию ───────────────────────────────────
 def test_flags_default_off_prompt_unchanged(monkeypatch):
     monkeypatch.setattr(Config, "AI_SANITIZE_PROMPT", False)
-    # AI_SANITIZE_PROMPT и WS_SHADOW_ENABLED по умолчанию следуют PAPER_TRADING — см. test_ops_status.py
-    for flag in ("AI_RAG_CONTEXT", "AI_STRICT_VALIDATION", "SAC_V2_ENABLED", "FUNDING_IN_PNL"):
+    # AI_SANITIZE_PROMPT, WS_SHADOW_ENABLED, AI_STRICT_VALIDATION и DATA_QUALITY_GATE
+    # по умолчанию следуют PAPER_TRADING — см. test_paper_defaults_follow_paper_trading.
+    for flag in ("AI_RAG_CONTEXT", "SAC_V2_ENABLED", "FUNDING_IN_PNL"):
         assert getattr(Config, flag) is False, flag
     assert Config.FORECASTER == "chronos"
     p = AIAnalyzer()._build_prompt([snap()], 1000.0)
@@ -285,3 +286,23 @@ async def test_candle_check_compares_ws_with_rest_and_publishes(monkeypatch):
     bot.api.exchange.fetch_ohlcv.return_value = rest_bad
     assert (await ot.candle_check(bot, make_stream_with_candles(5)))["BTC/USDT"]["mismatched"] == [2 * 900_000]
     assert "skipped" in (await ot.candle_check(bot, make_stream_with_candles(1)))["BTC/USDT"]
+
+
+def test_paper_defaults_follow_paper_trading():
+    """Строгая схема LLM и Data Quality gate: в paper включены, в live — нет; env главнее."""
+    import os
+    import subprocess
+    import sys
+
+    code = "from config import Config as C; print(C.AI_STRICT_VALIDATION, C.DATA_QUALITY_GATE)"
+
+    def run(**env):
+        clean = {k: v for k, v in os.environ.items()
+                 if k not in ("PAPER_TRADING", "AI_STRICT_VALIDATION", "DATA_QUALITY_GATE")}
+        out = subprocess.run([sys.executable, "-c", code], env={**clean, **env},
+                             capture_output=True, text=True, check=True)
+        return out.stdout.split()[-2:]
+
+    assert run(PAPER_TRADING="true") == ["True", "True"]
+    assert run(PAPER_TRADING="false") == ["False", "False"]
+    assert run(PAPER_TRADING="true", AI_STRICT_VALIDATION="false") == ["False", "True"]

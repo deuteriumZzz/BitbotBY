@@ -17,6 +17,8 @@ import logging
 import time
 from typing import Callable, Optional
 
+from src.infra.logger import mask_secrets
+
 logger = logging.getLogger(__name__)
 
 try:
@@ -340,6 +342,7 @@ class TelegramNotifier:
         """
         if not self._enabled:
             return
+        text = mask_secrets(text)
         try:
             bot = self._app.bot
             msg_id = self._live_msg_ids.get(key)
@@ -435,7 +438,8 @@ class TelegramNotifier:
         try:
             await self._app.bot.send_message(
                 chat_id=self._chat_id,
-                text=text,
+                # Ошибки бэктестов/обучения приходят сюда как есть — ключи не должны.
+                text=mask_secrets(text),
                 parse_mode=parse_mode,
                 reply_markup=reply_markup,
             )

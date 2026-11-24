@@ -28,9 +28,21 @@ if __name__ == "__main__":
             "Приложение /app/ не собрано: cd webapp && npm ci && npm run build",
             file=sys.stderr,
         )
+    import logging
+
+    from src.infra.logger import install_masking
+
+    # Свой обработчик вместо конфигурации uvicorn: логи uvicorn идут в корень,
+    # где секреты маскируются (как в процессе бота).
+    logging.basicConfig(level=logging.WARNING)
+    for _h in logging.getLogger().handlers:
+        install_masking(_h)
     uvicorn.run(
         app,
-        host="0.0.0.0",
+        # Вне Docker — только этот компьютер; образ задаёт BIND_HOST=0.0.0.0
+        # (наружу порт открывает compose: 127.0.0.1 локально, Caddy на сервере).
+        host=os.getenv("BIND_HOST", "127.0.0.1"),
         port=8080,
         log_level="warning",
+        log_config=None,
     )
