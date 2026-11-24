@@ -2,11 +2,13 @@
 Настройка структурированного логирования для торгового бота.
 
 JSON-формат в production, человекочитаемый формат в development.
-Поддерживает фильтрацию API-ключей через _SecretFilter.
+Поддерживает фильтрацию API-ключей через _SecretFilter. Каждая строка лога
+торгового цикла несёт его trace_id — тот же, что в журнале решений.
 """
 
 from __future__ import annotations
 
+import contextvars
 import json
 import logging
 import logging.handlers
@@ -29,6 +31,23 @@ _SECRET_PATTERNS = (
         r"\1***",
     ),
 )
+
+
+# trace_id торгового цикла. Ставит DecisionLedger.begin_cycle; его получают все
+# строки лога цикла и задачи, запущенные из цикла. Фоновые задачи, созданные до
+# цикла (монитор позиций), живут в своём контексте и метки не получают.
+TRACE_ID: contextvars.ContextVar[str] = contextvars.ContextVar("trace_id", default="")
+
+
+class _TraceFilter(logging.Filter):
+    """Добавляет к записи trace_id цикла: поле для JSON, метку для текста."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        tid = TRACE_ID.get()
+        if tid:
+            record.trace_id = tid
+        record.trace_tag = f" [{tid}]" if tid else ""
+        return True
 
 
 def mask_secrets(text: str) -> str:
@@ -124,6 +143,7 @@ class JSONFormatter(logging.Formatter):
             "process",
             "message",
             "taskName",
+            "trace_tag",
         }
     )
 
@@ -172,12 +192,13 @@ def setup_logging(
     else:
         handler.setFormatter(
             logging.Formatter(
-                "%(asctime)s %(levelname)-8s %(name)s — %(message)s",
+                "%(asctime)s %(levelname)-8s %(name)s%(trace_tag)s — %(message)s",
                 datefmt="%Y-%m-%d %H:%M:%S",
             )
         )
 
     install_masking(handler)
+    handler.addFilter(_TraceFilter())
     root.handlers.clear()
     root.addHandler(handler)
 
@@ -191,4 +212,5 @@ def setup_logging(
     )
     fh.setFormatter(JSONFormatter())
     install_masking(fh)
+    fh.addFilter(_TraceFilter())
     root.addHandler(fh)

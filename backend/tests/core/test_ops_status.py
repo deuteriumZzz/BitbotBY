@@ -5,6 +5,7 @@ import subprocess
 import sys
 from types import SimpleNamespace
 
+from bitbot.config.flags import FLAGS
 from bitbot.workers import ops as ops_tasks
 
 
@@ -47,7 +48,7 @@ def _bot(**kw):
 
 def test_ops_status_shape_without_ws():
     st = ops_tasks.ops_status(_bot())
-    assert set(st["flags"]) == set(ops_tasks.OPS_FLAGS)
+    assert set(st["flags"]) == {f.key for f in FLAGS}
     assert all(isinstance(v, bool) for v in st["flags"].values())
     assert st["ws"] is None and st["backup"] is None and st["emergency"] == 0
     assert st["mode"] in ("paper", "live")

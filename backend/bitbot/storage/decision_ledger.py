@@ -19,6 +19,8 @@ import threading
 from datetime import datetime, timezone
 from typing import Any
 
+from bitbot.infra.logger import TRACE_ID
+
 logger = logging.getLogger(__name__)
 
 _RAW_LIMIT = 8_000  # символов сырого ответа модели на запись
@@ -52,8 +54,10 @@ class DecisionLedger:
         self.sink: Any = None
 
     def begin_cycle(self, cycle: int) -> str:
-        """Новый trace_id на торговый цикл; его получают все записи цикла."""
+        """Новый trace_id на торговый цикл; его получают все записи цикла и
+        все строки лога цикла (`infra.logger.TRACE_ID`)."""
         self.trace_id = f"{int(datetime.now(timezone.utc).timestamp())}-{cycle}"
+        TRACE_ID.set(self.trace_id)
         return self.trace_id
 
     def write(self, kind: str, **fields: Any) -> None:

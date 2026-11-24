@@ -23,6 +23,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
+from bitbot.config import flags
 from bitbot.config.settings import Config
 from bitbot.ops.emergency import DEFAULT_PATH, EmergencyControl, plan
 
@@ -170,20 +171,6 @@ async def db_backup_loop(
 
 
 # ── Состояние защиты и наблюдения (для приложения и журнала) ───────────────────
-OPS_FLAGS = (
-    "WS_SHADOW_ENABLED",
-    "AI_SANITIZE_PROMPT",
-    "AI_STRICT_VALIDATION",
-    "AI_RAG_CONTEXT",
-    "RISK_GATE_SHADOW",
-    "DB_BACKUP_ENABLED",
-    "FUNDING_IN_PNL",
-    "SAC_V2_ENABLED",
-    "EVENT_STREAM_ENABLED",
-    "DATA_QUALITY_GATE",
-)
-
-
 def ops_status(bot: Any) -> Dict[str, Any]:
     """Что сейчас включено и как себя чувствует наблюдение: флаги, WS, копия БД, аварийный уровень.
 
@@ -215,7 +202,7 @@ def ops_status(bot: Any) -> Dict[str, Any]:
     return {
         "mode": "paper" if Config.PAPER_TRADING else "live",
         "prompt_version": PROMPT_VERSION,
-        "flags": {name: getattr(Config, name, False) is True for name in OPS_FLAGS},
+        "flags": flags.current(Config),
         "forecaster": Config.FORECASTER,
         "ws": ws,
         "backup": getattr(bot, "_last_backup", None),
