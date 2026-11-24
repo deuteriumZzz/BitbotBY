@@ -1,15 +1,15 @@
-"""Стратегии из Argent-Systems (backend/bitbot/domain/strategies/ported.py)."""
+"""Стратегии из Argent-Systems (experimental.py в папках семейств, адаптер — ported_base.py)."""
 
 import numpy as np
 import pandas as pd
 import pytest
 
 from bitbot.domain.strategies import STRATEGY_REGISTRY, create_strategy
-from bitbot.domain.strategies.ported import PORTED_STRATEGIES as FIRST
-from bitbot.domain.strategies.ported import PortedStrategy
-from bitbot.domain.strategies.ported_ind import IND_STRATEGIES
+from bitbot.domain.strategies.ported_base import PortedStrategy
 
-PORTED_STRATEGIES = {**FIRST, **IND_STRATEGIES}
+PORTED_STRATEGIES = {
+    n: c for n, c in STRATEGY_REGISTRY.items() if issubclass(c, PortedStrategy)
+}
 
 
 def _walk(n: int = 1100, seed: int = 7) -> pd.DataFrame:
@@ -28,8 +28,17 @@ def _walk(n: int = 1100, seed: int = 7) -> pd.DataFrame:
     )
 
 
+def test_strategy_lives_in_its_family_folder():
+    # папка = market_type, файл: main — основные, experimental — порты Argent
+    assert len(STRATEGY_REGISTRY) == 69
+    for name, cls in STRATEGY_REGISTRY.items():
+        kind = "experimental" if cls.experimental else "main"
+        assert (
+            cls.__module__ == f"bitbot.domain.strategies.{cls.market_type}.{kind}"
+        ), name
+
+
 def test_all_ports_are_registered_with_market_flags():
-    assert len(FIRST) == 15 and len(IND_STRATEGIES) == 34
     assert len(PORTED_STRATEGIES) == 49
     assert all(n in STRATEGY_REGISTRY for n in PORTED_STRATEGIES)
     assert STRATEGY_REGISTRY["bear_hedge"].markets == "futures"

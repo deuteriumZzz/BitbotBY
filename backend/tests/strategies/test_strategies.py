@@ -55,11 +55,8 @@ def test_strategy_handles_flat_market(name):
 
 def test_volume_spike_is_one_strategy_with_profile_threshold():
     from bitbot.config.runtime import set_active_profile
-    from bitbot.domain.strategies import (
-        LEGACY_ALIASES,
-        VolumeSpikeStrategy,
-        create_strategy,
-    )
+    from bitbot.domain.strategies import LEGACY_ALIASES, create_strategy
+    from bitbot.domain.strategies.volatile.main import VolumeSpikeStrategy
 
     assert not [n for n in STRATEGY_REGISTRY if n.startswith("volume_spike_")]
     # Старые имена из истории сделок и Redis по-прежнему создают рабочую стратегию.

@@ -17,17 +17,23 @@ import pytest
 
 from bitbot.domain.strategies import (
     STRATEGY_REGISTRY,
-    BollingerBandsStrategy,
-    BreakoutStrategy,
-    EMACrossoverStrategy,
-    MeanReversionStrategy,
-    RSIMomentumStrategy,
-    ScalpingStrategy,
-    SwingTradingStrategy,
     TradingStrategy,
-    TrendFollowingStrategy,
     create_strategy,
     get_all_strategies,
+)
+from bitbot.domain.strategies.ranging.main import (
+    MeanReversionStrategy,
+    RSIMomentumStrategy,
+)
+from bitbot.domain.strategies.trending.main import (
+    EMACrossoverStrategy,
+    SwingTradingStrategy,
+    TrendFollowingStrategy,
+)
+from bitbot.domain.strategies.volatile.main import (
+    BollingerBandsStrategy,
+    BreakoutStrategy,
+    ScalpingStrategy,
 )
 from bitbot.market.indicators import calculate_technical_indicators
 from tests.conftest import make_ohlcv

@@ -40,7 +40,8 @@ from bitbot.config.settings import (
     STABLECOIN_BASES,
     Config,
 )
-from bitbot.domain.strategies import STRATEGY_REGISTRY, BaseStrategy
+from bitbot.domain.strategies import STRATEGY_REGISTRY
+from bitbot.domain.strategies.base import BaseStrategy
 from bitbot.market.indicators import add_indicators
 from bitbot.market.market_impact import estimate_from_df as _ac_impact
 from bitbot.research.alpha_tester import AlphaTester
