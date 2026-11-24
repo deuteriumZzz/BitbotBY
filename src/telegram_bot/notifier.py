@@ -1,132 +1,240 @@
 """
-Telegram-бот для подтверждения сделок и отправки сигналов.
+Telegram: короткие уведомления владельцу и вход в приложение (Mini App).
 
-Порядок работы:
-  1. Бот отправляет предложение сделки с inline-кнопками ✅/❌.
-  2. Пользователь отвечает в течение CONFIRM_TIMEOUT секунд.
-  3. Нет ответа → авто-исполнение (True).
-  4. ❌ → пропустить сделку.
+Управление ботом и все настройки — только в приложении (MiniApp / Desktop).
+Здесь остаётся лёгкий слой поверх Telegram Bot API (прямые вызовы через httpx):
 
-Требования: python-telegram-bot>=20.0 (async)
+- `notify` / `edit_notify` / закрепление — сообщения о сделках, рисках, задачах.
+  Под сообщением кнопка web_app «Открыть в приложении» на нужную вкладку —
+  если задан https-адрес приложения (WEBAPP_URL): Telegram открывает Mini App
+  только по https.
+- `ask_confirm` — предложение сделки. Решение принимается в приложении
+  (`resolve_pending`); нет ответа до таймаута — авто-исполнение или пропуск,
+  как настроено.
+- Входящие: только `/start` (кнопка приложения) и `/app` (одноразовая ссылка
+  входа при запуске на своём компьютере), только от владельца. Остальное
+  игнорируется.
+
+Токен — часть URL Bot API: в логи попадают имя метода и описание ошибки,
+а не адрес (плюс общая маскировка секретов в логгере).
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import time
-from typing import Callable, Optional
+from typing import Any, Callable, Dict, Optional
+
+import httpx
 
 from src.infra.logger import mask_secrets
 
 logger = logging.getLogger(__name__)
 
-try:
-    from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
-    from telegram.ext import Application, CallbackQueryHandler, ContextTypes
+_CONFIRM_TIMEOUT = 60  # секунд на ответ по сделке
+_API = "https://api.telegram.org/bot{token}/{method}"
+_HTTP_TIMEOUT = 15.0
+_POLL_TIMEOUT = 25  # long polling getUpdates, сек
+_POLL_RETRY_S = 5.0
 
-    _TG_AVAILABLE = True
-except ImportError:
-    _TG_AVAILABLE = False
-    logger.warning(
-        "python-telegram-bot not installed. "
-        "Run: pip install python-telegram-bot>=20.0"
-    )
+# Вкладки приложения, на которые ведут кнопки (webapp/src/lib/types.ts: Tab).
+SCREEN_HOME = "terminal"
+SCREEN_PIPELINE = "bots"  # сигналы на подтверждение, риск, аварийное управление
+SCREEN_JOBS = "learn"  # обучение и проверки
+SCREEN_JOURNAL = "journal"
 
-_CONFIRM_TIMEOUT = 60  # seconds
+
+def webapp_url() -> str:
+    """https-адрес приложения или пустая строка (локальный запуск без туннеля)."""
+    url = os.getenv("WEBAPP_URL", "").strip()
+    return url if url.startswith("https://") else ""
+
+
+def app_button(screen: str, text: str = "Открыть в приложении") -> Optional[dict]:
+    """Inline-клавиатура с одной кнопкой web_app; None — приложение недоступно по https."""
+    base = webapp_url()
+    if not base:
+        return None
+    sep = "&" if "?" in base else "?"
+    url = f"{base}{sep}tab={screen}"
+    return {"inline_keyboard": [[{"text": text, "web_app": {"url": url}}]]}
 
 
 class TelegramNotifier:
-    """
-    Отправляет Telegram-уведомления и ожидает подтверждения сделки.
-
-    Работает в деградированном режиме если токен отсутствует
-    или библиотека не установлена.
-    """
+    """Уведомления владельцу и вход в приложение; без токена — тихо ничего не делает."""
 
     def __init__(self, token: str, chat_id: str):
         self._token = token
-        self._chat_id = chat_id
-        self._app: Optional[Application] = None
-        self._polling_task: Optional[asyncio.Task] = None
-        self._pending: dict = {}  # message_id → asyncio.Event
-        self._decisions: dict = {}  # message_id → bool
-        self._decided_by: dict = {}  # message_id → "app" (ответ из приложения)
-        # Публикация событий для приложения (MiniApp / Desktop); задаёт TradingBot.
+        self._chat_id = str(chat_id or "")
+        self._enabled = bool(token and self._chat_id)
+        self._client: Optional[httpx.AsyncClient] = None
+        self._poll_task: Optional[asyncio.Task] = None
+        self._offset = 0
+        self._pending: Dict[int, asyncio.Event] = {}  # message_id → ждём ответа
+        self._decisions: Dict[int, bool] = {}
+        self._decided_by: Dict[int, str] = {}
+        self._live_msg_ids: Dict[str, int] = {}  # key → message_id (edit_notify)
+        # Публикация событий для приложения; задаёт TradingBot.
         self._emit: "Callable[[str, dict], None] | None" = None
-        self._enabled = bool(_TG_AVAILABLE and token and chat_id)
-        self._live_msg_ids: dict = {}  # key → message_id for edit_notify
         # Пускать ли уведомление вида kind (тумблер + тихие часы); задаёт TradingBot.
         self.gate: "Callable[[str], bool] | None" = None
+        # Одноразовый токен входа для /app; задаёт TradingBot (нужен Redis).
+        self.login_issuer: "Callable[[], str] | None" = None
+
+    # ── жизненный цикл ────────────────────────────────────────────────────────
 
     async def start(self) -> None:
-        """Инициализирует и запускает polling Telegram в фоновом режиме."""
+        """Кнопка приложения в меню чата и приём /start, /app."""
         if not self._enabled:
             return
-        self._app = Application.builder().token(self._token).build()
-        self._app.add_handler(
-            CallbackQueryHandler(self._handle_callback, pattern="^(confirm|reject)$")
-        )
-        await self._app.initialize()
-        await self._app.start()
-        self._polling_task = asyncio.create_task(self._app.updater.start_polling())
+        self._client = httpx.AsyncClient(timeout=_HTTP_TIMEOUT)
+        if webapp_url():
+            await self._call(
+                "setChatMenuButton",
+                chat_id=self._chat_id,
+                menu_button={
+                    "type": "web_app",
+                    "text": "Приложение",
+                    "web_app": {"url": webapp_url()},
+                },
+            )
+        self._poll_task = asyncio.create_task(self._poll_updates())
         logger.info("Telegram notifier started")
 
     async def stop(self) -> None:
-        """Останавливает Telegram-приложение и отменяет polling."""
-        if self._polling_task:
-            self._polling_task.cancel()
+        if self._poll_task:
+            self._poll_task.cancel()
             try:
-                await self._polling_task
+                await self._poll_task
             except asyncio.CancelledError:
                 pass
-        if self._app:
-            await self._app.updater.stop()
-            await self._app.stop()
-            await self._app.shutdown()
+        if self._client:
+            await self._client.aclose()
+            self._client = None
 
-    async def _handle_callback(
+    # ── Bot API ───────────────────────────────────────────────────────────────
+
+    async def _call(
+        self, method: str, http_timeout: float = _HTTP_TIMEOUT, **params: Any
+    ) -> Optional[Any]:
+        """Вызов Bot API; результат или None (ошибка уже в логе, без токена)."""
+        if self._client is None:
+            return None
+        payload = {k: v for k, v in params.items() if v is not None}
+        try:
+            resp = await self._client.post(
+                _API.format(token=self._token, method=method),
+                json=payload,
+                timeout=http_timeout,
+            )
+            data = resp.json()
+        except (httpx.HTTPError, ValueError) as e:
+            logger.warning("Telegram %s failed: %s", method, type(e).__name__)
+            return None
+        if not data.get("ok"):
+            desc = str(data.get("description", ""))
+            # Markdown не разобрался (символы из названий, ошибок) — шлём как есть.
+            if "parse" in desc.lower() and payload.get("parse_mode"):
+                payload.pop("parse_mode")
+                return await self._call(method, http_timeout, **payload)
+            logger.warning("Telegram %s: %s", method, mask_secrets(desc))
+            return None
+        return data.get("result")
+
+    async def _send(
+        self, text: str, parse_mode: Optional[str], markup: Optional[dict]
+    ) -> Optional[int]:
+        res = await self._call(
+            "sendMessage",
+            chat_id=self._chat_id,
+            text=mask_secrets(text),
+            parse_mode=parse_mode,
+            reply_markup=markup,
+        )
+        return res.get("message_id") if isinstance(res, dict) else None
+
+    async def _edit(
         self,
-        update: Update,
-        context: ContextTypes.DEFAULT_TYPE,
+        message_id: int,
+        text: str,
+        parse_mode: Optional[str] = "Markdown",
+        markup: Optional[dict] = None,
+    ) -> bool:
+        res = await self._call(
+            "editMessageText",
+            chat_id=self._chat_id,
+            message_id=message_id,
+            text=mask_secrets(text),
+            parse_mode=parse_mode,
+            reply_markup=markup,
+        )
+        return res is not None
+
+    # ── уведомления ──────────────────────────────────────────────────────────
+
+    async def notify(
+        self,
+        text: str,
+        parse_mode: str = "Markdown",
+        kind: str = "",
+        screen: str = SCREEN_HOME,
     ) -> None:
         """
-        Обрабатывает нажатие inline-кнопки подтверждения/отклонения сделки.
+        Сообщение владельцу с кнопкой перехода на вкладку `screen` приложения.
 
-        Проверяет авторизацию пользователя по chat_id и устанавливает
-        решение в словаре _decisions.
+        :param kind: Вид уведомления (position_open, new_signal…) — для тумблеров
+            и тихих часов. Без вида — приходит всегда (например, «позиция без SL»).
         """
-        query = update.callback_query
-        # C4: only the configured chat owner can approve/reject trades
-        if str(query.from_user.id) != str(self._chat_id):
-            await query.answer("Not authorized.")
+        if not self._enabled:
             return
-        mid = query.message.message_id
-        data = query.data  # "confirm" or "reject"
-        confirmed = data == "confirm"
-        if mid in self._pending:
-            self._decisions[mid] = confirmed
-            self._pending[mid].set()
-
-        footer = (
-            "\n\n✅ *Trade — принято*" if confirmed else "\n\n❌ *Skip — пропущено*"
-        )
-        from telegram import Message as _TGMessage
-
-        original = (
-            query.message.text if isinstance(query.message, _TGMessage) else ""
-        ) or ""
-        try:
-            await query.edit_message_text(
-                text=original + footer,
-                parse_mode="Markdown",
-            )
-        except Exception:
+        if kind and self.gate is not None:
             try:
-                await query.edit_message_reply_markup(reply_markup=None)
-            except Exception:
-                pass
-        await query.answer()
+                if not self.gate(kind):
+                    return
+            except Exception as e:  # не смогли спросить — лучше отправить
+                logger.debug("notify gate failed for %s: %s", kind, e)
+        await self._send(text, parse_mode, app_button(screen))
+
+    async def edit_notify(
+        self, key: str, text: str, parse_mode: str = "Markdown"
+    ) -> None:
+        """Повторяющийся алерт `key`: первый раз — новое сообщение, дальше — правка его же."""
+        if not self._enabled:
+            return
+        markup = app_button(SCREEN_HOME)
+        msg_id = self._live_msg_ids.get(key)
+        if msg_id and await self._edit(msg_id, text, parse_mode, markup):
+            return
+        new_id = await self._send(text, parse_mode, markup)
+        if new_id:
+            self._live_msg_ids[key] = new_id
+        else:
+            self._live_msg_ids.pop(key, None)
+
+    async def pin_live_msg(self, key: str) -> None:
+        if not self._enabled or key not in self._live_msg_ids:
+            return
+        await self._call(
+            "pinChatMessage",
+            chat_id=self._chat_id,
+            message_id=self._live_msg_ids[key],
+            disable_notification=True,
+        )
+
+    async def unpin_live_msg(self, key: str, resolved_text: str = "") -> None:
+        """Перевести закреплённый алерт в «решено» и открепить."""
+        if not self._enabled:
+            return
+        msg_id = self._live_msg_ids.pop(key, None)
+        if not msg_id:
+            return
+        if resolved_text:
+            await self._edit(msg_id, resolved_text)
+        await self._call("unpinChatMessage", chat_id=self._chat_id, message_id=msg_id)
+
+    # ── предложение сделки ────────────────────────────────────────────────────
 
     async def ask_confirm(
         self,
@@ -141,178 +249,107 @@ class TelegramNotifier:
         auto_execute: bool = True,
     ) -> bool:
         """
-        Отправляет предложение сделки; возвращает True если
-        подтверждено или истёк таймаут.
+        Предложение сделки владельцу; решение — в приложении.
 
-        Показывает win rate из бэктеста и лайв отдельно.
-        Возвращает True немедленно если Telegram отключён.
-
-        :param rec: Рекомендация с ключами symbol, action, confidence, entry, sl, tp.
-        :param live_win_rate: Win rate по живым сделкам.
-        :param live_trades: Количество живых сделок.
-        :param live_ev: Expected value по живым сделкам.
-        :param bt_win_rate: Win rate по бэктесту.
-        :param bt_trades: Количество сделок в бэктесте.
-        :param bt_ev: Expected value по бэктесту.
-        :param timeout: Таймаут ожидания в секундах.
-        :return: True если сделка подтверждена или автоподтверждена по таймауту.
+        True — подтверждено или нет ответа при auto_execute. Без Telegram —
+        True сразу (как раньше). Сбой отправки — False: сделку пропускаем.
         """
         if not self._enabled:
             return True
-
         symbol = rec.get("symbol", "?")
-        action = rec.get("action", "?").upper()
+        action = str(rec.get("action", "?")).upper()
         confidence = rec.get("confidence", 0.0)
         entry = rec.get("entry", 0.0)
         sl = rec.get("stop_loss", 0.0)
         tp = rec.get("take_profit", 0.0)
         strategy = rec.get("strategy", "?")
-
-        if bt_trades > 0:
-            bt_line = (
-                f"Backtest:  "
-                f"*{bt_win_rate:.0%}*  "
-                f"({bt_trades} trades)  "
-                f"EV: *{bt_ev*100:+.2f}%*"
-            )
-        else:
-            bt_line = "Backtest: no data"
-
-        if live_trades > 0:
-            live_line = (
-                f"Live:      "
-                f"*{live_win_rate:.0%}*  "
-                f"({live_trades} trades)  "
-                f"EV: *{live_ev*100:+.2f}%*"
-            )
-        else:
-            live_line = "Live: -- (no trades yet)"
-
+        bt_line = (
+            f"Backtest: *{bt_win_rate:.0%}* ({bt_trades} trades) "
+            f"EV: *{bt_ev * 100:+.2f}%*"
+            if bt_trades > 0
+            else "Backtest: no data"
+        )
+        live_line = (
+            f"Live: *{live_win_rate:.0%}* ({live_trades} trades) "
+            f"EV: *{live_ev * 100:+.2f}%*"
+            if live_trades > 0
+            else "Live: -- (no trades yet)"
+        )
         text = (
             f"*{symbol}*  --  {action}\n\n"
             f"Strategy: `{strategy}`\n"
             f"Entry: `${entry:.4f}`\n"
-            f"SL: `${sl:.4f}`   "
-            f"TP: `${tp:.4f}`\n\n"
+            f"SL: `${sl:.4f}`   TP: `${tp:.4f}`\n\n"
             f"AI confidence: *{confidence:.0%}*\n\n"
-            f"{bt_line}\n"
-            f"{live_line}\n\n"
+            f"{bt_line}\n{live_line}\n\n"
             + (
-                f"⏱ {timeout}с на решение — нажми Trade, иначе сделка будет пропущена"
+                f"⏱ {timeout}с на решение в приложении, иначе сделка будет пропущена"
                 if not auto_execute
-                else f"⚡ Авто-исполнение через {timeout}с — нажми Skip чтобы пропустить"
+                else f"⚡ Авто-исполнение через {timeout}с — пропустить можно в приложении"
             )
         )
-        keyboard = InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton(
-                        "Trade",
-                        callback_data="confirm",
-                    ),
-                    InlineKeyboardButton(
-                        "Skip",
-                        callback_data="reject",
-                    ),
-                ]
-            ]
+        mid = await self._send(
+            text, "Markdown", app_button(SCREEN_PIPELINE, "Решить в приложении")
         )
-        try:
-            bot: Bot = self._app.bot
-            msg = await bot.send_message(
-                chat_id=self._chat_id,
-                text=text,
-                parse_mode="Markdown",
-                reply_markup=keyboard,
-            )
-            mid = msg.message_id
-            event = asyncio.Event()
-            self._pending[mid] = event
-            self._decisions[mid] = True  # default: всегда авто-исполнение
-            signal_id = f"sig{mid}"
-            self._publish(
-                "signal.pending",
-                {
-                    "id": signal_id,
-                    "symbol": symbol,
-                    "side": "long" if action == "BUY" else "short",
-                    "confidence": confidence,
-                    "strategy": strategy,
-                    "reasoning": str(rec.get("reasoning") or "")[:500],
-                    "entry": entry,
-                    "stop_loss": sl,
-                    "take_profit": tp,
-                    "expires_at": time.time() + timeout,
-                    # По таймауту: True — исполнить, False — пропустить.
-                    "on_timeout_execute": auto_execute,
-                    "backtest": {
-                        "win_rate": bt_win_rate,
-                        "trades": bt_trades,
-                        "ev": bt_ev,
-                    },
-                    "live": {
-                        "win_rate": live_win_rate,
-                        "trades": live_trades,
-                        "ev": live_ev,
-                    },
+        if not mid:
+            return False  # fail-closed: не смогли спросить — не входим
+        event = asyncio.Event()
+        self._pending[mid] = event
+        signal_id = f"sig{mid}"
+        self._publish(
+            "signal.pending",
+            {
+                "id": signal_id,
+                "symbol": symbol,
+                "side": "long" if action == "BUY" else "short",
+                "confidence": confidence,
+                "strategy": strategy,
+                "reasoning": str(rec.get("reasoning") or "")[:500],
+                "entry": entry,
+                "stop_loss": sl,
+                "take_profit": tp,
+                "expires_at": time.time() + timeout,
+                # По таймауту: True — исполнить, False — пропустить.
+                "on_timeout_execute": auto_execute,
+                "backtest": {
+                    "win_rate": bt_win_rate,
+                    "trades": bt_trades,
+                    "ev": bt_ev,
                 },
+                "live": {
+                    "win_rate": live_win_rate,
+                    "trades": live_trades,
+                    "ev": live_ev,
+                },
+            },
+        )
+        timed_out = False
+        try:
+            await asyncio.wait_for(event.wait(), timeout=timeout)
+        except asyncio.TimeoutError:
+            timed_out = True
+            logger.info(
+                "Confirm timeout for %s -> %s",
+                symbol,
+                "auto-execute" if auto_execute else "skip",
             )
-
-            timed_out = False
-            try:
-                await asyncio.wait_for(event.wait(), timeout=timeout)
-            except asyncio.TimeoutError:
-                timed_out = True
-                logger.info(
-                    "Telegram timeout for %s -> %s",
-                    symbol,
-                    "auto-execute" if auto_execute else "skip",
-                )
-
-            decision = self._decisions.pop(mid, auto_execute)
-            self._pending.pop(mid, None)
-            by = self._decided_by.pop(mid, "timeout" if timed_out else "telegram")
-            self._publish(
-                "signal.resolved",
-                {"id": signal_id, "symbol": symbol, "confirmed": decision, "by": by},
+        decision = self._decisions.pop(mid, auto_execute)
+        self._pending.pop(mid, None)
+        by = self._decided_by.pop(mid, "timeout")
+        self._publish(
+            "signal.resolved",
+            {"id": signal_id, "symbol": symbol, "confirmed": decision, "by": by},
+        )
+        if timed_out:
+            footer = "⚡ *Авто-исполнено*" if decision else "⏭ *Нет ответа — пропущено*"
+        else:
+            footer = (
+                "✅ *Принято в приложении*"
+                if decision
+                else "❌ *Пропущено в приложении*"
             )
-
-            footer = None
-            if timed_out:
-                footer = (
-                    "⚡ *Авто-исполнено*" if decision else "⏭ *Нет ответа — пропущено*"
-                )
-            elif by == "app":
-                footer = (
-                    "✅ *Trade — принято в приложении*"
-                    if decision
-                    else "❌ *Skip — пропущено в приложении*"
-                )
-            if footer:
-                try:
-                    await bot.edit_message_text(
-                        chat_id=self._chat_id,
-                        message_id=mid,
-                        text=text + f"\n\n{footer}",
-                        parse_mode="Markdown",
-                    )
-                except Exception:
-                    pass
-            return decision
-
-        except Exception as e:
-            logger.error("Telegram error: %s", e)
-            return False  # C3: fail-closed — skip trade on Telegram errors
-
-    def set_event_emitter(self, emit: "Callable[[str, dict], None]") -> None:
-        self._emit = emit
-
-    def _publish(self, type_: str, data: dict) -> None:
-        if self._emit is not None:
-            try:
-                self._emit(type_, data)
-            except Exception as e:
-                logger.debug("event %s not published: %s", type_, e)
+        await self._edit(mid, text + f"\n\n{footer}")  # без кнопки: решение принято
+        return decision
 
     def resolve_pending(self, signal_id: str, confirmed: bool) -> bool:
         """Ответ на предложение сделки из приложения. False — уже не ждём ответа."""
@@ -328,120 +365,79 @@ class TelegramNotifier:
         event.set()
         return True
 
-    async def edit_notify(
-        self,
-        key: str,
-        text: str,
-        parse_mode: str = "Markdown",
-    ) -> None:
-        """Send or silently edit a recurring alert identified by key.
+    def set_event_emitter(self, emit: "Callable[[str, dict], None]") -> None:
+        self._emit = emit
 
-        First call sends a new message and stores its ID.
-        Subsequent calls edit that same message in-place — no new chat entry.
-        If the stored message was deleted, falls back to sending a new one.
-        """
-        if not self._enabled:
-            return
-        text = mask_secrets(text)
-        try:
-            bot = self._app.bot
-            msg_id = self._live_msg_ids.get(key)
-            if msg_id:
-                try:
-                    await bot.edit_message_text(
-                        chat_id=self._chat_id,
-                        message_id=msg_id,
-                        text=text,
-                        parse_mode=parse_mode,
-                    )
-                    return
-                except Exception:
-                    self._live_msg_ids.pop(key, None)
-            msg = await bot.send_message(
-                chat_id=self._chat_id,
-                text=text,
-                parse_mode=parse_mode,
-            )
-            self._live_msg_ids[key] = msg.message_id
-        except Exception as e:
-            logger.error("Telegram edit_notify error: %s", e)
-
-    async def pin_live_msg(self, key: str) -> None:
-        """Pin the live message stored under key, if any."""
-        if not self._enabled:
-            return
-        msg_id = self._live_msg_ids.get(key)
-        if not msg_id:
-            return
-        try:
-            await self._app.bot.pin_chat_message(
-                chat_id=self._chat_id,
-                message_id=msg_id,
-                disable_notification=True,
-            )
-        except Exception as e:
-            logger.warning("Telegram pin error: %s", e)
-
-    async def unpin_live_msg(self, key: str, resolved_text: str = "") -> None:
-        """Edit live message to resolved state and unpin it.
-
-        No-op if the key was never sent (nothing to unpin).
-        """
-        if not self._enabled:
-            return
-        msg_id = self._live_msg_ids.pop(key, None)
-        if not msg_id:
-            return
-        try:
-            bot = self._app.bot
-            if resolved_text:
-                try:
-                    await bot.edit_message_text(
-                        chat_id=self._chat_id,
-                        message_id=msg_id,
-                        text=resolved_text,
-                        parse_mode="Markdown",
-                    )
-                except Exception:
-                    pass
-            await bot.unpin_chat_message(
-                chat_id=self._chat_id,
-                message_id=msg_id,
-            )
-        except Exception as e:
-            logger.warning("Telegram unpin error: %s", e)
-
-    async def notify(
-        self,
-        text: str,
-        reply_markup=None,
-        parse_mode: str = "Markdown",
-        kind: str = "",
-    ) -> None:
-        """
-        Отправляет текстовое уведомление в Telegram-чат.
-
-        :param text: Текст уведомления.
-        :param reply_markup: Опциональная InlineKeyboardMarkup.
-        :param parse_mode: Режим разметки (по умолчанию MarkdownV2).
-        :param kind: Вид уведомления (position_open, new_signal…) — для тумблеров
-            и тихих часов. Без вида — приходит всегда (например, «позиция без SL»).
-        """
-        if not self._enabled:
-            return
-        if kind and self.gate is not None:
+    def _publish(self, type_: str, data: dict) -> None:
+        if self._emit is not None:
             try:
-                if not self.gate(kind):
-                    return
-            except Exception as e:  # не смогли спросить — лучше отправить
-                logger.debug("notify gate failed for %s: %s", kind, e)
-        try:
-            await self._app.bot.send_message(
-                chat_id=self._chat_id,
-                # Ошибки бэктестов/обучения приходят сюда как есть — ключи не должны.
-                text=mask_secrets(text),
-                parse_mode=parse_mode,
-                reply_markup=reply_markup,
+                self._emit(type_, data)
+            except Exception as e:
+                logger.debug("event %s not published: %s", type_, e)
+
+    # ── входящие: /start и /app ───────────────────────────────────────────────
+
+    async def _poll_updates(self) -> None:
+        """Long polling getUpdates; 409 (бота опрашивает другая программа) — ждём."""
+        while True:
+            try:
+                updates = await self._call(
+                    "getUpdates",
+                    http_timeout=_POLL_TIMEOUT + 10,
+                    offset=self._offset or None,
+                    timeout=_POLL_TIMEOUT,
+                    allowed_updates=["message"],
+                )
+                if updates is None:
+                    await asyncio.sleep(_POLL_RETRY_S)
+                    continue
+                for upd in updates:
+                    self._offset = int(upd.get("update_id", 0)) + 1
+                    await self._handle_message(upd.get("message") or {})
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:  # приём сообщений не должен ронять бота
+                logger.warning("Telegram polling error: %s", type(e).__name__)
+                await asyncio.sleep(_POLL_RETRY_S)
+
+    async def _handle_message(self, msg: Dict[str, Any]) -> None:
+        if str((msg.get("chat") or {}).get("id", "")) != self._chat_id:
+            return  # не владелец — молчим
+        text = str(msg.get("text") or "").strip().split("@")[0]
+        if text.startswith("/start"):
+            await self._send(self._welcome_text(), None, app_button(SCREEN_HOME))
+        elif text.startswith("/app"):
+            await self._send(self._login_link_text(), "Markdown", None)
+
+    @staticmethod
+    def _welcome_text() -> str:
+        if webapp_url():
+            return (
+                "BitbotBY: сюда приходят уведомления о сделках и рисках. "
+                "Управление и настройки — в приложении: кнопка ниже или "
+                "«Приложение» в меню."
             )
-        except Exception as e:
-            logger.error("Telegram notify error: %s", e)
+        return (
+            "BitbotBY: сюда приходят уведомления о сделках и рисках. "
+            "Приложение открывается на компьютере с ботом (ярлык BitbotBY); "
+            "для телефона включите доступ: python3 launcher/launch.py phone on. "
+            "Ссылка входа на компьютере — команда /app."
+        )
+
+    def _login_link_text(self) -> str:
+        port = os.getenv("APP_PORT", "")
+        if not port.isdigit() or self.login_issuer is None:
+            return (
+                "Ссылка входа работает только при запуске бота на своём компьютере "
+                "(ярлык BitbotBY или launcher/launch.py)."
+            )
+        from src.settings import login_link  # noqa: PLC0415
+
+        token = self.login_issuer()
+        return (
+            "🔐 Ссылка входа в приложение — откройте её на компьютере, где запущен "
+            "бот (нажмите, чтобы скопировать):\n\n"
+            f"`http://localhost:{port}/app/#local={token}`\n\n"
+            f"Работает {login_link.TTL // 60} минут и только один раз. "
+            "Если вы её не запрашивали — просто не открывайте."
+        )

@@ -24,21 +24,14 @@ from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from config import Config
-from src.ops.emergency import LEVELS, EmergencyControl
+from src.ops.emergency import DEFAULT_PATH, EmergencyControl, plan
 
 logger = logging.getLogger(__name__)
 
-EMERGENCY_PATH = os.path.join("data", "emergency.json")
+EMERGENCY_PATH = DEFAULT_PATH
 BACKUP_DIR = os.path.join("data", "backups")
 STALE_ALERT_S = 90.0
 ALERT_COOLDOWN_S = 1800.0
-
-_LEVEL_TEXT = {
-    1: "запрет новых входов (пауза)",
-    2: "отмена отложенных ордеров (входные ордера рыночные, биржевые SL/TP не снимаются — ничего не сделает)",
-    3: "закрыть убыточные позиции, у прибыльных SL на безубыток",
-    4: "закрыть ВСЕ позиции и оставить паузу",
-}
 
 
 # ── WS Shadow ─────────────────────────────────────────────────────────────────
@@ -337,44 +330,33 @@ async def apply_emergency_on_start(bot: Any) -> None:
         with contextlib.suppress(Exception):
             await bot.telegram.notify(
                 f"⛔ Активен аварийный уровень {ctl.level}: торговля остаётся на паузе. "
-                "Снять: /emergency reset, затем /resume."
+                "Снять: приложение → Цепочка → Аварийное управление → «Сбросить», "
+                "затем «Продолжить».",
+                screen="bots",
             )
 
 
-async def emergency_command(bot: Any, args: List[str], who: str) -> str:
-    """Разбор `/emergency [уровень [confirm] | reset]` → текст ответа. Уровни — с подтверждением."""
+async def emergency_apply(
+    bot: Any, action: str, confirm: bool, who: str
+) -> Dict[str, Any]:
+    """Аварийный уровень из приложения: "1"…"4" или "reset".
+
+    Без `confirm` ничего не выполняется — возвращается список шагов для
+    подтверждения. Уровень только растёт; сброс снимает аварию, но торговля
+    остаётся на паузе (возобновить — отдельной командой).
+    """
     ctl = emergency_ctl(bot)
-    state = ctl.state()
-    usage = "Использование: /emergency | /emergency 1-4 [confirm] | /emergency reset"
-    if not args:
-        if ctl.level == 0:
-            return "Аварийный уровень: 0 (норма).\n" + usage
-        return (
-            f"Аварийный уровень: {ctl.level} ({LEVELS[ctl.level]}) от {state.get('by')} "
-            f"({state.get('ts')}): {state.get('reason')}\n" + usage
-        )
-    cmd = args[0].lower()
-    if cmd == "reset":
+    step = plan(ctl.level, action)
+    if not step["ok"]:
+        return step
+    if not confirm:  # и для сброса: снятие аварии — тоже осознанное действие
+        return {"level": ctl.level, "preview": True, **step}
+    if step.get("reset"):
         ctl.reset(who, "снято владельцем")
-        return "Аварийный уровень снят. Торговля остаётся на паузе — возобновите командой /resume."
-    if not cmd.isdigit() or int(cmd) not in LEVELS:
-        return usage
-    level = int(cmd)
-    if level <= ctl.level:
-        return (
-            f"Уровень {ctl.level} уже активен — понижать можно только командой reset."
-        )
-    if len(args) < 2 or args[1].lower() != "confirm":
-        steps = "\n".join(
-            f"  {lv}. {_LEVEL_TEXT[lv]}" for lv in range(ctl.level + 1, level + 1)
-        )
-        return f"Будет выполнено:\n{steps}\nПодтвердите: /emergency {level} confirm"
-    res = await ctl.aescalate(level, who, "команда владельца")
-    lines = [
-        f"Аварийный уровень {res['level']}: выполнено {', '.join(res['executed']) or 'ничего'}."
-    ]
-    if res["errors"]:
-        lines.append(
-            "Ошибки: " + "; ".join(f"{k}: {v}" for k, v in res["errors"].items())
-        )
-    return "\n".join(lines)
+        return {"level": 0, "reset": True}
+    res = await ctl.aescalate(step["level"], who, "команда владельца")
+    return {
+        "level": res["level"],
+        "executed": res["executed"],
+        "errors": res["errors"],
+    }

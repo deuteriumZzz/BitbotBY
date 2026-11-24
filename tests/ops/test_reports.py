@@ -1,16 +1,13 @@
-"""Telegram-команды /digest /audit /dbcheck: тексты и обработчики (только чтение)."""
+"""Отчёты для приложения: сводка, разбор решения, проверка БД (только чтение)."""
 
 import json
 import sqlite3
 from datetime import datetime, timezone
-from types import SimpleNamespace
-from unittest.mock import AsyncMock
 
 import pytest
 
-from src.ops import telegram_views as tv
+from src.ops import reports as tv
 from src.ops.decision_audit import audit_decision
-from src.telegram_bot.commander import TelegramCommander
 
 NOW = datetime.now(timezone.utc).isoformat()
 RECS = [
@@ -99,49 +96,29 @@ def test_dbcheck_text_ok_and_missing(tmp_path):
     )
 
 
-# ── обработчики командера ─────────────────────────────────────────────────────
-def commander():
-    c = TelegramCommander.__new__(TelegramCommander)
-    c._notifier = SimpleNamespace(_chat_id="42")
-    return c
+# ── эндпоинты приложения ──────────────────────────────────────────────────────
+@pytest.fixture
+def client():
+    from fastapi.testclient import TestClient
+
+    from src.dashboard import app
+
+    return TestClient(app, raise_server_exceptions=False)
 
 
-def update(chat_id="42"):
-    return SimpleNamespace(
-        effective_chat=SimpleNamespace(id=chat_id),
-        message=SimpleNamespace(reply_text=AsyncMock()),
-    )
+def test_report_endpoints_return_text(ledger, client):
+    digest = client.get("/api/reports/digest?hours=6")
+    assert digest.status_code == 200 and "Сводка за 6 ч" in digest.json()["text"]
+    audit = client.get("/api/reports/audit/d1")
+    assert audit.status_code == 200 and "Аудит решения d1" in audit.json()["text"]
+    assert client.get("/api/reports/audit/bad id!").status_code in (400, 404)
 
 
-async def test_handlers_reply_plain_text_when_authorized(ledger):
-    c = commander()
-    u = update()
-    await c._cmd_digest(u, SimpleNamespace(args=["6"]))
-    call = u.message.reply_text.await_args
-    assert "Сводка за 6 ч" in call.args[0] and "parse_mode" not in call.kwargs
-    u2 = update()
-    await c._cmd_audit(u2, SimpleNamespace(args=["d1"]))
-    assert "Аудит решения d1" in u2.message.reply_text.await_args.args[0]
-    u3 = update()
-    await c._cmd_audit(u3, SimpleNamespace(args=[]))
-    assert "Использование" in u3.message.reply_text.await_args.args[0]
-
-
-async def test_handlers_ignore_foreign_chats(ledger):
-    c = commander()
-    for handler in (c._cmd_digest, c._cmd_audit, c._cmd_dbcheck):
-        u = update(chat_id="999")
-        await handler(u, SimpleNamespace(args=["d1"]))
-        u.message.reply_text.assert_not_awaited()
-
-
-async def test_handler_failure_becomes_a_message_not_an_exception(monkeypatch):
-    c = commander()
-
+def test_report_failure_hides_details(monkeypatch, client):
     def boom(*_):
-        raise OSError("disk")
+        raise OSError("/secret/path/trades.db")
 
     monkeypatch.setattr(tv, "digest_text", boom)
-    u = update()
-    await c._cmd_digest(u, SimpleNamespace(args=[]))
-    assert "Не удалось построить сводку" in u.message.reply_text.await_args.args[0]
+    resp = client.get("/api/reports/digest")
+    assert resp.status_code == 500
+    assert "secret" not in resp.text and "OSError" not in resp.text

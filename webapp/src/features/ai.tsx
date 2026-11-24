@@ -210,7 +210,7 @@ function ChainCard({ ai }: { ai: AiState }) {
       {pinned && !ai.single && (
         <div className="row-tgl" style={{ marginTop: 8 }}>
           <span className="note-soon">
-            Первым всегда идёт <b>{pinned.name}</b> — выбран в /provider.
+            Первым всегда идёт <b>{pinned.name}</b> — закреплён в цепочке.
           </span>
           <button className="btn" type="button" onClick={() => void pin("auto")}>
             Открепить

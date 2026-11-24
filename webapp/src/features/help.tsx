@@ -58,7 +58,7 @@ const HELP: [string, string[]][] = [
   [
     "Команды Telegram",
     [
-      "Всё, что есть в приложении, доступно и в Telegram-боте: /status /pnl /pos /pause /resume /closeall /mode /scan /risk /lev /hours /add /remove /symbols /strategies /provider /alerts /trainn /settings /help.",
+      "Управление и настройки — только в приложении. Telegram присылает короткие уведомления о сделках и рисках с кнопкой перехода в приложение; команды бота: /start — открыть приложение, /app — ссылка входа на компьютере с ботом.",
     ],
   ],
   [

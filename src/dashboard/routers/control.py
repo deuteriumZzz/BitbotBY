@@ -37,6 +37,7 @@ from src.core.trusted_trader import LAST_KEY as TRUSTED_LAST_KEY
 from src.core.types import is_trusted
 from src.dashboard import auth, data
 from src.infra import background_jobs, bot_bus
+from src.ops import emergency, reports
 from src.sentiment import telegram_login
 from src.sentiment.telegram_sentiment import STATUS_KEY as TG_STATUS_KEY
 from src.settings import secrets_store
@@ -397,6 +398,63 @@ async def jobs_status() -> JSONResponse:
 @router.post("/api/model/rollback")
 async def cmd_rollback(request: Request) -> JSONResponse:
     return await _command(request, "rollback_model")
+
+
+# ── Аварийное управление и отчёты ─────────────────────────────────────────────
+
+
+@router.get("/api/emergency")
+async def get_emergency() -> JSONResponse:
+    """Текущий аварийный уровень (кто, когда, почему) и что делает каждый уровень."""
+    state = emergency.read_state(emergency.DEFAULT_PATH)
+    levels = {str(k): v for k, v in emergency.LEVEL_TEXT.items()}
+    return JSONResponse({**state, "levels": levels})
+
+
+@router.post("/api/emergency")
+async def post_emergency(request: Request) -> JSONResponse:
+    """{action: "1"…"4" | "reset", confirm}. Выполняется только с confirm: true;
+    без него — шаги для подтверждения (сама команда идёт в бот через шину)."""
+    denied = _control_denied(request)
+    if denied is not None:
+        return denied
+    body = await _body(request)
+    action = str(body.get("action", ""))
+    level = int(emergency.read_state(emergency.DEFAULT_PATH).get("level", 0))
+    step = emergency.plan(level, action)
+    if not step["ok"]:
+        return _err(400, step["error"]["code"], step["error"]["message"])
+    if body.get("confirm") is not True:
+        return JSONResponse({"preview": True, "level": level, **step})
+    return await _command(request, "emergency", {"action": action, "confirm": True})
+
+
+async def _report(fn: Any, *args: Any) -> JSONResponse:
+    try:
+        text = await asyncio.to_thread(fn, *args)
+    except Exception:  # детали — в лог бота, наружу — общее сообщение
+        return _err(500, "report_failed", "Не удалось построить отчёт.")
+    return JSONResponse({"text": text})
+
+
+@router.get("/api/reports/digest")
+async def report_digest(hours: float = 24.0) -> JSONResponse:
+    """Сводка по журналу решений за `hours` часов (1…720)."""
+    return await _report(reports.digest_text, max(1.0, min(hours, 720.0)))
+
+
+@router.get("/api/reports/audit/{decision_id}")
+async def report_audit(decision_id: str) -> JSONResponse:
+    """Цепочка «данные → решение → исполнение → итог» по одному решению."""
+    if not re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", decision_id):
+        return _err(400, "bad_request", "Неверный идентификатор решения.")
+    return await _report(reports.audit_text, decision_id)
+
+
+@router.get("/api/reports/dbcheck")
+async def report_dbcheck() -> JSONResponse:
+    """Целостность базы сделок по снимку; боевой файл не трогается."""
+    return await _report(reports.dbcheck_text)
 
 
 @router.post("/api/bot/restart")

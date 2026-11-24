@@ -1,4 +1,4 @@
-// Фоновые задачи бота — всё, что есть в меню Telegram: бэктест, обучение и тюнинг SAC,
+// Фоновые задачи бота: бэктест, обучение и тюнинг SAC,
 // откат модели, отчёты. Бот продолжает торговать, пока задача идёт.
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -137,7 +137,7 @@ function JobRow({ def, profile }: { def: JobDef; profile?: ProfileInfo }) {
   const sibling = JOBS.some(
     (j) => j.group === def.group && j.id !== def.id && jobs[j.id]?.running,
   );
-  // Группа занята, а у этой задачи своего прогресса нет — её запустили из Telegram (или другого окна).
+  // Группа занята, а у этой задачи своего прогресса нет — её запустили из другого окна или по расписанию.
   const foreign = groupSource !== undefined && !job?.running && !sibling;
   const d = job?.done;
   return (

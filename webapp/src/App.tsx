@@ -41,6 +41,11 @@ export function App() {
   useEffect(() => {
     void useStore.getState().boot();
   }, []);
+  // Кнопка из Telegram-уведомления открывает нужную вкладку: …/app/?tab=learn.
+  useEffect(() => {
+    const t = ready ? platform.tabFromUrl(location.search) : null;
+    if (t) useStore.getState().setTab(t);
+  }, [ready]);
   // Ctrl/⌘ K — к поиску параметров из любого места.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

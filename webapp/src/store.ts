@@ -550,7 +550,7 @@ export const useStore = create<Store>((set, get) => {
           set({ lastCycle: d as unknown as CycleTrace });
           break;
         case "cycle": {
-          // Пауза могла прийти из Telegram — цикл бота знает о ней раньше снимка.
+          // Пауза могла прийти из другого окна — цикл бота знает о ней раньше снимка.
           const bot = get().bot;
           set({ cycle: d as Store["cycle"], cycleAt: Date.now(), bot: bot && { ...bot, paused: d.state === "paused" } });
           break;

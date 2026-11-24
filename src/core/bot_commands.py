@@ -1,11 +1,10 @@
 """
-Команды из приложения (Telegram MiniApp / Desktop) → те же действия бота,
-что выполняют кнопки Telegram. Исполняются в процессе бота через
-`bot_bus.CommandConsumer`.
+Команды из приложения (Telegram MiniApp / Desktop) → действия бота.
+Исполняются в процессе бота через `bot_bus.CommandConsumer`.
 
-`bot` — TradingBot; обращаемся к тем же методам, что TelegramCommander
-получает колбэками (`_handle_close_all`, `_handle_restart`,
-`_handle_mode_switch`) и к RuntimeConfig.
+`bot` — TradingBot; обращаемся к его методам (`_handle_close_all`,
+`_handle_restart`, `_handle_mode_switch`), к RuntimeConfig и к аварийному
+управлению (`ops_tasks.emergency_apply`).
 """
 
 from __future__ import annotations
@@ -47,7 +46,22 @@ class BotCommands:
             "account_mode": self.account_mode,
             "run_job": self.run_job,
             "rollback_model": self.rollback_model,
+            "emergency": self.emergency,
         }
+
+    async def emergency(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        """Аварийный уровень 1–4 или сброс; без confirm — только список шагов."""
+        from src.core import ops_tasks  # noqa: PLC0415 — тянет тяжёлые зависимости бота
+
+        res = await ops_tasks.emergency_apply(
+            self._bot, str(args.get("action", "")), bool(args.get("confirm")), "app"
+        )
+        changed = not res.get("preview") and (
+            "executed" in res or bool(res.get("reset"))
+        )
+        if changed:
+            emit(self._r, "emergency", {"level": res.get("level", 0)})
+        return res
 
     async def run_job(self, args: Dict[str, Any]) -> Dict[str, Any]:
         """Фоновая задача из меню Telegram: бэктест, обучение, тюнинг, отчёты."""

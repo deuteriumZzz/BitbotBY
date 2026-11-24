@@ -6,7 +6,7 @@
 объектами (в боте — `RuntimeConfig.set_paused`, отмена ордеров, закрытие в
 `PositionMonitor`). Уровень только растёт; понижение — явная операция `reset`
 с указанием, кто и почему. Состояние хранится в файле, чтобы пережить рестарт.
-Подключение к боту/Telegram не выполнено.
+Действия подключает бот (src/core/ops_tasks.py); управление — из приложения.
 """
 
 from __future__ import annotations
@@ -17,7 +17,54 @@ import os
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
+DEFAULT_PATH = os.path.join("data", "emergency.json")
+
 LEVELS = {1: "block_entries", 2: "cancel_orders", 3: "reduce_positions", 4: "full_stop"}
+# Что делает каждый уровень — для подтверждения в приложении.
+LEVEL_TEXT = {
+    1: "запрет новых входов (пауза)",
+    2: "отмена отложенных ордеров (входные ордера рыночные, биржевые SL/TP не снимаются — ничего не сделает)",
+    3: "закрыть убыточные позиции, у прибыльных SL на безубыток",
+    4: "закрыть ВСЕ позиции и оставить паузу",
+}
+
+
+def read_state(path: str) -> Dict[str, Any]:
+    """Состояние из файла без процесса бота: {level, by, reason, ts}; нет файла — уровень 0."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            s = json.load(f)
+        return s if isinstance(s, dict) and "level" in s else {"level": 0}
+    except (OSError, ValueError):
+        return {"level": 0}
+
+
+def plan(current: int, action: str) -> Dict[str, Any]:
+    """Что произойдёт по действию `action` ("1"…"4" или "reset") при уровне `current`.
+
+    Ответ в форме шины команд: {"ok": False, "error": …} — нельзя; иначе
+    {"ok": True, "reset": True} или {"ok": True, "level": N, "steps": [...]}.
+    Уровень только растёт: понизить можно лишь сбросом.
+    """
+    act = str(action).strip().lower()
+    if act == "reset":
+        return {"ok": True, "reset": True}
+    if not act.isdigit() or int(act) not in LEVELS:
+        return {
+            "ok": False,
+            "error": {"code": "bad_level", "message": "Уровень — 1…4 или сброс."},
+        }
+    level = int(act)
+    if level <= current:
+        return {
+            "ok": False,
+            "error": {
+                "code": "level_active",
+                "message": f"Уровень {current} уже активен — понизить можно только сбросом.",
+            },
+        }
+    steps = [f"{lv}. {LEVEL_TEXT[lv]}" for lv in range(current + 1, level + 1)]
+    return {"ok": True, "level": level, "steps": steps}
 
 
 class EmergencyControl:
@@ -29,12 +76,7 @@ class EmergencyControl:
 
     # ── состояние ─────────────────────────────────────────────────────────────
     def state(self) -> Dict[str, Any]:
-        try:
-            with open(self.path, encoding="utf-8") as f:
-                s = json.load(f)
-            return s if isinstance(s, dict) and "level" in s else {"level": 0}
-        except (OSError, ValueError):
-            return {"level": 0}
+        return read_state(self.path)
 
     @property
     def level(self) -> int:

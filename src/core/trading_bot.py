@@ -59,19 +59,14 @@ from src.sentiment.news_analyzer import NewsAnalyzer
 from src.sentiment.sentiment_poller import SentimentPoller
 from src.sentiment.telegram_sentiment import TelegramSentiment, channel_names
 from src.sentiment.twitter_analyzer import TwitterAnalyzer
+from src.settings import login_link
 from src.settings.runtime_config import RuntimeConfig
 from src.settings.secrets_store import SERVICES as SECRET_SERVICES
 from src.settings.secrets_store import apply_secrets
 from src.settings.settings_registry import apply_overrides as apply_config_overrides
 from src.settings.settings_registry import effective_config
 from src.strategies import STRATEGY_REGISTRY, TradingStrategy
-from src.telegram_bot.commander import (
-    TelegramCommander,
-    _kb_main,
-    _kb_sac_train,
-    _kb_tune_sac,
-)
-from src.telegram_bot.notifier import TelegramNotifier
+from src.telegram_bot.notifier import SCREEN_JOBS, SCREEN_PIPELINE, TelegramNotifier
 
 _SECONDS_PER_HOUR: int = 3_600
 
@@ -197,6 +192,10 @@ class TradingBot:
             Config.TELEGRAM_CHAT_ID,
         )
         self.telegram.gate = self._runtime_config.should_notify
+        # /app в Telegram: одноразовая ссылка входа в приложение (локальный запуск).
+        self.telegram.login_issuer = lambda: login_link.issue(
+            self._runtime_config._r.redis_client
+        )
         self.ai._telegram = self.telegram
         self.ai._emit = self._publish_event  # статусы AI-провайдеров для приложения
         # Постоянный журнал решений (AUDIT_REPORT H-2/H-5): только запись.
@@ -290,15 +289,6 @@ class TradingBot:
             redis=self._bus,
         )
         self.telegram.set_event_emitter(self._publish_event)
-        self._commander = TelegramCommander(
-            notifier=self.telegram,
-            runtime_config=self._runtime_config,
-            get_state=self._get_bot_state,
-            on_mode_switch=self._handle_mode_switch,
-            on_restart=self._handle_restart,
-            on_close_all=self._handle_close_all,
-            on_emergency=self._handle_emergency_cmd,
-        )
         self._cycle = CycleRunner(
             news=self.news,
             scanner=self.scanner,
@@ -386,7 +376,6 @@ class TradingBot:
             # провалится, алерт ниже должен быть кому доставлять.
             await self.telegram.start()
             await self._reconcile_positions()
-            self._commander.register()
             await self._fit_regime_detector()
             self._load_corr_filter()
             logger.info("Trading bot initialized successfully")
@@ -409,7 +398,7 @@ class TradingBot:
             "Рекомендуем запустить тюнинг SAC — модель будет обучена\n"
             "с параметрами оптимальными для твоего рынка.\n\n"
             "⏱ Займёт ~3 часа, бот продолжает торговать.",
-            reply_markup=_kb_tune_sac(),
+            screen=SCREEN_JOBS,
         )
 
     async def _check_sac_model(self) -> None:
@@ -439,7 +428,7 @@ class TradingBot:
             "⏱ Обучение займёт ~60 мин на CPU.\n"
             "_После достаточного числа сделок модель переобучается автоматически._\n\n"
             "Хотите обучить SAC сейчас?",
-            reply_markup=_kb_sac_train(),
+            screen=SCREEN_JOBS,
         )
 
     async def _reconcile_positions(self) -> None:
@@ -975,47 +964,6 @@ class TradingBot:
             },
         )
 
-    def _get_bot_state(self) -> Dict[str, Any]:
-        """Снэпшот состояния бота для TelegramCommander."""
-        positions = [
-            {
-                "symbol": sym,
-                "side": pos.get("side", "buy"),
-                "qty": pos.get("qty", 0),
-                "entry_price": pos.get("entry", 0),
-                "stop_loss": pos.get("stop_loss", 0),
-                "take_profit": pos.get("take_profit", 0),
-                "pnl_pct": pos.get("pnl_pct", 0),
-            }
-            for sym, pos in self._monitored.items()
-            if pos is not None
-        ]
-        balance = (
-            self.portfolio_manager.current_balance
-            if Config.PAPER_TRADING
-            else self._live_balance_cache
-        )
-        from src.strategies import get_all_strategies  # noqa: PLC0415
-
-        disabled = self._runtime_config.get_disabled_strategies()
-        strategies = [
-            {**s, "enabled": s["name"] not in disabled} for s in get_all_strategies()
-        ]
-        return {
-            "balance": balance,
-            "initial_balance": Config.INITIAL_BALANCE,
-            "positions": positions,
-            "paper_trading": Config.PAPER_TRADING,
-            "strategies": strategies,
-            # Готовность режимов: почему режим сейчас не может принимать решения
-            # (например, нет допущенной SAC-модели). Аддитивный ключ.
-            "mode_readiness": all_readiness(
-                sac_loaded=bool(getattr(self.combiner.sac, "loaded", False)),
-                sac_approved=bool(getattr(self.combiner.sac, "approved", True)),
-                ai_available=bool(getattr(self.ai, "enabled", True)),
-            ),
-        }
-
     def _set_paper_balance(self, value: float) -> None:
         """Синхронизирует оба регистра бумажного баланса.
 
@@ -1246,10 +1194,6 @@ class TradingBot:
             sign * float(pos.get("qty") or 0) * float(pos.get("entry") or 0) / base
         )
         return max(-1.0, min(1.0, exposure)), 0.0
-
-    async def _handle_emergency_cmd(self, args: list, who: str) -> str:
-        """Telegram /emergency: уровни аварийного управления (src/core/ops_tasks.py)."""
-        return await ops_tasks.emergency_command(self, args, who)
 
     async def _handle_close_all(self) -> int:
         """Закрывает все открытые позиции по команде из Telegram.
@@ -1482,12 +1426,6 @@ class TradingBot:
 
         import os as _os
 
-        try:
-            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-        except ImportError:
-            InlineKeyboardButton = None  # type: ignore[assignment,misc]
-            InlineKeyboardMarkup = None  # type: ignore[assignment,misc]
-
         check_interval_h = float(_os.getenv("SEASON_CHECK_INTERVAL_H", "4"))
         check_interval_s = int(check_interval_h * 3600)
 
@@ -1570,26 +1508,11 @@ class TradingBot:
                                 suffix = f"\n\n✅ *Профиль переключён на {label}.*"
                                 await self.telegram.notify(msg + suffix)
                             else:
-                                btn_label = "✅ Переключить на " + profile_labels.get(
-                                    signal, signal
+                                await self.telegram.notify(
+                                    msg + "\n\nПереключить профиль можно в приложении: "
+                                    "Цепочка → Сканер → Что торговать.",
+                                    screen=SCREEN_PIPELINE,
                                 )
-                                kb = InlineKeyboardMarkup(
-                                    [
-                                        [
-                                            InlineKeyboardButton(
-                                                btn_label,
-                                                callback_data=(
-                                                    f"market_profile:{signal}"
-                                                ),
-                                            ),
-                                            InlineKeyboardButton(
-                                                "❌ Оставить как есть",
-                                                callback_data="season_dismiss",
-                                            ),
-                                        ]
-                                    ]
-                                )
-                                await self.telegram.notify(msg, reply_markup=kb)
 
                         logger.info(
                             "Season check: index=%.0f dom=%.1f%% signal=%s profile=%s",
@@ -2140,9 +2063,7 @@ class TradingBot:
             f"Баланс: `${start_balance:,.2f}`\n"
             f"AI: {ai_status} | Символов: {scan_n}\n"
             f"Провайдеры: `{_providers_line}`\n\n"
-            f"Используй кнопки ниже или набери /help "
-            f"(баланс/лимиты — кнопка 🤖 AI-провайдеры)",
-            reply_markup=_kb_main(),
+            "Управление и настройки — в приложении.",
         )
         await self._check_sac_model()
         await self._check_tune_reminder()

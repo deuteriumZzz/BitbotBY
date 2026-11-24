@@ -79,11 +79,12 @@ def test_traceback_and_extra_fields_are_masked():
 async def test_telegram_notify_masks_text():
     from src.telegram_bot.notifier import TelegramNotifier
 
-    n = object.__new__(TelegramNotifier)
-    n._enabled, n._chat_id, n.gate = True, "1", None
-    n._app = SimpleNamespace(bot=SimpleNamespace(send_message=AsyncMock()))
+    n = TelegramNotifier("123:token", "1")
+    resp = MagicMock()
+    resp.json.return_value = {"ok": True, "result": {"message_id": 7}}
+    n._client = SimpleNamespace(post=AsyncMock(return_value=resp))
     await n.notify(f"❌ Бэктест упал: https://api.telegram.org/bot{BOT_TOKEN}/x")
-    sent = n._app.bot.send_message.call_args.kwargs["text"]
+    sent = n._client.post.await_args.kwargs["json"]["text"]
     assert BOT_TOKEN not in sent
 
 
@@ -207,10 +208,15 @@ def test_ai_rec_for_symbol_not_sent_to_model_is_dropped():
     assert [r["symbol"] for r in kept] == ["BTC/USDT"]
 
 
-def test_commander_rejects_when_owner_unset():
-    tc = pytest.importorskip("src.telegram_bot.commander")
-    c = object.__new__(tc.TelegramCommander)
-    c._notifier = SimpleNamespace(_chat_id="")
-    assert c._authorized(SimpleNamespace(effective_chat=None)) is False
-    c._notifier = SimpleNamespace(_chat_id="42")
-    assert c._authorized(SimpleNamespace(effective_chat=SimpleNamespace(id=42)))
+async def test_telegram_answers_only_the_owner():
+    from src.telegram_bot.notifier import TelegramNotifier
+
+    assert (
+        TelegramNotifier("123:token", "")._enabled is False
+    )  # нет владельца — выключен
+    n = TelegramNotifier("123:token", "42")
+    n._send = AsyncMock()
+    await n._handle_message({"chat": {"id": 999}, "text": "/app"})
+    n._send.assert_not_awaited()  # чужой чат — молчим
+    await n._handle_message({"chat": {"id": 42}, "text": "/start"})
+    n._send.assert_awaited_once()

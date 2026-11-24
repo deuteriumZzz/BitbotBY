@@ -100,7 +100,7 @@ const ico = (d: string) => (
     <path d={d} />
   </svg>
 );
-/** Подписи пресетов. Сами значения — из бота (GET /api/risk/presets), одни на приложение и Telegram. */
+/** Подписи пресетов. Сами значения — из бота (GET /api/risk/presets), одни на приложение и бота. */
 const PRESET_META: Record<string, { name: string; d: string; icon: JSX.Element }> = {
   conservative: {
     name: "Консервативный",

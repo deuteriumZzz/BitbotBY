@@ -264,7 +264,7 @@ export function HoursCard() {
         onChange={(v) => void actions.patchConfig({ TRADING_HOURS: v })}
         label="Часы торговли"
       />
-      {custom && <p className="note-soon" style={{ marginTop: 8 }}>Свой диапазон: {hours} UTC (из Telegram /hours или «Все параметры»).</p>}
+      {custom && <p className="note-soon" style={{ marginTop: 8 }}>Свой диапазон: {hours} UTC (задаётся в «Все параметры»).</p>}
       <div className="hours-bar">
         {Array.from({ length: 24 }, (_, i) => (
           <i key={i} className={`${on(i) ? "on" : ""}${i === h ? " now" : ""}`} title={`${String(i).padStart(2, "0")}:00 UTC`} />
@@ -298,7 +298,7 @@ export function SymbolsCard() {
     <article className="card">
       <div className="card-h">
         <h2>Монеты</h2>
-        <Q tip="«Всегда сканировать» — бот проверяет эти монеты в каждом цикле, даже если их нет в топе по объёму (/add в Telegram). «Исключить» — бот никогда ими не торгует (/remove)." />
+        <Q tip="«Всегда сканировать» — бот проверяет эти монеты в каждом цикле, даже если их нет в топе по объёму. «Исключить» — бот никогда ими не торгует." />
       </div>
       {(["forced", "excluded"] as const).map((l) => (
         <SymbolList key={l} list={l} items={symbols[l]} />
@@ -385,7 +385,7 @@ function AlertsCard() {
     <article className="card">
       <div className="card-h">
         <h2>Уведомления в Telegram</h2>
-        <Q tip="Те же виды, что в меню /alerts. Пауза не даёт одному и тому же уведомлению сыпаться чаще, чем раз в N минут." />
+        <Q tip="Пауза не даёт одному и тому же уведомлению сыпаться чаще, чем раз в N минут." />
       </div>
       <div className="field">
         <div className="field-h">
@@ -804,7 +804,7 @@ function AccountCard({ openKey }: { openKey: (service: string) => void }) {
           ) : !pinSet ? (
             <>
               <b>Сначала задайте PIN.</b>
-              <span>Без PIN переход на реальные деньги невозможен. Он хранится в «Ключи и доступ → Пароли и PIN», его же спрашивает Telegram-бот.</span>
+              <span>Без PIN переход на реальные деньги невозможен. Он хранится в «Ключи и доступ → Пароли и PIN».</span>
               <div className="btn-row">
                 <button className="btn primary" type="button" onClick={() => openKey("server")}>
                   Задать PIN
@@ -1743,7 +1743,7 @@ function SettingsTools({ schema, config, onImport }: { schema: SettingDef[]; con
       {resetAsk && (
         <div className="confirm-box">
           <span>
-            Все настройки, которые вы меняли из приложения и Telegram, вернутся к значениям из <code>.env</code>: режим, пауза, символы, риск, стратегии.
+            Все настройки, которые вы меняли в приложении, вернутся к значениям из <code>.env</code>: режим, пауза, символы, риск, стратегии.
             Экспериментальные стратегии снова выключатся. Ключи API не затрагиваются.
           </span>
           <div className="btn-row">

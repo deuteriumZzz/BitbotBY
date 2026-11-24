@@ -10,6 +10,7 @@ import { Q, Seg } from "../ui";
 import { AiPane } from "./ai";
 import { Lane, isStep, useLanes } from "./blocks";
 import { ConfirmCard, OpsCard, RiskCard, StrategiesCard, TrackCard, WhatCard, cfg, levText, presetName, presetOf, profileName } from "./bots";
+import { EmergencyCard } from "./emergency";
 import { chosenId } from "./chainops";
 import { ModelCard } from "./jobs";
 import { RulesCard } from "./rules";
@@ -476,6 +477,7 @@ export function Pipeline() {
             <div className="col">
               <RulesCard />
               <OpsCard />
+              <EmergencyCard />
             </div>
           </div>
         )}

@@ -51,8 +51,6 @@ _KEY_CURRENT_SYMBOLS = "bot:current_symbols"
 _KEY_TIMEFRAME = "bot:timeframe"
 _KEY_MIN_VOLUME = "bot:min_volume_usdt"
 _KEY_MAX_VOLUME = "bot:max_volume_usdt"
-_KEY_AWAITING_MODE_PIN = "bot:awaiting_mode_pin"
-_KEY_AWAITING_ALERT_COOLDOWN = "bot:awaiting_alert_cooldown"
 _KEY_PAPER_TRADING = "bot:paper_trading_override"
 _KEY_SAC_BACKUP = "bot:sac_model_backup"
 _KEY_SAC_BACKUP_PROFILE = "bot:sac_backup_profile"
@@ -686,13 +684,6 @@ class RuntimeConfig:
         except (ValueError, TypeError):
             return default
 
-    def set_leverage_dd_threshold(self, pct: float) -> bool:
-        if not (0.05 <= pct <= 0.5):
-            return False
-        self._set(_KEY_LEVERAGE_DD, str(pct))
-        logger.info("Runtime: leverage_dd_threshold → %.2f", pct)
-        return True
-
     def get_leverage_mode(self) -> str:
         """Режим плеча: fixed | volatility | full."""
         val = self._get(_KEY_LEVERAGE_MODE)
@@ -1062,21 +1053,6 @@ class RuntimeConfig:
 
     # ── Paper / Live switch ───────────────────────────────────────────────────
 
-    def set_awaiting_mode_pin(self, ttl: int = 120) -> None:
-        try:
-            self._r.redis_client.setex(_KEY_AWAITING_MODE_PIN, ttl, "1")
-        except Exception:
-            pass
-
-    def is_awaiting_mode_pin(self) -> bool:
-        return self._get(_KEY_AWAITING_MODE_PIN) == "1"
-
-    def clear_awaiting_mode_pin(self) -> None:
-        try:
-            self._r.redis_client.delete(_KEY_AWAITING_MODE_PIN)
-        except Exception:
-            pass
-
     def get_paper_trading_override(self) -> "bool | None":
         val = self._get(_KEY_PAPER_TRADING)
         if val == "1":
@@ -1132,20 +1108,6 @@ class RuntimeConfig:
             self._r.redis_client.setex(_KEY_SEASON_INDEX, 6 * 3600, _json.dumps(data))
         except Exception:
             pass
-
-    def get_season_index(self) -> "dict | None":
-        """Читает последний результат CoinGecko из Redis."""
-        import json as _json
-
-        raw = self._get(_KEY_SEASON_INDEX)
-        if not raw:
-            return None
-        try:
-            return _json.loads(raw)
-        except Exception:
-            return None
-
-    # ── Фоновые задачи: общий замок для Telegram и приложения ─────────────────
 
     def try_start_job(self, group: str, source: str, ttl: int) -> bool:
         """Занимает группу задач (sac, backtest, …); False, если уже занята.
@@ -1483,19 +1445,3 @@ class RuntimeConfig:
 
     def set_alert_cooldown_mins(self, name: str, minutes: int) -> None:
         self._set(f"bot:alert:cooldown:{name}", str(max(0, minutes)))
-
-    def set_awaiting_alert_cooldown(self, alert_name: str, ttl: int = 60) -> None:
-        try:
-            self._r.redis_client.setex(_KEY_AWAITING_ALERT_COOLDOWN, ttl, alert_name)
-        except Exception:
-            pass
-
-    def get_awaiting_alert_cooldown(self) -> str | None:
-        val = self._get(_KEY_AWAITING_ALERT_COOLDOWN)
-        return val if val else None
-
-    def clear_awaiting_alert_cooldown(self) -> None:
-        try:
-            self._r.redis_client.delete(_KEY_AWAITING_ALERT_COOLDOWN)
-        except Exception:
-            pass

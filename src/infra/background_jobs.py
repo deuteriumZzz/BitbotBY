@@ -58,6 +58,25 @@ _PROFILE_EXPERIENCES = {
 }
 
 
+def _parse_train_result(stdout: str) -> "Dict[str, Any] | None":
+    """Итог обучения SAC: строка `TRAIN_RESULT:{json}` в выводе процесса."""
+    for line in stdout.splitlines():
+        if line.startswith("TRAIN_RESULT:"):
+            try:
+                return json.loads(line[len("TRAIN_RESULT:") :])
+            except ValueError as exc:
+                logger.warning("Не удалось разобрать TRAIN_RESULT: %s", exc)
+                return None
+    return None
+
+
+def _is_worse(result: "Dict[str, Any] | None") -> bool:
+    """Модель заметно хуже рынка: доходность SAC ниже Buy&Hold больше чем на 10 п.п."""
+    if not result:
+        return False
+    return result.get("sac_pct", 0) < result.get("bh_pct", 0) - 10
+
+
 def status(rc: Any) -> Dict[str, Any]:
     """Что идёт сейчас, прогресс и можно ли откатить модель (читает Redis)."""
     backup = rc.get_sac_backup_path()
@@ -259,12 +278,6 @@ class JobRunner:
     async def _train_stage(
         self, env: Dict[str, str], profile: str = ""
     ) -> Dict[str, Any]:
-        # Импорт здесь: telegram_commander тянет библиотеку Telegram, нужна только тут.
-        from src.telegram_bot.commander import (  # noqa: PLC0415
-            _is_worse,
-            _parse_train_result,
-        )
-
         self._rc.clear_train_progress()
 
         def progress(info: Dict[str, Any]) -> None:

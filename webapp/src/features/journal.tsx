@@ -8,6 +8,7 @@ import type { JournalTrade, Period, Side } from "../lib/types";
 import { actions, useStore } from "../store";
 import { Q, Seg, Skel, hideTip, showTip } from "../ui";
 import { cfg, stratName } from "./bots";
+import { ReportsCard } from "./reports";
 import { Calendar, ExecutionCard } from "./terminal";
 import { TraceSteps } from "./trace";
 
@@ -113,6 +114,7 @@ export function Journal() {
           {all && <ByHour trades={trades} />}
           <Calendar />
           <ExecutionCard />
+          <ReportsCard />
         </div>
         <div className="col">
           <article className="card jr-trades">

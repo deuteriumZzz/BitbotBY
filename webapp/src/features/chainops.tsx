@@ -23,7 +23,7 @@ export const STATUS: Record<string, [string, string]> = {
 export const hhmm = (epoch: number) =>
   new Date(epoch * 1000).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
 
-/** Закрепить провайдера (AI_PROVIDER, как /provider в Telegram) и сразу обновить раздел. */
+/** Закрепить провайдера (AI_PROVIDER) и сразу обновить раздел. */
 export async function pin(id: string): Promise<void> {
   if (await actions.patchConfig({ AI_PROVIDER: id })) await useStore.getState().loadAi().catch(() => undefined);
 }

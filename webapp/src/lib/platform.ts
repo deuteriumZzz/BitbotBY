@@ -1,6 +1,8 @@
 // Единственное место, которое знает, где запущено приложение:
 // Telegram MiniApp, десктоп (Tauri) или обычный браузер.
 
+import type { Tab } from "./types";
+
 interface TelegramWebApp {
   initData: string;
   ready(): void;
@@ -118,6 +120,14 @@ export function setApiBase(url: string): void {
 let memoryToken: string | null = null;
 
 /** Токен запуска из ссылки лаунчера `#local=…`; другие фрагменты игнорируются. */
+const TABS: readonly Tab[] = ["terminal", "bots", "learn", "journal", "settings"];
+
+/** Вкладка из адреса `?tab=…` — так открывает приложение кнопка в Telegram-уведомлении. */
+export function tabFromUrl(search: string): Tab | null {
+  const t = new URLSearchParams(search).get("tab");
+  return t && (TABS as readonly string[]).includes(t) ? (t as Tab) : null;
+}
+
 export function parseLocalHash(hash: string): string | null {
   const m = /^#local=([A-Za-z0-9_-]{32,})$/.exec(hash);
   return m ? m[1] : null;

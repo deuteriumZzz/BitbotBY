@@ -912,6 +912,14 @@ async function request(method: string, path: string, body: unknown): Promise<unk
   return structuredClone(route(method, path, body));
 }
 
+let emergencyLevel = 0;
+const EMERGENCY_LEVELS: Record<string, string> = {
+  "1": "запрет новых входов (пауза)",
+  "2": "отмена отложенных ордеров",
+  "3": "закрыть убыточные позиции, у прибыльных SL на безубыток",
+  "4": "закрыть ВСЕ позиции и оставить паузу",
+};
+
 let launcher: Record<string, unknown> = { local: true, autostart: true, keep_awake: false, phone: true, helper: true, result: null };
 
 function route(method: string, path: string, body: unknown): unknown {
@@ -985,6 +993,30 @@ function route(method: string, path: string, body: unknown): unknown {
       emit("cycle", { state: "paused" });
       return done(b, { ok: true, closed: syms.length, paused: true });
     }
+    case "GET /api/emergency":
+      return { level: emergencyLevel, levels: EMERGENCY_LEVELS };
+    case "POST /api/emergency": {
+      const action = String(b.action ?? "");
+      const target = action === "reset" ? 0 : Number(action);
+      if (action !== "reset" && !(target > emergencyLevel && target <= 4)) {
+        throw new ApiError(400, "bad_level", "Уровень — выше текущего, 1…4, или сброс.");
+      }
+      if (b.confirm !== true) {
+        if (action === "reset") return { preview: true, ok: true, reset: true, level: emergencyLevel };
+        const steps = Object.entries(EMERGENCY_LEVELS)
+          .filter(([k]) => Number(k) > emergencyLevel && Number(k) <= target)
+          .map(([k, v]) => `${k}. ${v}`);
+        return { preview: true, ok: true, level: target, steps };
+      }
+      emergencyLevel = target;
+      if (target > 0) bot.paused = true;
+      emit("emergency", { level: target });
+      return done(b, { ok: true, level: target });
+    }
+    case "GET /api/reports/digest":
+      return { text: `Сводка за ${q.get("hours") ?? 24} ч (демо)\nРешений: 42 · входов: 3 · отказов риска: 7` };
+    case "GET /api/reports/dbcheck":
+      return { text: "Проверка базы сделок (демо): integrity_check ok, таблиц 3." };
     case "POST /api/config/reset":
       strategies.forEach((s) => (s.enabled = !s.experimental));
       emit("config.changed", { keys: ["STRATEGIES", "SYMBOLS", "MARKET_PROFILE", "MODE"] });
@@ -1037,6 +1069,9 @@ function route(method: string, path: string, body: unknown): unknown {
     return { provider: prov.id, models: [...prov.models.map((x) => x.id), `${prov.id}-preview-2026`].sort() };
   }
   if ((m = p.match(/^\/api\/commands\/(.+)$/))) return results[m[1]] ?? { request_id: m[1], status: "pending" };
+  if (method === "GET" && (m = p.match(/^\/api\/reports\/audit\/(.+)$/))) {
+    return { text: `Аудит решения ${decodeURIComponent(m[1])} (демо)\nДанные → решение → исполнение → итог` };
+  }
   if (method === "POST" && (m = p.match(/^\/api\/jobs\/(.+)$/))) return startJob(m[1], b);
   if (method === "POST" && (m = p.match(/^\/api\/positions\/(.+)\/close$/))) {
     const pos = findPos(m[1]);

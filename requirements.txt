@@ -23,7 +23,6 @@ chronos-forecasting>=1.4.0
 transformers>=4.41.0
 praw>=7.7.0
 scikit-learn>=1.0.0
-python-telegram-bot>=20.0
 fastapi>=0.110.0
 uvicorn>=0.29.0
 websockets>=12.0  # без неё дашборд не принимает /ws: приложение теряет поток событий
@@ -39,7 +38,7 @@ feedparser>=6.0.8
 black>=24.0.0
 isort>=5.13.0
 mypy>=1.9.0
-# Хранилище ключей и их проверка (уже приходят с ccxt и python-telegram-bot)
+# Хранилище ключей и их проверка; httpx — ещё и Telegram Bot API (уведомления)
 cryptography>=41.0
 httpx>=0.25
 # Датасеты SAC: Parquet + ZSTD (ADR-001, Phase 7); кодек ZSTD встроен в pyarrow.

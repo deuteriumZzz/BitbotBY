@@ -12,7 +12,6 @@ import pytest
 from src.core import ops_tasks as ot
 from src.infra import health_server
 from src.ops.emergency import EmergencyControl
-from src.telegram_bot.commander import TelegramCommander
 
 
 def make_bot(tmp_path):
@@ -32,31 +31,31 @@ def make_bot(tmp_path):
     return bot
 
 
-# ── /emergency ────────────────────────────────────────────────────────────────
-async def test_status_and_usage_at_level_zero(tmp_path):
+# ── аварийный уровень из приложения ───────────────────────────────────────────
+async def test_invalid_level_is_rejected(tmp_path):
     bot = make_bot(tmp_path)
-    assert "уровень: 0" in (await ot.emergency_command(bot, [], "owner")).lower()
-    assert "Использование" in await ot.emergency_command(bot, ["9"], "owner")
-    assert "Использование" in await ot.emergency_command(bot, ["abc"], "owner")
+    for bad in ("9", "abc", ""):
+        res = await ot.emergency_apply(bot, bad, True, "owner")
+        assert res["ok"] is False and res["error"]["code"] == "bad_level"
 
 
 async def test_level_requires_confirmation_then_pauses_entries(tmp_path):
     bot = make_bot(tmp_path)
-    ask = await ot.emergency_command(bot, ["1"], "owner")
-    assert "/emergency 1 confirm" in ask and "пауза" in ask
-    bot._runtime_config.set_paused.assert_not_called()  # без подтверждения ничего не выполняется
-    done = await ot.emergency_command(bot, ["1", "confirm"], "owner")
-    assert "block_entries" in done
+    ask = await ot.emergency_apply(bot, "1", False, "owner")
+    assert ask["preview"] and "пауза" in ask["steps"][0]
+    bot._runtime_config.set_paused.assert_not_called()  # без подтверждения ничего
+    done = await ot.emergency_apply(bot, "1", True, "owner")
+    assert done["executed"] == ["block_entries"] and done["level"] == 1
     bot._runtime_config.set_paused.assert_called_once_with(True)
-    assert "уровень: 1" in (await ot.emergency_command(bot, [], "owner")).lower()
+    assert bot._emergency_ctl.level == 1
 
 
 async def test_level_three_runs_levels_in_order_and_never_cancels_exchange_orders(
     tmp_path,
 ):
     bot = make_bot(tmp_path)
-    out = await ot.emergency_command(bot, ["3", "confirm"], "owner")
-    assert "block_entries, cancel_orders, reduce_positions" in out
+    out = await ot.emergency_apply(bot, "3", True, "owner")
+    assert out["executed"] == ["block_entries", "cancel_orders", "reduce_positions"]
     args = bot._position_monitor.close_losers_tighten_winners.await_args
     assert args.args[2] == {"BTC/USDT": 100.0}  # цены только по открытым позициям
     assert args.kwargs["reason"] == "emergency"
@@ -66,18 +65,23 @@ async def test_level_three_runs_levels_in_order_and_never_cancels_exchange_order
 
 async def test_level_four_closes_everything_and_keeps_pause(tmp_path):
     bot = make_bot(tmp_path)
-    await ot.emergency_command(bot, ["4", "confirm"], "owner")
+    await ot.emergency_apply(bot, "4", True, "owner")
     bot._close_all_open_positions.assert_awaited_once_with("emergency_full_stop")
     bot._save_monitored_state.assert_called_once()
     assert bot._runtime_config.set_paused.call_args_list[-1].args == (True,)
 
 
-async def test_lower_level_and_reset_do_not_unpause(tmp_path):
+async def test_lower_level_needs_reset_and_reset_needs_confirm_and_keeps_pause(
+    tmp_path,
+):
     bot = make_bot(tmp_path)
-    await ot.emergency_command(bot, ["2", "confirm"], "owner")
-    assert "понижать можно только" in await ot.emergency_command(bot, ["1"], "owner")
-    out = await ot.emergency_command(bot, ["reset"], "owner")
-    assert "/resume" in out and bot._emergency_ctl.level == 0
+    await ot.emergency_apply(bot, "2", True, "owner")
+    lower = await ot.emergency_apply(bot, "1", True, "owner")
+    assert lower["ok"] is False and lower["error"]["code"] == "level_active"
+    preview = await ot.emergency_apply(bot, "reset", False, "owner")
+    assert preview["preview"] and bot._emergency_ctl.level == 2  # без confirm не снято
+    out = await ot.emergency_apply(bot, "reset", True, "owner")
+    assert out["reset"] and bot._emergency_ctl.level == 0
     assert all(
         c.args != (False,) for c in bot._runtime_config.set_paused.call_args_list
     )
@@ -88,8 +92,8 @@ async def test_failed_action_is_reported_and_level_is_still_persisted(tmp_path):
     bot._position_monitor.close_losers_tighten_winners.side_effect = RuntimeError(
         "биржа"
     )
-    out = await ot.emergency_command(bot, ["3", "confirm"], "owner")
-    assert "Ошибки" in out and "reduce_positions" in out
+    out = await ot.emergency_apply(bot, "3", True, "owner")
+    assert "reduce_positions" in out["errors"]
     assert bot._emergency_ctl.level == 3
     bot._runtime_config.set_paused.assert_called_once_with(
         True
@@ -269,41 +273,3 @@ def test_publish_ws_metrics_exposes_gauges(monkeypatch):
     )  # None не публикуется
     g["_g_ws_lag_p99"].labels.return_value.set.assert_called_once_with(42.0)
     g["_g_ws_silence"].labels.assert_called_once_with("orderbook.BTCUSDT")
-
-
-# ── командер ──────────────────────────────────────────────────────────────────
-def commander(handler):
-    c = TelegramCommander.__new__(TelegramCommander)
-    c._notifier = SimpleNamespace(_chat_id="42")
-    c._on_emergency = handler
-    return c
-
-
-def update(chat="42"):
-    return SimpleNamespace(
-        effective_chat=SimpleNamespace(id=chat),
-        message=SimpleNamespace(reply_text=AsyncMock()),
-    )
-
-
-async def test_cmd_emergency_passes_args_and_chat_id_and_replies_plain():
-    h = AsyncMock(return_value="ответ")
-    u = update()
-    await commander(h)._cmd_emergency(u, SimpleNamespace(args=["3", "confirm"]))
-    h.assert_awaited_once_with(["3", "confirm"], "42")
-    u.message.reply_text.assert_awaited_once_with("ответ")
-
-
-async def test_cmd_emergency_ignores_foreign_chat_and_reports_errors():
-    h = AsyncMock(return_value="x")
-    u = update("999")
-    await commander(h)._cmd_emergency(u, SimpleNamespace(args=[]))
-    h.assert_not_awaited()
-    u.message.reply_text.assert_not_awaited()
-    boom = AsyncMock(side_effect=RuntimeError("упало"))
-    u2 = update()
-    await commander(boom)._cmd_emergency(u2, SimpleNamespace(args=["1"]))
-    assert "не выполнена" in u2.message.reply_text.await_args.args[0]
-    u3 = update()
-    await commander(None)._cmd_emergency(u3, SimpleNamespace(args=[]))
-    assert "недоступно" in u3.message.reply_text.await_args.args[0]

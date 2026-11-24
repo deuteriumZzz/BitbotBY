@@ -178,7 +178,7 @@ def test_bot_state_exposes_mode_readiness() -> None:
     bot.ai.enabled = True
     bot._runtime_config = MagicMock()
     bot._runtime_config.get_disabled_strategies.return_value = set()
-    state = bot._get_bot_state()
+    state = {"mode_readiness": bot._mode_readiness()}
     assert state["mode_readiness"]["hybrid"] == {
         "ready": False,
         "reason": REASON_SAC_MISSING,

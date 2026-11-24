@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -121,16 +121,15 @@ async def test_close_fraction_paper_keeps_sl_by_default():
 # ── Кнопка MiniApp в Telegram ─────────────────────────────────────────────────
 
 
-def test_main_panel_opens_miniapp_only_over_https(monkeypatch):
-    from src.telegram_bot.commander import _kb_main
+def test_app_button_opens_miniapp_only_over_https(monkeypatch):
+    from src.telegram_bot.notifier import app_button
 
     monkeypatch.setenv("WEBAPP_URL", "https://bot.example.com/app/")
-    first = _kb_main(paper=True).inline_keyboard[0][0]
-    assert first.web_app.url == "https://bot.example.com/app/"
+    button = app_button("learn")["inline_keyboard"][0][0]
+    assert button["web_app"]["url"] == "https://bot.example.com/app/?tab=learn"
 
     monkeypatch.setenv("WEBAPP_URL", "http://bot.example.com/app/")
-    rows = _kb_main(paper=True).inline_keyboard
-    assert all(b.web_app is None for row in rows for b in row)
+    assert app_button("learn") is None  # Telegram открывает Mini App только по https
 
 
 # ── Ответ на предложение сделки из приложения ─────────────────────────────────
@@ -157,15 +156,10 @@ def test_resolve_pending_from_app():
 
 
 async def test_ask_confirm_publishes_and_accepts_app_answer():
-    n = _notifier()
-    n._enabled = True
-    n._chat_id = "1"
-    n._app = SimpleNamespace(
-        bot=SimpleNamespace(
-            send_message=AsyncMock(return_value=SimpleNamespace(message_id=7)),
-            edit_message_text=AsyncMock(),
-        )
-    )
+    n = TelegramNotifier("123:token", "1")
+    resp = MagicMock()
+    resp.json.return_value = {"ok": True, "result": {"message_id": 7}}
+    n._client = SimpleNamespace(post=AsyncMock(return_value=resp))
     events = []
     n.set_event_emitter(lambda t, d: events.append((t, d)))
 
@@ -186,5 +180,6 @@ async def test_ask_confirm_publishes_and_accepts_app_answer():
         "confirmed": False,
         "by": "app",
     }
-    footer = n._app.bot.edit_message_text.await_args.kwargs["text"]
-    assert "в приложении" in footer
+    last = n._client.post.await_args
+    assert last.args[0].endswith("/editMessageText")
+    assert "в приложении" in last.kwargs["json"]["text"]
