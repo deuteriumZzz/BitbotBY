@@ -153,3 +153,31 @@ class TimesFMWorker:
             return {k: np.asarray(r[k]) for k in ("median", "lo", "hi")}
 
         return f
+
+
+class TimesFMForecaster:
+    """Замена `chronos_analyzer` для `SignalCombiner` (`FORECASTER=timesfm`): тот же `predict_direction`.
+
+    Прогноз на 1 шаг: медиана против последней цены; порог — как у Chronos (передаёт комбинатор).
+    Недоступен/ошибка/мало истории → "neutral" (политика forecaster_unavailable: поправка нейтральна).
+    Измерение 2026-11-23 (AUDIT_REPORT §10p): точечный прогноз не лучше naive — включать осознанно.
+    """
+
+    def __init__(self, worker: Optional[TimesFMWorker] = None) -> None:
+        self.worker = worker or TimesFMWorker()
+
+    def predict_direction(self, close_prices: Sequence[float], threshold_pct: float = 0.002) -> str:
+        if len(close_prices) < 10 or not close_prices[-1]:
+            return "neutral"
+        r = self.worker.forecast(list(close_prices[-512:]), 1)
+        if r is None:
+            return "neutral"
+        diff = (float(r["median"][0]) - close_prices[-1]) / close_prices[-1]
+        if diff > threshold_pct:
+            return "up"
+        if diff < -threshold_pct:
+            return "down"
+        return "neutral"
+
+    def close(self) -> None:
+        self.worker.close()

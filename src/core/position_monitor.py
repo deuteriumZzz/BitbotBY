@@ -408,10 +408,47 @@ class PositionMonitor:
                     exit_price=price,
                     commission=qty * price * Config.COMMISSION_RATE,
                     reason=reason,
+                    funding=await self._funding_effect(sym, pos, price),
                 )
             except Exception as exc:
                 logger.error("record_close for trade %s failed: %s", trade_id, exc)
         self._ledger_outcome(sym, pos, price, reason, pnl)
+
+    async def _funding_effect(self, sym: str, pos: Any, price: float) -> float:
+        """Вклад funding в итог сделки (минус — заплатили). 0, пока `FUNDING_IN_PNL` выключен.
+
+        paper — оценка по ставке и сроку удержания, live — выплаты с биржи; аномальные значения
+        и недоступность данных дают 0 (закрытие позиции от этого не зависит).
+        """
+        if not Config.FUNDING_IN_PNL:
+            return 0.0
+        try:
+            import time as _t  # noqa: PLC0415
+
+            from src.core import funding as fd  # noqa: PLC0415
+
+            opened = float(pos.get("opened_at") or 0)
+            if not opened:
+                return 0.0
+            qty, entry = float(pos.get("qty") or 0), float(pos.get("entry") or 0)
+            margin = qty * entry / max(float(pos.get("lev") or 1.0), 1.0)
+            if Config.PAPER_TRADING:
+                eff = fd.estimate_effect(
+                    pos.get("side", "buy"), qty, entry, price, _t.time() - opened,
+                    Config.PAPER_FUNDING_RATE_8H,
+                )
+            else:
+                live = await fd.live_effect(self._api, sym, int(opened * 1000))
+                if live is None:
+                    return 0.0
+                eff = live
+            if not fd.is_sane(eff, margin):
+                logger.warning("Funding %.4f for %s отклонён как аномалия (маржа %.2f)", eff, sym, margin)
+                return 0.0
+            return eff
+        except Exception as exc:  # noqa: BLE001 — учёт funding не должен ломать закрытие
+            logger.debug("Funding effect failed for %s: %s", sym, exc)
+            return 0.0
 
     def _ledger_outcome(
         self, sym: str, pos: Any, price: float, reason: str, pnl: Optional[float]
@@ -998,6 +1035,7 @@ class PositionMonitor:
                     exit_price=price,
                     commission=exit_commission,
                     reason=reason,
+                    funding=await self._funding_effect(sym, pos, price),
                 )
             except Exception as exc:
                 logger.error("record_close for trade %s failed: %s", trade_id, exc)
@@ -1175,6 +1213,7 @@ class PositionMonitor:
                     exit_price=price,
                     commission=exit_commission,
                     reason=exit_reason,
+                    funding=await self._funding_effect(sym, pos, price),
                 )
             except Exception as exc:
                 # Позиция уже удалена из монитора и закрыта на бирже.

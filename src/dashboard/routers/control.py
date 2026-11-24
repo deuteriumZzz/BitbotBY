@@ -136,6 +136,8 @@ def build_state() -> Dict[str, Any]:
         },
         # Итог последнего цикла по узлам конвейера (src/core/decision_trace.py).
         "cycle": _redis_json(r, "bot:last_cycle"),
+        # Готов ли выбранный режим решать (нет модели SAC, не допущена, AI недоступен).
+        "mode_readiness": _redis_json(r, "bot:mode_readiness"),
         # Последний пост доверенного канала: вход или почему нет (trusted_trader).
         "trusted": _redis_json(r, TRUSTED_LAST_KEY),
         "balance": portfolio.get("balance", Config.INITIAL_BALANCE),

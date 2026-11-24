@@ -56,5 +56,17 @@ const EXIT_REASON: Record<string, string> = {
   short_squeeze: "каскад ликвидаций",
 };
 
+/** Почему режим не принимает решений (коды из src/core/trading_modes.py). */
+const READINESS_REASON: Record<string, string> = {
+  sac_model_missing: "модель SAC не загружена — пока её нет, новых сделок в этом режиме не будет",
+  sac_not_approved:
+    "модель SAC загружена, но не допущена реестром (в Paper нужна стадия paper и выше, в Live — только production)",
+  ai_unavailable: "AI недоступен — ни один провайдер цепочки не отвечает",
+  unknown_mode: "неизвестный режим",
+};
+
+export const readinessReason = (code?: string | null): string =>
+  code ? (READINESS_REASON[code] ?? code) : "";
+
 export const exitReason = (code?: string | null): string =>
   code ? (EXIT_REASON[code] ?? EXIT_REASON[code.split(/[\s=]/)[0]] ?? code) : "";

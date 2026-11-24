@@ -120,7 +120,8 @@ class TradeHistory:
                     pass  # column already exists
             # Частичные закрытия: сколько уже закрыто, какой результат зафиксирован
             # и сколько комиссий ушло на эти закрытия.
-            for column in ("closed_qty", "realized_pnl", "partial_fees"):
+            # funding — вклад funding в итог сделки (0, пока FUNDING_IN_PNL выключен).
+            for column in ("closed_qty", "realized_pnl", "partial_fees", "funding"):
                 try:
                     self._conn.execute(
                         f"ALTER TABLE trades ADD COLUMN {column} "
@@ -290,6 +291,7 @@ class TradeHistory:
         commission: float = 0.0,
         leverage: int = 1,
         reason: str = "",
+        funding: float = 0.0,
     ) -> Optional[float]:
         """
         Закрывает сделку и рассчитывает PnL из данных входа.
@@ -328,6 +330,7 @@ class TradeHistory:
             move = (exit_price - entry_price) * remaining
             pnl = realized + (move if action == "buy" else -move)
             pnl -= entry_comm + commission
+            pnl += funding  # минус — заплатили; 0 при выключенном FUNDING_IN_PNL
             # УЛУЧШЕНИЕ 2: pnl_pct от маржи, а не от notional.
             # Маржа = notional / leverage → при leverage=3 результат корректен.
             lev = max(1, int(leverage))
@@ -340,7 +343,7 @@ class TradeHistory:
                     UPDATE trades
                     SET exit_price=?, commission=commission+?,
                         pnl=?, pnl_pct=?, exit_time=?,
-                        status='closed', exit_reason=?
+                        status='closed', exit_reason=?, funding=?
                     WHERE id=?
                     """,
                     (
@@ -350,6 +353,7 @@ class TradeHistory:
                         pnl_pct,
                         now_iso,
                         reason,
+                        funding,
                         trade_id,
                     ),
                 )

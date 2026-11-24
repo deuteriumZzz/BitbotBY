@@ -89,7 +89,18 @@ class SignalCombiner:
             по умолчанию — модуль chronos_analyzer.
         """
         self.ai = ai
-        self.sac = sac if sac is not None else SACSignal()
+        if sac is None:
+            if getattr(Config, "SAC_V2_ENABLED", False) is True:
+                from src.ai.sac_v2_policy import SACV2Signal  # noqa: PLC0415
+
+                sac = SACV2Signal()
+            else:
+                sac = SACSignal()
+        self.sac = sac
+        self._market_data: Dict[str, Any] = {}
+        if getattr(self.sac, "needs_candles", False):
+            # v2 учится на свечах: берём их из market_data текущего цикла
+            self.sac.candles_provider = lambda s: (self._market_data or {}).get(s)
         self._forecaster = forecaster
         # Входы последнего combine() — для воспроизведения решения (Phase 4):
         # ответ AI, сигналы SAC, направления Chronos и настройки. Только запись.
@@ -130,6 +141,7 @@ class SignalCombiner:
         # Флаг прошлого цикла не должен дожить до этого:
         # AI в этом цикле может и не вызываться.
         self.ai.unavailable = False
+        self._market_data = market_data or {}
         self._capture_settings(mode, regime, regimes)
 
         if mode == "local":

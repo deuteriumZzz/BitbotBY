@@ -47,6 +47,33 @@ services:
       redis:
         condition: service_healthy
 
+  # Выделенный воркер обучения SAC v2: НЕ стартует с ботом, запускается по запросу —
+  #   docker compose --profile train run --rm trainer
+  # Свои лимиты (TRAINER_CPUS / TRAINER_MEM_LIMIT), приоритет ниже, потоки ограничены.
+  # Модель попадает в ./models как кандидат реестра; продвигает её только человек.
+  trainer:
+    build: .
+    profiles: ["train"]
+    restart: "no"
+    cpus: ${TRAINER_CPUS:-0}
+    mem_limit: ${TRAINER_MEM_LIMIT:-0}
+    environment:
+      PYTHONPATH: /app
+      HEAVY_JOB_NICE: "10"
+      HEAVY_JOB_THREADS: ${TRAINER_THREADS:-2}
+    command: >-
+      python -m reinforcement_learning.train_sac_v2
+      --csv ${TRAIN_CSV:-data/ohlcv.csv}
+      --symbol ${TRAIN_SYMBOL:-BTC/USDT}
+      --timeframe ${TRAIN_TIMEFRAME:-15m}
+      --timesteps ${TRAIN_TIMESTEPS:-100000}
+      --folds ${TRAIN_FOLDS:-4}
+      --out models/sac_v2.zip
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./logs:/app/logs
+
   dashboard:
     build: .
     restart: unless-stopped

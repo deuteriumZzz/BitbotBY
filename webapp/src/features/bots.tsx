@@ -3,7 +3,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import { fmtN, plural, tone } from "../lib/format";
+import { fmtN, plural, readinessReason, tone } from "../lib/format";
 import { reducedMotion } from "../lib/platform";
 import type { ConfigValues, RiskPreset, Strategy } from "../lib/types";
 import { actions, useStore } from "../store";
@@ -528,6 +528,7 @@ export function StrategiesCard() {
   const all0 = useStore((s) => s.strategies);
   const marketSpot = useStore((s) => cfg<string>(s.config, "MARKET_TYPE", "linear") === "spot");
   const mode = useStore((s) => s.bot?.mode ?? "ai");
+  const readiness = useStore((s) => s.modeReadiness?.[s.bot?.mode ?? "ai"] ?? null);
   const fallback = useStore((s) => cfg<boolean>(s.config, "LOCAL_FALLBACK", false));
   const [all, setAll] = useState(false);
   const [view, setView] = useState<"futures" | "spot" | null>(null);
@@ -597,6 +598,14 @@ export function StrategiesCard() {
   const role = MODE_ROLE[mode] ?? MODE_ROLE.ai;
   const body = (
     <>
+      {readiness && !readiness.ready && (
+        <div className="honest">
+          {Icon.warn}
+          <div>
+            <b>Выбранный режим сейчас не принимает решений:</b> {readinessReason(readiness.reason)}.
+          </div>
+        </div>
+      )}
       {role.text && <p className="note-soon role">{role.text}</p>}
       {mode !== "local" && (
         <div className="row-tgl">

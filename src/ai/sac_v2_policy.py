@@ -29,6 +29,87 @@ def exposure_to_signal(target: float, current: float, band: float = 0.15) -> str
     return "buy" if delta > 0 else "sell"
 
 
+class SACV2Signal:
+    """Замена `SACSignal` для `SignalCombiner` (`SAC_V2_ENABLED=true`): тот же интерфейс.
+
+    Целевая экспозиция политики превращается в buy/sell/hold через `exposure_to_signal`;
+    confidence = |цель − текущая| (величина действия, не вероятность). Допуск — как у v1:
+    без записи в реестре с нужной стадией модель не торгует (`tradable`). Свечи и позицию
+    поставляют провайдеры (комбинатор и бот); нет данных — hold.
+    """
+
+    needs_candles = True
+
+    def __init__(self, model_path: Optional[str] = None) -> None:
+        from config import Config  # noqa: PLC0415
+
+        self._cfg = Config
+        self.model_path = model_path or Config.SAC_V2_MODEL_PATH
+        self.policy = SACV2Policy(self.model_path)
+        self._mtime = self._file_mtime()
+        self.candles_provider: Optional[Any] = None  # symbol -> DataFrame
+        self.position_provider: Optional[Any] = None  # symbol -> (exposure, equity_pnl)
+
+    def _file_mtime(self) -> float:
+        try:
+            return os.path.getmtime(self.model_path)
+        except OSError:
+            return 0.0
+
+    @property
+    def loaded(self) -> bool:
+        return self.policy.loaded
+
+    @property
+    def stage(self) -> str:
+        from reinforcement_learning.model_registry import ModelRegistry, default_registry_path  # noqa: PLC0415
+
+        return ModelRegistry(default_registry_path(self.model_path)).stage_of_path(self.model_path)
+
+    @property
+    def approved(self) -> bool:
+        if not getattr(self._cfg, "SAC_REQUIRE_APPROVAL", True):
+            return True
+        from reinforcement_learning.model_registry import EXECUTABLE  # noqa: PLC0415
+
+        return self.stage in EXECUTABLE["paper" if self._cfg.PAPER_TRADING else "live"]
+
+    @property
+    def tradable(self) -> bool:
+        return bool(self.loaded and self.approved)
+
+    def get_signal(self, snap: Dict[str, Any], balance: float, position: float = 0.0,
+                   entry_price: float = 0.0) -> Dict[str, Any]:
+        sym = snap.get("symbol", "")
+        hold = {"symbol": sym, "action": "hold", "confidence": 0.0, "source": "sac"}
+        if not self.loaded or self.candles_provider is None:
+            return hold
+        try:
+            df = self.candles_provider(sym)
+            if df is None or len(df) == 0:
+                return hold
+            exposure, pnl = self.position_provider(sym) if self.position_provider else (0.0, 0.0)
+            target = self.policy.target_exposure(df, exposure, pnl)
+            if target is None:
+                return hold
+            action = exposure_to_signal(target, exposure)
+            if action == "hold":
+                return hold
+            return {"symbol": sym, "action": action, "confidence": round(min(1.0, abs(target - exposure)), 3),
+                    "source": "sac", "target_exposure": round(target, 3)}
+        except Exception:  # noqa: BLE001 — сбой инференса = нет сигнала, не исключение в цикле
+            return hold
+
+    def reload_if_updated(self) -> bool:
+        """Горячая перезагрузка, если тренер сохранил новую версию файла модели."""
+        mtime = self._file_mtime()
+        if mtime and mtime > self._mtime:
+            self.policy = SACV2Policy(self.model_path)
+            self._mtime = mtime
+            return True
+        return False
+
+
 class SACV2Policy:
     def __init__(self, model_path: str) -> None:
         self.model_path = model_path

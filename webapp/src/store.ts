@@ -98,6 +98,8 @@ export interface Store {
   bot: BotState["bot"] | null;
   /** Итог последнего цикла по узлам конвейера (вкладка «Бот»). */
   lastCycle: CycleTrace | null;
+  /** Готовность режимов решать (причина — код из бота); null, пока бот не публиковал. */
+  modeReadiness: BotState["mode_readiness"];
   /** Последний пост доверенного канала: вход по нему или причина отказа. */
   trusted: TrustedPost | null;
   balance: number;
@@ -252,6 +254,7 @@ export const useStore = create<Store>((set, get) => {
     set({
       bot: st.bot,
       lastCycle: st.cycle ?? null,
+      modeReadiness: st.mode_readiness ?? null,
       trusted: st.trusted ?? null,
       alive: st.bot.alive,
       balance: st.balance,
@@ -267,6 +270,7 @@ export const useStore = create<Store>((set, get) => {
     alive: true,
     bot: null,
     lastCycle: null,
+    modeReadiness: null,
     trusted: null,
     balance: 0,
     slots: { used: 0, max: 0 },

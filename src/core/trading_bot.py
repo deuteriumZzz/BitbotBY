@@ -142,7 +142,21 @@ class TradingBot:
         # сделок по доверенным каналам: они идут мимо цикла, а цикл в это время спит.
         self._entries_blocked = ""
         self.ai = AIAnalyzer(runtime_config=self._runtime_config)
-        self.combiner = SignalCombiner(self.ai, rc=self._runtime_config)
+        # Прогнозист для Chronos-поправки: по умолчанию chronos_analyzer; FORECASTER=timesfm —
+        # изолированный воркер TimesFM (src/forecast). Работает, если включён переключатель Chronos.
+        self._forecaster: Any = None
+        if Config.FORECASTER == "timesfm":
+            from src.forecast.timesfm_client import TimesFMForecaster  # noqa: PLC0415
+
+            self._forecaster = TimesFMForecaster()
+        self.combiner = SignalCombiner(
+            self.ai, rc=self._runtime_config, forecaster=self._forecaster
+        )
+        if getattr(self.combiner.sac, "needs_candles", False):
+            # v2 подаёт модели текущую позицию (а не 0, как v1 — C-3)
+            self.combiner.sac.position_provider = self._sac_position
+        self.rag: Any = None  # индекс по Ledger (AI_RAG_CONTEXT)
+        self.ai._rag_provider = lambda symbols: ops_tasks.rag_context(self, symbols)
         self.regime_detector = RegimeDetector()
         self._current_regime: str = "unknown"
         self.portfolio_optimizer = PortfolioOptimizer()
@@ -859,6 +873,14 @@ class TradingBot:
         except Exception as e:
             logger.debug("pending signal not stored: %s", e)
 
+    def _mode_readiness(self) -> Dict[str, Any]:
+        """Готов ли каждый режим решать: причина (нет модели SAC, не допущена, AI недоступен)."""
+        return all_readiness(
+            sac_loaded=bool(getattr(self.combiner.sac, "loaded", False)),
+            sac_approved=bool(getattr(self.combiner.sac, "approved", True)),
+            ai_available=bool(getattr(self.ai, "enabled", True)),
+        )
+
     def _store_cycle_trace(self, summary: Dict[str, Any]) -> None:
         """Итог цикла по узлам конвейера — для вкладки «Бот» (и после перезагрузки)."""
         r = self._bus
@@ -866,6 +888,8 @@ class TradingBot:
             return
         try:
             r.set("bot:last_cycle", json.dumps(summary, ensure_ascii=False))
+            # Готовность режимов — приложению (оно в другом процессе и читает Redis).
+            r.set("bot:mode_readiness", json.dumps(self._mode_readiness()))
         except Exception as e:
             logger.debug("last cycle not stored: %s", e)
         emit(r, "trace.cycle", summary)
@@ -1193,6 +1217,22 @@ class TradingBot:
         self._drawdown_consec = 0
         logger.info("Mode switch: _monitored cleared, peak balance reset")
         await self._reconcile_positions()
+
+    def _sac_position(self, symbol: str) -> tuple:
+        """(экспозиция, результат) по символу для наблюдения SAC v2.
+
+        Экспозиция — знаковая доля капитала в позиции на момент входа (notional / баланс при
+        входе), результат — 0: текущая цена здесь недоступна (приближение, см. AUDIT_REPORT §10q).
+        """
+        pos = self._monitored.get(symbol)
+        if not pos:
+            return 0.0, 0.0
+        base = float(pos.get("balance_at_entry") or 0.0)
+        if base <= 0:
+            return 0.0, 0.0
+        sign = 1.0 if pos.get("side", "buy") == "buy" else -1.0
+        exposure = sign * float(pos.get("qty") or 0) * float(pos.get("entry") or 0) / base
+        return max(-1.0, min(1.0, exposure)), 0.0
 
     async def _handle_emergency_cmd(self, args: list, who: str) -> str:
         """Telegram /emergency: уровни аварийного управления (src/core/ops_tasks.py)."""
@@ -2037,6 +2077,8 @@ class TradingBot:
             self._ws_task = asyncio.create_task(ops_tasks.ws_shadow_loop(self))
         if Config.DB_BACKUP_ENABLED:
             self._backup_task = asyncio.create_task(ops_tasks.db_backup_loop(self))
+        if Config.AI_RAG_CONTEXT:
+            self._rag_task = asyncio.create_task(ops_tasks.rag_refresh_loop(self))
         await ops_tasks.apply_emergency_on_start(self)
         asyncio.create_task(self._season_check_loop())
         # Команды из приложения (MiniApp / Desktop) — через очередь в Redis.
@@ -2620,9 +2662,11 @@ class TradingBot:
             self._command_task.cancel()
         if self._reconcile_task:
             self._reconcile_task.cancel()
-        for _t in (self._ws_task, self._backup_task):
+        for _t in (self._ws_task, self._backup_task, getattr(self, "_rag_task", None)):
             if _t:
                 _t.cancel()
+        if self._forecaster is not None and hasattr(self._forecaster, "close"):
+            self._forecaster.close()  # воркер TimesFM — отдельный процесс
         if self._monitor_task:
             self._monitor_task.cancel()
             try:

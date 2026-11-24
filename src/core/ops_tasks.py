@@ -41,6 +41,27 @@ _LEVEL_TEXT = {
 
 
 # ── WS Shadow ─────────────────────────────────────────────────────────────────
+CANDLE_CHECK_S = 900.0
+
+
+async def candle_check(
+    bot: Any, stream: Any, timeframe: str = "15m", limit: int = 60
+) -> Dict[str, Dict[str, Any]]:
+    """Сверка подтверждённых свечей WS с REST по каждому символу; результат — в метрики Prometheus."""
+    from src.infra.health_server import publish_candle_check  # noqa: PLC0415
+    from src.market.ws.candles import compare_with_rest  # noqa: PLC0415
+    from src.market.ws.client import to_bybit  # noqa: PLC0415
+
+    out: Dict[str, Dict[str, Any]] = {}
+    for sym in [s.strip() for s in Config.WS_SHADOW_SYMBOLS.split(",") if s.strip()]:
+        ws = stream.candles[to_bybit(sym)].ohlcv()[-30:]
+        if len(ws) < 3:
+            out[sym] = {"skipped": "мало подтверждённых свечей WS"}
+            continue
+        rest = await bot.api.exchange.fetch_ohlcv(sym, timeframe, limit=limit)
+        out[sym] = compare_with_rest(ws, rest)
+    publish_candle_check(out)
+    return out
 async def ws_shadow_loop(
     bot: Any,
     *,
@@ -59,10 +80,21 @@ async def ws_shadow_loop(
     stop = stop or asyncio.Event()
     runner = asyncio.create_task(run_stream(connect or default_connect(), stream, topics(symbols), stop))
     last_alert = -ALERT_COOLDOWN_S
+    last_check = time.monotonic()
+    last_check_alert = -ALERT_COOLDOWN_S * 2
     try:
         while not stop.is_set() and not runner.done():
             await sleep(interval)
             publish_ws_metrics(stream.health.snapshot())
+            # сверка свечей WS и REST раз в CANDLE_CHECK_S: расхождение — тревога (откат на REST и так штатный)
+            if time.monotonic() - last_check >= CANDLE_CHECK_S:
+                last_check = time.monotonic()
+                with contextlib.suppress(Exception):
+                    res = await candle_check(bot, stream)
+                    bad = sorted(s for s, r in res.items() if r.get("ok") is False)
+                    if bad and time.monotonic() - last_check_alert >= ALERT_COOLDOWN_S * 2:
+                        last_check_alert = time.monotonic()
+                        await bot.telegram.notify("⚠️ WS≠REST: свечи расходятся: " + ", ".join(bad))
             silent = stream.health.silent_streams(STALE_ALERT_S)
             if silent and time.monotonic() - last_alert >= ALERT_COOLDOWN_S:
                 last_alert = time.monotonic()
@@ -111,6 +143,43 @@ async def db_backup_loop(
         except Exception as exc:  # noqa: BLE001 — задача бэкапа не должна падать насовсем
             logger.warning("DB backup failed: %s", exc)
         await sleep(max(1.0, Config.DB_BACKUP_INTERVAL_H) * 3600)
+
+
+# ── RAG по Ledger ─────────────────────────────────────────────────────────────
+RAG_REFRESH_S = 600.0
+
+
+async def rag_refresh_loop(
+    bot: Any,
+    *,
+    sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    path: Optional[str] = None,
+) -> None:
+    """Раз в 10 минут пересобирает индекс по журналу в потоке (чтение до 50 МБ не должно блокировать цикл)."""
+    from src.rag.ledger_rag import LedgerRAG  # noqa: PLC0415
+
+    while True:
+        try:
+            ledger_path = path or getattr(getattr(bot, "ledger", None), "path", None)
+            bot.rag = await asyncio.to_thread(LedgerRAG.from_ledger, ledger_path or "data/decision_ledger.jsonl")
+        except Exception as exc:  # noqa: BLE001 — прежний индекс остаётся, цикл не падает
+            logger.warning("RAG refresh failed: %s", exc)
+        await sleep(RAG_REFRESH_S)
+
+
+def rag_context(bot: Any, symbols: List[str]) -> str:
+    """Синхронный провайдер для `AIAnalyzer._rag_block`: только чтение готового индекса (быстро)."""
+    from src.rag.ledger_rag import safe_context  # noqa: PLC0415
+
+    rag = getattr(bot, "rag", None)
+    if rag is None:
+        return ""
+    parts = []
+    for sym in symbols:
+        r = safe_context(rag, sym, 2, symbol=sym, only_with_outcome=True)
+        if r["context"]:
+            parts.append(r["context"])
+    return "\n".join(parts)
 
 
 # ── Аварийное управление ──────────────────────────────────────────────────────

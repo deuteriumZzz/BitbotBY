@@ -197,6 +197,21 @@ class Config:
     RISK_GATE_SHADOW: bool = os.getenv("RISK_GATE_SHADOW", "true").lower() != "false"
     # WS-shadow (Phase 4b): публичный поток Bybit параллельно REST, только метрики и
     # тревога при тишине; выключен по умолчанию — открывает внешнее соединение.
+    # Решение на основе новых источников — ВСЕ выключены по умолчанию (меняют вход/выход AI):
+    #   AI_SANITIZE_PROMPT   — заголовки новостей очищаются и помечаются как недоверенные;
+    #   AI_RAG_CONTEXT       — в промпт добавляется «что было в похожих случаях» из Ledger;
+    #   AI_STRICT_VALIDATION — ответ LLM проходит строгую схему (лишние поля/выдуманные цены — отказ);
+    #   FORECASTER           — chronos | timesfm (используется, если включён переключатель Chronos).
+    # Funding в PnL сделки (src/core/funding.py): выключен — меняет учёт результата.
+    # SAC v2 вместо v1 (src/ai/sac_v2_policy.py): модель из train_sac_v2; допуск через реестр.
+    SAC_V2_ENABLED: bool = os.getenv("SAC_V2_ENABLED", "false").lower() == "true"
+    SAC_V2_MODEL_PATH: str = os.getenv("SAC_V2_MODEL_PATH", "models/sac_v2.zip")
+    FUNDING_IN_PNL: bool = os.getenv("FUNDING_IN_PNL", "false").lower() == "true"
+    PAPER_FUNDING_RATE_8H: float = float(os.getenv("PAPER_FUNDING_RATE_8H", "0.0001"))
+    AI_SANITIZE_PROMPT: bool = os.getenv("AI_SANITIZE_PROMPT", "false").lower() == "true"
+    AI_RAG_CONTEXT: bool = os.getenv("AI_RAG_CONTEXT", "false").lower() == "true"
+    AI_STRICT_VALIDATION: bool = os.getenv("AI_STRICT_VALIDATION", "false").lower() == "true"
+    FORECASTER: str = os.getenv("FORECASTER", "chronos").strip().lower()
     WS_SHADOW_ENABLED: bool = os.getenv("WS_SHADOW_ENABLED", "false").lower() == "true"
     WS_SHADOW_SYMBOLS: str = os.getenv("WS_SHADOW_SYMBOLS", "BTC/USDT,ETH/USDT")
     # Ежедневная проверенная копия БД сделок (src/infra/db_health.py); защитная мера.

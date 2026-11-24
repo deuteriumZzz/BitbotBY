@@ -63,6 +63,8 @@ export interface BotState {
   market?: { season: Season | null; fear_greed: FearGreed | null };
   /** Итог последнего цикла; null — бот ещё не прошёл цикл после обновления. */
   cycle?: CycleTrace | null;
+  /** Готовность режимов решать: reason — код причины, пусто если готов; null — бот ещё не публиковал. */
+  mode_readiness?: Record<string, { ready: boolean; reason: string }> | null;
   /** Последний пост доверенного канала Telegram; null — постов ещё не было. */
   trusted?: TrustedPost | null;
   timestamp: string;

@@ -80,6 +80,18 @@ def publish_ws_metrics(snapshot: Dict[str, Any]) -> None:
             _g_ws_lag_p99.labels(name).set(p99)
 
 
+_g_ws_rest_mismatch = Gauge(
+    "bitbot_ws_rest_candle_mismatch", "Свечей, где WS и REST расходятся (или нет в WS)", ["symbol"]
+)
+
+
+def publish_candle_check(results: Dict[str, Dict[str, Any]]) -> None:
+    """Результат `compare_with_rest` по символам → Prometheus (пропущенные проверки не публикуются)."""
+    for sym, r in results.items():
+        if "mismatched" in r:
+            _g_ws_rest_mismatch.labels(sym).set(len(r["mismatched"]) + len(r.get("missing_in_ws", [])))
+
+
 _bot: "TradingBot | None" = None
 app = FastAPI(docs_url=None, redoc_url=None, title="BitbotBY health")
 
