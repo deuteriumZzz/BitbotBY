@@ -1,4 +1,4 @@
-.PHONY: train train-long train-docker tune tune-bluechip tune-altcoin retrain backtest backtest-eth alpha-report live-divergence ai-isolation paper paper-ai live test lint fmt up down logs htpasswd local webapp
+.PHONY: train train-long train-docker tune tune-bluechip tune-altcoin retrain backtest backtest-eth alpha-report live-divergence ai-isolation paper paper-ai live test lint fmt local webapp
 
 # ── Training ───────────────────────────────────────────────────────────────────
 train:
@@ -97,41 +97,3 @@ lint:
 fmt:
 	python3 -m black src/ tests/ reinforcement_learning/ config.py dashboard.py supervisor.py
 	python3 -m isort --profile black src/ tests/ reinforcement_learning/ config.py dashboard.py supervisor.py
-
-# ── Docker: старый вариант с .env (deploy/legacy) ───────────────────────────────
-# Обычный запуск — ярлык BitbotBY (launcher/launch.py), на сервере — launch.py server.
-LEGACY_COMPOSE := docker compose -f deploy/legacy/docker-compose.yml
-
-up:
-	$(LEGACY_COMPOSE) up -d --build
-
-down:
-	$(LEGACY_COMPOSE) down
-
-rebuild:
-	@echo ">>> Full reset: removing containers, volumes and images..."
-	$(LEGACY_COMPOSE) down -v
-	docker image rm bitbotby-bot bitbotby-dashboard 2>/dev/null || true
-	docker builder prune -f
-	@echo ">>> Rebuilding from scratch..."
-	$(LEGACY_COMPOSE) build --no-cache
-	$(LEGACY_COMPOSE) up -d
-	@echo ">>> Done. Run 'make logs' to watch startup."
-
-logs:
-	$(LEGACY_COMPOSE) logs -f bot
-
-htpasswd:
-	$(eval DASHBOARD_USER := $(shell grep '^DASHBOARD_USER=' .env | cut -d= -f2))
-	$(eval DASHBOARD_PASSWORD := $(shell grep '^DASHBOARD_PASSWORD=' .env | cut -d= -f2))
-	@docker run --rm httpd:alpine htpasswd -nb "$(DASHBOARD_USER)" "$(DASHBOARD_PASSWORD)" > deploy/legacy/nginx/htpasswd
-	@echo ">>> deploy/legacy/nginx/htpasswd создан."
-
-setup:
-	@echo ">>> [1/3] Генерирую htpasswd..."
-	@$(MAKE) htpasswd
-	@echo ">>> [2/3] Останавливаю старые контейнеры..."
-	@$(LEGACY_COMPOSE) down
-	@echo ">>> [3/3] Собираю и запускаю всё..."
-	@$(LEGACY_COMPOSE) up -d --build
-	@echo ">>> Готово! Dashboard: http://localhost:8080"

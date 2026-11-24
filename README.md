@@ -15,8 +15,6 @@
 [![Bybit](https://img.shields.io/badge/exchange-Bybit-F7A600)](https://www.bybit.com/)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-🌐 **Русский** · [English](docs/README.en.md) · [中文](docs/README.zh.md) · [Español](docs/README.es.md) · [Deutsch](docs/README.de.md)
-
 </div>
 
 ---
@@ -142,7 +140,8 @@ make local         # бот + дашборд: http://localhost:8080/app/
 ```
 
 Здесь бот читает переменные окружения и `.env` — список в [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
-Старый запуск в Docker с `.env` и nginx лежит в `deploy/legacy/` (`make setup`, `make up`, `make down`).
+Мониторинг (Prometheus, Alertmanager, Grafana) подключается вторым файлом compose:
+`docker compose -f docker-compose.local.yml -f deploy/monitoring/compose.yml up -d`.
 
 ---
 
@@ -498,7 +497,6 @@ CI проверяет black, isort, flake8, mypy, компиляцию и тес
 | `make backtest` / `make backtest-eth` | Walk-forward бэктест |
 | `make alpha-report` / `make live-divergence` / `make ai-isolation` | Значимость альфы / live против бэктеста / вклад AI |
 | `make test` / `make lint` / `make fmt` | Тесты / линтеры / форматирование |
-| `make setup` / `make up` / `make down` / `make rebuild` / `make logs` | Старый запуск `deploy/legacy/` с `.env` и nginx |
 
 </details>
 

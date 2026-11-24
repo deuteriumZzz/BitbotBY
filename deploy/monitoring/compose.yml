@@ -1,0 +1,66 @@
+# Мониторинг: Prometheus (метрики бота и панели), Alertmanager (алерты → Telegram
+# через вебхук панели), Grafana (дашборд). Подключается к основному compose вторым файлом:
+#   docker compose -f docker-compose.local.yml  -f deploy/monitoring/compose.yml up -d
+#   docker compose -f docker-compose.server.yml -f deploy/monitoring/compose.yml up -d
+# Пути — от корня репозитория (каталог первого файла). Порты открыты только на
+# 127.0.0.1: на сервере Grafana открывают через SSH-туннель (ssh -L 3000:localhost:3000).
+#
+# Алерты доходят до Telegram, только если задан ALERTMANAGER_WEBHOOK_SECRET (тот же
+# секрет у панели и Alertmanager); без него вебхук панели отвечает 403.
+
+services:
+  dashboard:
+    environment:
+      ALERTMANAGER_WEBHOOK_SECRET: ${ALERTMANAGER_WEBHOOK_SECRET:-}
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    restart: unless-stopped
+    environment:
+      ALERTMANAGER_WEBHOOK_SECRET: ${ALERTMANAGER_WEBHOOK_SECRET:-}
+    # Конфиг Alertmanager не читает переменные окружения: секрет кладём в файл,
+    # на который ссылается http_config.authorization.credentials_file.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        printf '%s' "$$ALERTMANAGER_WEBHOOK_SECRET" > /tmp/webhook_secret &&
+        exec /bin/alertmanager --config.file=/etc/alertmanager/alertmanager.yml
+        --storage.path=/alertmanager
+    volumes:
+      - ./deploy/monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    ports:
+      - "127.0.0.1:9093:9093"
+
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    restart: unless-stopped
+    volumes:
+      - ./deploy/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/monitoring/rules:/etc/prometheus/rules:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    depends_on:
+      - alertmanager
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-bitbot}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/dashboards/bitbot.json
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./deploy/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/monitoring/grafana/dashboards:/etc/grafana/dashboards:ro
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - prometheus
+
+volumes:
+  alertmanager_data:
+  prometheus_data:
+  grafana_data:

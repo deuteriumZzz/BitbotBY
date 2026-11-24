@@ -18,8 +18,6 @@ python-dotenv==1.0.0
 newsapi-python==0.2.7
 redis==5.0.1
 pytest==8.2.0
-matplotlib>=3.7.0
-seaborn>=0.13.0
 torch>=2.0.0
 chronos-forecasting>=1.4.0
 transformers>=4.41.0
@@ -44,7 +42,6 @@ mypy>=1.9.0
 # Хранилище ключей и их проверка (уже приходят с ccxt и python-telegram-bot)
 cryptography>=41.0
 httpx>=0.25
-# Датасеты SAC: Parquet + ZSTD (ADR-001, Phase 7)
+# Датасеты SAC: Parquet + ZSTD (ADR-001, Phase 7); кодек ZSTD встроен в pyarrow.
 pyarrow>=21.0; sys_platform != "darwin" or platform_machine != "x86_64"
 pyarrow>=17,<20; sys_platform == "darwin" and platform_machine == "x86_64"
-zstandard>=0.25

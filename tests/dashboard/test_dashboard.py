@@ -607,7 +607,7 @@ class TestTgEscape:
         assert _tg_escape("Hello world 123") == "Hello world 123"
 
 
-def test_root_redirects_to_app_when_built_else_serves_legacy(
+def test_root_redirects_to_app_when_built_else_explains_build(
     client, monkeypatch, tmp_path
 ):
     from src.dashboard.routers import frontend
@@ -618,5 +618,7 @@ def test_root_redirects_to_app_when_built_else_serves_legacy(
     resp = client.get("/", follow_redirects=False)
     assert resp.status_code == 302 and resp.headers["location"] == "/app/"
     monkeypatch.setattr(frontend, "_WEBAPP_INDEX", tmp_path / "missing.html")
-    assert client.get("/").status_code == 200
-    assert client.get("/legacy").status_code == 200
+    resp = client.get("/")
+    assert resp.status_code == 503 and "npm run build" in resp.text
+    # Старой панели больше нет.
+    assert client.get("/legacy").status_code == 404

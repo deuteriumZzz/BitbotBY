@@ -5,8 +5,7 @@ Application logic lives in src/dashboard/:
   data.py             — Redis/SQLite helpers, Prometheus gauges
   routers/api.py      — /api/status, /api/trades, /api/backtest
   routers/ops.py      — /metrics, /health, /webhook/alerts
-  routers/frontend.py — / (HTML SPA)
-  index.html          — single-page dashboard UI
+  routers/frontend.py — / → приложение /app/ (webapp/dist)
 """
 
 import os

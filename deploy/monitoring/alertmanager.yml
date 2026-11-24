@@ -18,6 +18,12 @@ receivers:
     webhook_configs:
       - url: "http://dashboard:8080/webhook/alerts"
         send_resolved: true
+        # Секрет вебхука панели (ALERTMANAGER_WEBHOOK_SECRET): файл пишет
+        # команда запуска контейнера, см. deploy/monitoring/compose.yml.
+        http_config:
+          authorization:
+            type: Bearer
+            credentials_file: /tmp/webhook_secret
 
 inhibit_rules:
   - source_matchers:
