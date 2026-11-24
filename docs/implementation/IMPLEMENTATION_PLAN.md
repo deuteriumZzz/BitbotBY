@@ -34,9 +34,9 @@
 
 | Элемент | Файлы | Поведение |
 |---|---|---|
-| Контракты | `src/core/contracts.py` (новый) | адаптер `decision_from_rec`; значения не меняются |
-| Режимы | `src/core/trading_modes.py` (новый) | таблица режимов + `readiness`; combiner-guard использует её |
-| Ledger | `src/core/trading_bot.py`, `decision_ledger.py` | в «signals» пишутся `TradingDecision`, в «execution» — `decision_id` |
+| Контракты | `backend/bitbot/domain/contracts.py` (новый) | адаптер `decision_from_rec`; значения не меняются |
+| Режимы | `backend/bitbot/domain/trading_modes.py` (новый) | таблица режимов + `readiness`; combiner-guard использует её |
+| Ledger | `backend/bitbot/workers/bot.py`, `decision_ledger.py` | в «signals» пишутся `TradingDecision`, в «execution» — `decision_id` |
 | Состояние для приложения | `trading_bot._get_bot_state` | + `mode_readiness` (аддитивно) |
 | Тесты | `tests/core/test_contracts.py` (контракты, режимы, запись в ledger, состояние бота) | 12 кейсов |
 

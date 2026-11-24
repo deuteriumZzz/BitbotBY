@@ -19,35 +19,33 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
+          cache-dependency-path: backend/pyproject.toml
 
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install \
-            "black==24.10.0" isort \
-            flake8 flake8-isort flake8-return pep8-naming \
-            mypy types-redis pytest-cov pytest-asyncio
+          pip install "torch>=2.0.0" --extra-index-url https://download.pytorch.org/whl/cpu
+          pip install -e "backend[dev]"
 
       - name: Check formatting with black
-        run: black --check src/ tests/ reinforcement_learning/ config.py dashboard.py supervisor.py
+        run: black --check backend
 
-      - name: Check imports with isort
-        run: isort --check-only --profile black src/ tests/ reinforcement_learning/ config.py dashboard.py supervisor.py
+      - name: Lint with ruff
+        run: ruff check backend
 
-      - name: Lint with flake8
-        run: flake8 src/ tests/ reinforcement_learning/ config.py dashboard.py supervisor.py
+      - name: Check layer boundaries (import-linter)
+        working-directory: backend
+        run: lint-imports
 
       - name: Type check with mypy
-        run: mypy src/
+        working-directory: backend
+        run: mypy bitbot
 
       - name: Syntax check
-        run: |
-          python -m compileall -q src reinforcement_learning launcher
-          python -m py_compile config.py dashboard.py supervisor.py
+        run: python -m compileall -q backend/bitbot launcher
 
       - name: Run tests with coverage
-        run: pytest tests/ --ignore=tests/integration -v --tb=short --cov=src --cov-report=term-missing --cov-fail-under=50
+        run: pytest backend/tests --ignore=backend/tests/integration -v --tb=short --cov=bitbot --cov-report=term-missing --cov-fail-under=50
 
       - name: Upload coverage artifact
         if: always()
@@ -101,13 +99,14 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
+          cache-dependency-path: backend/pyproject.toml
 
       - name: Install dependencies
-        run: pip install --upgrade pip && pip install -r requirements.txt pytest pytest-asyncio
+        run: pip install --upgrade pip && pip install "torch>=2.0.0" --extra-index-url https://download.pytorch.org/whl/cpu && pip install -e "backend[dev]"
 
       - name: Run integration tests
         if: ${{ env.BYBIT_TESTNET_API_KEY != '' }}
-        run: pytest tests/integration/ -m integration -v --timeout=60
+        run: pytest backend/tests/integration/ -m integration -v
 
       - name: Skip (secrets not configured)
         if: ${{ env.BYBIT_TESTNET_API_KEY == '' }}
@@ -126,19 +125,20 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
+          cache-dependency-path: backend/pyproject.toml
 
       - name: Install dependencies
-        run: pip install --upgrade pip && pip install -r requirements.txt
+        run: pip install --upgrade pip && pip install "torch>=2.0.0" --extra-index-url https://download.pytorch.org/whl/cpu && pip install -e "backend[dev]"
 
       - name: Backtest import and structure check
         run: |
           python -c "
-          from src.research import backtest
+          from bitbot.research import backtest
           assert callable(backtest.run_strategy), 'run_strategy missing'
           assert callable(backtest.load_data), 'load_data missing'
           assert callable(backtest.aggregate_results), 'aggregate_results missing'
           assert callable(backtest.print_report), 'print_report missing'
-          print('src/research/backtest.py structure OK')
+          print('backend/bitbot/research/backtest.py structure OK')
           "
 
       - name: Backtest live smoke (BTC/USDT, 1 month, 4h)
@@ -149,4 +149,4 @@ jobs:
           BT_MONTHS: "1"
           BT_TIMEFRAME: 4h
           PAPER_TRADING: "true"
-        run: python -m src.research.backtest
+        run: python -m bitbot.research.backtest

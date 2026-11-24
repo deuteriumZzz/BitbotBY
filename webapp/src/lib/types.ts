@@ -46,7 +46,7 @@ export interface Position {
   trace?: TraceStep[];
 }
 
-/** Состояние защиты и наблюдения (Redis bot:ops_status, пишет src/core/ops_tasks.ops_status). */
+/** Состояние защиты и наблюдения (Redis bot:ops_status, пишет bitbot.workers.ops.ops_status). */
 export interface OpsStatus {
   mode: "paper" | "live";
   prompt_version: string;

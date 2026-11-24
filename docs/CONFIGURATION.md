@@ -422,7 +422,7 @@ REDIS_PASSWORD=          # Рекомендуется задать в production
 <summary><b>🧪 Новые источники решения и эксплуатация</b></summary>
 
 Значения по умолчанию безопасны: всё, что меняет вход или выход решения, **выключено**. Включайте по одному,
-после недели в paper и по отчёту (`python -m src.research.signal_intelligence_report`, приложение → Журнал → Отчёты → «Сводка»).
+после недели в paper и по отчёту (`python -m bitbot.research.signal_intelligence_report`, приложение → Журнал → Отчёты → «Сводка»).
 Подробности и откат — [MIGRATION_GUIDE](implementation/MIGRATION_GUIDE.md).
 
 ```env

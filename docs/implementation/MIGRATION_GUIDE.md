@@ -18,14 +18,14 @@
 
 ## Зависимости
 - Обязательные добавлены: `pyarrow`, `zstandard` (датасеты SAC).
-- Необязательные — `requirements-optional.txt`: `onnx`, `onnxruntime` (экспорт SAC), `orjson` (быстрый JSON шины).
-- TimesFM — отдельное окружение `.venv-timesfm` на Python ≥ 3.10 (`pip install "timesfm[torch]" "numpy<2"`); в основной `requirements.txt` не входит.
+- Необязательные — extras в `backend/pyproject.toml` (`pip install -e "backend[onnx,fast]"`): `onnx`, `onnxruntime` (экспорт SAC), `orjson` (быстрый JSON шины).
+- TimesFM — отдельное окружение `.venv-timesfm` на Python ≥ 3.10 (`pip install "timesfm[torch]" "numpy<2"`); в основные зависимости не входит.
 
 ## Порядок первого запуска
-1. Обновить код, `pip install -r requirements.txt`.
+1. Обновить код, `pip install -e "backend[dev]"` (или `pip install ./backend`).
 2. Запустить бота в **paper**; убедиться, что в `/status` режим готов (`mode_readiness`).
 3. Проверить `/dbcheck` и `/digest`; через сутки — наличие копии в `data/backups/`.
-4. Через неделю: `python -m src.research.signal_intelligence_report` (теневой гейт, исходы, отказы).
+4. Через неделю: `python -m bitbot.research.signal_intelligence_report` (теневой гейт, исходы, отказы).
 5. Включать флаги по одному, по отчёту; каждое включение — отдельным решением.
 
 ## Откат

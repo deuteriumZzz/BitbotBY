@@ -275,7 +275,7 @@ function usePipeline(mode: string): { status: Record<BotNode, string>; info: Rec
   return { status, info };
 }
 
-/** Кто решает и какая роль у стратегий — одной фразой под переключателем (как в src/core/trading_bot.py). */
+/** Кто решает и какая роль у стратегий — одной фразой под переключателем (как в backend/bitbot/workers/bot.py). */
 const modeNote = (mode: string, fallback: boolean): string =>
   mode === "local"
     ? "Решают стратегии: на каждой монете запускаются все включённые, входит самый уверенный сигнал. AI не участвует."

@@ -58,7 +58,7 @@ const EXIT_REASON: Record<string, string> = {
   short_squeeze: "каскад ликвидаций",
 };
 
-/** Почему режим не принимает решений (коды из src/core/trading_modes.py). */
+/** Почему режим не принимает решений (коды из backend/bitbot/domain/trading_modes.py). */
 const READINESS_REASON: Record<string, string> = {
   sac_model_missing: "модель SAC не загружена — пока её нет, новых сделок в этом режиме не будет",
   sac_not_approved:

@@ -1,0 +1,194 @@
+# BitbotBY backend — единственный файл зависимостей и настроек инструментов.
+#   pip install -e "backend[dev]"      — разработка (из корня репозитория)
+#   pip install ./backend               — Docker / сервер
+# Тесты и линтеры запускаются из корня репозитория: пути к data/, models/, logs/
+# в коде — относительно рабочей папки.
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bitbot"
+version = "2.0.0"
+description = "BitbotBY: торговый бот для Bybit, API приложения (Mini App / Desktop), воркеры и ML"
+requires-python = ">=3.11"
+dependencies = [
+    # биржа и данные
+    "ccxt==4.3.47",
+    # Intel-Mac: последний torch для него (2.2.2) собран под numpy 1.x — там numpy<2.
+    'numpy>=2.2.6; sys_platform != "darwin" or platform_machine != "x86_64"',
+    'numpy>=1.26,<2; sys_platform == "darwin" and platform_machine == "x86_64"',
+    # pandas 3 меняет поведение (copy-on-write, строки, разрешение времени) —
+    # переход только осознанно, с прогоном golden replay.
+    "pandas>=2.3.2,<3",
+    "scipy>=1.11.0",
+    "scikit-learn>=1.0.0",  # нужен hmmlearn (детектор режима рынка)
+    "hmmlearn>=0.3.2",
+    # Датасеты SAC: Parquet + ZSTD (ADR-001); кодек ZSTD встроен в pyarrow.
+    'pyarrow>=21.0; sys_platform != "darwin" or platform_machine != "x86_64"',
+    'pyarrow>=17,<20; sys_platform == "darwin" and platform_machine == "x86_64"',
+    # AI и ML
+    "anthropic>=0.30.0",
+    "openai>=1.0.0",
+    "torch>=2.0.0",
+    "stable-baselines3>=2.3.2",
+    "gymnasium>=0.29.1",
+    "optuna>=3.6.0",
+    "chronos-forecasting>=1.4.0",
+    "transformers>=4.41.0",
+    # настроение и новости
+    "vaderSentiment==3.3.2",
+    "twscrape>=0.16.0",
+    "telethon>=1.36",
+    "praw>=7.7.0",
+    "newsapi-python==0.2.7",
+    "feedparser>=6.0.8",
+    "beautifulsoup4>=4.12",
+    # сеть, хранение, API
+    "aiohttp>=3.9",
+    "httpx>=0.25",  # ещё и Telegram Bot API (уведомления)
+    "tenacity>=8.2.0",
+    "redis==5.0.1",
+    "fastapi>=0.110.0",
+    "uvicorn>=0.29.0",
+    "websockets>=12.0",  # без неё API не принимает /ws: приложение теряет поток событий
+    "prometheus-client>=0.20.0",
+    "cryptography>=41.0",  # зашифрованное хранилище ключей (Fernet)
+    "python-dotenv==1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.2.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=5.0.0",
+    "hypothesis>=6.0.0",
+    "black==24.10.0",
+    "ruff>=0.6",
+    "mypy>=1.9.0",
+    "types-redis",
+    "import-linter>=2.0",
+]
+# Необязательное: без них бот работает, соответствующая функция недоступна.
+onnx = ["onnx>=1.16", "onnxruntime>=1.18"]  # экспорт и инференс актора SAC
+fast = ["orjson>=3.9"]  # быстрый JSON для шины событий
+# TimesFM ставится ОТДЕЛЬНО, в своё окружение:
+#   python3.11 -m venv .venv-timesfm
+#   .venv-timesfm/bin/pip install "timesfm[torch]" "numpy<2"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["bitbot*"]
+
+# ── форматирование и линтеры ─────────────────────────────────────────────────
+
+[tool.black]
+line-length = 88
+target-version = ["py311"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+# pycodestyle, pyflakes, сортировка импортов, именование, явные return
+select = ["E", "F", "W", "I", "N", "RET"]
+ignore = [
+    "E501",    # длину кода держит black; длинные комментарии и строки допустимы
+    "N806",    # переменные-классы моков в тестах с большой буквы
+    "N818",    # исключения названы по смыслу (SecretsDisabled), суффикс Error не обязателен
+    "E741",    # l — low свечи, принятое обозначение (c, h, l, v)
+    "RET504",  # «лишняя переменная перед return» часто делает код понятнее
+    "RET505", "RET506", "RET507", "RET508",  # else после return — дело вкуса
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["bitbot", "tests"]
+
+[tool.ruff.lint.per-file-ignores]
+"bitbot/ai/reliability/*.py" = ["N803"]  # X, Xtr, Xte — матрица признаков (ML)
+"bitbot/api/__main__.py" = ["E402"]  # .env загружается до импорта приложения
+"bitbot/workers/supervisor.py" = ["E402"]  # логирование настраивается до импортов
+"tests/**/*.py" = ["E402", "N802", "N812"]  # алиасы модулей (RP, SC…), фабрики L/V
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+no_strict_optional = true
+warn_unused_ignores = false
+warn_return_any = false
+
+# ── тесты ────────────────────────────────────────────────────────────────────
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+    "integration: integration tests against Bybit testnet (require API credentials)",
+]
+
+[tool.coverage.run]
+source = ["bitbot"]
+omit = [
+    "*/bitbot/workers/bot.py",
+    "*/bitbot/workers/health_server.py",
+    "*/bitbot/adapters/telegram/notifier.py",
+    "*/bitbot/adapters/sentiment/news_analyzer.py",
+    "*/bitbot/market/market_scanner.py",
+    "*/bitbot/market/data_loader.py",
+    "*/bitbot/infra/logger.py",
+    "*/bitbot/research/portfolio_optimizer.py",
+    "*/bitbot/market/regime_detector.py",
+    "*/bitbot/research/backtest.py",
+    "*/bitbot/research/ai_signal_isolation_backtest.py",
+    "*/bitbot/research/backtest_live_divergence.py",
+    "*/bitbot/research/paper_alpha_report.py",
+]
+
+[tool.coverage.report]
+skip_empty = true
+show_missing = true
+
+# ── правила слоёв (lint-imports) ─────────────────────────────────────────────
+# Верхний слой может импортировать нижний, нижний верхний — нет. Новое нарушение
+# роняет CI. ignore_imports — известный долг: каждое разбирается в фазе 4
+# (внутренняя структура) и удаляется отсюда.
+
+[tool.importlinter]
+root_package = "bitbot"
+
+[[tool.importlinter.contracts]]
+name = "Слои backend"
+type = "layers"
+layers = [
+    "bitbot.workers",
+    "bitbot.api",
+    "bitbot.ops",
+    "bitbot.research",
+    "bitbot.execution",
+    "bitbot.risk",
+    "bitbot.domain",
+    "bitbot.ml",
+    "bitbot.ai",
+    "bitbot.market",
+    "bitbot.adapters",
+    "bitbot.storage",
+    "bitbot.config",
+    "bitbot.infra",
+]
+ignore_imports = [
+    "bitbot.adapters.exchange.bybit -> bitbot.execution.reliability",
+    "bitbot.market.ws.private -> bitbot.execution.reliability",
+    "bitbot.ai.analyzer -> bitbot.domain.strategies",
+    "bitbot.ai.ledger_rag -> bitbot.domain.decision.explain",
+    "bitbot.ai.ledger_rag -> bitbot.research.signal_intelligence_report",
+    "bitbot.api.routers.control -> bitbot.workers.jobs",
+    "bitbot.config.registry -> bitbot.ai.providers",
+    "bitbot.config.runtime -> bitbot.ai.providers",
+    "bitbot.config.runtime -> bitbot.domain.strategies",
+    "bitbot.config.secrets -> bitbot.ai.providers",
+    "bitbot.execution.order_executor -> bitbot.research.portfolio_optimizer",
+]

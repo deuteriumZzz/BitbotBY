@@ -146,7 +146,7 @@ docker compose restart bot
 
 ```bash
 # Запустить свежий бэктест для выбора лучшей стратегии
-docker compose exec bot python -m src.research.backtest
+docker compose exec bot python -m bitbot.research.backtest
 
 # После бэктеста — сменить стратегию в .env
 # ACTIVE_STRATEGY=<лучшая из бэктеста>

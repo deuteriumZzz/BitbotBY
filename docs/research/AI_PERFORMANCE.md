@@ -6,7 +6,7 @@
 `provider`, `model`, `latency_ms`, `attempts[]` (кто отказал и почему), `prompt_sha256`, `prompt_version`, `n_symbols`, `n_signals`, `schema_audit` (строгая проверка в тени), `injection_flags`, `strict_dropped`, `raw` (до 8 000 символов). Рекомендация в сделке несёт `ai_provider`/`ai_model`.
 
 ## Как смотреть
-- `python -m src.research.signal_intelligence_report` — раздел «AI-вызовы»: ответили, цепочка исчерпана, доля fallback, отказы по статусам, задержка mean/p95.
+- `python -m bitbot.research.signal_intelligence_report` — раздел «AI-вызовы»: ответили, цепочка исчерпана, доля fallback, отказы по статусам, задержка mean/p95.
 - Telegram `/digest [часы]` — сводка и тревоги (цепочка исчерпана в > 50% вызовов).
 - `src/ai_infra/health.provider_health` — по провайдеру: ответы, отказы, доля успеха, p95.
 
@@ -15,7 +15,7 @@
 - Ответы разных провайдеров и разных версий промпта не смешиваются в статистике: ключ группировки — `(provider, model, prompt_version)`.
 
 ## Защита вывода
-Строгая схема (`src/ai_infra/schema.py`): неизвестные поля, выдуманные цены (>2% от snapshot), SL/TP не с той стороны — отказ. В бою за флагом `AI_STRICT_VALIDATION` (по умолчанию тень). Заголовки новостей и RAG — недоверенные данные (`AI_SANITIZE_PROMPT`, `AI_RAG_CONTEXT`).
+Строгая схема (`backend/bitbot/ai/schema.py`): неизвестные поля, выдуманные цены (>2% от snapshot), SL/TP не с той стороны — отказ. В бою за флагом `AI_STRICT_VALIDATION` (по умолчанию тень). Заголовки новостей и RAG — недоверенные данные (`AI_SANITIZE_PROMPT`, `AI_RAG_CONTEXT`).
 
 ## Стоимость
 Токены в журнале не хранятся, поэтому `estimate_cost` принимает их снаружи; модель без цены → `None`. Для учёта стоимости нужно писать токены в `ai_call` (не сделано).

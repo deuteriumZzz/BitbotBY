@@ -6,8 +6,8 @@
 По признакам сигнала (Local + SAC + волатильность + стакан) оценить вероятность, что сделка закроется в плюс. Эта вероятность — не «уверенность» LLM, не величина действия SAC и не прогноз: это отдельная величина, пригодная для размера позиции только после доказанной калибровки.
 
 ## Реализация
-- `src/reliability/meta_model.py`: логистическая регрессия на numpy (L2); LightGBM — необязательный адаптер (зависимость не добавлена).
-- `src/reliability/calibration.py`: Brier, ECE, reliability-корзины, Platt (демпфированный Ньютон), isotonic (PAV). Калибратор обучается только на validation.
+- `backend/bitbot/ai/reliability/meta_model.py`: логистическая регрессия на numpy (L2); LightGBM — необязательный адаптер (зависимость не добавлена).
+- `backend/bitbot/ai/reliability/calibration.py`: Brier, ECE, reliability-корзины, Platt (демпфированный Ньютон), isotonic (PAV). Калибратор обучается только на validation.
 - Дисциплина выборок: train → обучение, validation → калибровка, test → оценка один раз.
 
 ## Вердикт `usable`

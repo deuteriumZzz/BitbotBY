@@ -5,7 +5,6 @@ name: bitbotby
 
 x-bot-env: &bot-env
   REDIS_HOST: redis
-  PYTHONPATH: /app
   PAPER_TRADING: "true"
   # Адрес MiniApp (https): подставляет лаунчер при «phone on»; пусто — кнопки приложения в Telegram нет.
   WEBAPP_URL: ${WEBAPP_URL:-}
@@ -32,7 +31,7 @@ services:
   bot:
     build: .
     restart: unless-stopped
-    command: python supervisor.py
+    command: python -m bitbot.workers.supervisor
     # Потолок ресурсов контейнера бота (0 = без лимита); см. docker-compose.server.yml.
     cpus: ${BOT_CPUS:-0}
     mem_limit: ${BOT_MEM_LIMIT:-0}
@@ -56,11 +55,10 @@ services:
     cpus: ${TRAINER_CPUS:-0}
     mem_limit: ${TRAINER_MEM_LIMIT:-0}
     environment:
-      PYTHONPATH: /app
       HEAVY_JOB_NICE: "10"
       HEAVY_JOB_THREADS: ${TRAINER_THREADS:-2}
     command: >-
-      python -m reinforcement_learning.train_sac_v2
+      python -m bitbot.ml.train_sac_v2
       --csv ${TRAIN_CSV:-data/ohlcv.csv}
       --symbol ${TRAIN_SYMBOL:-BTC/USDT}
       --timeframe ${TRAIN_TIMEFRAME:-15m}
@@ -75,7 +73,7 @@ services:
   dashboard:
     build: .
     restart: unless-stopped
-    command: python dashboard.py
+    command: python -m bitbot.api
     ports:
       - "127.0.0.1:${BITBOT_PORT:-8080}:8080"
     environment:

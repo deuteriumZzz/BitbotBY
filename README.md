@@ -133,8 +133,8 @@ python3 launcher/launch.py server --domain=bot.example.com
 Нужны Python 3.11, Redis и Node.js 20+.
 
 ```bash
-python -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
+python3.11 -m venv .venv && source .venv/bin/activate
+pip install -e "backend[dev]"
 make webapp        # собрать приложение
 make local         # бот + дашборд: http://localhost:8080/app/
 ```
@@ -182,19 +182,19 @@ flowchart LR
 
 | # | Шаг | Что делает |
 |---|---|---|
-| 1 | **Снэпшоты** ([cycle.py](src/core/cycle.py)) | OHLCV → индикаторы (RSI/MACD/BB/ATR/тренд) + новостной сентимент на монету |
+| 1 | **Снэпшоты** ([cycle.py](backend/bitbot/workers/cycle.py)) | OHLCV → индикаторы (RSI/MACD/BB/ATR/тренд) + новостной сентимент на монету |
 | 2 | **Prescore** | `score = vol×0.35 + rsi×0.30 + atr×0.20 + regime_bonus×0.15` → топ-30 в AI |
-| 3 | **Рыночный контекст** ([market_context.py](src/market/market_context.py)) | 13 сигналов: funding, OI+ликвидации, F&G, basis, orderbook, Deribit PCR/IV, Google Trends, Glassnode, ETF flows, Reddit (CryptoBERT), stablecoin supply |
-| 4 | **SignalCombiner** ([signal_combiner.py](src/core/signal_combiner.py)) | `local` / `ai` / `dqn` / **`hybrid`** (SAC+AI согласие, вес зависит от режима: trending 50/50, ranging 40/60) / **`hybrid+Chronos`** (±0.05…0.15 модификатор) |
+| 3 | **Рыночный контекст** ([market_context.py](backend/bitbot/market/market_context.py)) | 13 сигналов: funding, OI+ликвидации, F&G, basis, orderbook, Deribit PCR/IV, Google Trends, Glassnode, ETF flows, Reddit (CryptoBERT), stablecoin supply |
+| 4 | **SignalCombiner** ([signal_combiner.py](backend/bitbot/domain/signals/combiner.py)) | `local` / `ai` / `dqn` / **`hybrid`** (SAC+AI согласие, вес зависит от режима: trending 50/50, ranging 40/60) / **`hybrid+Chronos`** (±0.05…0.15 модификатор) |
 | 5 | **Контекстный фильтр** | Каждый из 13 сигналов двигает confidence на ±0.05…0.15 (напр. F&G ≤15 + каскад ликвидаций → confidence = 0) |
 | 6 | **Прямые контекстные сигналы** | Экстремумы (funding overheated, squeeze, imbalance >0.4, F&G ≤10/≥92) генерируют отдельные сигналы |
 | 7 | **Локальный fallback** | Если сигналов нет — индикаторная стратегия, TP шире в тренде, уже в боковике |
 | 8 | **Приоритизация** | `composite_score = confidence × (1+tp_bonus) × (1+volume_bonus) × regime_mult` |
-| 9 | **Portfolio allocation** | CVaR/Markowitz ([portfolio_optimizer.py](src/research/portfolio_optimizer.py)) при ≥2 сигналах, cap ×3 |
-| 10 | **Execution guards** ([order_executor.py](src/core/order_executor.py)) | macro blackout → слоты/cooldown → торговые часы → дубликат символа → **correlation guard** → подтверждение в Telegram → **liquidity filter** → валидация SL/TP → **Kelly sizing** → drawdown scaling → **Almgren-Chriss** → dynamic leverage → ордер |
+| 9 | **Portfolio allocation** | CVaR/Markowitz ([portfolio_optimizer.py](backend/bitbot/research/portfolio_optimizer.py)) при ≥2 сигналах, cap ×3 |
+| 10 | **Execution guards** ([order_executor.py](backend/bitbot/execution/order_executor.py)) | macro blackout → слоты/cooldown → торговые часы → дубликат символа → **correlation guard** → подтверждение в Telegram → **liquidity filter** → валидация SL/TP → **Kelly sizing** → drawdown scaling → **Almgren-Chriss** → dynamic leverage → ордер |
 | 11 | **После открытия** | PositionMonitor каждые 5с: те же 13 сигналов контекста управляют выходом (force_close / tighten_sl) |
 
-**Отдельный путь — доверенные каналы Telegram** ([trusted_trader.py](src/core/trusted_trader.py)). Пост канала,
+**Отдельный путь — доверенные каналы Telegram** ([trusted_trader.py](backend/bitbot/execution/trusted_trader.py)). Пост канала,
 которому вы доверяете, сразу идёт в ордер: сканер, стратегии, AI и фильтры этой таблицы его не отклоняют. Защиты
 остаются: пауза, дневной лимит убытка, стоп всегда, свой риск и свои слоты, Paper остаётся Paper. Выключено по
 умолчанию — см. [FAQ](#-faq).
@@ -283,7 +283,7 @@ src/
   settings/      — настройки во время работы, реестр параметров, шифрованное хранилище ключей, вход
   infra/         — Redis, шина событий, логи, health, фоновые задачи
   dashboard/     — FastAPI: API, WebSocket, приложение /app/
-  research/      — бэктесты и отчёты: python -m src.research.backtest и др.
+  research/      — бэктесты и отчёты: python -m bitbot.research.backtest и др.
 reinforcement_learning/ — SAC: среда, обучение, подбор гиперпараметров
 webapp/          — приложение (React + Vite + TypeScript), собирается в образ Docker
 tests/           — тесты по тем же папкам, что и src/ (+ launcher/, integration/ для testnet)
@@ -475,14 +475,14 @@ make ai-isolation       # даёт ли AI-слой edge поверх голых
 
 ```bash
 make test                     # pytest с покрытием (порог 50%)
-make lint                     # flake8 + mypy
-make fmt                      # black + isort
+make lint                     # ruff + lint-imports + mypy
+make fmt                      # black + сортировка импортов (ruff)
 cd webapp && npx vitest run   # тесты приложения
 ```
 
 **2012 тестов бэкенда** (индикаторы, стратегии и порты из Argent, риск, CVaR, Kelly, Almgren-Chriss, SAC-инференс,
 монитор позиций, настройки, API приложения и вход, лаунчер, e2e цикл) и **77 тестов приложения** (vitest).
-CI проверяет black, isort, flake8, mypy, компиляцию и тесты. Настройки инструментов — в `pyproject.toml` и `setup.cfg`.
+CI проверяет black, ruff, mypy, слои импортов (lint-imports) и тесты. Зависимости и настройки инструментов — в `backend/pyproject.toml`.
 
 <details>
 <summary>Все команды Makefile</summary>

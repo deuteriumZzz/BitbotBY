@@ -8,7 +8,7 @@
 - На Mac с Intel `torch` не новее 2.2.2; в нём `scaled_dot_product_attention` возвращает NaN на полностью замаскированных строках. Воркер подменяет NaN нулями (как делают новые torch). Заплатка — снять при смене железа.
 
 ## Метод
-`src/reliability/forecast_eval.py`: общие точки отсчёта и горизонты для всех моделей, в истории только прошлое (look-ahead исключён), базисы naive / seasonal naive / MA, метрики MAE, RMSE, MASE, pinball, coverage, directional accuracy. Ансамблевые веса — только по validation, test один раз (правило ТЗ).
+`backend/bitbot/ai/reliability/forecast_eval.py`: общие точки отсчёта и горизонты для всех моделей, в истории только прошлое (look-ahead исключён), базисы naive / seasonal naive / MA, метрики MAE, RMSE, MASE, pinball, coverage, directional accuracy. Ансамблевые веса — только по validation, test один раз (правило ТЗ).
 
 ## Первое измерение (BTC/ETH 15m, 1000 свечей, 40 точек отсчёта)
 | Актив / горизонт | MASE naive | MASE TimesFM | покрытие p10–p90 (номинал 0.80) |

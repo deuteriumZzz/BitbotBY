@@ -17,25 +17,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python deps first (layer caching)
-COPY requirements.txt .
+# Зависимости отдельным слоем (кэш): список берётся из backend/pyproject.toml
+COPY backend/pyproject.toml backend/pyproject.toml
 # CPU-only torch — избегаем скачивания 1GB+ CUDA библиотек
 RUN pip install --no-cache-dir --timeout 300 \
     "torch>=2.0.0" --extra-index-url https://download.pytorch.org/whl/cpu
-RUN pip install --no-cache-dir --timeout 300 -r requirements.txt
+RUN python -c "import tomllib; print('\\n'.join(tomllib.load(open('backend/pyproject.toml','rb'))['project']['dependencies']))" > /tmp/deps.txt \
+    && pip install --no-cache-dir --timeout 300 -r /tmp/deps.txt
 
-# Copy source
+# Код: пакет bitbot ставится без зависимостей (они уже в слое выше)
 COPY . .
+RUN pip install --no-cache-dir --no-deps ./backend
 COPY --from=webapp /webapp/dist ./webapp/dist
 
 # Create data directory
 RUN mkdir -p data/cache models logs
 
-# Ensure imports work
-ENV PYTHONPATH=/app
 # В контейнере сервисы слушают все интерфейсы сети Docker; вне Docker — 127.0.0.1.
 ENV BIND_HOST=0.0.0.0
 
 EXPOSE 8080
 
-CMD ["python", "supervisor.py"]
+CMD ["python", "-m", "bitbot.workers.supervisor"]
