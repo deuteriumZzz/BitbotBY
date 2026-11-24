@@ -29,13 +29,12 @@ def _walk(n: int = 1100, seed: int = 7) -> pd.DataFrame:
 
 
 def test_strategy_lives_in_its_family_folder():
-    # папка = market_type, файл: main — основные, experimental — порты Argent
+    # папка = market_type; main — основные, experimental/indicators — порты Argent
     assert len(STRATEGY_REGISTRY) == 69
     for name, cls in STRATEGY_REGISTRY.items():
-        kind = "experimental" if cls.experimental else "main"
-        assert (
-            cls.__module__ == f"bitbot.domain.strategies.{cls.market_type}.{kind}"
-        ), name
+        files = ("experimental", "indicators") if cls.experimental else ("main",)
+        mods = {f"bitbot.domain.strategies.{cls.market_type}.{f}" for f in files}
+        assert cls.__module__ in mods, name
 
 
 def test_all_ports_are_registered_with_market_flags():

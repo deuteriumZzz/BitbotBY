@@ -22,6 +22,7 @@ import ccxt
 import pytest
 
 from bitbot.domain.order_states import Placed, Rejected
+from tests.conftest import monitor_config
 
 # ---------------------------------------------------------------------------
 # Factory helpers
@@ -80,7 +81,7 @@ def _make_monitor(
 
     set_running = MagicMock()
 
-    with patch("bitbot.execution.position_monitor.Config", cfg):
+    with monitor_config(cfg):
         from bitbot.execution.position_monitor import PositionMonitor
 
         monitor = PositionMonitor(
@@ -161,7 +162,7 @@ async def _run_one_cycle(
     lock = asyncio.Lock()
 
     with (
-        patch("bitbot.execution.position_monitor.Config", cfg),
+        monitor_config(cfg),
         patch("asyncio.sleep", new=AsyncMock()),
     ):
         await monitor.run(_is_running, monitored, lock)
@@ -329,7 +330,7 @@ class TestCBStatePersistence:
         redis = MagicMock()
         redis.load_trading_state = MagicMock(return_value={"consecutive_losses": 3})
         cfg = _make_cfg()
-        with patch("bitbot.execution.position_monitor.Config", cfg):
+        with monitor_config(cfg):
             from bitbot.execution.position_monitor import PositionMonitor
 
             monitor = PositionMonitor(
@@ -346,7 +347,7 @@ class TestCBStatePersistence:
         redis = MagicMock()
         redis.load_trading_state = MagicMock(return_value=None)
         cfg = _make_cfg()
-        with patch("bitbot.execution.position_monitor.Config", cfg):
+        with monitor_config(cfg):
             from bitbot.execution.position_monitor import PositionMonitor
 
             monitor = PositionMonitor(
@@ -364,7 +365,7 @@ class TestCBStatePersistence:
         redis.load_trading_state = MagicMock(return_value=None)
         redis.save_trading_state = MagicMock()
         cfg = _make_cfg()
-        with patch("bitbot.execution.position_monitor.Config", cfg):
+        with monitor_config(cfg):
             from bitbot.execution.position_monitor import PositionMonitor
 
             monitor = PositionMonitor(
@@ -403,14 +404,14 @@ class TestApplyTrailingStopEdgeCases:
     def test_zero_atr_returns_same_pos(self):
         monitor, cfg = self._monitor_with_mult(1.0)
         pos = _open_pos(side="buy", sl=49000, atr=0.0)
-        with patch("bitbot.execution.position_monitor.Config", cfg):
+        with monitor_config(cfg):
             result = monitor._apply_trailing_stop("BTC/USDT", pos, 51000.0)
         assert result is pos
 
     def test_zero_mult_returns_same_pos(self):
         monitor, cfg = self._monitor_with_mult(0.0)
         pos = _open_pos(side="buy", sl=49000, atr=500.0)
-        with patch("bitbot.execution.position_monitor.Config", cfg):
+        with monitor_config(cfg):
             result = monitor._apply_trailing_stop("BTC/USDT", pos, 51000.0)
         assert result is pos
 
@@ -418,7 +419,7 @@ class TestApplyTrailingStopEdgeCases:
         """Buy: trail=48000 < current_sl=49000 → no update."""
         monitor, cfg = self._monitor_with_mult(1.0)
         pos = _open_pos(side="buy", sl=49000, atr=2000.0)  # trail=50000-2000=48000
-        with patch("bitbot.execution.position_monitor.Config", cfg):
+        with monitor_config(cfg):
             result = monitor._apply_trailing_stop("BTC/USDT", pos, 50000.0)
         assert result is pos
 
@@ -426,7 +427,7 @@ class TestApplyTrailingStopEdgeCases:
         """Sell: trail=51500 > current_sl=51000 → no update."""
         monitor, cfg = self._monitor_with_mult(1.0)
         pos = _open_pos(side="sell", sl=51000, atr=1500.0)  # trail=49000+1500=50500
-        with patch("bitbot.execution.position_monitor.Config", cfg):
+        with monitor_config(cfg):
             result = monitor._apply_trailing_stop("BTC/USDT", pos, 49000.0)
         # trail=49000+1500=50500 < 51000 → should update
         assert result["stop_loss"] == pytest.approx(50500.0)
@@ -435,7 +436,7 @@ class TestApplyTrailingStopEdgeCases:
         """Buy: trail=50500 > sl=49000 → SL raised to 50500."""
         monitor, cfg = self._monitor_with_mult(1.0)
         pos = _open_pos(side="buy", sl=49000, atr=500.0)
-        with patch("bitbot.execution.position_monitor.Config", cfg):
+        with monitor_config(cfg):
             result = monitor._apply_trailing_stop("BTC/USDT", pos, 51000.0)
         assert result is not pos
         assert result["stop_loss"] == pytest.approx(50500.0)
@@ -455,7 +456,7 @@ class TestCheckPartialTp:
         pos = _open_pos(entry=50000, tp=55000, sl=48000, qty=0.1)
         lock = asyncio.Lock()
         monitored = {"BTC/USDT": dict(pos)}
-        with patch("bitbot.execution.position_monitor.Config", cfg):
+        with monitor_config(cfg):
             result = await monitor._check_partial_tp(
                 "BTC/USDT", pos, 53000.0, monitored, lock
             )
@@ -470,7 +471,7 @@ class TestCheckPartialTp:
         )
         lock = asyncio.Lock()
         monitored = {"BTC/USDT": dict(pos)}
-        with patch("bitbot.execution.position_monitor.Config", cfg):
+        with monitor_config(cfg):
             result = await monitor._check_partial_tp(
                 "BTC/USDT", pos, 53000.0, monitored, lock
             )
@@ -485,7 +486,7 @@ class TestCheckPartialTp:
         pos = _open_pos(side="buy", entry=50000, tp=55000, sl=48000, qty=0.1)
         lock = asyncio.Lock()
         monitored = {"BTC/USDT": dict(pos)}
-        with patch("bitbot.execution.position_monitor.Config", cfg):
+        with monitor_config(cfg):
             result = await monitor._check_partial_tp(
                 "BTC/USDT", pos, 52000.0, monitored, lock
             )
@@ -501,7 +502,7 @@ class TestCheckPartialTp:
         pos = _open_pos(side="buy", entry=50000, tp=55000, sl=48000, qty=0.1)
         lock = asyncio.Lock()
         monitored = {"BTC/USDT": dict(pos)}
-        with patch("bitbot.execution.position_monitor.Config", cfg):
+        with monitor_config(cfg):
             result = await monitor._check_partial_tp(
                 "BTC/USDT", pos, 53500.0, monitored, lock
             )
@@ -519,7 +520,7 @@ class TestCheckPartialTp:
         pos = _open_pos(side="sell", entry=50000, tp=45000, sl=52000, qty=0.1)
         lock = asyncio.Lock()
         monitored = {"BTC/USDT": dict(pos)}
-        with patch("bitbot.execution.position_monitor.Config", cfg):
+        with monitor_config(cfg):
             result = await monitor._check_partial_tp(
                 "BTC/USDT", pos, 46500.0, monitored, lock
             )
@@ -543,7 +544,7 @@ class TestCheckPartialTp:
         )
         lock = asyncio.Lock()
         monitored = {"BTC/USDT": dict(pos)}
-        with patch("bitbot.execution.position_monitor.Config", cfg):
+        with monitor_config(cfg):
             result = await monitor._check_partial_tp(
                 "BTC/USDT", pos, 53500.0, monitored, lock
             )
@@ -577,7 +578,7 @@ class TestCheckPartialTp:
         )
         lock = asyncio.Lock()
         monitored = {"BTC/USDT": dict(pos)}
-        with patch("bitbot.execution.position_monitor.Config", cfg):
+        with monitor_config(cfg):
             result = await monitor._check_partial_tp(
                 "BTC/USDT", pos, 53500.0, monitored, lock
             )
@@ -606,7 +607,7 @@ class TestCheckPartialTp:
         )
         lock = asyncio.Lock()
         monitored = {"BTC/USDT": dict(pos)}
-        with patch("bitbot.execution.position_monitor.Config", cfg):
+        with monitor_config(cfg):
             await monitor._check_partial_tp("BTC/USDT", pos, 53500.0, monitored, lock)
         monitor._telegram.notify.assert_awaited_once()
         msg = monitor._telegram.notify.await_args.args[0]
@@ -631,7 +632,7 @@ class TestCheckPartialTp:
         )
         lock = asyncio.Lock()
         monitored = {"BTC/USDT": dict(pos)}
-        with patch("bitbot.execution.position_monitor.Config", cfg):
+        with monitor_config(cfg):
             result = await monitor._check_partial_tp(
                 "BTC/USDT", pos, 53500.0, monitored, lock
             )
@@ -651,7 +652,7 @@ class TestCheckPartialTp:
         pos = _open_pos(side="buy", entry=50000, tp=0.0, sl=48000, qty=0.1)
         lock = asyncio.Lock()
         monitored = {"BTC/USDT": dict(pos)}
-        with patch("bitbot.execution.position_monitor.Config", cfg):
+        with monitor_config(cfg):
             result = await monitor._check_partial_tp(
                 "BTC/USDT", pos, 53500.0, monitored, lock
             )
@@ -667,7 +668,7 @@ class TestCheckPartialTp:
         pos = _open_pos()
         lock = asyncio.Lock()
         monitored = {"BTC/USDT": dict(pos)}
-        with patch("bitbot.execution.position_monitor.Config", cfg):
+        with monitor_config(cfg):
             # Should not raise
             result = await monitor._check_partial_tp(
                 "BTC/USDT", pos, 53500.0, monitored, lock
@@ -698,7 +699,7 @@ class TestCloseLosersTightenWinners:
         )
         lock = asyncio.Lock()
         monitored = {"BTC/USDT": dict(pos)}
-        with patch("bitbot.execution.position_monitor.Config", cfg):
+        with monitor_config(cfg):
             await monitor.close_losers_tighten_winners(
                 monitored, lock, {"BTC/USDT": 51000.0}
             )
@@ -726,7 +727,7 @@ class TestCloseLosersTightenWinners:
         )
         lock = asyncio.Lock()
         monitored = {"BTC/USDT": dict(pos)}
-        with patch("bitbot.execution.position_monitor.Config", cfg):
+        with monitor_config(cfg):
             await monitor.close_losers_tighten_winners(
                 monitored, lock, {"BTC/USDT": 51000.0}
             )
@@ -741,7 +742,7 @@ class TestCloseLosersTightenWinners:
         pos = _open_pos(side="buy", entry=50000, sl=48000, tp=55000, qty=0.1)
         lock = asyncio.Lock()
         monitored = {"BTC/USDT": dict(pos)}
-        with patch("bitbot.execution.position_monitor.Config", cfg):
+        with monitor_config(cfg):
             await monitor.close_losers_tighten_winners(
                 monitored, lock, {"BTC/USDT": 49000.0}
             )
@@ -774,7 +775,7 @@ class TestCheckAndCloseLive:
         )
         lock = asyncio.Lock()
         monitored = {"BTC/USDT": dict(pos)}
-        with patch("bitbot.execution.position_monitor.Config", cfg):
+        with monitor_config(cfg):
             closed = await monitor._check_and_close(
                 "BTC/USDT", pos, 48000.0, monitored, lock
             )
@@ -801,7 +802,7 @@ class TestCheckAndCloseLive:
         )
         lock = asyncio.Lock()
         monitored = {"BTC/USDT": dict(pos)}
-        with patch("bitbot.execution.position_monitor.Config", cfg):
+        with monitor_config(cfg):
             closed = await monitor._check_and_close(
                 "BTC/USDT", pos, 48000.0, monitored, lock
             )
@@ -816,7 +817,7 @@ class TestCheckAndCloseLive:
         pos = _open_pos(side="buy", sl=49000, tp=55000, qty=0.01)
         lock = asyncio.Lock()
         monitored = {"BTC/USDT": dict(pos)}
-        with patch("bitbot.execution.position_monitor.Config", cfg):
+        with monitor_config(cfg):
             closed = await monitor._check_and_close(
                 "BTC/USDT", pos, 48000.0, monitored, lock
             )
@@ -835,7 +836,7 @@ class TestCheckAndCloseLive:
         pos = _open_pos(side="buy", sl=49000, tp=55000, qty=0.01, trade_id=77)
         lock = asyncio.Lock()
         monitored = {"BTC/USDT": dict(pos)}
-        with patch("bitbot.execution.position_monitor.Config", cfg):
+        with monitor_config(cfg):
             closed = await monitor._check_and_close(
                 "BTC/USDT", pos, 48000.0, monitored, lock
             )
@@ -854,7 +855,7 @@ class TestCheckAndCloseLive:
         pos = _open_pos(side="buy", sl=49000, tp=55000, qty=0.01, trade_id=42)
         lock = asyncio.Lock()
         monitored = {"BTC/USDT": dict(pos)}
-        with patch("bitbot.execution.position_monitor.Config", cfg):
+        with monitor_config(cfg):
             closed = await monitor._check_and_close(
                 "BTC/USDT", pos, 48000.0, monitored, lock
             )
@@ -870,7 +871,7 @@ class TestCheckAndCloseLive:
         pos = _open_pos(side="buy", entry=50000, sl=49000, tp=55000, qty=0.01)
         lock = asyncio.Lock()
         monitored = {"BTC/USDT": dict(pos)}
-        with patch("bitbot.execution.position_monitor.Config", cfg):
+        with monitor_config(cfg):
             await monitor._check_and_close("BTC/USDT", pos, 48000.0, monitored, lock)
         learner.on_trade_closed.assert_awaited_once()
 
@@ -882,7 +883,7 @@ class TestCheckAndCloseLive:
         pos = _open_pos(side="buy", sl=49000, tp=55000, qty=0.01, trade_id=None)
         lock = asyncio.Lock()
         monitored = {"BTC/USDT": dict(pos)}
-        with patch("bitbot.execution.position_monitor.Config", cfg):
+        with monitor_config(cfg):
             closed = await monitor._check_and_close(
                 "BTC/USDT", pos, 48000.0, monitored, lock
             )
@@ -898,7 +899,7 @@ class TestCheckAndCloseLive:
         pos = _open_pos(side="buy", sl=49000, tp=55000, qty=0.01)
         lock = asyncio.Lock()
         monitored = {"BTC/USDT": dict(pos)}
-        with patch("bitbot.execution.position_monitor.Config", cfg):
+        with monitor_config(cfg):
             await monitor._check_and_close("BTC/USDT", pos, 48000.0, monitored, lock)
         msg = monitor._telegram.notify.await_args.args[0]
         assert "Баланс" in msg or "1234" in msg
@@ -920,7 +921,7 @@ class TestCheckAndCloseLive:
         monitored = {"BTC/USDT": dict(pos)}
         save_mock = MagicMock()
         with (
-            patch("bitbot.execution.position_monitor.Config", cfg),
+            monitor_config(cfg),
             patch("bitbot.ml.experience_buffer.save", save_mock),
         ):
             await monitor._check_and_close("BTC/USDT", pos, 48000.0, monitored, lock)
@@ -935,7 +936,7 @@ class TestCheckAndCloseLive:
         pos = _open_pos(side="buy", sl=49000, tp=55000, qty=0.01)
         lock = asyncio.Lock()
         monitored = {"BTC/USDT": dict(pos)}
-        with patch("bitbot.execution.position_monitor.Config", cfg):
+        with monitor_config(cfg):
             closed = await monitor._check_and_close(
                 "BTC/USDT", pos, 51000.0, monitored, lock
             )
@@ -954,7 +955,7 @@ class TestUpdateCircuitBreaker:
         cfg = _make_cfg(cb_losses=0)
         monitor = _make_monitor(cfg=cfg)
         monitor._consecutive_losses = 0
-        with patch("bitbot.execution.position_monitor.Config", cfg):
+        with monitor_config(cfg):
             monitor._update_circuit_breaker("buy", 48000.0, 50000.0)
         assert monitor._consecutive_losses == 0
 
@@ -965,7 +966,7 @@ class TestUpdateCircuitBreaker:
         redis.save_trading_state = MagicMock()
         monitor = _make_monitor(cfg=cfg, redis=redis)
         monitor._consecutive_losses = 2
-        with patch("bitbot.execution.position_monitor.Config", cfg):
+        with monitor_config(cfg):
             monitor._update_circuit_breaker("buy", 52000.0, 50000.0)  # win
         assert monitor._consecutive_losses == 0
         redis.save_trading_state.assert_called()
@@ -974,7 +975,7 @@ class TestUpdateCircuitBreaker:
         cfg = _make_cfg(cb_losses=5)
         monitor = _make_monitor(cfg=cfg)
         monitor._consecutive_losses = 1
-        with patch("bitbot.execution.position_monitor.Config", cfg):
+        with monitor_config(cfg):
             monitor._update_circuit_breaker("buy", 48000.0, 50000.0)  # loss
         assert monitor._consecutive_losses == 2
 
@@ -984,7 +985,7 @@ class TestUpdateCircuitBreaker:
         monitor = _make_monitor(cfg=cfg)
         monitor._consecutive_losses = 2
         with (
-            patch("bitbot.execution.position_monitor.Config", cfg),
+            monitor_config(cfg),
             patch(
                 "asyncio.create_task",
                 return_value=MagicMock(add_done_callback=MagicMock()),
@@ -1000,7 +1001,7 @@ class TestUpdateCircuitBreaker:
         monitor = _make_monitor(cfg=cfg)
         monitor._consecutive_losses = 2
         with (
-            patch("bitbot.execution.position_monitor.Config", cfg),
+            monitor_config(cfg),
             patch(
                 "asyncio.create_task",
                 return_value=MagicMock(add_done_callback=MagicMock()),
@@ -1014,7 +1015,7 @@ class TestUpdateCircuitBreaker:
         cfg = _make_cfg(cb_losses=3)
         monitor = _make_monitor(cfg=cfg)
         monitor._consecutive_losses = 2
-        with patch("bitbot.execution.position_monitor.Config", cfg):
+        with monitor_config(cfg):
             monitor._update_circuit_breaker(
                 "sell", 48000.0, 50000.0
             )  # win (price fell)
@@ -1025,7 +1026,7 @@ class TestUpdateCircuitBreaker:
         cfg = _make_cfg(cb_losses=5)
         monitor = _make_monitor(cfg=cfg)
         monitor._consecutive_losses = 0
-        with patch("bitbot.execution.position_monitor.Config", cfg):
+        with monitor_config(cfg):
             monitor._update_circuit_breaker("sell", 52000.0, 50000.0)  # loss
         assert monitor._consecutive_losses == 1
 
@@ -1060,7 +1061,7 @@ class TestRunErrorHandling:
             return calls[0] == 1  # True once, then False
 
         with (
-            patch("bitbot.execution.position_monitor.Config", cfg),
+            monitor_config(cfg),
             patch("asyncio.sleep", new=AsyncMock()),
         ):
             await monitor.run(_is_running, monitored, lock)
@@ -1083,7 +1084,7 @@ class TestRunErrorHandling:
             return calls[0] == 1
 
         with (
-            patch("bitbot.execution.position_monitor.Config", cfg),
+            monitor_config(cfg),
             patch("asyncio.sleep", new=AsyncMock()),
         ):
             await monitor.run(_is_running, monitored, lock)
@@ -1108,7 +1109,7 @@ class TestRunErrorHandling:
             return calls[0] == 1
 
         with (
-            patch("bitbot.execution.position_monitor.Config", cfg),
+            monitor_config(cfg),
             patch("asyncio.sleep", new=AsyncMock()),
         ):
             await monitor.run(_is_running, monitored, lock)
@@ -1138,7 +1139,7 @@ class TestRunErrorHandling:
             return run_count[0] <= max_runs
 
         with (
-            patch("bitbot.execution.position_monitor.Config", cfg),
+            monitor_config(cfg),
             patch("asyncio.sleep", new=AsyncMock()),
             patch(
                 "asyncio.create_task",
@@ -1170,7 +1171,7 @@ class TestRunErrorHandling:
             return run_count[0] <= max_runs
 
         with (
-            patch("bitbot.execution.position_monitor.Config", cfg),
+            monitor_config(cfg),
             patch("asyncio.sleep", new=AsyncMock()),
             patch(
                 "asyncio.create_task",
@@ -1208,7 +1209,7 @@ class TestRunErrorHandling:
             return calls[0] == 1
 
         with (
-            patch("bitbot.execution.position_monitor.Config", cfg),
+            monitor_config(cfg),
             patch("asyncio.sleep", new=AsyncMock()),
         ):
             await monitor.run(_is_running, monitored, lock)
@@ -1236,7 +1237,7 @@ class TestRunErrorHandling:
             return calls[0] == 1
 
         with (
-            patch("bitbot.execution.position_monitor.Config", cfg),
+            monitor_config(cfg),
             patch("asyncio.sleep", new=AsyncMock()),
         ):
             await monitor.run(_is_running, monitored, lock)
@@ -1266,7 +1267,7 @@ class TestRunErrorHandling:
             return calls[0] == 1
 
         with (
-            patch("bitbot.execution.position_monitor.Config", cfg),
+            monitor_config(cfg),
             patch("asyncio.sleep", new=AsyncMock()),
         ):
             await monitor.run(_is_running, monitored, lock)
@@ -1300,7 +1301,7 @@ class TestRunErrorHandling:
             return runs[0] <= 2  # two iterations
 
         with (
-            patch("bitbot.execution.position_monitor.Config", cfg),
+            monitor_config(cfg),
             patch("asyncio.sleep", new=AsyncMock()),
         ):
             await monitor.run(_is_running, monitored, lock)
@@ -1325,7 +1326,7 @@ async def test_close_reason_reaches_history_and_callback(price, sl, reason):
     seen = []
     monitor._on_position_closed = lambda sym, info: seen.append((sym, info))
     pos = _open_pos(side="buy", entry=50000.0, sl=sl, tp=52000.0)
-    with patch("bitbot.execution.position_monitor.Config", cfg):
+    with monitor_config(cfg):
         closed = await monitor._check_and_close(
             "BTC/USDT", pos, price, {"BTC/USDT": dict(pos)}, asyncio.Lock()
         )
@@ -1342,7 +1343,7 @@ async def test_close_all_books_exit_in_history_and_balance():
     seen = []
     monitor._on_position_closed = lambda sym, info: seen.append((sym, info))
     monitored = {"BTC/USDT": _open_pos(trade_id=7)}
-    with patch("bitbot.execution.position_monitor.Config", cfg):
+    with monitor_config(cfg):
         await monitor.close_all_positions(
             monitored, asyncio.Lock(), reason="telegram_closeall"
         )
@@ -1365,7 +1366,7 @@ async def test_close_all_without_price_leaves_history_alone():
     monitor = _make_monitor(cfg=cfg)
     monitor._api.get_current_price = AsyncMock(side_effect=RuntimeError("down"))
     monitored = {"BTC/USDT": _open_pos()}
-    with patch("bitbot.execution.position_monitor.Config", cfg):
+    with monitor_config(cfg):
         await monitor.close_all_positions(monitored, asyncio.Lock())
     assert monitored == {}
     monitor._trade_history.record_close.assert_not_awaited()
@@ -1379,7 +1380,7 @@ async def test_partial_close_books_balance_and_history():
     monitor = _make_monitor(cfg=cfg)
     pos = _open_pos(side="buy", entry=50000.0, qty=0.02, trade_id=5)
     monitored = {"BTC/USDT": dict(pos)}
-    with patch("bitbot.execution.position_monitor.Config", cfg):
+    with monitor_config(cfg):
         updated, _ = await monitor.close_fraction(
             "BTC/USDT", pos, 0.5, monitored, asyncio.Lock(), price=51000.0
         )
@@ -1398,7 +1399,7 @@ async def test_partial_close_without_price_is_not_booked_but_still_closes():
     monitor = _make_monitor(cfg=cfg)
     monitor._api.get_current_price = AsyncMock(return_value=None)
     pos = _open_pos(trade_id=6)
-    with patch("bitbot.execution.position_monitor.Config", cfg):
+    with monitor_config(cfg):
         updated, _ = await monitor.close_fraction(
             "BTC/USDT", pos, 0.5, {"BTC/USDT": dict(pos)}, asyncio.Lock()
         )

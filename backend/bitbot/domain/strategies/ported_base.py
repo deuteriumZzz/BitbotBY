@@ -18,7 +18,7 @@ Argent ни одна ценовая стратегия не значима по 
 
 Здесь — общий адаптер `PortedStrategy`, помощники, которыми пользуются
 несколько портов, и `indicator_strategy` для индикаторных портов. Сами стратегии —
-в experimental.py своих семейств.
+в experimental.py (классами) и indicators.py (индикаторные) своих семейств.
 """
 
 from typing import Any, Callable, Dict, Optional, Tuple, Type

@@ -8,11 +8,12 @@
 """
 
 import asyncio
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
 from bitbot.domain.order_states import Rejected, Unknown
+from tests.conftest import monitor_config
 from tests.core.test_position_monitor_new import _make_cfg, _make_monitor, _open_pos
 
 SYM = "BTC/USDT"
@@ -41,7 +42,7 @@ async def test_unconfirmed_close_keeps_position_protected(path, outcome):
     pos = _open_pos(side="buy", entry=50000, sl=49000, tp=52000, qty=0.01)
     pos.update(exchange_sl_id="sl-old", exchange_tp_id="tp-old")
     monitored = {SYM: dict(pos)}
-    with patch("bitbot.execution.position_monitor.Config", cfg):
+    with monitor_config(cfg):
         await _close(path, monitor, pos, monitored, asyncio.Lock())
 
     assert SYM in monitored  # наблюдение не потеряно

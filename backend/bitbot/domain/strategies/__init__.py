@@ -2,8 +2,8 @@
 
 Стратегии разложены по семействам — по рынку, на котором работают (`market_type`):
 trending/, ranging/, volatile/, any/. В каждом main.py — основные (включены по
-умолчанию), в experimental.py — порты из Argent без доказанного преимущества
-(выключены по умолчанию, см. experimental_names()). База — base.py, адаптер
+умолчанию), в experimental.py и indicators.py — порты из Argent без доказанного
+преимущества (классами и индикаторные; выключены по умолчанию, см. experimental_names()). База — base.py, адаптер
 портов — ported_base.py.
 
 Новая стратегия: класс в файле своего семейства + имя в _ORDER. Порядок реестра —
@@ -20,10 +20,13 @@ import pandas as pd
 from bitbot.domain.strategies.any import main as any_main
 from bitbot.domain.strategies.base import BaseStrategy
 from bitbot.domain.strategies.ranging import experimental as ranging_experimental
+from bitbot.domain.strategies.ranging import indicators as ranging_indicators
 from bitbot.domain.strategies.ranging import main as ranging_main
 from bitbot.domain.strategies.trending import experimental as trending_experimental
+from bitbot.domain.strategies.trending import indicators as trending_indicators
 from bitbot.domain.strategies.trending import main as trending_main
 from bitbot.domain.strategies.volatile import experimental as volatile_experimental
+from bitbot.domain.strategies.volatile import indicators as volatile_indicators
 from bitbot.domain.strategies.volatile import main as volatile_main
 from bitbot.storage.redis_client import RedisClient
 
@@ -38,6 +41,9 @@ _FAMILIES = (
     trending_experimental,
     ranging_experimental,
     volatile_experimental,
+    trending_indicators,
+    ranging_indicators,
+    volatile_indicators,
 )
 
 

@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from bitbot.adapters.telegram.notifier import TelegramNotifier
+from tests.conftest import monitor_config
 from tests.core.test_order_executor import _TOP_BUY, _make_executor
 from tests.core.test_order_executor import _make_cfg as _exec_cfg
 from tests.core.test_position_monitor_new import _make_cfg as _mon_cfg
@@ -44,7 +45,7 @@ def test_trailing_can_be_disabled_per_position():
     cfg = _mon_cfg(trailing_mult=1.0)
     monitor = _make_monitor(cfg=cfg)
     pos = _open_pos(side="buy", sl=49000, atr=500.0)
-    with patch("bitbot.execution.position_monitor.Config", cfg):
+    with monitor_config(cfg):
         moved = monitor._apply_trailing_stop("BTC/USDT", pos, 51000.0)
         kept = monitor._apply_trailing_stop(
             "BTC/USDT", {**pos, "trailing": False}, 51000.0
@@ -81,7 +82,7 @@ async def test_update_levels_places_new_before_cancelling_old():
     monitor._api.cancel_order = AsyncMock(side_effect=cancel)
     pos = _open_pos(exchange_sl_id="sl1", exchange_tp_id="tp1")
     monitored = {"BTC/USDT": pos}
-    with patch("bitbot.execution.position_monitor.Config", cfg):
+    with monitor_config(cfg):
         new = await monitor.update_levels(
             "BTC/USDT", pos, 49500.0, 52500.0, monitored, asyncio.Lock()
         )
@@ -97,7 +98,7 @@ async def test_update_levels_failure_keeps_old_orders():
     pos = _open_pos(exchange_sl_id="sl1", exchange_tp_id="tp1")
     monitored = {"BTC/USDT": pos}
     with (
-        patch("bitbot.execution.position_monitor.Config", cfg),
+        monitor_config(cfg),
         pytest.raises(RuntimeError),
     ):
         await monitor.update_levels(
@@ -112,7 +113,7 @@ async def test_close_fraction_paper_keeps_sl_by_default():
     monitor = _make_monitor(cfg=cfg)
     pos = _open_pos(qty=1.0, sl=49000.0)
     monitored = {"BTC/USDT": pos}
-    with patch("bitbot.execution.position_monitor.Config", cfg):
+    with monitor_config(cfg):
         updated, unprotected = await monitor.close_fraction(
             "BTC/USDT", pos, 0.5, monitored, asyncio.Lock()
         )

@@ -1,6 +1,8 @@
+import contextlib
+import importlib
 import os
 import sys
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 # TestClient шлёт Host: testserver; без ключа дашборд пускает только локальные
 # адреса (защита от DNS-rebinding) — тестовый хост считаем своим.
@@ -22,6 +24,23 @@ sys.modules.setdefault("prometheus_client", _prom_mock)
 import numpy as np
 import pandas as pd
 import pytest
+
+# Монитор позиций разложен по модулям; Config читается в каждом из них.
+_MONITOR_MODULES = (
+    "bitbot.execution.monitor_base",
+    "bitbot.execution.booking",
+    "bitbot.execution.closing",
+    "bitbot.execution.levels",
+)
+
+
+def monitor_config(cfg):
+    """Подменяет Config во всех модулях монитора позиций (контекстный менеджер)."""
+    stack = contextlib.ExitStack()
+    for name in _MONITOR_MODULES:
+        if hasattr(importlib.import_module(name), "Config"):
+            stack.enter_context(patch(f"{name}.Config", cfg))
+    return stack
 
 
 def make_ohlcv(

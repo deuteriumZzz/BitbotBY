@@ -13,6 +13,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from tests.conftest import monitor_config
+
 # ---------------------------------------------------------------------------
 # Bot factory
 # ---------------------------------------------------------------------------
@@ -111,7 +113,7 @@ async def _run_once(bot, price: float, paper: bool = True, cfg_overrides: dict =
     # PAPER_TRADING / TRAILING_STOP_ATR_MULT / CIRCUIT_BREAKER_LOSSES / COMMISSION_RATE.
     with (
         patch("bitbot.workers.bot.Config") as cfg,
-        patch("bitbot.execution.position_monitor.Config", cfg),
+        monitor_config(cfg),
     ):
         cfg.PAPER_TRADING = paper
         cfg.COMMISSION_RATE = 0.001
@@ -276,7 +278,7 @@ class TestTrailingStop:
 
         with (
             patch("bitbot.workers.bot.Config") as cfg,
-            patch("bitbot.execution.position_monitor.Config", cfg),
+            monitor_config(cfg),
         ):
             cfg.PAPER_TRADING = True
             cfg.COMMISSION_RATE = 0.001
@@ -306,7 +308,7 @@ class TestTrailingStop:
 
         with (
             patch("bitbot.workers.bot.Config") as cfg,
-            patch("bitbot.execution.position_monitor.Config", cfg),
+            monitor_config(cfg),
         ):
             cfg.PAPER_TRADING = True
             cfg.COMMISSION_RATE = 0.001
