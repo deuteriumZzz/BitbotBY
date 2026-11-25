@@ -32,15 +32,13 @@ from fastapi.responses import JSONResponse
 from starlette.requests import HTTPConnection
 
 from bitbot.adapters.sentiment import telegram_login
-from bitbot.adapters.sentiment.telegram_sentiment import STATUS_KEY as TG_STATUS_KEY
 from bitbot.api import auth, data
-from bitbot.config import ai_providers, registry
+from bitbot.config import ai_providers, keys, registry
 from bitbot.config import secrets as secrets_store
 from bitbot.config.runtime import RISK_PRESETS, RuntimeConfig
 from bitbot.config.settings import Config
 from bitbot.domain import strategies
 from bitbot.domain.types import is_trusted
-from bitbot.execution.trusted_trader import LAST_KEY as TRUSTED_LAST_KEY
 from bitbot.ops import emergency, reports
 from bitbot.ops import jobs as background_jobs
 from bitbot.storage import bot_bus
@@ -120,30 +118,30 @@ def build_state() -> Dict[str, Any]:
     r = data.get_redis()
     positions = data.get_open_positions()
     try:
-        max_pos = int(_redis_str(r, "bot:max_positions") or Config.MAX_POSITIONS)
+        max_pos = int(_redis_str(r, keys.MAX_POSITIONS) or Config.MAX_POSITIONS)
     except ValueError:
         max_pos = Config.MAX_POSITIONS
     return {
         "bot": {
             "alive": data.check_healthcheck(),
-            "paused": _redis_str(r, "bot:paused") == "1",
+            "paused": _redis_str(r, keys.PAUSED) == "1",
             "paper": data.paper_mode(),
-            "mode": _redis_str(r, "bot:mode") or Config.MODE,
-            "profile": _redis_str(r, "bot:market_profile"),
-            "ai": _redis_str(r, "bot:last_ai_provider"),
+            "mode": _redis_str(r, keys.MODE) or Config.MODE,
+            "profile": _redis_str(r, keys.MARKET_PROFILE),
+            "ai": _redis_str(r, keys.LAST_AI_PROVIDER),
         },
         "market": {
-            "season": _redis_json(r, "bot:season_index"),
-            "fear_greed": _redis_json(r, "bot:fear_greed"),
+            "season": _redis_json(r, keys.SEASON_INDEX),
+            "fear_greed": _redis_json(r, keys.FEAR_GREED),
         },
         # Итог последнего цикла по узлам конвейера (backend/bitbot/domain/decision/trace.py).
-        "cycle": _redis_json(r, "bot:last_cycle"),
+        "cycle": _redis_json(r, keys.LAST_CYCLE),
         # Готов ли выбранный режим решать (нет модели SAC, не допущена, AI недоступен).
-        "mode_readiness": _redis_json(r, "bot:mode_readiness"),
+        "mode_readiness": _redis_json(r, keys.MODE_READINESS),
         # Что включено и как работает наблюдение (WS, копия БД, аварийный уровень).
-        "ops_status": _redis_json(r, "bot:ops_status"),
+        "ops_status": _redis_json(r, keys.OPS_STATUS),
         # Последний пост доверенного канала: вход или почему нет (trusted_trader).
-        "trusted": _redis_json(r, TRUSTED_LAST_KEY),
+        "trusted": _redis_json(r, keys.TG_LAST_TRUSTED),
         "balance": portfolio.get("balance", Config.INITIAL_BALANCE),
         # У сделок по каналам свои слоты — обычные они не занимают.
         "slots": {
@@ -242,7 +240,7 @@ async def get_strategies() -> JSONResponse:
     r = data.get_redis()
     if r is not None:
         try:
-            disabled = set(r.smembers("bot:disabled_strategies") or [])
+            disabled = set(r.smembers(keys.DISABLED_STRATEGIES) or [])
         except Exception:
             disabled = set()
 
@@ -503,7 +501,7 @@ async def get_pending_signals() -> JSONResponse:
     out = []
     if r is not None:
         try:
-            for key in r.scan_iter("bot:pending_signal:*"):
+            for key in r.scan_iter(f"{keys.PENDING_SIGNAL_PREFIX}*"):
                 raw = r.get(key)
                 if isinstance(raw, str) and raw:
                     out.append(json.loads(raw))
@@ -1288,7 +1286,7 @@ async def telethon_status(request: Request) -> JSONResponse:
     if denied is not None:
         return denied
     return JSONResponse(
-        _redis_json(data.get_redis(), TG_STATUS_KEY)
+        _redis_json(data.get_redis(), keys.TELEGRAM_STATUS)
         or {"state": "unknown", "message": "Бот ещё не сообщал о Telegram."}
     )
 
@@ -1481,7 +1479,7 @@ async def ws_events(ws: WebSocket) -> None:
 
     async def pump() -> None:
         try:
-            await pubsub.subscribe(bot_bus.EVENTS_CHANNEL)
+            await pubsub.subscribe(keys.EVENTS)
         except Exception:
             await ws.send_json(
                 {"type": "cycle", "ts": time.time(), "data": {"state": "offline"}}

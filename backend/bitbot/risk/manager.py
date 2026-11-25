@@ -12,6 +12,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
+from bitbot.config import keys
 from bitbot.config.settings import Config
 
 _DAY_REF_TTL = 3 * 24 * 3600  # ссылка на баланс дня живёт дольше самих суток
@@ -56,7 +57,7 @@ class RiskManager:
 
     def _ref_key(self) -> str:
         mode = "paper" if Config.PAPER_TRADING else "live"
-        return f"bot:risk:daily_ref:{mode}"
+        return f"{keys.RISK_DAILY_REF_PREFIX}{mode}"
 
     def _raw_redis(self) -> Any:
         rc = self._redis

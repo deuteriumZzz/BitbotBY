@@ -10,7 +10,8 @@ import os
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-from bitbot.config.registry.model import OVERRIDES_KEY, Setting
+from bitbot.config import keys
+from bitbot.config.registry.model import Setting
 from bitbot.config.registry.table import BY_KEY, SETTINGS
 
 logger = logging.getLogger(__name__)
@@ -80,7 +81,7 @@ def load_overrides(r: Any) -> Dict[str, Any]:
     if r is None:
         return {}
     try:
-        items = list((r.hgetall(OVERRIDES_KEY) or {}).items())
+        items = list((r.hgetall(keys.CONFIG_OVERRIDES) or {}).items())
     except Exception as e:
         logger.debug("load_overrides failed: %s", e)
         return {}
@@ -242,9 +243,6 @@ def validate_patch(
     return values, errors
 
 
-HISTORY_KEY = "bot:config_history"
-
-
 HISTORY_MAX = 200
 
 
@@ -269,10 +267,10 @@ def record_history(
         return
     try:
         r.lpush(
-            HISTORY_KEY,
+            keys.CONFIG_HISTORY,
             json.dumps({"ts": time.time(), "by": by, "changes": changes}),
         )
-        r.ltrim(HISTORY_KEY, 0, HISTORY_MAX - 1)
+        r.ltrim(keys.CONFIG_HISTORY, 0, HISTORY_MAX - 1)
     except Exception:
         logger.warning("config history not recorded", exc_info=True)
 
@@ -280,7 +278,7 @@ def record_history(
 def load_history(r: Any, limit: int = 50) -> List[Dict[str, Any]]:
     """Последние изменения настроек, свежие сверху."""
     out: List[Dict[str, Any]] = []
-    for raw in r.lrange(HISTORY_KEY, 0, max(0, limit - 1)) or []:
+    for raw in r.lrange(keys.CONFIG_HISTORY, 0, max(0, limit - 1)) or []:
         try:
             out.append(json.loads(raw))
         except ValueError:
@@ -299,9 +297,9 @@ def apply_patch(rc: Any, r: Any, values: Dict[str, Any]) -> Dict[str, List[str]]
             ok = s.hot_set(rc, v)  # type: ignore[misc]
             (failed if ok is False else applied_hot).append(k)
         elif v is None:
-            r.hdel(OVERRIDES_KEY, k)
+            r.hdel(keys.CONFIG_OVERRIDES, k)
             pending.append(k)
         else:
-            r.hset(OVERRIDES_KEY, k, json.dumps(v))
+            r.hset(keys.CONFIG_OVERRIDES, k, json.dumps(v))
             pending.append(k)
     return {"applied_hot": applied_hot, "pending_restart": pending, "failed": failed}

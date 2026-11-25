@@ -6,6 +6,7 @@ import json
 from unittest.mock import AsyncMock, patch
 
 from bitbot.api import watchdog
+from bitbot.config import keys
 from tests.infra.test_bot_bus import FakeRedis
 
 
@@ -49,7 +50,7 @@ async def test_stalled_cycle_and_switch_off():
     ):
         # Панель только что запустилась — время цикла ещё не судим.
         await watchdog.check_once(r, started=now - 60, now=now)
-        assert r.get(watchdog._ALERT_KEY) is None
+        assert r.get(keys.WATCHDOG_ALERT) is None
         await watchdog.check_once(r, started=0, now=now)
-    assert "цикл" in r.get(watchdog._ALERT_KEY)
+    assert "цикл" in r.get(keys.WATCHDOG_ALERT)
     send.assert_not_awaited()  # тревога bot_stalled выключена

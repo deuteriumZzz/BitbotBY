@@ -12,11 +12,10 @@ import asyncio
 import logging
 from typing import List, Tuple
 
+from bitbot.config import keys
 from bitbot.config.settings import Config
 
 logger = logging.getLogger(__name__)
-
-_REDIS_KEY_PREFIX = "bot:sentiment:"
 
 
 def combine(tw: float, tg: float) -> float:
@@ -95,7 +94,7 @@ class SentimentPoller:
 
     def _twitter_score(self, symbol: str) -> float:
         try:
-            raw = self._redis.redis_client.get(f"{_REDIS_KEY_PREFIX}{symbol}")
+            raw = self._redis.redis_client.get(f"{keys.SENTIMENT_PREFIX}{symbol}")
             if raw is None:
                 return 0.0
             return float(raw.decode() if isinstance(raw, bytes) else raw)
@@ -129,7 +128,7 @@ class SentimentPoller:
                 continue
             try:
                 self._redis.redis_client.setex(
-                    f"{_REDIS_KEY_PREFIX}{sym}",
+                    f"{keys.SENTIMENT_PREFIX}{sym}",
                     self._cache_ttl,
                     str(round(float(result), 4)),
                 )

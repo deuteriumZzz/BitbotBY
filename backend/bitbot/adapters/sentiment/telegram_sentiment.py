@@ -7,7 +7,7 @@ Telegram-каналы: свежие посты в реальном времен�
 Посты приходят событием NewMessage — бот подписан на каналы от аккаунта
 пользователя, поэтому Telegram присылает их сразу, без опроса. Они лежат в
 скользящем окне (TELEGRAM_WINDOW_MIN), и оценка монеты считается из окна
-мгновенно. Что происходит с подключением — в Redis `STATUS_KEY`.
+мгновенно. Что происходит с подключением — в Redis `keys.TELEGRAM_STATUS`.
 """
 
 from __future__ import annotations
@@ -32,12 +32,12 @@ from typing import (
     Tuple,
 )
 
+from bitbot.config import keys
 from bitbot.config import secrets as secrets_store
 from bitbot.config.settings import Config
 
 logger = logging.getLogger(__name__)
 
-STATUS_KEY = "bot:telegram:status"
 # Не чаще раза в минуту: без сессии или при сбое сети не долбим Telegram.
 _RETRY_S = 60.0
 # ponytail: потолок окна в памяти — ~80 постов в минуту за час; больше не держим.
@@ -237,7 +237,7 @@ class TelegramSentiment:
             payload["mentions"] = dict(n.most_common(10))
         try:
             self._redis.redis_client.set(
-                STATUS_KEY, json.dumps(payload, ensure_ascii=False)
+                keys.TELEGRAM_STATUS, json.dumps(payload, ensure_ascii=False)
             )
         except Exception as e:
             logger.debug("TelegramSentiment: status not saved: %s", e)

@@ -15,6 +15,7 @@ from starlette.websockets import WebSocketDisconnect
 
 from bitbot.api import data
 from bitbot.api.routers import control
+from bitbot.config import keys
 from bitbot.config import secrets as ss
 from bitbot.storage import bot_bus
 from tests.infra.test_bot_bus import FakeRedis
@@ -243,7 +244,7 @@ def test_command_is_queued(keyed, monkeypatch):
             headers={"X-API-Key": "secret", "X-Client": "miniapp"},
         )
     assert resp.status_code == 202
-    queued = r.lists[bot_bus.COMMANDS_KEY]
+    queued = r.lists[keys.COMMANDS]
     assert len(queued) == 1 and '"source": "miniapp"' in queued[0]
 
 
@@ -259,7 +260,7 @@ def test_repeated_request_returns_stored_result(keyed):
         )
     assert resp.status_code == 200
     assert resp.json()["result"] == {"ok": True, "paused": True}
-    assert len(r.lists[bot_bus.COMMANDS_KEY]) == 1  # повтор не поставлен в очередь
+    assert len(r.lists[keys.COMMANDS]) == 1  # повтор не поставлен в очередь
 
 
 def test_account_mode_validates_body(keyed):
@@ -408,7 +409,7 @@ def test_put_ai_chain_applies_and_validates(keyed):
     assert [c["provider"] for c in chain] == ["groq", "deepseek"]
     assert chain[0]["model"] == "openai/gpt-oss-20b"
     assert json.loads(r.get("bot:ai_chain"))["mode"] == "auto"
-    assert r.published[-1][0] == bot_bus.EVENTS_CHANNEL
+    assert r.published[-1][0] == keys.EVENTS
     assert r.published[-1][1]["data"] == {"keys": ["AI_CHAIN"]}
 
 

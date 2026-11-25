@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from bitbot.config import keys
 from bitbot.storage import bot_bus
 from bitbot.workers.commands import BotCommands
 
@@ -87,7 +88,7 @@ def test_enqueue_is_idempotent():
     r = FakeRedis()
     assert bot_bus.enqueue(r, "pause", {}, "req-00000001", "miniapp") is True
     assert bot_bus.enqueue(r, "pause", {}, "req-00000001", "miniapp") is False
-    assert len(r.lists[bot_bus.COMMANDS_KEY]) == 1
+    assert len(r.lists[keys.COMMANDS]) == 1
 
 
 async def test_consumer_runs_handler_and_stores_result():
@@ -96,7 +97,7 @@ async def test_consumer_runs_handler_and_stores_result():
     bot_bus.enqueue(r, "pause", {"x": 1}, "req-00000002", "desktop")
     consumer = bot_bus.CommandConsumer(r, {"pause": handler})
 
-    raw = r.brpop(bot_bus.COMMANDS_KEY)[1]
+    raw = r.brpop(keys.COMMANDS)[1]
     result = await consumer.handle(raw)
 
     handler.assert_awaited_once_with({"x": 1})
@@ -110,7 +111,7 @@ async def test_handler_error_result_is_kept_as_is():
     handler = AsyncMock(return_value=bot_bus.error("not_found", "Нет такой позиции."))
     bot_bus.enqueue(r, "close_position", {}, "req-00000003", "app")
     consumer = bot_bus.CommandConsumer(r, {"close_position": handler})
-    result = await consumer.handle(r.brpop(bot_bus.COMMANDS_KEY)[1])
+    result = await consumer.handle(r.brpop(keys.COMMANDS)[1])
     assert result["ok"] is False
     assert result["error"]["code"] == "not_found"
 
@@ -119,7 +120,7 @@ async def test_unknown_command_is_reported():
     r = FakeRedis()
     bot_bus.enqueue(r, "launch_rockets", {}, "req-00000004", "app")
     consumer = bot_bus.CommandConsumer(r, {})
-    result = await consumer.handle(r.brpop(bot_bus.COMMANDS_KEY)[1])
+    result = await consumer.handle(r.brpop(keys.COMMANDS)[1])
     assert result["error"]["code"] == "unknown_command"
 
 
@@ -128,7 +129,7 @@ async def test_handler_exception_does_not_leak_details():
     handler = AsyncMock(side_effect=ValueError("api-secret-123"))
     bot_bus.enqueue(r, "panic", {}, "req-00000005", "app")
     consumer = bot_bus.CommandConsumer(r, {"panic": handler})
-    result = await consumer.handle(r.brpop(bot_bus.COMMANDS_KEY)[1])
+    result = await consumer.handle(r.brpop(keys.COMMANDS)[1])
     assert result["error"]["code"] == "failed"
     assert "api-secret-123" not in json.dumps(result, ensure_ascii=False)
 

@@ -15,13 +15,13 @@ import time
 from typing import Any, Optional
 
 from bitbot.api import auth, data
+from bitbot.config import keys
 
 logger = logging.getLogger(__name__)
 
 CHECK_EVERY = 60
 # Запас сверх интервала торговли: полный скан с AI бывает долгим.
 STALL_GRACE = 900
-_ALERT_KEY = "bot:watchdog_alert"
 
 
 def problem(alive: bool, cycle_age: Optional[float], interval: int) -> Optional[str]:
@@ -35,7 +35,7 @@ def problem(alive: bool, cycle_age: Optional[float], interval: int) -> Optional[
 
 def _cycle_age(r: Any, now: float) -> Optional[float]:
     try:
-        at = json.loads(r.get("bot:last_cycle") or "{}").get("at")
+        at = json.loads(r.get(keys.LAST_CYCLE) or "{}").get("at")
     except (ValueError, AttributeError):
         return None
     return now - float(at) if at else None
@@ -53,9 +53,9 @@ async def check_once(r: Any, started: float, now: Optional[float] = None) -> Non
     # Сразу после запуска панели бот ещё поднимается — время цикла не судим.
     age = _cycle_age(r, now) if now - started > interval + STALL_GRACE else None
     issue = problem(data.check_healthcheck(), age, interval)
-    alerted = r.get(_ALERT_KEY)
+    alerted = r.get(keys.WATCHDOG_ALERT)
     if issue and not alerted:
-        r.set(_ALERT_KEY, issue)
+        r.set(keys.WATCHDOG_ALERT, issue)
         if cfg.get_alert_enabled("bot_stalled"):
             await auth.send_owner(
                 f"🛑 Бот не работает: {issue}.\n"
@@ -63,7 +63,7 @@ async def check_once(r: Any, started: float, now: Optional[float] = None) -> Non
                 "python3 launcher/launch.py start"
             )
     elif not issue and alerted:
-        r.delete(_ALERT_KEY)
+        r.delete(keys.WATCHDOG_ALERT)
         if cfg.get_alert_enabled("bot_stalled"):
             await auth.send_owner("✅ Бот снова работает.")
 

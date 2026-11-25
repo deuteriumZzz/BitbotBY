@@ -9,7 +9,6 @@ from types import SimpleNamespace
 
 import pytest
 
-from bitbot.adapters.sentiment import telegram_sentiment as ts
 from bitbot.adapters.sentiment.sentiment_poller import SentimentPoller, combine
 from bitbot.adapters.sentiment.telegram_sentiment import (
     Post,
@@ -17,6 +16,7 @@ from bitbot.adapters.sentiment.telegram_sentiment import (
     channel_names,
     mentions,
 )
+from bitbot.config import keys
 
 # ── точное упоминание ─────────────────────────────────────────────────────────
 
@@ -208,7 +208,7 @@ def test_status_shows_posts_and_mentions():
     )
     tg.state = "ok"
     tg.report(["WIF/USDT", "PEPE/USDT"])
-    st = json.loads(saved[ts.STATUS_KEY])
+    st = json.loads(saved[keys.TELEGRAM_STATUS])
     assert st["posts"] == 2 and st["mentions"] == {"WIF": 1}
     assert st["window_min"] == 60
 
@@ -224,7 +224,7 @@ def test_status_names_each_channel_and_what_happens_to_it():
     tg._titles = {"alpha": "Alpha Calls"}
     tg._failed = {"gamma": "канал не найден или закрыт"}
     tg.report([])
-    per = json.loads(saved[ts.STATUS_KEY])["per_channel"]
+    per = json.loads(saved[keys.TELEGRAM_STATUS])["per_channel"]
     assert per["alpha"]["title"] == "Alpha Calls"
     assert per["alpha"]["state"] == "reading" and per["alpha"]["posts"] == 1
     assert per["alpha"]["last_at"] == pytest.approx(time.time() - 180, abs=5)

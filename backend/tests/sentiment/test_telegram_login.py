@@ -15,8 +15,9 @@ from telethon.crypto import AuthKey
 from telethon.sessions import StringSession
 
 from bitbot.adapters.sentiment import telegram_login
-from bitbot.adapters.sentiment.telegram_sentiment import STATUS_KEY, TelegramSentiment
+from bitbot.adapters.sentiment.telegram_sentiment import TelegramSentiment
 from bitbot.api import data
+from bitbot.config import keys
 from bitbot.config import secrets as ss
 from tests.infra.test_bot_bus import FakeRedis
 
@@ -179,7 +180,7 @@ def test_login_with_cloud_password(app):
 
 def test_status_endpoint_reads_what_the_bot_wrote(app):
     r = FakeRedis()
-    r.set(STATUS_KEY, json.dumps({"state": "ok", "message": "Подключено"}))
+    r.set(keys.TELEGRAM_STATUS, json.dumps({"state": "ok", "message": "Подключено"}))
     with patch.object(data, "get_redis", return_value=r):
         resp = app.get("/api/secrets/telethon/status", headers=H)
     assert resp.json()["state"] == "ok"
@@ -195,7 +196,7 @@ class Redis:
         self.redis_client = FakeRedis()
 
     def status(self):
-        return json.loads(self.redis_client.get(STATUS_KEY))["state"]
+        return json.loads(self.redis_client.get(keys.TELEGRAM_STATUS))["state"]
 
 
 async def test_bot_without_login_reports_it_and_never_asks_for_code(store):

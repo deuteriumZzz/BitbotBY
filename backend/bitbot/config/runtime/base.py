@@ -7,7 +7,7 @@ import json
 import logging
 from typing import Any, Set
 
-from bitbot.config.runtime.keys import HOT_PREFIX
+from bitbot.config import keys
 from bitbot.config.settings import Config
 
 logger = logging.getLogger(__name__)
@@ -42,10 +42,10 @@ class RuntimeBase:
         Нет в Redis — прежнее значение из UI (до того как настройка стала
         «сразу»), иначе Config.
         """
-        raw: Any = self._get(f"{HOT_PREFIX}{key}")
+        raw: Any = self._get(f"{keys.HOT_PREFIX}{key}")
         if raw is None:
             try:
-                raw = self._r.redis_client.hget("bot:config_overrides", key)
+                raw = self._r.redis_client.hget(keys.CONFIG_OVERRIDES, key)
             except Exception:
                 raw = None
             if isinstance(raw, bytes):
@@ -60,7 +60,7 @@ class RuntimeBase:
         return getattr(Config, key, None)
 
     def set_hot(self, key: str, value: Any) -> bool:
-        self._set(f"{HOT_PREFIX}{key}", json.dumps(value))
+        self._set(f"{keys.HOT_PREFIX}{key}", json.dumps(value))
         return True
 
     # ── Symbol overrides ──────────────────────────────────────────────────────

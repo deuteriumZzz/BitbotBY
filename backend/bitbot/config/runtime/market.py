@@ -8,27 +8,10 @@ import logging
 from datetime import datetime, timezone
 from typing import Dict, Iterable, List, Optional, Set
 
+from bitbot.config import keys
 from bitbot.config.runtime.active import (
     set_active_market_type,
     set_active_profile,
-)
-from bitbot.config.runtime.keys import (
-    _KEY_CURRENT_SYMBOLS,
-    _KEY_DISABLED_STRATS,
-    _KEY_EXPERIMENTAL_SEEN,
-    _KEY_FEAR_GREED,
-    _KEY_JOB,
-    _KEY_LAST_AI_PROVIDER,
-    _KEY_LAUNCH_RATE_HISTORY,
-    _KEY_MARKET_PROFILE,
-    _KEY_MARKET_TYPE,
-    _KEY_MAX_VOLUME,
-    _KEY_MIN_VOLUME,
-    _KEY_SAC_BACKUP,
-    _KEY_SAC_BACKUP_PROFILE,
-    _KEY_SEASON_INDEX,
-    _KEY_SEASON_MODE,
-    _KEY_TIMEFRAME,
 )
 from bitbot.config.runtime.models import ModelSettings
 from bitbot.config.runtime.presets import _MARKET_PROFILES, _MARKET_TYPES
@@ -48,7 +31,7 @@ class MarketSettings(ModelSettings):
     # ── Market Type (spot / futures) ─────────────────────────────────────────
     def get_market_type(self) -> str:
         """Текущий тип рынка: spot | linear (perpetual futures)."""
-        val = self._get(_KEY_MARKET_TYPE)
+        val = self._get(keys.MARKET_TYPE)
         if val and val in _MARKET_TYPES:
             return val
         return getattr(Config, "MARKET_TYPE", "linear")
@@ -56,41 +39,41 @@ class MarketSettings(ModelSettings):
     def set_market_type(self, market_type: str) -> bool:
         if market_type not in _MARKET_TYPES:
             return False
-        self._set(_KEY_MARKET_TYPE, market_type)
+        self._set(keys.MARKET_TYPE, market_type)
         set_active_market_type(market_type)
         logger.info("Runtime: market_type → %s", market_type)
         return True
 
     def get_last_ai_provider(self) -> str:
         """Провайдер, который реально ответил последним."""
-        return self._get(_KEY_LAST_AI_PROVIDER) or ""
+        return self._get(keys.LAST_AI_PROVIDER) or ""
 
     def set_last_ai_provider(self, provider: str) -> None:
-        self._set(_KEY_LAST_AI_PROVIDER, provider)
+        self._set(keys.LAST_AI_PROVIDER, provider)
 
     def set_provider_status(self, provider: str, status: str) -> None:
         """Сохраняет статус провайдера: 'ok', 'no_balance', 'rate_limit'."""
-        self._set(f"bot:provider_status:{provider}", status)
+        self._set(f"{keys.PROVIDER_STATUS_PREFIX}{provider}", status)
 
     def get_provider_status(self, provider: str) -> str:
         """Возвращает последний известный статус провайдера."""
-        return self._get(f"bot:provider_status:{provider}") or "unknown"
+        return self._get(f"{keys.PROVIDER_STATUS_PREFIX}{provider}") or "unknown"
 
     # ── Strategies ────────────────────────────────────────────────────────────
     def get_disabled_strategies(self) -> Set[str]:
         """Возвращает имена отключённых стратегий. Пустой set = все включены."""
-        return self._smembers(_KEY_DISABLED_STRATS)
+        return self._smembers(keys.DISABLED_STRATEGIES)
 
     def disable_strategy(self, name: str) -> None:
         try:
-            self._r.redis_client.sadd(_KEY_DISABLED_STRATS, name)
+            self._r.redis_client.sadd(keys.DISABLED_STRATEGIES, name)
             logger.info("Runtime: стратегия отключена — %s", name)
         except Exception as e:
             logger.warning("RuntimeConfig sadd failed: %s", e)
 
     def enable_strategy(self, name: str) -> None:
         try:
-            self._r.redis_client.srem(_KEY_DISABLED_STRATS, name)
+            self._r.redis_client.srem(keys.DISABLED_STRATEGIES, name)
             logger.info("Runtime: стратегия включена — %s", name)
         except Exception as e:
             logger.warning("RuntimeConfig srem failed: %s", e)
@@ -102,11 +85,11 @@ class MarketSettings(ModelSettings):
         остаётся включённой). Возвращает, какие были выключены сейчас.
         """
         try:
-            seen = self._smembers(_KEY_EXPERIMENTAL_SEEN)
+            seen = self._smembers(keys.EXPERIMENTAL_STRATEGIES_SEEN)
             fresh = [n for n in names if n not in seen]
             for name in fresh:
                 self.disable_strategy(name)
-                self._r.redis_client.sadd(_KEY_EXPERIMENTAL_SEEN, name)
+                self._r.redis_client.sadd(keys.EXPERIMENTAL_STRATEGIES_SEEN, name)
             return fresh
         except Exception as e:
             logger.warning("RuntimeConfig experimental seeding failed: %s", e)
@@ -121,7 +104,7 @@ class MarketSettings(ModelSettings):
         передаёт вызывающий: настройки не знают о стратегиях (слой ниже).
         """
         try:
-            self._r.redis_client.delete(_KEY_DISABLED_STRATS)
+            self._r.redis_client.delete(keys.DISABLED_STRATEGIES)
             logger.info("Runtime: основные стратегии включены")
         except Exception as e:
             logger.warning("RuntimeConfig delete failed: %s", e)
@@ -147,7 +130,7 @@ class MarketSettings(ModelSettings):
     # ── Market Profile ────────────────────────────────────────────────────────
     def get_market_profile(self) -> str:
         """Текущий профиль: 'bluechip' | 'altcoin' | '' (не задан)."""
-        return self._get(_KEY_MARKET_PROFILE) or ""
+        return self._get(keys.MARKET_PROFILE) or ""
 
     def ensure_default_market_profile(self, default: str = "bluechip") -> str:
         """Применяет профиль по умолчанию, если он ещё не задан (первый запуск
@@ -161,11 +144,11 @@ class MarketSettings(ModelSettings):
 
     def get_timeframe(self) -> str:
         """Таймфрейм свечей. Fallback: Config.TIMEFRAME."""
-        return self._get(_KEY_TIMEFRAME) or Config.TIMEFRAME
+        return self._get(keys.TIMEFRAME) or Config.TIMEFRAME
 
     def get_min_volume_usdt(self) -> float:
         """Минимальный 24h объём USDT. Fallback: Config.MIN_VOLUME_USDT."""
-        val = self._get(_KEY_MIN_VOLUME)
+        val = self._get(keys.MIN_VOLUME_USDT)
         try:
             return float(val) if val is not None else Config.MIN_VOLUME_USDT
         except ValueError:
@@ -173,7 +156,7 @@ class MarketSettings(ModelSettings):
 
     def get_max_volume_usdt(self) -> float:
         """Максимальный 24h объём USDT (0 = без ограничения). Fallback: Config."""
-        val = self._get(_KEY_MAX_VOLUME)
+        val = self._get(keys.MAX_VOLUME_USDT)
         try:
             return float(val) if val is not None else Config.MAX_VOLUME_USDT
         except ValueError:
@@ -184,17 +167,17 @@ class MarketSettings(ModelSettings):
         profile = _MARKET_PROFILES.get(name)
         if not profile:
             return False
-        self._set(_KEY_MARKET_PROFILE, name)
-        self._set(_KEY_TIMEFRAME, str(profile.get("timeframe", "")))
-        self._set(_KEY_MIN_VOLUME, str(profile.get("min_volume_usdt", 0)))
-        self._set(_KEY_MAX_VOLUME, str(profile.get("max_volume_usdt", 0)))
+        self._set(keys.MARKET_PROFILE, name)
+        self._set(keys.TIMEFRAME, str(profile.get("timeframe", "")))
+        self._set(keys.MIN_VOLUME_USDT, str(profile.get("min_volume_usdt", 0)))
+        self._set(keys.MAX_VOLUME_USDT, str(profile.get("max_volume_usdt", 0)))
         self.set_scan_top_n(int(str(profile.get("scan_top_n", 20))))
         self.set_train_top_n(int(str(profile.get("train_top_n", 20))))
         self.set_risk_per_trade(float(str(profile.get("risk_per_trade", 0.02))))
         self.set_mode(str(profile.get("mode", "ai")))
-        self._set("bot:sl_percent", str(profile.get("sl_percent", 0.05)))
-        self._set("bot:tp_multiplier", str(profile.get("tp_multiplier", 2.0)))
-        self._set("bot:trading_interval", str(profile.get("trading_interval", 60)))
+        self._set(keys.SL_PERCENT, str(profile.get("sl_percent", 0.05)))
+        self._set(keys.TP_MULTIPLIER, str(profile.get("tp_multiplier", 2.0)))
+        self._set(keys.TRADING_INTERVAL, str(profile.get("trading_interval", 60)))
 
         # Переключаем профиль-специфичные стратегии. volume_spike одна для всех
         # профилей: порог берётся из active_profile() внутри стратегии. Старые
@@ -238,11 +221,11 @@ class MarketSettings(ModelSettings):
             "symbols": symbols,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
-        self._set(_KEY_CURRENT_SYMBOLS, json.dumps(payload, ensure_ascii=False))
+        self._set(keys.CURRENT_SYMBOLS, json.dumps(payload, ensure_ascii=False))
 
     def get_current_symbols(self) -> Optional[dict]:
         """Возвращает {"profile", "symbols", "updated_at"} или None, если данных нет."""
-        raw = self._get(_KEY_CURRENT_SYMBOLS)
+        raw = self._get(keys.CURRENT_SYMBOLS)
         if not raw:
             return None
         try:
@@ -254,7 +237,7 @@ class MarketSettings(ModelSettings):
     def get_season_switch_mode(self) -> str:
         import os as _os
 
-        val = self._get(_KEY_SEASON_MODE)
+        val = self._get(keys.SEASON_SWITCH_MODE)
         if val in ("alert", "auto"):
             return val
         return _os.getenv("SEASON_SWITCH_MODE", "alert").lower()
@@ -262,7 +245,7 @@ class MarketSettings(ModelSettings):
     def set_season_switch_mode(self, mode: str) -> bool:
         if mode not in ("alert", "auto"):
             return False
-        self._set(_KEY_SEASON_MODE, mode)
+        self._set(keys.SEASON_SWITCH_MODE, mode)
         return True
 
     def set_season_index(self, signal: "str | None", index: dict) -> None:
@@ -278,7 +261,7 @@ class MarketSettings(ModelSettings):
             "checked_at": _time.time(),
         }
         try:
-            self._r.redis_client.setex(_KEY_SEASON_INDEX, 6 * 3600, _json.dumps(data))
+            self._r.redis_client.setex(keys.SEASON_INDEX, 6 * 3600, _json.dumps(data))
         except Exception:
             pass
 
@@ -290,7 +273,9 @@ class MarketSettings(ModelSettings):
         """
         try:
             return bool(
-                self._r.redis_client.set(_KEY_JOB + group, source, nx=True, ex=ttl)
+                self._r.redis_client.set(
+                    keys.JOB_PREFIX + group, source, nx=True, ex=ttl
+                )
             )
         except Exception as e:
             logger.warning("RuntimeConfig job lock failed: %s", e)
@@ -298,7 +283,7 @@ class MarketSettings(ModelSettings):
 
     def end_job(self, group: str) -> None:
         try:
-            self._r.redis_client.delete(_KEY_JOB + group)
+            self._r.redis_client.delete(keys.JOB_PREFIX + group)
         except Exception as e:
             logger.warning("RuntimeConfig job unlock failed: %s", e)
 
@@ -306,21 +291,21 @@ class MarketSettings(ModelSettings):
         """{группа: источник запуска} для занятых групп."""
         out: Dict[str, str] = {}
         for g in groups:
-            val = self._get(_KEY_JOB + g)
+            val = self._get(keys.JOB_PREFIX + g)
             if val:
                 out[g] = val
         return out
 
     def get_sac_backup_path(self) -> str:
-        return self._get(_KEY_SAC_BACKUP) or ""
+        return self._get(keys.SAC_MODEL_BACKUP) or ""
 
     def set_sac_backup_path(self, path: str, profile: str = "") -> None:
-        self._set(_KEY_SAC_BACKUP, path)
-        self._set(_KEY_SAC_BACKUP_PROFILE, profile)
+        self._set(keys.SAC_MODEL_BACKUP, path)
+        self._set(keys.SAC_BACKUP_PROFILE, profile)
 
     def get_sac_backup_profile(self) -> str:
         """Профиль, чью модель сохранила последняя резервная копия ('' — неизвестно)."""
-        return self._get(_KEY_SAC_BACKUP_PROFILE) or ""
+        return self._get(keys.SAC_BACKUP_PROFILE) or ""
 
     def get_training_profiles(self) -> list:
         """Профили рынка для вкладки «Обучение»: таймфрейм, монеты, файл модели."""
@@ -358,7 +343,7 @@ class MarketSettings(ModelSettings):
 
         try:
             self._r.redis_client.setex(
-                _KEY_FEAR_GREED,
+                keys.FEAR_GREED,
                 6 * 3600,
                 _json.dumps({"value": value, "label": label}),
             )
@@ -368,7 +353,7 @@ class MarketSettings(ModelSettings):
     def get_fear_greed(self) -> "dict | None":
         import json as _json
 
-        raw = self._get(_KEY_FEAR_GREED)
+        raw = self._get(keys.FEAR_GREED)
         if not raw:
             return None
         try:
@@ -380,21 +365,21 @@ class MarketSettings(ModelSettings):
         """Добавляет замер темпа лаунчей в скользящую историю (капается)."""
         import json as _json
 
-        raw = self._get(_KEY_LAUNCH_RATE_HISTORY)
+        raw = self._get(keys.LAUNCH_RATE_HISTORY)
         try:
             history = _json.loads(raw) if raw else []
         except Exception:
             history = []
         history.append(round(rate, 2))
         history = history[-self._LAUNCH_RATE_MAX_SAMPLES :]
-        self._set(_KEY_LAUNCH_RATE_HISTORY, _json.dumps(history))
+        self._set(keys.LAUNCH_RATE_HISTORY, _json.dumps(history))
 
     def get_launch_rate_baseline(self, min_samples: int = 5) -> "float | None":
         """Медиана накопленной истории. None если данных ещё недостаточно."""
         import json as _json
         import statistics as _statistics
 
-        raw = self._get(_KEY_LAUNCH_RATE_HISTORY)
+        raw = self._get(keys.LAUNCH_RATE_HISTORY)
         if not raw:
             return None
         try:

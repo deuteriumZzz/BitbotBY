@@ -13,12 +13,13 @@ import hashlib
 import secrets
 from typing import Any
 
+from bitbot.config import keys
+
 TTL = 300
-_PREFIX = "bot:login_link:"
 
 
 def _key(token: str) -> str:
-    return _PREFIX + hashlib.sha256(token.encode()).hexdigest()
+    return keys.LOGIN_LINK_PREFIX + hashlib.sha256(token.encode()).hexdigest()
 
 
 def issue(r: Any) -> str:

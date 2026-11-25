@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from bitbot.adapters.sentiment.telegram_sentiment import Post
+from bitbot.config import keys
 from bitbot.domain.types import is_trusted
 from bitbot.execution import trusted_trader as tt
 from bitbot.execution.position_monitor import PositionMonitor
@@ -212,7 +213,7 @@ async def test_trusted_post_goes_straight_to_an_order():
     assert [s["node"] for s in top["trace"]][0] == "scan"
     (kind, ev), *_ = events
     assert kind == "trusted.post" and ev["ok"] and ev["latency_s"] >= 0.9
-    stored = json.loads(trader._r.get(tt.LAST_KEY))
+    stored = json.loads(trader._r.get(keys.TG_LAST_TRUSTED))
     assert stored["channel"] == "alpha" and stored["symbol"] == "WIF/USDT"
 
 
@@ -279,7 +280,7 @@ async def test_auto_untrust_after_losses_in_a_row():
     )
     await trader.review()
     assert rc.values["TELEGRAM_TRUSTED_CHANNELS"] == "beta"
-    assert trader._r.hget(tt.UNTRUSTED_KEY, "alpha") == 12
+    assert trader._r.hget(keys.TG_UNTRUSTED, "alpha") == 12
     trader._telegram.notify.assert_awaited_once()
     assert "@alpha" in trader._telegram.notify.await_args.args[0]
     assert ("config.changed", {"keys": ["TELEGRAM_TRUSTED_CHANNELS"]}) in events

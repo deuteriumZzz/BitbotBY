@@ -10,9 +10,6 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 
-OVERRIDES_KEY = "bot:config_overrides"
-
-
 HotSet = Callable[[Any, Any], Any]  # (RuntimeConfig, value) -> bool | None
 
 

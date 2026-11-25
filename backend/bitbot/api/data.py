@@ -13,6 +13,8 @@ from typing import List, Optional
 
 from prometheus_client import Gauge
 
+from bitbot.config import keys
+
 logger = logging.getLogger(__name__)
 
 _DB_PATH = os.path.join(
@@ -155,7 +157,7 @@ def paper_mode() -> bool:
     r = get_redis()
     if r:
         try:
-            v = r.get("bot:paper_trading_override")
+            v = r.get(keys.PAPER_TRADING_OVERRIDE)
             if v in ("1", "0"):
                 return v == "1"
         except Exception:

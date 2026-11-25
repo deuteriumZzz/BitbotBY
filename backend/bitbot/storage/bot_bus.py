@@ -21,10 +21,10 @@ import logging
 import time
 from typing import Any, Awaitable, Callable, Dict, Optional
 
+from bitbot.config import keys
+
 logger = logging.getLogger(__name__)
 
-EVENTS_CHANNEL = "bot:events"
-COMMANDS_KEY = "bot:commands"
 RESULT_TTL = 600  # сек: сколько хранится результат и метка идемпотентности
 
 Handler = Callable[[Dict[str, Any]], Awaitable[Dict[str, Any]]]
@@ -40,7 +40,7 @@ def emit(r: Any, type_: str, data: Optional[Dict[str, Any]] = None) -> None:
         return
     try:
         r.publish(
-            EVENTS_CHANNEL,
+            keys.EVENTS,
             json.dumps({"type": type_, "ts": time.time(), "data": data or {}}),
         )
     except Exception as e:
@@ -55,10 +55,10 @@ def enqueue(
     source: str,
 ) -> bool:
     """Ставит команду в очередь. False — команда с таким request_id уже была."""
-    if not r.set(f"bot:cmd:{request_id}", "1", nx=True, ex=RESULT_TTL):
+    if not r.set(f"{keys.CMD_PREFIX}{request_id}", "1", nx=True, ex=RESULT_TTL):
         return False
     r.lpush(
-        COMMANDS_KEY,
+        keys.COMMANDS,
         json.dumps(
             {
                 "request_id": request_id,
@@ -72,7 +72,7 @@ def enqueue(
 
 
 def get_result(r: Any, request_id: str) -> Optional[Dict[str, Any]]:
-    raw = r.get(f"bot:cmdres:{request_id}")
+    raw = r.get(f"{keys.CMDRES_PREFIX}{request_id}")
     return json.loads(_text(raw)) if raw else None
 
 
@@ -117,7 +117,9 @@ class CommandConsumer:
             "ok" if result.get("ok") else result["error"]["code"],
         )
         try:
-            self._r.set(f"bot:cmdres:{request_id}", json.dumps(result), ex=RESULT_TTL)
+            self._r.set(
+                f"{keys.CMDRES_PREFIX}{request_id}", json.dumps(result), ex=RESULT_TTL
+            )
         except Exception as e:
             logger.warning("Saving command result failed: %s", e)
         emit(
@@ -133,7 +135,7 @@ class CommandConsumer:
         while True:
             try:
                 item = await asyncio.to_thread(
-                    self._r.brpop, COMMANDS_KEY, timeout=poll_timeout
+                    self._r.brpop, keys.COMMANDS, timeout=poll_timeout
                 )
             except asyncio.CancelledError:
                 raise

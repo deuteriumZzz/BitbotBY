@@ -30,7 +30,7 @@ from bitbot.adapters.telegram.notifier import (
     TelegramNotifier,
 )
 from bitbot.ai.analyzer import AIAnalyzer
-from bitbot.config import ai_providers, login_link
+from bitbot.config import ai_providers, keys, login_link
 from bitbot.config.constants import REDIS_TTL_MARKET_DATA, SILENT_DEATH_ALERT_COOLDOWN
 from bitbot.config.registry import apply_overrides as apply_config_overrides
 from bitbot.config.registry import effective_config
@@ -870,7 +870,7 @@ class TradingBot:
         r = self._bus
         if r is None or type_ not in ("signal.pending", "signal.resolved"):
             return
-        key = f"bot:pending_signal:{data.get('id')}"
+        key = f"{keys.PENDING_SIGNAL_PREFIX}{data.get('id')}"
         try:
             if type_ == "signal.pending":
                 ttl = max(1, int(float(data.get("expires_at", 0)) - time.time()))
@@ -894,10 +894,10 @@ class TradingBot:
         if r is None:
             return
         try:
-            r.set("bot:last_cycle", json.dumps(summary, ensure_ascii=False))
+            r.set(keys.LAST_CYCLE, json.dumps(summary, ensure_ascii=False))
             # Готовность режимов — приложению (оно в другом процессе и читает Redis).
-            r.set("bot:mode_readiness", json.dumps(self._mode_readiness()))
-            r.set("bot:ops_status", json.dumps(ops_tasks.ops_status(self)))
+            r.set(keys.MODE_READINESS, json.dumps(self._mode_readiness()))
+            r.set(keys.OPS_STATUS, json.dumps(ops_tasks.ops_status(self)))
         except Exception as e:
             logger.debug("last cycle not stored: %s", e)
         emit(r, "trace.cycle", summary)

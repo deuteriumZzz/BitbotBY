@@ -14,6 +14,7 @@ import hmac
 import logging
 from typing import Any, Dict
 
+from bitbot.config import keys
 from bitbot.config.settings import Config
 from bitbot.storage.bot_bus import Handler, emit, error
 from bitbot.workers.jobs import JobRunner
@@ -262,7 +263,7 @@ class BotCommands:
                 "Сначала задайте PIN для перехода в Live — без него переход "
                 "из приложения запрещён.",
             )
-        fails_key = "bot:pin_fails"
+        fails_key = keys.PIN_FAILS
         try:
             fails = int(self._r.get(fails_key) or 0)
         except Exception:

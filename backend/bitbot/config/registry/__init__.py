@@ -20,12 +20,10 @@ DQN_WEIGHT, AI_WEIGHT, DQN_SOLO_CONFIDENCE, AI_STRATEGY_SELECTION из .env.exam
 from bitbot.config.registry.model import (  # noqa: F401
     BASIC,
     HOT_KEYS,
-    OVERRIDES_KEY,
     Setting,
 )
 from bitbot.config.registry.table import BY_KEY, SETTINGS  # noqa: F401
 from bitbot.config.registry.values import (  # noqa: F401 — публичный API пакета
-    HISTORY_KEY,
     HISTORY_MAX,
     apply_overrides,
     apply_patch,

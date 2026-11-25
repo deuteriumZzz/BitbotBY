@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 from typing import Iterable
 
+from bitbot.config import keys
 from bitbot.config.runtime.active import (  # noqa: F401 — публичный API пакета
     active_market_type,
     active_profile,
@@ -21,34 +22,6 @@ from bitbot.config.runtime.active import (  # noqa: F401 — публичный 
     experiences_path,
     set_active_market_type,
     set_active_profile,
-)
-from bitbot.config.runtime.keys import (
-    _KEY_AI_PROVIDER,
-    _KEY_AUTO_EXECUTE,
-    _KEY_DISABLED_STRATS,
-    _KEY_DRAWDOWN_CONFIRM,
-    _KEY_DRAWDOWN_SCALE,
-    _KEY_EXCLUDED,
-    _KEY_EXPERIMENTAL_SEEN,
-    _KEY_FORCED,
-    _KEY_LEVERAGE_DD,
-    _KEY_LEVERAGE_MODE,
-    _KEY_LEVERAGE_TARGET_RISK,
-    _KEY_LOCAL_FALLBACK,
-    _KEY_MARKET_PROFILE,
-    _KEY_MARKET_TYPE,
-    _KEY_MAX_POSITIONS,
-    _KEY_MAX_VOLUME,
-    _KEY_MIN_VOLUME,
-    _KEY_MODE,
-    _KEY_PAPER_GUARDS_OFF,
-    _KEY_PAUSED,
-    _KEY_RISK_PER_TRADE,
-    _KEY_SCAN_TOP_N,
-    _KEY_TIMEFRAME,
-    _KEY_TRADING_HOURS,
-    _KEY_TRAIN_TOP_N,
-    HOT_PREFIX,
 )
 from bitbot.config.runtime.market import MarketSettings
 from bitbot.config.runtime.presets import (  # noqa: F401 — публичный API пакета
@@ -72,30 +45,30 @@ class RuntimeConfig(MarketSettings):
 
     # ── Startup ───────────────────────────────────────────────────────────────
     _ALL_KEYS = (
-        _KEY_MODE,
-        _KEY_SCAN_TOP_N,
-        _KEY_PAUSED,
-        _KEY_AUTO_EXECUTE,
-        _KEY_LOCAL_FALLBACK,
-        _KEY_PAPER_GUARDS_OFF,
-        _KEY_FORCED,
-        _KEY_EXCLUDED,
-        _KEY_DISABLED_STRATS,
-        _KEY_TRADING_HOURS,
-        _KEY_MAX_POSITIONS,
-        _KEY_RISK_PER_TRADE,
-        _KEY_DRAWDOWN_SCALE,
-        _KEY_TRAIN_TOP_N,
-        _KEY_AI_PROVIDER,
-        _KEY_MARKET_TYPE,
-        _KEY_LEVERAGE_MODE,
-        _KEY_LEVERAGE_TARGET_RISK,
-        _KEY_LEVERAGE_DD,
-        _KEY_DRAWDOWN_CONFIRM,
-        _KEY_MARKET_PROFILE,
-        _KEY_TIMEFRAME,
-        _KEY_MIN_VOLUME,
-        _KEY_MAX_VOLUME,
+        keys.MODE,
+        keys.SCAN_TOP_N,
+        keys.PAUSED,
+        keys.AUTO_EXECUTE,
+        keys.LOCAL_FALLBACK,
+        keys.PAPER_GUARDS_OFF,
+        keys.FORCED_SYMBOLS,
+        keys.EXCLUDED_SYMBOLS,
+        keys.DISABLED_STRATEGIES,
+        keys.TRADING_HOURS,
+        keys.MAX_POSITIONS,
+        keys.RISK_PER_TRADE,
+        keys.DRAWDOWN_SCALE_ENABLED,
+        keys.TRAIN_TOP_N,
+        keys.AI_PROVIDER,
+        keys.MARKET_TYPE,
+        keys.LEVERAGE_MODE,
+        keys.LEVERAGE_TARGET_RISK,
+        keys.LEVERAGE_DD_THRESHOLD,
+        keys.DRAWDOWN_CONFIRM_CYCLES,
+        keys.MARKET_PROFILE,
+        keys.TIMEFRAME,
+        keys.MIN_VOLUME_USDT,
+        keys.MAX_VOLUME_USDT,
     )
 
     def reset_to_defaults(self, experimental: Iterable[str]) -> None:
@@ -106,9 +79,11 @@ class RuntimeConfig(MarketSettings):
         """
         from bitbot.config.registry import HOT_KEYS  # noqa: PLC0415
 
-        hot = (f"{HOT_PREFIX}{k}" for k in HOT_KEYS)
+        hot = (f"{keys.HOT_PREFIX}{k}" for k in HOT_KEYS)
         try:
-            self._r.redis_client.delete(*self._ALL_KEYS, _KEY_EXPERIMENTAL_SEEN, *hot)
+            self._r.redis_client.delete(
+                *self._ALL_KEYS, keys.EXPERIMENTAL_STRATEGIES_SEEN, *hot
+            )
             logger.info("RuntimeConfig: сброс к .env-дефолтам выполнен")
         except Exception as e:
             logger.warning("RuntimeConfig reset failed: %s", e)

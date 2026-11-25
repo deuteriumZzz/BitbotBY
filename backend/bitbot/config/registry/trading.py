@@ -6,6 +6,7 @@ from __future__ import annotations
 import logging
 from typing import Tuple
 
+from bitbot.config import keys
 from bitbot.config.registry.model import (
     _G_EXIT,
     _G_FILTER,
@@ -49,7 +50,7 @@ SETTINGS: Tuple[Setting, ...] = (
         "15m",
         options=_opts("1m", "3m", "5m", "15m", "1h", "4h", "1d"),
         hint="Профиль рынка при переключении ставит своё значение.",
-        **_redis_key("bot:timeframe", "get_timeframe"),
+        **_redis_key(keys.TIMEFRAME, "get_timeframe"),
     ),
     Setting(
         "TRADING_INTERVAL",
@@ -247,7 +248,7 @@ SETTINGS: Tuple[Setting, ...] = (
         max=10_000_000_000,
         step=100_000,
         unit="$",
-        **_redis_key("bot:min_volume_usdt", "get_min_volume_usdt"),
+        **_redis_key(keys.MIN_VOLUME_USDT, "get_min_volume_usdt"),
     ),
     Setting(
         "MAX_VOLUME_USDT",
@@ -260,7 +261,7 @@ SETTINGS: Tuple[Setting, ...] = (
         step=1_000_000,
         unit="$",
         hint="0 — без ограничения. Для Altcoin отсекает BTC и ETH.",
-        **_redis_key("bot:max_volume_usdt", "get_max_volume_usdt"),
+        **_redis_key(keys.MAX_VOLUME_USDT, "get_max_volume_usdt"),
     ),
     Setting(
         "MAX_SPREAD_PCT",

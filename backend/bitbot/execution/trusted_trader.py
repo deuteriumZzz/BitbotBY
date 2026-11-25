@@ -33,12 +33,11 @@ from typing import (
 )
 
 from bitbot.adapters.sentiment.telegram_sentiment import Post, channel_names, mentions
+from bitbot.config import keys
 from bitbot.domain.types import TRUSTED_PREFIX, is_trusted
 
 logger = logging.getLogger(__name__)
 
-LAST_KEY = "bot:tg:last_trusted"  # последний разобранный пост — для приложения
-UNTRUSTED_KEY = "bot:tg:untrusted"  # канал → id сделки, после которой снято доверие
 _STALE_S = 120.0  # пост старше — пришёл с опозданием (обрыв связи): не входим
 _MAX_SL_DIST = 0.5  # стоп дальше 50% от цены — почти наверняка ошибка разбора
 
@@ -323,7 +322,7 @@ class TrustedTrader:
         self._emit("trusted.post", event)
         if self._r is not None:
             try:
-                self._r.set(LAST_KEY, json.dumps(event, ensure_ascii=False))
+                self._r.set(keys.TG_LAST_TRUSTED, json.dumps(event, ensure_ascii=False))
             except Exception as e:
                 logger.debug("last trusted post not stored: %s", e)
 
@@ -334,13 +333,13 @@ class TrustedTrader:
         if n <= 0 or not trusted or self._r is None:
             return
         for ch in trusted:
-            after = int(self._r.hget(UNTRUSTED_KEY, ch) or 0)
+            after = int(self._r.hget(keys.TG_UNTRUSTED, ch) or 0)
             rows = await self._history.recent_results(f"{TRUSTED_PREFIX}{ch}", n, after)
             if len(rows) < n or any(pnl >= 0 for _, pnl in rows):
                 continue
             left = [c for c in self._trusted() if c != ch]
             self._rc.set_hot("TELEGRAM_TRUSTED_CHANNELS", ",".join(left))
-            self._r.hset(UNTRUSTED_KEY, ch, rows[0][0])
+            self._r.hset(keys.TG_UNTRUSTED, ch, rows[0][0])
             logger.warning("Channel @%s untrusted after %d losses in a row", ch, n)
             self._emit("config.changed", {"keys": ["TELEGRAM_TRUSTED_CHANNELS"]})
             await self._telegram.notify(

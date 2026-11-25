@@ -22,7 +22,7 @@ import urllib.parse
 import urllib.request
 from typing import Any, Dict, Optional, Tuple
 
-from bitbot.config import login_link
+from bitbot.config import keys, login_link
 from bitbot.config import secrets as secrets_store
 
 SESSION_TTL = 12 * 3600
@@ -30,10 +30,6 @@ INIT_DATA_MAX_AGE = 24 * 3600
 CODE_TTL = 300
 CODE_MAX_ATTEMPTS = 5
 CODE_RESEND_SEC = 30
-
-_CODE_KEY = "bot:desktop_code"
-_CODE_RESEND_KEY = "bot:desktop_code_sent"
-_CODE_TRIES_KEY = "bot:desktop_code_tries"
 
 
 def _sha(text: str) -> str:
@@ -88,7 +84,7 @@ def verify_init_data(
 
 
 def _session_key(token: str) -> str:
-    return "bot:session:" + _sha(token)
+    return keys.SESSION_PREFIX + _sha(token)
 
 
 def create_session(r: Any, subject: str, source: str) -> str:
@@ -133,11 +129,11 @@ def bearer_token(headers: Any) -> str:
 
 def issue_desktop_code(r: Any) -> Optional[str]:
     """Новый код или None, если прошлый запрошен меньше CODE_RESEND_SEC назад."""
-    if not r.set(_CODE_RESEND_KEY, "1", nx=True, ex=CODE_RESEND_SEC):
+    if not r.set(keys.DESKTOP_CODE_SENT, "1", nx=True, ex=CODE_RESEND_SEC):
         return None
     code = f"{secrets.randbelow(10**6):06d}"
-    r.delete(_CODE_TRIES_KEY)
-    r.set(_CODE_KEY, json.dumps({"h": _sha(code)}), ex=CODE_TTL)
+    r.delete(keys.DESKTOP_CODE_TRIES)
+    r.set(keys.DESKTOP_CODE, json.dumps({"h": _sha(code)}), ex=CODE_TTL)
     return code
 
 
@@ -147,18 +143,18 @@ def check_desktop_code(r: Any, code: str) -> str:
     Попытки считает INCR в Redis: параллельные запросы не обойдут лимит
     (прочитать-изменить-записать давало каждому из них один и тот же счётчик).
     """
-    raw = r.get(_CODE_KEY)
+    raw = r.get(keys.DESKTOP_CODE)
     if not raw:
         return "expired"
     state = json.loads(raw.decode() if isinstance(raw, bytes) else raw)
-    tries = int(r.incr(_CODE_TRIES_KEY))
+    tries = int(r.incr(keys.DESKTOP_CODE_TRIES))
     if tries == 1:
-        r.expire(_CODE_TRIES_KEY, CODE_TTL)
+        r.expire(keys.DESKTOP_CODE_TRIES, CODE_TTL)
     if tries > CODE_MAX_ATTEMPTS:
         return "locked"
     if hmac.compare_digest(_sha(str(code).strip()), state["h"]):
         # Одноразовый: из двух одновременных верных запросов вход получит один.
-        return "ok" if r.delete(_CODE_KEY) else "expired"
+        return "ok" if r.delete(keys.DESKTOP_CODE) else "expired"
     return "locked" if tries >= CODE_MAX_ATTEMPTS else "wrong"
 
 
@@ -176,7 +172,6 @@ LOCAL_TOKEN_MIN = 32
 LOCAL_MAX_FAILS = 5
 LOCAL_LOCK_SEC = 600
 _LOCAL_HOSTS = {"localhost", "127.0.0.1", "[::1]"}
-_LOCAL_FAIL_KEY = "bot:local_login_fails"
 
 
 def local_login_token() -> str:
@@ -201,17 +196,19 @@ def check_local_login(r: Any, token: str, host_header: str) -> str:
         return "disabled"
     if _host_only(host_header) not in _LOCAL_HOSTS:
         return "host"
-    fails = r.get(_LOCAL_FAIL_KEY)
+    fails = r.get(keys.LOCAL_LOGIN_FAILS)
     if int(fails or 0) >= LOCAL_MAX_FAILS:
         return "locked"
     if login_link.consume(r, token):  # ссылка из Telegram (/app)
         return "ok"
     if not hmac.compare_digest(str(token).encode(), expected.encode()):
-        if r.incr(_LOCAL_FAIL_KEY) == 1:
-            r.expire(_LOCAL_FAIL_KEY, LOCAL_LOCK_SEC)
+        if r.incr(keys.LOCAL_LOGIN_FAILS) == 1:
+            r.expire(keys.LOCAL_LOGIN_FAILS, LOCAL_LOCK_SEC)
         return "wrong"
     # Один раз на токен запуска: повторное открытие той же ссылки не пускает.
-    if not r.set(f"bot:local_login_used:{_sha(expected)[:16]}", "1", nx=True, ex=86400):
+    if not r.set(
+        f"{keys.LOCAL_LOGIN_USED_PREFIX}{_sha(expected)[:16]}", "1", nx=True, ex=86400
+    ):
         return "used"
     return "ok"
 

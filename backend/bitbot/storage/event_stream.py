@@ -15,9 +15,8 @@ from __future__ import annotations
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
+from bitbot.config import keys
 from bitbot.infra import fastjson
-
-STREAM_KEY = "bot:stream:events"
 
 
 def _t(x: Any) -> str:
@@ -46,7 +45,9 @@ def _parse(entries: Any) -> List[Tuple[str, Dict[str, Any]]]:
 
 
 class EventStream:
-    def __init__(self, r: Any, key: str = STREAM_KEY, maxlen: int = 10_000) -> None:
+    def __init__(
+        self, r: Any, key: str = keys.STREAM_EVENTS, maxlen: int = 10_000
+    ) -> None:
         self.r, self.key, self.maxlen = r, key, maxlen
 
     def publish(

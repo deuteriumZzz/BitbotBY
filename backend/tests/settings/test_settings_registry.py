@@ -10,6 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from bitbot.api import data
+from bitbot.config import keys
 from bitbot.config import registry as reg
 from bitbot.config.settings import Config
 from tests.infra.test_bot_bus import FakeRedis
@@ -75,7 +76,7 @@ def test_apply_patch_hot_and_restart():
     rc.set_max_positions.assert_called_once_with(4)
     assert result["applied_hot"] == ["MAX_POSITIONS"]
     assert result["pending_restart"] == ["ATR_SPIKE_MULT"]
-    assert json.loads(r.hgetall(reg.OVERRIDES_KEY)["ATR_SPIKE_MULT"]) == 4.0
+    assert json.loads(r.hgetall(keys.CONFIG_OVERRIDES)["ATR_SPIKE_MULT"]) == 4.0
 
 
 def test_hot_settings_apply_at_once_and_survive_old_overrides():
@@ -85,7 +86,7 @@ def test_hot_settings_apply_at_once_and_survive_old_overrides():
     rc = RuntimeConfig(MagicMock(redis_client=r))
     assert rc.hot("TELEGRAM_WINDOW_MIN") == Config.TELEGRAM_WINDOW_MIN
     # значение из UI, сохранённое, когда настройка ещё требовала рестарта
-    r.hset(reg.OVERRIDES_KEY, "TELEGRAM_SENTIMENT_CHANNELS", json.dumps("old"))
+    r.hset(keys.CONFIG_OVERRIDES, "TELEGRAM_SENTIMENT_CHANNELS", json.dumps("old"))
     assert rc.hot("TELEGRAM_SENTIMENT_CHANNELS") == "old"
     out = reg.apply_patch(rc, r, {"TELEGRAM_WINDOW_MIN": 15})
     assert out["applied_hot"] == ["TELEGRAM_WINDOW_MIN"]
@@ -97,15 +98,15 @@ def test_hot_settings_apply_at_once_and_survive_old_overrides():
 
 def test_apply_patch_none_removes_override():
     r = FakeRedis()
-    r.hset(reg.OVERRIDES_KEY, "ATR_SPIKE_MULT", "4.0")
+    r.hset(keys.CONFIG_OVERRIDES, "ATR_SPIKE_MULT", "4.0")
     reg.apply_patch(MagicMock(), r, {"ATR_SPIKE_MULT": None})
-    assert "ATR_SPIKE_MULT" not in r.hgetall(reg.OVERRIDES_KEY)
+    assert "ATR_SPIKE_MULT" not in r.hgetall(keys.CONFIG_OVERRIDES)
 
 
 def test_load_overrides_skips_invalid_values():
     r = FakeRedis()
-    r.hset(reg.OVERRIDES_KEY, "ATR_SPIKE_MULT", "999")  # больше max
-    r.hset(reg.OVERRIDES_KEY, "LOG_LEVEL", '"DEBUG"')
+    r.hset(keys.CONFIG_OVERRIDES, "ATR_SPIKE_MULT", "999")  # больше max
+    r.hset(keys.CONFIG_OVERRIDES, "LOG_LEVEL", '"DEBUG"')
     assert reg.load_overrides(r) == {"LOG_LEVEL": "DEBUG"}
 
 
@@ -121,7 +122,7 @@ class _Cfg:
 def test_apply_overrides_sets_config_and_env(monkeypatch):
     monkeypatch.delenv("ATR_SPIKE_MULT", raising=False)
     r = FakeRedis()
-    r.hset(reg.OVERRIDES_KEY, "ATR_SPIKE_MULT", "4.5")
+    r.hset(keys.CONFIG_OVERRIDES, "ATR_SPIKE_MULT", "4.5")
     cfg = type("Cfg", (_Cfg,), {})
     assert reg.apply_overrides(cfg, r) == ["ATR_SPIKE_MULT"]
     assert cfg.ATR_SPIKE_MULT == 4.5
@@ -132,7 +133,7 @@ def test_apply_overrides_sets_config_and_env(monkeypatch):
 def test_apply_overrides_rolls_back_when_they_break_validate(monkeypatch):
     monkeypatch.delenv("STOP_LOSS_PERCENT", raising=False)
     r = FakeRedis()
-    r.hset(reg.OVERRIDES_KEY, "STOP_LOSS_PERCENT", "0.25")
+    r.hset(keys.CONFIG_OVERRIDES, "STOP_LOSS_PERCENT", "0.25")
     cfg = type("Cfg", (_Cfg,), {})
     assert reg.apply_overrides(cfg, r) == []
     assert cfg.STOP_LOSS_PERCENT == 0.05

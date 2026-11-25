@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
+from bitbot.config import keys
 from bitbot.infra.logger import (
     JSONFormatter,
     _SecretFilter,
@@ -162,7 +163,7 @@ def test_desktop_code_single_use_under_race():
     code = auth.issue_desktop_code(r)
     assert auth.check_desktop_code(r, code) == "ok"
     # Второй одновременный запрос прочитал код до удаления: delete вернёт 0.
-    r.set(auth._CODE_KEY, json.dumps({"h": auth._sha(code)}))
+    r.set(keys.DESKTOP_CODE, json.dumps({"h": auth._sha(code)}))
     r.delete = lambda *k: 0
     assert auth.check_desktop_code(r, code) == "expired"
 
