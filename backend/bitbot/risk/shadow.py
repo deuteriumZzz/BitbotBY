@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Optional
 
-import numpy as np
+from numpy.typing import NDArray
 
 from bitbot.risk.metrics import beta as calc_beta
 from bitbot.risk.metrics import hist_var_cvar
@@ -37,7 +37,7 @@ def _sign(side: str) -> float:
 
 
 def asset_risk(
-    symbol: str, returns: Callable[[str], Optional[np.ndarray]]
+    symbol: str, returns: Callable[[str], Optional[NDArray[Any]]]
 ) -> Dict[str, Any]:
     """(beta, cvar, источник) по доходностям окна; без данных — значения по умолчанию."""
     r = returns(symbol)
@@ -70,7 +70,7 @@ def shadow_verdict(
     peak_equity: float,
     day_start_equity: float,
     consecutive_losses: int,
-    returns: Callable[[str], Optional[np.ndarray]],
+    returns: Callable[[str], Optional[NDArray[Any]]],
     max_corr: Callable[[str, List[str]], float],
     limits: GateLimits,
     kill_switch: bool = False,

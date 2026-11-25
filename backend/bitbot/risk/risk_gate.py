@@ -16,7 +16,7 @@ allow/reduce/deny с кодами причин. Не знает ни о моде
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Sequence
+from typing import Any, Dict, List, Sequence
 
 from bitbot.risk.metrics import net_beta_exposure, stress_cvar
 
@@ -85,7 +85,7 @@ class Verdict:
     reasons: List[str] = field(default_factory=list)
     level: int = 0
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "action": self.action,
             "approved_notional": self.approved_notional,
@@ -94,7 +94,9 @@ class Verdict:
         }
 
 
-def breaker_levels(pf: Portfolio, lim: GateLimits, ood: bool = False) -> dict:
+def breaker_levels(
+    pf: Portfolio, lim: GateLimits, ood: bool = False
+) -> Dict[int, bool]:
     """Независимые признаки уровней 1–4 (могут быть истинны в любой комбинации)."""
     dd = 1 - pf.equity / pf.peak_equity if pf.peak_equity > 0 else 0.0
     day_loss = (

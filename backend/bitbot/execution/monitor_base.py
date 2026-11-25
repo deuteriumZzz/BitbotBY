@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Set, Tuple
 
 from bitbot.config.settings import Config
 from bitbot.domain.types import PositionRecord, is_trusted
@@ -55,15 +55,15 @@ class MonitorBase:
         # Load persisted counter so circuit breaker survives bot restarts.
         self._consecutive_losses: int = self._load_cb_state()
         # State for dynamic exits — updated each cycle via update_market_state().
-        self._current_signals: dict = {}
-        self._current_market_ctx: dict = {}
+        self._current_signals: Dict[str, Any] = {}
+        self._current_market_ctx: Dict[str, Any] = {}
         self._current_regime: str = "unknown"
         # Счётчик подтверждений для regime_flip/funding: {symbol: count}
         # При N=3 подряд — escalate to force_close
         self._exit_confirm_counts: Dict[str, int] = {}
         self._EXIT_CONFIRM_THRESHOLD = 3
         # Keeps strong references to fire-and-forget tasks so GC can't destroy them.
-        self._background_tasks: set = set()
+        self._background_tasks: "Set[asyncio.Task[Any]]" = set()
 
     def _publish(self, type_: str, data: Dict[str, Any]) -> None:
         if self._emit is not None:
@@ -93,8 +93,8 @@ class MonitorBase:
 
     def update_market_state(
         self,
-        signals: dict,
-        market_ctx: dict,
+        signals: Dict[str, Any],
+        market_ctx: Dict[str, Any],
         regime: str,
     ) -> None:
         """Обновляет рыночное состояние для динамических выходов.
@@ -105,7 +105,9 @@ class MonitorBase:
         self._current_market_ctx = market_ctx
         self._current_regime = regime
 
-    def _check_dynamic_exit(self, sym: str, record: PositionRecord) -> tuple:
+    def _check_dynamic_exit(
+        self, sym: str, record: PositionRecord
+    ) -> Tuple[Optional[str], str]:
         """Проверяет условия досрочного выхода из позиции.
 
         :return: (action: str | None, reason: str)

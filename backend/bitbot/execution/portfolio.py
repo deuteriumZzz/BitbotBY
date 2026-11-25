@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from bitbot.config.settings import Config
 from bitbot.storage.redis_client import RedisClient
@@ -24,7 +24,7 @@ class PortfolioManager:
     Использует Redis для сохранения состояния между запусками.
     """
 
-    def __init__(self, initial_balance: float, redis_client=None) -> None:
+    def __init__(self, initial_balance: float, redis_client: Any = None) -> None:
         """
         Инициализирует менеджер портфеля.
 

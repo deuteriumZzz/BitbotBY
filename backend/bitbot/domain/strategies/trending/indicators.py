@@ -6,8 +6,11 @@
 tests/strategies/test_strategies_ported.py.
 """
 
+from typing import Any
+
 import numpy as np
 import pandas as pd
+from numpy.typing import NDArray
 
 from bitbot.domain.strategies.ported_base import (
     indicator_strategy,
@@ -21,7 +24,7 @@ def _chaikin_osc_signals(
     slow_period: int = 10,
     entry_threshold: float = 0.0,
     allow_short: bool = False,
-    **_,
+    **_: object,
 ) -> pd.Series:
     high, low, close, volume = df["high"], df["low"], df["close"], df["volume"]
 
@@ -65,7 +68,7 @@ def _coppock_signals(
     roc_short: int = 11,
     wma_period: int = 10,
     allow_short: bool = False,
-    **_,
+    **_: object,
 ) -> pd.Series:
     close = df["close"]
 
@@ -99,7 +102,7 @@ def _coral_trend_signals(
     period: int = 21,
     cd: float = 0.4,
     allow_short: bool = False,
-    **_,
+    **_: object,
 ) -> pd.Series:
     close = df["close"]
 
@@ -152,7 +155,7 @@ def _kst_signals(
     sma4: int = 15,
     signal_period: int = 9,
     allow_short: bool = False,
-    **_,
+    **_: object,
 ) -> pd.Series:
     close = df["close"]
 
@@ -189,7 +192,7 @@ def _rvi_signals(
     df: pd.DataFrame,
     period: int = 10,
     allow_short: bool = False,
-    **_,
+    **_: object,
 ) -> pd.Series:
     open_, high, low, close = df["open"], df["high"], df["low"], df["close"]
 
@@ -220,11 +223,11 @@ def _zlsma_rolling_linreg_endpoint(series: pd.Series, length: int) -> pd.Series:
     x_mean = x.mean()
     x_var = ((x - x_mean) ** 2).sum()
 
-    def _endpoint(y: np.ndarray) -> float:
+    def _endpoint(y: NDArray[Any]) -> float:
         y_mean = y.mean()
         slope = ((x - x_mean) * (y - y_mean)).sum() / x_var
         intercept = y_mean - slope * x_mean
-        return slope * (length - 1) + intercept
+        return float(slope * (length - 1) + intercept)
 
     return series.rolling(length).apply(_endpoint, raw=True)
 
@@ -233,7 +236,7 @@ def _zlsma_signals(
     df: pd.DataFrame,
     length: int = 32,
     allow_short: bool = False,
-    **_,
+    **_: object,
 ) -> pd.Series:
     close = df["close"]
 
@@ -283,7 +286,7 @@ def _engulfing_trend_signals(
     roc_period: int = 24,
     roc_ceiling: float = 8.0,
     allow_short: bool = False,
-    **_,
+    **_: object,
 ) -> pd.Series:
     open_, close = df["open"], df["close"]
     prev_open, prev_close = open_.shift(1), close.shift(1)
@@ -351,7 +354,7 @@ def _chaikin_money_flow_signals(
     period: int = 20,
     entry_threshold: float = 0.05,
     allow_short: bool = False,
-    **_,
+    **_: object,
 ) -> pd.Series:
     high, low, close, volume = df["high"], df["low"], df["close"], df["volume"]
 
@@ -387,7 +390,7 @@ def _klinger_signals(
     slow_period: int = 55,
     signal_period: int = 13,
     allow_short: bool = False,
-    **_,
+    **_: object,
 ) -> pd.Series:
     high, low, close, volume = df["high"], df["low"], df["close"], df["volume"]
 
@@ -435,7 +438,7 @@ def _awesome_saucer_signals(
     fast_period: int = 5,
     slow_period: int = 34,
     allow_short: bool = False,
-    **_,
+    **_: object,
 ) -> pd.Series:
     midpoint = (df["high"] + df["low"]) / 2
     ao = midpoint.rolling(fast_period).mean() - midpoint.rolling(slow_period).mean()
@@ -484,7 +487,7 @@ AwesomeSaucerStrategy = indicator_strategy(
 # ── pattern_heikin_ashi ──
 def _heikin_ashi_heikin_ashi(
     df: pd.DataFrame,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[NDArray[Any], NDArray[Any], NDArray[Any], NDArray[Any]]:
     o = df["open"].to_numpy(dtype=float)
     h = df["high"].to_numpy(dtype=float)
     l = df["low"].to_numpy(dtype=float)
@@ -501,7 +504,9 @@ def _heikin_ashi_heikin_ashi(
     return ha_open, ha_high, ha_low, ha_close
 
 
-def _heikin_ashi_signals(df: pd.DataFrame, allow_short: bool = False, **_) -> pd.Series:
+def _heikin_ashi_signals(
+    df: pd.DataFrame, allow_short: bool = False, **_: object
+) -> pd.Series:
     ha_open, ha_high, ha_low, ha_close = _heikin_ashi_heikin_ashi(df)
 
     bullish_no_lower_wick = (ha_close > ha_open) & np.isclose(ha_open, ha_low)
@@ -557,7 +562,7 @@ def _adx_dmi_signals(
     fast: int = 10,
     slow: int = 30,
     allow_short: bool = False,
-    **_,
+    **_: object,
 ) -> pd.Series:
     close = df["close"]
     adx = _adx_dmi_dmi_adx(df, period)
@@ -600,7 +605,7 @@ def _chandelier_signals(
     period: int = 22,
     mult: float = 3.0,
     allow_short: bool = False,
-    **_,
+    **_: object,
 ) -> pd.Series:
     high, low, close = df["high"], df["low"], df["close"]
     atr = _chandelier_atr(df, period)
@@ -652,7 +657,7 @@ ChandelierStrategy = indicator_strategy(
 
 # ── trend_halftrend ──
 def _halftrend_signals(
-    df: pd.DataFrame, amplitude: int = 4, allow_short: bool = False, **_
+    df: pd.DataFrame, amplitude: int = 4, allow_short: bool = False, **_: object
 ) -> pd.Series:
     ma_high = df["high"].rolling(amplitude).mean().to_numpy()
     ma_low = df["low"].rolling(amplitude).mean().to_numpy()
@@ -702,7 +707,7 @@ HalftrendStrategy = indicator_strategy(
 
 # ── trend_ssl_channel ──
 def _ssl_channel_signals(
-    df: pd.DataFrame, period: int = 10, allow_short: bool = False, **_
+    df: pd.DataFrame, period: int = 10, allow_short: bool = False, **_: object
 ) -> pd.Series:
     close = df["close"]
     sma_high = df["high"].rolling(period).mean()
@@ -735,7 +740,7 @@ def _ad_line_trend_signals(
     fast_period: int = 10,
     slow_period: int = 30,
     allow_short: bool = False,
-    **_,
+    **_: object,
 ) -> pd.Series:
     high, low, close, volume = df["high"], df["low"], df["close"], df["volume"]
 
@@ -769,7 +774,7 @@ def _ease_of_movement_signals(
     volume_scale: float = 1_000_000.0,
     entry_threshold: float = 0.0,
     allow_short: bool = False,
-    **_,
+    **_: object,
 ) -> pd.Series:
     high, low, volume = df["high"], df["low"], df["volume"]
 
@@ -802,7 +807,7 @@ def _elder_force_signals(
     fast_period: int = 2,
     slow_period: int = 13,
     allow_short: bool = False,
-    **_,
+    **_: object,
 ) -> pd.Series:
     close, volume = df["close"], df["volume"]
     force = close.diff() * volume
@@ -843,7 +848,7 @@ def _vwap_trend_signals(
     vwap_period: int = 20,
     slope_lookback: int = 5,
     allow_short: bool = False,
-    **_,
+    **_: object,
 ) -> pd.Series:
     close, volume = df["close"], df["volume"]
     typical = (df["high"] + df["low"] + close) / 3
@@ -885,7 +890,7 @@ def _vw_macd_signals(
     slow_period: int = 26,
     signal_period: int = 9,
     allow_short: bool = False,
-    **_,
+    **_: object,
 ) -> pd.Series:
     close, volume = df["close"], df["volume"]
 
@@ -916,7 +921,7 @@ def _dual_momentum_signals(
     lookback: int = 252,
     risk_free_rate: float = 0.0,
     allow_short: bool = False,
-    **_,
+    **_: object,
 ) -> pd.Series:
     close = df["close"]
     trailing_return = close.pct_change(lookback)
@@ -946,7 +951,7 @@ def _gtaa_ma_signals(
     df: pd.DataFrame,
     ma_lookback: int = 210,
     allow_short: bool = False,
-    **_,
+    **_: object,
 ) -> pd.Series:
     close = df["close"]
     sma = close.rolling(ma_lookback, min_periods=ma_lookback).mean()

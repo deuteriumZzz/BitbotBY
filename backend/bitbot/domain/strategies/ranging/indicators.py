@@ -51,7 +51,7 @@ def _cci_aroon_signals(
     trend_ema_period: int = 100,
     trend_slope_lookback: int = 10,
     allow_short: bool = False,
-    **_,
+    **_: object,
 ) -> pd.Series:
     high, low, close = df["high"], df["low"], df["close"]
 
@@ -109,7 +109,7 @@ def _fisher_transform_signals(
     fisher_period: int = 12,
     smooth_period: int = 8,
     baseline_period: int = 21,
-    **_,
+    **_: object,
 ) -> pd.Series:
     median_price = (df["high"] + df["low"]) / 2
     fisher = _fisher_transform_fisher(median_price, fisher_period)
@@ -142,7 +142,7 @@ FisherTransformStrategy = indicator_strategy(
 
 # ── niche_kdj ──
 def _kdj_signals(
-    df: pd.DataFrame, period: int = 9, allow_short: bool = False, **_
+    df: pd.DataFrame, period: int = 9, allow_short: bool = False, **_: object
 ) -> pd.Series:
     high, low, close = df["high"], df["low"], df["close"]
 
@@ -187,7 +187,7 @@ def _rsi_divergence_signals(
     pivot_window: int = 3,
     lookback: int = 30,
     allow_short: bool = False,
-    **_,
+    **_: object,
 ) -> pd.Series:
     close = df["close"]
     rsi = _rsi_divergence_rsi(close, rsi_period)
@@ -261,7 +261,7 @@ def _shooting_star_signals(
     stop_pct: float = 0.05,
     holding_period: int = 7,
     allow_short: bool = True,
-    **_,
+    **_: object,
 ) -> pd.Series:
     open_, high, low, close = df["open"], df["high"], df["low"], df["close"]
 
@@ -322,7 +322,7 @@ def _cci_reversion_signals(
     period: int = 20,
     threshold: float = 100,
     allow_short: bool = False,
-    **_,
+    **_: object,
 ) -> pd.Series:
     typical = (df["high"] + df["low"] + df["close"]) / 3
     sma = typical.rolling(period).mean()
@@ -367,7 +367,7 @@ def _ifr2_signals(
     trend_ema_period: int = 50,
     slope_lookback: int = 5,
     exit_lookback: int = 2,
-    **_,
+    **_: object,
 ) -> pd.Series:
     close = df["close"]
     rsi = _ifr2_rsi(close, rsi_period)
@@ -402,7 +402,7 @@ def _stochastic_signals(
     oversold: float = 20,
     overbought: float = 80,
     allow_short: bool = False,
-    **_,
+    **_: object,
 ) -> pd.Series:
     high, low, close = df["high"], df["low"], df["close"]
     lowest_low = low.rolling(k_period).min()
@@ -462,7 +462,7 @@ def _poc_reversion_signals(
     num_bins: int = 12,
     dev_pct: float = 0.01,
     allow_short: bool = False,
-    **_,
+    **_: object,
 ) -> pd.Series:
     close = df["close"]
     typical = (df["high"] + df["low"] + close) / 3
@@ -494,7 +494,7 @@ def _bollinger_reentry_signals(
     period: int = 20,
     num_std: float = 2.0,
     allow_short: bool = False,
-    **_,
+    **_: object,
 ) -> pd.Series:
     close = df["close"]
     mid = close.rolling(period).mean()
@@ -533,7 +533,7 @@ def _spike_reversal_signals(
     return_z_threshold: float = 1.5,
     vol_lookback: int = 48,
     holding_period: int = 6,
-    **_,
+    **_: object,
 ) -> pd.Series:
     ret = df["close"].pct_change()
 

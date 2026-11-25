@@ -431,10 +431,10 @@ class ClosingMixin(BookingMixin):
         else:
             pnl_pct = (entry - price) / entry if entry else 0.0
 
-        if pos.get("snap"):
+        _snap = pos.get("snap")
+        if _snap:
             from bitbot.ml.experience_buffer import save as _exp_save  # noqa: PLC0415
 
-            _snap = pos["snap"]
             _side = side
             _entry = entry
             _price = price

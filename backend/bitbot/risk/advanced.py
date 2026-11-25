@@ -18,24 +18,24 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, TypeGuard, cast
 
 import numpy as np
+from numpy.typing import NDArray
 
 
 # ── Динамический CVaR ─────────────────────────────────────────────────────────
 def ewma_sigma(
-    returns: "Sequence[float] | np.ndarray", lam: float = 0.94, warmup: int = 20
-) -> np.ndarray:
+    returns: "Sequence[float] | NDArray[Any]", lam: float = 0.94, warmup: int = 20
+) -> NDArray[Any]:
     """Условная σ_t по RiskMetrics: σ_t² = λσ_{t-1}² + (1−λ)r_{t-1}²; старт — выборочная σ первых `warmup`."""
     r = np.asarray(returns, float)
     s2 = np.empty(len(r) + 1)
     s2[0] = np.var(r[:warmup]) if len(r) >= warmup else np.var(r)
     for t in range(len(r)):
         s2[t + 1] = lam * s2[t] + (1 - lam) * r[t] ** 2
-    return np.sqrt(
-        np.maximum(s2, 1e-18)
-    )  # [t] — прогноз σ для шага t; последний — на следующий шаг
+    # [t] — прогноз σ для шага t; последний — на следующий шаг
+    return cast(NDArray[Any], np.sqrt(np.maximum(s2, 1e-18)))
 
 
 def dynamic_cvar(
@@ -102,7 +102,7 @@ class View:
     confidence: float  # (0, 1]
 
 
-def _finite_number(x: Any) -> bool:
+def _finite_number(x: Any) -> TypeGuard[float]:
     return not isinstance(x, bool) and isinstance(x, (int, float)) and math.isfinite(x)
 
 
@@ -137,7 +137,7 @@ def validate_views(
 
 def black_litterman(
     universe: Sequence[str],
-    cov: np.ndarray,
+    cov: NDArray[Any],
     market_weights: Sequence[float],
     views: Sequence[View],
     tau: float = 0.05,
@@ -171,12 +171,12 @@ def black_litterman(
 
 
 def mv_weights(
-    mu: np.ndarray,
-    cov: np.ndarray,
+    mu: NDArray[Any],
+    cov: NDArray[Any],
     risk_aversion: float = 2.5,
     cap: float = 0.3,
     long_only: bool = True,
-) -> np.ndarray:
+) -> NDArray[Any]:
     """w ∝ Σ⁻¹μ/λ с потолком на актив и суммарной экспозицией ≤ 1. Исследовательская функция."""
     w = np.linalg.solve(np.asarray(cov, float), np.asarray(mu, float)) / risk_aversion
     w = np.clip(w, 0.0 if long_only else -cap, cap)

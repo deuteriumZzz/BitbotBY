@@ -10,10 +10,11 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, List
+from typing import Any, Dict, List
 
 import numpy as np
 import pandas as pd
+from numpy.typing import NDArray
 
 logger = logging.getLogger(__name__)
 
@@ -58,10 +59,10 @@ class PortfolioOptimizer:
             cov = returns_df.cov().values
             w0 = np.full(n, 1.0 / n)
 
-            def neg_sharpe(w: np.ndarray) -> float:
+            def neg_sharpe(w: NDArray[Any]) -> float:
                 ret = mu @ w
                 vol = np.sqrt(w @ cov @ w + 1e-12)
-                return -(ret - _RISK_FREE) / vol
+                return float(-(ret - _RISK_FREE) / vol)
 
             result = minimize(
                 neg_sharpe,

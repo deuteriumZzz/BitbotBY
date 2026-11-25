@@ -39,7 +39,7 @@ class PositionRecord(TypedDict, total=False):
     peak_price: float
 
     # Снэпшот сохраняется при закрытии для буфера опыта SAC
-    snap: Optional[dict]
+    snap: Optional[Dict[str, Any]]
 
     # Записывается при открытии для атрибуции PnL и диагностики сайзинга
     balance_at_entry: float

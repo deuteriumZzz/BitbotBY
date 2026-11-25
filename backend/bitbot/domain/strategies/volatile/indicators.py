@@ -25,7 +25,7 @@ def _waddah_attar_signals(
     dz_period: int = 100,
     dz_mult: float = 3.7,
     allow_short: bool = False,
-    **_,
+    **_: object,
 ) -> pd.Series:
     high, low, close = df["high"], df["low"], df["close"]
 

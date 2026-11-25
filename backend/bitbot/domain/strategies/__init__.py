@@ -193,7 +193,7 @@ class TradingStrategy:
         self.strategy: BaseStrategy = create_strategy(strategy_name)
         self.logger = logging.getLogger(__name__)
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         """Инициализирует оркестратор и логирует информацию об активной стратегии."""
         self.logger.info(
             "Strategy initialized: %s | risk=%s | timeframes=%s",
@@ -202,7 +202,7 @@ class TradingStrategy:
             self.strategy.recommended_timeframes,
         )
 
-    def switch_strategy(self, new_name: str):
+    def switch_strategy(self, new_name: str) -> None:
         """
         Переключает активную стратегию без перезапуска бота.
 

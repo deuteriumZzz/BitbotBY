@@ -49,7 +49,7 @@ _REGIME_MULT = {"uptrend": 1.0, "sideways": 0.7, "downtrend": 0.5}
 
 
 def _calc_dynamic_leverage(
-    top: dict,
+    top: Dict[str, Any],
     entry: float,
     balance: float = 0.0,
     peak_balance: float = 0.0,
@@ -199,7 +199,7 @@ class OrderExecutor:
 
     async def execute(
         self,
-        top: dict,
+        top: Dict[str, Any],
         market_data: Dict[str, pd.DataFrame],
         balance: float,
     ) -> None:
@@ -744,8 +744,11 @@ class OrderExecutor:
         Проверяет спред (ask-bid)/mid и 24h volume в USDT.
         При ошибке получения данных возвращает True (не блокируем торговлю).
         """
+        exchange = self._api.exchange
+        if exchange is None:  # клиента биржи нет — не блокируем (как при ошибке)
+            return True
         try:
-            ticker = await self._api.exchange.fetch_ticker(sym)
+            ticker = await exchange.fetch_ticker(sym)
             bid = ticker.get("bid") or price
             ask = ticker.get("ask") or price
             volume_usdt = ticker.get("quoteVolume") or 0.0
@@ -829,7 +832,7 @@ class OrderExecutor:
 
     def _size_position(
         self,
-        top: dict,
+        top: Dict[str, Any],
         balance: float,
         live_wr: float,
         live_n: int,
@@ -888,4 +891,4 @@ class OrderExecutor:
                 quantity,
             )
 
-        return quantity
+        return float(quantity)

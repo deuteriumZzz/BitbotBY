@@ -119,6 +119,18 @@ no_strict_optional = true
 warn_unused_ignores = false
 warn_return_any = false
 
+# Ядро торговой логики — строгая типизация: предметная логика, риск, исполнение.
+# Остальной код переводится по мере правок.
+[[tool.mypy.overrides]]
+module = ["bitbot.domain.*", "bitbot.risk.*", "bitbot.execution.*"]
+strict_optional = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+disallow_any_generics = true
+check_untyped_defs = true
+warn_return_any = true
+warn_unused_ignores = true
+
 # ── тесты ────────────────────────────────────────────────────────────────────
 
 [tool.pytest.ini_options]

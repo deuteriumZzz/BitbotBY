@@ -96,7 +96,7 @@ class LevelsMixin(ClosingMixin):
                 f" SL → breakeven ${entry:.4f}",
                 kind="position_close",
             )
-        return {**updated, "partial_tp_triggered": True}  # type: ignore[return-value]
+        return {**updated, "partial_tp_triggered": True}
 
     async def close_fraction(
         self,
@@ -288,11 +288,11 @@ class LevelsMixin(ClosingMixin):
         if side == "buy":
             trail = price - atr * mult
             if trail > current_sl:
-                return {**pos, "stop_loss": trail}  # type: ignore[return-value]
+                return {**pos, "stop_loss": trail}
         else:
             trail = price + atr * mult
             if trail < pos.get("stop_loss", float("inf")):
-                return {**pos, "stop_loss": trail}  # type: ignore[return-value]
+                return {**pos, "stop_loss": trail}
 
         return pos
 
@@ -335,4 +335,4 @@ class LevelsMixin(ClosingMixin):
         async with lock:
             if sym in monitored and monitored[sym] is not None:
                 monitored[sym] = {**monitored[sym], "stop_loss": new_sl}
-        return {**pos, "stop_loss": new_sl}  # type: ignore[return-value]
+        return {**pos, "stop_loss": new_sl}

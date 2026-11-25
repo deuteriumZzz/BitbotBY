@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 # Имена факторов — как в context_flags / fired в SignalCombiner.
 FACTOR_GROUP: Dict[str, str] = {
@@ -162,7 +162,7 @@ def analyze_signal(
     :param outputs: `(kind, direction, model_id, reasoning)` каждой политики.
     """
     outs = list(outputs)
-    groups: set = set()
+    groups: Set[str] = set()
     channels: Dict[str, List[str]] = {}
 
     def add(group: str, channel: str) -> None:
@@ -186,10 +186,10 @@ def analyze_signal(
         for factor in SAC_OBS_FACTORS:
             add(FACTOR_GROUP[factor], "sac_obs")
     for factor in _fired_flags(rec):
-        group = FACTOR_GROUP.get(factor)
-        if group:
-            add(group, "filter")
-            groups.add(group)
+        fired = FACTOR_GROUP.get(factor)
+        if fired:
+            add(fired, "filter")
+            groups.add(fired)
     if rec.get("context_boost"):
         add("context", "merge")
 

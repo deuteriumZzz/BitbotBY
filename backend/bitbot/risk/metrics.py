@@ -8,12 +8,13 @@
 
 from __future__ import annotations
 
-from typing import Sequence, Tuple
+from typing import Any, Sequence, Tuple
 
 import numpy as np
+from numpy.typing import NDArray
 
 
-def hist_var_cvar(returns: np.ndarray, alpha: float = 0.95) -> Tuple[float, float]:
+def hist_var_cvar(returns: NDArray[Any], alpha: float = 0.95) -> Tuple[float, float]:
     """(VaR, CVaR) как положительные доли потерь на уровне alpha по историческим доходностям."""
     r = np.asarray(returns, float)
     if len(r) < 2:
@@ -24,7 +25,7 @@ def hist_var_cvar(returns: np.ndarray, alpha: float = 0.95) -> Tuple[float, floa
     return max(var, 0.0), max(float(tail.mean()), 0.0)
 
 
-def beta(asset: np.ndarray, market: np.ndarray) -> float:
+def beta(asset: NDArray[Any], market: NDArray[Any]) -> float:
     """β = cov(asset, market) / var(market). Ряды должны быть выровнены по времени."""
     a, m = np.asarray(asset, float), np.asarray(market, float)
     if len(a) != len(m) or len(a) < 3:
@@ -34,7 +35,7 @@ def beta(asset: np.ndarray, market: np.ndarray) -> float:
 
 
 def portfolio_cvar(
-    returns: np.ndarray, notionals: Sequence[float], alpha: float = 0.95
+    returns: NDArray[Any], notionals: Sequence[float], alpha: float = 0.95
 ) -> float:
     """CVaR портфеля историческим сценарным методом, в деньгах.
 
