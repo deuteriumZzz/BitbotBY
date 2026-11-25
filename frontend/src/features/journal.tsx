@@ -9,7 +9,8 @@ import { actions, useStore } from "../store";
 import { Q, Seg, Skel, hideTip, showTip } from "../ui";
 import { cfg, stratName } from "./bots";
 import { ReportsCard } from "./reports";
-import { Calendar, ExecutionCard } from "./terminal";
+import { Calendar } from "./terminal/calendar";
+import { ExecutionCard } from "./terminal/metrics";
 import { TraceSteps } from "./trace";
 
 /** Выгрузка показанных сделок: открывается в Excel и Numbers. */

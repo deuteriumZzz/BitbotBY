@@ -13,7 +13,8 @@ import { NotifButton, NotifSheet } from "./features/notifications";
 import { Palette } from "./features/palette";
 import { Settings } from "./features/settings";
 import { Setup } from "./features/setup";
-import { Terminal, cycleKind } from "./features/terminal";
+import { Terminal } from "./features/terminal";
+import { cycleKind } from "./features/terminal/radar";
 import { GUARD_TEXT, actions, useStore, type Ui } from "./store";
 import { Icon, Skel, TipLayer, Toggle, hideTip } from "./ui";
 

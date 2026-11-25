@@ -1,0 +1,312 @@
+// Вкладка «Терминал»: баланс, метрики, радар монет, живые позиции, график, лента, календарь.
+
+import { useEffect, useRef, useState } from "react";
+
+import { arrow, base, fmtN, plural, tone, usd } from "../../lib/format";
+import { idleReason } from "../../lib/idle";
+
+import { positionPnl, useStore } from "../../store";
+import { cfg } from "../bots";
+import { MarketPulse } from "../market";
+import { ReadinessCard } from "../setup";
+
+import { Q, Seg, Tween } from "../../ui";
+import { Chart } from "./chart";
+import { Equity } from "./equity";
+import { Feed } from "./feed";
+import { MetricsCard } from "./metrics";
+import { Positions } from "./positions";
+import { Radar } from "./radar";
+
+const PERIODS = [
+  ["24h", "24ч"],
+  ["7d", "7д"],
+  ["30d", "30д"],
+  ["all", "Всё"],
+] as const;
+
+/** Строка здоровья: бот, связь, кто решает и когда был последний цикл. */
+function HealthStrip() {
+  const alive = useStore((s) => s.alive);
+  const wsUp = useStore((s) => s.wsUp);
+  const mode = useStore((s) => s.bot?.mode);
+  const paused = useStore((s) => s.bot?.paused ?? false);
+  const cycleAt = useStore((s) => s.cycleAt);
+  const guardsOff = useStore(
+    (s) =>
+      (s.bot?.paper ?? true) &&
+      cfg<boolean>(s.config, "PAPER_GUARDS_OFF", false),
+  );
+  const ai = useStore((s) => {
+    const id = s.ai?.last || s.bot?.ai;
+    return id ? (s.ai?.providers.find((p) => p.id === id)?.name ?? id) : "";
+  });
+  const secrets = useStore((s) => s.secrets);
+  const aiOk = useStore((s) => Boolean(s.ai?.chain.length));
+  const setTab = useStore((s) => s.setTab);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 5000);
+    return () => clearInterval(t);
+  }, []);
+  const ago = cycleAt ? Math.max(0, Math.round((now - cycleAt) / 1000)) : null;
+  const agoText =
+    ago === null
+      ? "ещё не было"
+      : ago < 60
+        ? `${ago} с назад`
+        : `${Math.round(ago / 60)} мин назад`;
+  // Цикл идёт каждые несколько минут; тишина дольше 15 минут при работающем боте — повод насторожиться.
+  const stale = !paused && alive && ago !== null && ago > 900;
+  // «Бот работает» уже видно в шапке (переключатель и «онлайн»): здесь — только когда не так.
+  const down = !wsUp || !alive;
+  const items: [string, string, string][] = [
+    ...(down
+      ? [
+          ["Бот", !wsUp ? "нет связи" : "молчит", "bad"] as [
+            string,
+            string,
+            string,
+          ],
+        ]
+      : []),
+    [
+      "Решает",
+      mode === "local"
+        ? "локальные стратегии"
+        : ai && ai !== "local"
+          ? `AI · ${ai}`
+          : "AI, ждёт ответа",
+      mode === "local" || ai ? "ok" : "warn",
+    ],
+    ["Цикл", agoText, stale ? "bad" : ago === null ? "warn" : "ok"],
+    ...(guardsOff
+      ? [
+          ["Защиты портфеля", "выключены (Paper)", "warn"] as [
+            string,
+            string,
+            string,
+          ],
+        ]
+      : []),
+  ];
+  // Огни подключений: биржа, AI и Telegram; нажатие ведёт к карте в «Настройках».
+  const light = (id: string) => {
+    const st = secrets?.find((x) => x.service === id)?.status;
+    return st === "ok" ? "ok" : st === "bad" ? "bad" : "warn";
+  };
+  const links: [string, string][] = [
+    ["Bybit", light("bybit")],
+    ["AI", aiOk ? "ok" : "bad"],
+    ["Telegram", light("telegram")],
+  ];
+  return (
+    <ul className="health" aria-label="Состояние системы">
+      {items.map(([k, v, c]) => (
+        <li key={k}>
+          <span className={`dot ${c}`} />
+          <small>{k}</small>
+          <b>{v}</b>
+        </li>
+      ))}
+      {secrets && (
+        <li className="health-links">
+          <small>Связи</small>
+          <button
+            type="button"
+            aria-label={`Подключения: ${links.map(([n, c]) => `${n} ${c === "ok" ? "работает" : "не работает"}`).join(", ")}. Открыть карту`}
+            onClick={() => setTab("settings")}
+          >
+            {links.map(([n, c]) => (
+              <span key={n}>
+                <span className={`dot ${c}`} />
+                {n}
+              </span>
+            ))}
+          </button>
+        </li>
+      )}
+    </ul>
+  );
+}
+
+/** «Почему бот молчит?»: одна причина простыми словами и переход к шагу, где это настраивается. */
+function Idle() {
+  const wsUp = useStore((s) => s.wsUp);
+  const alive = useStore((s) => s.alive);
+  const paused = useStore((s) => s.bot?.paused ?? false);
+  const cycle = useStore((s) => s.lastCycle);
+  const slots = useStore((s) => s.slots);
+  const hours = useStore((s) => cfg<string>(s.config, "TRADING_HOURS", ""));
+  const openNode = useStore((s) => s.openNode);
+  const [hourUtc, setHour] = useState(() => new Date().getUTCHours());
+  useEffect(() => {
+    const t = setInterval(() => setHour(new Date().getUTCHours()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+  // Нет связи с сервером — об этом уже говорят шапка и строка здоровья.
+  const r = wsUp ? idleReason({ alive, paused, cycle, slots, hours, hourUtc }) : null;
+  if (!r) return null;
+  return (
+    <div className={`why ${r.tone}`} role="status">
+      <span className={`dot ${r.tone}`} />
+      <div>
+        <b>{r.title}</b>
+        <p>{r.detail}</p>
+      </div>
+      {r.node && (
+        <button type="button" className="btn" onClick={() => openNode(r.node!)}>
+          Где настроить →
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Прокрутка к блоку другой вкладки: ждём, пока вкладка отрисуется (до ~1 с). */
+export const scrollWhenReady = (id: string, tries = 20): void => {
+  const el = document.getElementById(id);
+  if (el) el.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+  else if (tries) setTimeout(() => scrollWhenReady(id, tries - 1), 50);
+};
+
+/** Последний пост доверенного канала: откуда, что разобрали, вход через сколько секунд или почему нет. */
+function TrustedLast() {
+  const t = useStore((s) => s.trusted);
+  const openSettings = useStore((s) => s.setTab);
+  if (!t || Date.now() / 1000 - t.at > 86_400) return null;
+  const what = t.symbol ? `${base(t.symbol)} ${t.side === "buy" ? "LONG" : "SHORT"}` : "монета не разобрана";
+  const when = new Date(t.at * 1000).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  return (
+    <div className={`why ${t.ok ? "ok" : "warn"}`} role="status">
+      <span className={`dot ${t.ok ? "ok" : "warn"}`} />
+      <div>
+        <b>
+          Доверенный канал @{t.channel} · {what}
+        </b>
+        <p>
+          {t.ok ? `Вход открыт через ${t.latency_s} с после поста` : `Без сделки: ${t.reason}`} · {when}. Стратегии, AI и фильтры скана в этих сделках не участвуют.
+        </p>
+      </div>
+      <button type="button" className="btn" onClick={() => (openSettings("settings"), scrollWhenReady("tg-channels"))}>
+        Каналы →
+      </button>
+    </div>
+  );
+}
+
+export function Terminal() {
+  return (
+    <section className="view term enter" aria-label="Терминал">
+      <HealthStrip />
+      <Idle />
+      <TrustedLast />
+      <ReadinessCard />
+      <Hero />
+      <MetricsCard />
+      <MarketPulse />
+      <Radar />
+      <Positions />
+      <Chart />
+      <Feed />
+    </section>
+  );
+}
+
+// ── Баланс и кривая equity ────────────────────────────────────────────────────
+
+function Hero() {
+  const balance = useStore((s) => s.balance);
+  // Баланс коротко вспыхивает цветом сделки, когда закрытая позиция «приземляется» в него.
+  const prevBal = useRef(balance);
+  const [balFx, setBalFx] = useState("");
+  // Рядом всплывает сумма, на которую он изменился, — видно, сколько принесла сделка.
+  const [delta, setDelta] = useState(0);
+  useEffect(() => {
+    if (balance === prevBal.current) return;
+    setBalFx(balance > prevBal.current ? "fl-up" : "fl-down");
+    setDelta(balance - prevBal.current);
+    prevBal.current = balance;
+    const t = setTimeout(() => setBalFx(""), 900);
+    const d = setTimeout(() => setDelta(0), 1800);
+    return () => {
+      clearTimeout(t);
+      clearTimeout(d);
+    };
+  }, [balance]);
+  const paper = useStore((s) => s.bot?.paper ?? true);
+  const period = useStore((s) => s.period);
+  const setPeriod = useStore((s) => s.setPeriod);
+  const m = useStore((s) => s.metrics[s.period]);
+  const positions = useStore((s) => s.positions);
+  const list = Object.values(positions);
+  const unreal = list.reduce((sum, p) => sum + positionPnl(p).pnl, 0);
+  return (
+    <article className="card hero">
+      <div className="card-h">
+        <span className="label">Баланс · {paper ? "Paper" : "Live"}</span>
+        <Seg
+          className="sm sp"
+          value={period}
+          options={PERIODS}
+          onChange={setPeriod}
+          label="Период"
+        />
+      </div>
+      <div className={`bal ${balFx}`}>
+        <Tween value={balance} fmt={(v) => `$${fmtN(v)}`} />
+        {delta !== 0 && (
+          <span key={balance} className={`bal-d ${tone(delta)}`} aria-hidden="true">
+            {arrow(delta)} {usd(delta)}
+          </span>
+        )}
+      </div>
+      <div className="hero-stats">
+        <div>
+          <span className="label">
+            Закрытые{" "}
+            <Q tip="Прибыль и убыток по уже закрытым сделкам за выбранный период, до вычета комиссий." />
+          </span>
+          <b className={m ? tone(m.realized) : ""}>
+            {m ? (
+              <Tween value={m.realized} fmt={(v) => `${arrow(v)} ${usd(v)}`} />
+            ) : (
+              "—"
+            )}
+          </b>
+          <small>
+            {m ? `${m.n} ${plural(m.n, ["сделка", "сделки", "сделок"])}` : "—"}
+          </small>
+        </div>
+        <div>
+          <span className="label">
+            Открытые{" "}
+            <Q tip="Сколько вы получили бы, если закрыть открытые позиции прямо сейчас. Меняется вместе с ценой." />
+          </span>
+          <b className={tone(unreal)}>
+            {list.length ? `${arrow(unreal)} ${usd(unreal)}` : "$0.00"}
+          </b>
+          <small>
+            {list.length}{" "}
+            {plural(list.length, ["позиция", "позиции", "позиций"])}
+          </small>
+        </div>
+        <div>
+          <span className="label">
+            Чистыми{" "}
+            <Q tip="Закрытые сделки минус комиссии биржи. Это то, что реально осталось на счёте." />
+          </span>
+          <b className={m ? tone(m.net) : ""}>
+            {m ? (
+              <Tween value={m.net} fmt={(v) => `${arrow(v)} ${usd(v)}`} />
+            ) : (
+              "—"
+            )}
+          </b>
+          <small>{m ? `комиссии −$${fmtN(m.fees)}` : "—"}</small>
+        </div>
+      </div>
+      <Equity />
+    </article>
+  );
+}
