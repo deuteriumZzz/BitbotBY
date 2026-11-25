@@ -8,7 +8,8 @@ import { actions, useStore } from "../store";
 import { Q, Toggle } from "../ui";
 import { cfg } from "./bots";
 import { ParamList } from "./params";
-import { FEEDS, STEP, chanList } from "./settings";
+import { FEEDS, STEP } from "./settings/keys";
+import { chanList } from "./settings/telegram";
 
 /** Фильтр рынка — 13 сигналов _apply_market_context_filter; key — источнику нужен ключ. */
 export const MARKET: { name: string; rule: string; key?: string }[] = [

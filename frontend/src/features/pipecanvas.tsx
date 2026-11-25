@@ -12,7 +12,7 @@ import type { BotNode, CycleTrace, SecretItem } from "../lib/types";
 import { actions, useStore } from "../store";
 import { Toggle } from "../ui";
 import { cfg } from "./bots";
-import { chanList } from "./settings";
+import { chanList } from "./settings/telegram";
 import { MARKET, setChronos } from "./signals";
 import { scrollWhenReady } from "./terminal";
 

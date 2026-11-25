@@ -9,7 +9,7 @@ import { actions, useStore } from "../store";
 import { Icon, Skel } from "../ui";
 import { AddCard } from "./ai";
 import { RiskCard, presetName, presetOf } from "./bots";
-import { KeyCard } from "./settings";
+import { KeyCard } from "./settings/keys";
 
 const STEPS: SetupStep[] = ["bybit", "telegram", "ai", "risk", "mode"];
 const SEEN = "bitbot.setup.seen";

@@ -15,7 +15,7 @@ import { chosenId } from "./chainops";
 import { ModelCard } from "./jobs";
 import { RulesCard } from "./rules";
 import { UiSwitchRow } from "./uimode";
-import { HoursCard, SymbolsCard } from "./settings";
+import { HoursCard, SymbolsCard } from "./settings/trading";
 import { NW, PipeCanvas } from "./pipecanvas";
 import { SignalsCard } from "./signals";
 import { mark } from "./trace";

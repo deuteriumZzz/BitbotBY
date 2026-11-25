@@ -8,7 +8,7 @@ import { actions, useStore } from "../store";
 import { Q, Seg, Toggle } from "../ui";
 import { cfg } from "./bots";
 import { shown } from "./params";
-import { NumField, fmtVal } from "./settings";
+import { NumField, fmtVal } from "./settings/params";
 
 export interface Rule {
   id: string;
