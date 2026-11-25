@@ -115,12 +115,6 @@ function Main({ openKey }: { openKey: (service: string) => void }) {
         <div className="col">
           <AlertsCard />
           <TgChannelsCard openKey={openKey} />
-          <p className="note-soon moved">
-            Часы торговли и монеты теперь в узле «Сканер».{" "}
-            <button className="btn" type="button" onClick={() => useStore.getState().openNode("scan")}>
-              Цепочка → Сканер
-            </button>
-          </p>
         </div>
         <div className="col">
           <AccountCard openKey={openKey} />

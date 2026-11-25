@@ -72,6 +72,8 @@ export interface BotState {
     ai?: string | null;
   };
   balance: number;
+  /** Капитал на 00:00 UTC — от него бот считает дневной лимит убытка; null — день ещё не начат. */
+  day_ref?: { date: string; balance: number } | null;
   slots: { used: number; max: number };
   positions: Position[];
   /** Сезон рынка и индекс Страха/Жадности; null, пока бот их не загрузил. */

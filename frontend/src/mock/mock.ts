@@ -392,6 +392,8 @@ function state() {
   return {
     bot: { alive: true, ...bot, ai: ai.last || null },
     balance: +balance.toFixed(2),
+    // Демо: день начался с текущего баланса, без сделок с полуночи.
+    day_ref: { date: new Date().toISOString().slice(0, 10), balance: +balance.toFixed(2) },
     slots: { used: Object.keys(positions).length, max: maxPositions() },
     market: {
       season: { signal: null, altcoin_index: 41, btc_dominance: 58.3, btc_30d: 4.2, checked_at: Date.now() / 1000 },

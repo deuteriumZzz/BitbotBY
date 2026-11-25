@@ -231,11 +231,12 @@ export function Terminal() {
       {simple && <PathBar />}
       <Hero />
       <MetricsCard />
-      <MarketPulse />
       <Radar />
       <Positions />
       <Chart />
       <Feed />
+      {/* Фон рынка — справочно, поэтому в самом конце. */}
+      <MarketPulse />
     </section>
   );
 }
@@ -265,9 +266,6 @@ function Hero() {
   const period = useStore((s) => s.period);
   const setPeriod = useStore((s) => s.setPeriod);
   const m = useStore((s) => s.metrics[s.period]);
-  const positions = useStore((s) => s.positions);
-  const list = Object.values(positions);
-  const unreal = list.reduce((sum, p) => sum + positionPnl(p).pnl, 0);
   return (
     <article className="card hero">
       <div className="card-h">
@@ -305,19 +303,7 @@ function Hero() {
             {m ? `${m.n} ${plural(m.n, ["сделка", "сделки", "сделок"])}` : "—"}
           </small>
         </div>
-        <div>
-          <span className="label">
-            Открытые{" "}
-            <Q tip="Сколько вы получили бы, если закрыть открытые позиции прямо сейчас. Меняется вместе с ценой." />
-          </span>
-          <b className={tone(unreal)}>
-            {list.length ? `${arrow(unreal)} ${usd(unreal)}` : "$0.00"}
-          </b>
-          <small>
-            {list.length}{" "}
-            {plural(list.length, ["позиция", "позиции", "позиций"])}
-          </small>
-        </div>
+        <OpenPnl />
         <div>
           <span className="label">
             Чистыми{" "}
@@ -333,7 +319,52 @@ function Hero() {
           <small>{m ? `комиссии −$${fmtN(m.fees)}` : "—"}</small>
         </div>
       </div>
+      <DailyStop />
       <Equity />
     </article>
+  );
+}
+
+/** P&L открытых позиций — отдельно, чтобы тики цены перерисовывали только эту ячейку, а не всю карточку. */
+function OpenPnl() {
+  const unreal = useStore((s) => Object.values(s.positions).reduce((sum, p) => sum + positionPnl(p).pnl, 0));
+  const n = useStore((s) => Object.keys(s.positions).length);
+  return (
+    <div>
+      <span className="label">
+        Открытые <Q tip="Сколько вы получили бы, если закрыть открытые позиции прямо сейчас. Меняется вместе с ценой." />
+      </span>
+      <b className={tone(unreal)}>{n ? `${arrow(unreal)} ${usd(unreal)}` : "$0.00"}</b>
+      <small>
+        {n} {plural(n, ["позиция", "позиции", "позиций"])}
+      </small>
+    </div>
+  );
+}
+
+/** Дневной стоп: при каком капитале бот сегодня перестанет открывать сделки (RiskManager, сброс в 00:00 UTC). */
+function DailyStop() {
+  const ref = useStore((s) => s.dayRef);
+  const limit = useStore((s) => Number(cfg(s.config, "DAILY_LOSS_LIMIT", 0)));
+  const off = useStore((s) => (s.bot?.paper ?? true) && cfg<boolean>(s.config, "PAPER_GUARDS_OFF", false));
+  const openNode = useStore((s) => s.openNode);
+  if (!ref || !(limit > 0)) return null;
+  return (
+    <p className={`day-stop${off ? " off" : ""}`}>
+      <span className="label">
+        Дневной стоп{" "}
+        <Q tip="Если капитал (баланс + открытые позиции) за сутки упадёт на этот процент от уровня на 00:00 UTC, бот перестанет открывать новые сделки до конца дня. Открытые позиции доживают до своих SL/TP." />
+      </span>
+      {off ? (
+        <span>не действует — защиты портфеля выключены (Paper)</span>
+      ) : (
+        <span>
+          входы встанут ниже <b className="num">${fmtN(ref.balance * (1 - limit))}</b> · −{fmtN(limit * 100, 1)}% от уровня 00:00 UTC
+        </span>
+      )}
+      <button type="button" className="link" onClick={() => openNode("risk")}>
+        изменить
+      </button>
+    </p>
   );
 }

@@ -115,9 +115,21 @@ def _redis_json(r: Any, key: str) -> Optional[Dict[str, Any]]:
     return val if isinstance(val, dict) else None
 
 
+def _day_ref(r: Any, paper: bool) -> Optional[Dict[str, Any]]:
+    """Капитал на начало UTC-суток, от которого бот считает дневной лимит убытка (RiskManager).
+
+    Вчерашняя запись не годится: бот обновит её на первом цикле нового дня.
+    """
+    ref = _redis_json(r, keys.RISK_DAILY_REF_PREFIX + ("paper" if paper else "live"))
+    if not ref or ref.get("date") != datetime.utcnow().date().isoformat():
+        return None
+    return {"date": ref["date"], "balance": ref.get("balance")}
+
+
 def build_state() -> Dict[str, Any]:
     portfolio = data.redis_get(data.portfolio_key()) or {}
     r = data.get_redis()
+    paper = data.paper_mode()
     positions = data.get_open_positions()
     try:
         max_pos = int(_redis_str(r, keys.MAX_POSITIONS) or Config.MAX_POSITIONS)
@@ -127,7 +139,7 @@ def build_state() -> Dict[str, Any]:
         "bot": {
             "alive": data.check_healthcheck(),
             "paused": _redis_str(r, keys.PAUSED) == "1",
-            "paper": data.paper_mode(),
+            "paper": paper,
             "mode": _redis_str(r, keys.MODE) or Config.MODE,
             "profile": _redis_str(r, keys.MARKET_PROFILE),
             "ai": _redis_str(r, keys.LAST_AI_PROVIDER),
@@ -145,6 +157,8 @@ def build_state() -> Dict[str, Any]:
         # Последний пост доверенного канала: вход или почему нет (trusted_trader).
         "trusted": _redis_json(r, keys.TG_LAST_TRUSTED),
         "balance": portfolio.get("balance", Config.INITIAL_BALANCE),
+        # Опора дневного лимита убытка; null — бот ещё не начал сегодняшний день.
+        "day_ref": _day_ref(r, paper),
         # У сделок по каналам свои слоты — обычные они не занимают.
         "slots": {
             "used": sum(1 for p in positions if not is_trusted(p)),

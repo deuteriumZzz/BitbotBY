@@ -1,6 +1,6 @@
 // Терминал: метрики торговли и качество исполнения (проскальзывание, задержка).
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { fmtN, plural, tone } from "../../lib/format";
 
@@ -147,6 +147,11 @@ export function MetricsCard() {
 /** Качество исполнения — живёт в «Журнале». */
 export function ExecutionCard() {
   const e = useStore((s) => s.execution[s.period]);
+  const period = useStore((s) => s.period);
+  // Грузим только здесь: на «Обзоре» эти цифры не показываются.
+  useEffect(() => {
+    if (!e) void useStore.getState().loadExecution(period).catch(() => undefined);
+  }, [period]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!e) return <article className="card exec" aria-busy="true" />;
   const few = e.latency_ms_avg === null || e.slippage_pct_avg === null;
   return (

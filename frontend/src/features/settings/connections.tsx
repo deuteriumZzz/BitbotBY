@@ -5,6 +5,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { api } from "../../lib/api";
 
 import { fmtN, plural } from "../../lib/format";
+import * as platform from "../../lib/platform";
 
 import type { SecretItem } from "../../lib/types";
 import { actions } from "../../store/actions";
@@ -167,6 +168,7 @@ export function AccountCard({ openKey }: { openKey: (service: string) => void })
   const [box, setBox] = useState(false);
   const [busy, setBusy] = useState(false);
   const [restartArmed, armRestart] = useArm();
+  const [logoutArmed, armLogout] = useArm();
   const bybitOk = !secrets || secrets.find((s) => s.service === "bybit")?.status === "ok";
   const pinSet = !secrets || Boolean(secrets.find((s) => s.service === "server")?.fields.find((f) => f.env === "TRADING_MODE_PIN")?.set);
 
@@ -266,6 +268,12 @@ export function AccountCard({ openKey }: { openKey: (service: string) => void })
         <button className={`btn${restartArmed ? " armed" : ""}`} type="button" onClick={() => armRestart() && void actions.restart()}>
           {restartArmed ? "Точно перезапустить?" : "Перезапустить бота"}
         </button>
+        {/* В MiniApp вход — через Telegram, выходить некуда; без сессии (вход не настроен) — тоже. */}
+        {platform.kind !== "miniapp" && platform.getToken() && (
+          <button className={`btn${logoutArmed ? " armed" : ""}`} type="button" onClick={() => armLogout() && void useStore.getState().logout()}>
+            {logoutArmed ? "Точно выйти?" : "Выйти на этом устройстве"}
+          </button>
+        )}
       </div>
     </article>
   );

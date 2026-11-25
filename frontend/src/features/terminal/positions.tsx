@@ -1,6 +1,6 @@
 // Терминал: живые позиции — прогресс к SL/TP, анимация входа с радара.
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { memo, useEffect, useRef, useState, type FormEvent } from "react";
 
 import { arrow, base, fmtN, pct, plural, price, priceDecimals, tone, usd } from "../../lib/format";
 
@@ -181,7 +181,8 @@ function flyFromRadar(symbol: string, card: HTMLElement | null): void {
     .catch(() => dot.remove());
 }
 
-function PositionCard({ p, enter }: { p: Position; enter: boolean }) {
+// memo: тик цены одной монеты перерисовывает только её карточку.
+const PositionCard = memo(function PositionCard({ p, enter }: { p: Position; enter: boolean }) {
   const online = useStore((s) => s.alive);
   const self = useRef<HTMLElement>(null);
   // Новая позиция: ждём, пока чип доедет до слота на радаре, потом засветка летит в карточку.
@@ -195,6 +196,7 @@ function PositionCard({ p, enter }: { p: Position; enter: boolean }) {
   const e = progOf(p, p.entry) * 100;
   const mk = progOf(p, cur) * 100;
   const [closeArmed, armClose] = useArm();
+  const [halfArmed, armHalf] = useArm();
   const [editing, setEditing] = useState(false);
   const [whyOpen, setWhyOpen] = useState(false);
   const [err, setErr] = useState("");
@@ -401,12 +403,12 @@ function PositionCard({ p, enter }: { p: Position; enter: boolean }) {
           Трейлинг
         </button>
         <button
-          className="btn"
+          className={`btn ${halfArmed ? "armed" : ""}`}
           type="button"
           disabled={!can}
-          onClick={() => void run(() => actions.closePosition(p, 0.5))}
+          onClick={() => armHalf() && void run(() => actions.closePosition(p, 0.5))}
         >
-          Закрыть 50%
+          {halfArmed ? "Точно 50%?" : "Закрыть 50%"}
         </button>
       </div>
       {editing && (
@@ -439,4 +441,4 @@ function PositionCard({ p, enter }: { p: Position; enter: boolean }) {
     </article>
     </div>
   );
-}
+});

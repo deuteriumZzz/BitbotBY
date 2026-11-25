@@ -83,6 +83,8 @@ export interface Store {
   /** Последний пост доверенного канала: вход по нему или причина отказа. */
   trusted: TrustedPost | null;
   balance: number;
+  /** Опора дневного лимита убытка (капитал на 00:00 UTC); null — бот ещё не начал день. */
+  dayRef: BotState["day_ref"];
   slots: { used: number; max: number };
   positions: Record<string, Position>;
   market: BotState["market"] | null;
@@ -178,6 +180,8 @@ export interface Store {
 
   requestCode(): Promise<boolean>;
   verifyCode(code: string): Promise<boolean>;
+  /** Закрыть сессию на сервере и забыть токен на этом устройстве. */
+  logout(): Promise<void>;
 }
 
 let feedSeq = 0;
@@ -217,7 +221,7 @@ export const useStore = create<Store>((set, get) => {
     refreshTimer = setTimeout(() => {
       void get().loadState().catch(() => undefined);
       void get().loadMetrics().catch(() => undefined);
-      void get().loadExecution().catch(() => undefined);
+      if (get().execution[get().period]) void get().loadExecution().catch(() => undefined);
       void get().loadDaily().catch(() => undefined);
       const j = get().journal;
       if (j) void get().loadJournal(j.period).catch(() => undefined);
@@ -244,6 +248,7 @@ export const useStore = create<Store>((set, get) => {
       trusted: st.trusted ?? null,
       alive: st.bot.alive,
       balance: st.balance,
+      dayRef: st.day_ref ?? null,
       slots: st.slots,
       positions: positionsFrom(st.positions),
       market: st.market ?? null,
@@ -260,6 +265,7 @@ export const useStore = create<Store>((set, get) => {
     opsStatus: null,
     trusted: null,
     balance: 0,
+    dayRef: null,
     slots: { used: 0, max: 0 },
     positions: {},
     cycle: { state: "scan" },
@@ -344,7 +350,6 @@ export const useStore = create<Store>((set, get) => {
       set({ ready: true, needLogin: false });
       void Promise.allSettled([
         get().loadMetrics(),
-        get().loadExecution(),
         get().loadDaily(),
         get().loadStrategies(),
         get().loadConfig(),
@@ -401,7 +406,6 @@ export const useStore = create<Store>((set, get) => {
     setPeriod(period) {
       set({ period });
       if (!get().metrics[period]) void get().loadMetrics(period).catch(() => undefined);
-      if (!get().execution[period]) void get().loadExecution(period).catch(() => undefined);
     },
     say: (text) => set({ toast: { id: ++toastSeq, text } }),
     sayUndo: (text, undo) => set({ toast: { id: ++toastSeq, text, undo } }),
@@ -676,6 +680,13 @@ export const useStore = create<Store>((set, get) => {
 
     requestCode() {
       return get().act(() => api("POST", EP.authDesktopRequest), "Код отправлен вам в Telegram");
+    },
+    async logout() {
+      await api("POST", EP.authLogout).catch(() => undefined);
+      unsubscribe?.();
+      unsubscribe = null;
+      platform.setToken(null);
+      set({ needLogin: true, wsUp: false });
     },
     async verifyCode(code) {
       try {

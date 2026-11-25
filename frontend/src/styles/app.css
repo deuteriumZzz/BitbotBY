@@ -1087,7 +1087,6 @@ details.extra[open]>.card{animation:viewin .28s var(--ease-mech)}
 .guards-off ul{margin:4px 0 8px;padding-left:18px}
 .btn.disclose{align-self:flex-start;margin-top:12px}
 .manual{margin-top:12px;padding-top:12px;border-top:1px solid var(--line-soft)}
-.note-soon.moved{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .pos-why-more{color:var(--brand-ink)}
 .pipe-node:hover{border-color:var(--line-ui)}
 .pipe-node:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
@@ -1189,7 +1188,9 @@ select.sel{border-radius:var(--r-ctl);background:var(--c-inset);box-shadow:none}
   .term>.radar{grid-column:9/13;order:2}
   .term>.positions{grid-column:1/9;order:3}
   .term>.feed{grid-column:9/13;order:3}
-  .term>.pulse,.term>.cal,.term>.exec{grid-column:span 4;order:4}
+  .term>.cal,.term>.exec{grid-column:span 4;order:4}
+  /* Одна строка на всю ширину: страх/жадность и сезон рядом, без пустых 8 колонок справа. */
+  .term>.pulse{grid-column:1/-1;order:4}
   /* Сканер в узкой колонке: этапы — строки ленты, монеты едут сверху вниз по этапам. */
   .term>.radar .lanes{grid-template-columns:minmax(0,1fr);gap:0}
   .term>.radar .lane{display:grid;grid-template-columns:96px minmax(0,1fr);gap:10px;align-items:start;padding:9px 0;border-top:1px solid var(--c-line)}
@@ -1690,3 +1691,11 @@ small.hr-act,.hr-act small{font-size:12px;color:var(--c-ink3);line-height:1.45}
 .tgch-gh small{font:12px/1.4 var(--font-text);color:var(--c-ink3)}
 .tgch-g .list-tgl .alert-row:last-child{border-bottom:0}
 .tgch-g .tgch-params{border-top-color:var(--c-line)}
+/* Дневной стоп под цифрами баланса */
+.day-stop{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;margin:12px 0 0;padding-top:10px;border-top:1px solid var(--line-soft);font-size:12px;color:var(--ink-3)}
+.day-stop .label{display:inline-flex;gap:5px;align-items:center;text-transform:none;letter-spacing:0;font-size:12px}
+.day-stop b{color:var(--ink-2)}
+.day-stop.off span:not(.label){color:var(--warn)}
+.link{all:unset;cursor:pointer;margin-left:auto;font-size:12px;color:var(--ink-3);text-decoration:underline;text-underline-offset:3px;transition:color var(--t-fast)}
+.link:hover{color:var(--ink)}
+.link:focus-visible{outline:2px solid var(--brand);outline-offset:2px;border-radius:4px}

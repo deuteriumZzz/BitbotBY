@@ -15,6 +15,7 @@ export const EP = {
   authLocal: "/api/auth/local",
   authDesktopRequest: "/api/auth/desktop/request",
   authDesktopVerify: "/api/auth/desktop/verify",
+  authLogout: "/api/auth/logout",
 
   // бот и команды
   botPause: "/api/bot/pause",

@@ -1,11 +1,10 @@
 // Терминал: радар монет — где монета в цикле (скан → сигнал → отказ/вход).
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { arrow, base, plural } from "../../lib/format";
 
 import { reducedMotion } from "../../lib/platform";
-import type { Position } from "../../lib/types";
 import { positionPnl, useStore, type Store } from "../../store";
 import { profileName } from "../bots";
 
@@ -18,6 +17,12 @@ const EASE = "cubic-bezier(.2,.8,.2,1)";
 const LANE_CAP = 5;
 
 const REJECT_SHOW_MS = 1300;
+
+/** Открытая позиция на радаре: монета и знак P&L (−1, 0, 1). */
+interface Slot {
+  symbol: string;
+  sign: number;
+}
 
 /** FLIP: чип с тем же символом плавно переезжает из старого места в новое, даже между колонками. */
 function useFlip(ref: React.RefObject<HTMLElement>): void {
@@ -93,7 +98,7 @@ function Scope(props: {
   lanes: string[][];
   side: (s: string) => string;
   rejected: Set<string>;
-  open: Position[];
+  open: Slot[];
   on: boolean;
 }) {
   const blips = [
@@ -107,7 +112,7 @@ function Scope(props: {
     ...props.open.map((p) => ({
       s: p.symbol,
       lane: 4,
-      cls: positionPnl(p).pnl >= 0 ? "win" : "loss",
+      cls: p.sign >= 0 ? "win" : "loss",
     })),
   ];
   return (
@@ -152,7 +157,8 @@ function Scope(props: {
 
 export function Radar() {
   const radar = useStore((s) => s.radar);
-  const positions = useStore((s) => s.positions);
+  // Радару нужны только монета и знак P&L: тики цены, не меняющие знак, его не перерисовывают.
+  const openKey = useStore((s) => Object.values(s.positions).map((p) => `${p.symbol} ${Math.sign(positionPnl(p).pnl)}`).join("|"));
   const slots = useStore((s) => s.slots);
   const kind = useStore(cycleKind);
   const profile = useStore((s) => s.bot?.profile);
@@ -175,7 +181,10 @@ export function Radar() {
     return () => clearInterval(t);
   }, [fresh, radar]);
 
-  const open = Object.values(positions);
+  const open = useMemo<Slot[]>(
+    () => (openKey ? openKey.split("|").map((x) => ({ symbol: x.slice(0, x.lastIndexOf(" ")), sign: Number(x.slice(x.lastIndexOf(" ") + 1)) })) : []),
+    [openKey],
+  );
   const openSyms = new Set(open.map((p) => p.symbol));
   // "" — обычный чип, "rej" — только что отсеян, "gone" — уже не показываем.
   const rej = (s: string, lane: number) => {
@@ -311,15 +320,14 @@ export function Radar() {
                     свободно
                   </div>
                 );
-              const { pnl } = positionPnl(p);
               return (
                 <div className="slot full" key={p.symbol}>
                   <div
                     data-sym={p.symbol}
-                    className={`chip ${pnl >= 0 ? "win" : "loss"}`}
+                    className={`chip ${p.sign >= 0 ? "win" : "loss"}`}
                   >
                     <span>{base(p.symbol)}</span>
-                    <i>{arrow(pnl)}</i>
+                    <i>{arrow(p.sign)}</i>
                   </div>
                 </div>
               );

@@ -206,6 +206,22 @@ def test_state_exposes_season_and_fear_greed(client):
     assert body["market"]["season"]["signal"] == "altcoin"
 
 
+def test_state_day_ref_only_for_today(client):
+    from datetime import datetime, timedelta
+
+    today = datetime.utcnow().date()
+    r = FakeRedis()
+    r.set("bot:risk:daily_ref:paper", json.dumps({"date": today.isoformat(), "balance": 1000.0}))
+    with (
+        patch.object(data, "get_redis", return_value=r),
+        patch.object(data, "paper_mode", return_value=True),
+        patch.object(data, "check_healthcheck", return_value=True),
+    ):
+        assert client.get("/api/state").json()["day_ref"] == {"date": today.isoformat(), "balance": 1000.0}
+        r.set("bot:risk:daily_ref:paper", json.dumps({"date": (today - timedelta(days=1)).isoformat(), "balance": 1.0}))
+        assert client.get("/api/state").json()["day_ref"] is None
+
+
 def test_metrics_rejects_unknown_period(client):
     assert client.get("/api/metrics?period=year").status_code == 400
 
