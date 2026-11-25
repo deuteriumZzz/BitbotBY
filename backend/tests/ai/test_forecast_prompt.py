@@ -151,3 +151,35 @@ async def test_untrusted_provider_cannot_open_trade_but_forecasts_still_logged(
         assert await ai.analyze(snaps, 1000) == []  # не лучше монетки — сделки нет
     kinds = [r["kind"] for r in _lines(tmp_path / "l.jsonl")]
     assert kinds.count("ai_forecast") == 2 and kinds[-1] == "ai_untrusted"
+
+
+def test_prompt_v2_lists_only_enabled_strategy_names():
+    ai, cfg = _ai()
+    ai.strategies = [
+        {
+            "name": "ema_crossover",
+            "description": "long text " * 20,
+            "market_type": "trending",
+            "risk_level": "low",
+            "markets": "both",
+        },
+        {
+            "name": "off_one",
+            "description": "x",
+            "market_type": "ranging",
+            "risk_level": "low",
+            "markets": "both",
+        },
+    ]
+    rc = MagicMock()
+    rc.get_disabled_strategies.return_value = {"off_one"}
+    rc.get_market_type.return_value = "linear"
+    rc.get_timeframe.return_value = "15m"
+    ai._runtime_config = rc
+    with patch("bitbot.ai.analyzer.Config", cfg):
+        prompt = ai._build_prompt([{"symbol": "SOL/USDT"}], 0)
+    assert "trending: ema_crossover" in prompt
+    assert "off_one" not in prompt  # выключенная не попадает
+    assert (
+        "long text" not in prompt and "backtest EV" not in prompt
+    )  # без описаний и статистики

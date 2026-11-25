@@ -251,6 +251,20 @@ class AIAnalyzer:
             )
         return "\n".join(lines)
 
+    def _strategy_names(self) -> str:
+        """Запрос v2: стратегия — только ярлык сетапа, поэтому одни названия включённых,
+        по типу рынка. Без описаний и статистики бэктеста: в 3–4 раза короче, и модель
+        не якорится на чужих цифрах."""
+        _rc = getattr(self, "_runtime_config", None)
+        disabled = _rc.get_disabled_strategies() if _rc is not None else set()
+        kind = self._market_kind()
+        groups: Dict[str, List[str]] = {}
+        for s in self.strategies:
+            if s["name"] in disabled or s.get("markets", "both") not in ("both", kind):
+                continue
+            groups.setdefault(str(s.get("market_type", "any")), []).append(s["name"])
+        return "\n".join(f"  {m}: {', '.join(names)}" for m, names in groups.items())
+
     def _build_prompt(self, snapshots: List[Dict[str, Any]], balance: float) -> str:
         """Запрос к AI: v2 (вероятности, без баланса и порога) или прежний v1."""
         if Config.AI_FORECAST_PROMPT:
@@ -312,7 +326,7 @@ class AIAnalyzer:
             "near the current price, stop_loss and take_profit, p_win = probability "
             f"that take_profit is hit before stop_loss within {h} candles, "
             "case_against first. An empty trades list is a normal and common answer.\n"
-            f"strategy: one label from this list:\n{self._build_strategy_list()}\n\n"
+            f"strategy: one label from this list:\n{self._strategy_names()}\n\n"
             "reasoning and case_against: Russian, one sentence each.\n"
             "Return ONLY this JSON object (no markdown):\n"
             '{"forecasts":[{"symbol":"AAA/USDT","case_against":"...","p_up":0.5},'
