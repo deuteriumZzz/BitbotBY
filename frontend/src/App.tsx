@@ -15,7 +15,8 @@ import { Settings } from "./features/settings";
 import { Setup } from "./features/setup";
 import { Terminal } from "./features/terminal";
 import { cycleKind } from "./features/terminal/radar";
-import { GUARD_TEXT, actions, useStore, type Ui } from "./store";
+import { GUARD_TEXT, useStore, type Ui } from "./store";
+import { actions } from "./store/actions";
 import { Icon, Skel, TipLayer, Toggle, hideTip } from "./ui";
 
 // «Цепочка», «Обучение» и «Журнал» грузятся при первом открытии — первый экран легче.

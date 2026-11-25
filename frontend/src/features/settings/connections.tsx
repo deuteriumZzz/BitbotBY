@@ -7,7 +7,8 @@ import { api } from "../../lib/api";
 import { fmtN, plural } from "../../lib/format";
 
 import type { SecretItem } from "../../lib/types";
-import { actions, useStore } from "../../store";
+import { actions } from "../../store/actions";
+import { useStore } from "../../store";
 import { Icon, useArm } from "../../ui";
 import { cfg } from "../bots";
 

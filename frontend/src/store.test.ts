@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { positionPnl, reduceRadar, useStore, type Radar } from "./store";
+import { positionPnl, useStore } from "./store";
+import { reduceRadar, type Radar } from "./store/radar";
 
 const ev = (type: string, data: Record<string, unknown>) => ({ type, ts: 0, data });
 const empty: Radar = { cycle: 0, scan: [], prescore: [], signal: {}, guards: [], rejected: {}, opened: [], note: "" };

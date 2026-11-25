@@ -6,7 +6,8 @@ import { OWN_HOME } from "../../lib/where";
 import { fmtN, plural } from "../../lib/format";
 
 import type { SettingDef } from "../../lib/types";
-import { actions, useStore, type PatchResult } from "../../store";
+import { actions, type PatchResult } from "../../store/actions";
+import { useStore } from "../../store";
 import { Q, Toggle } from "../../ui";
 
 import { shown, unitOf } from "../params";

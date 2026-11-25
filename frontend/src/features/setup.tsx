@@ -5,7 +5,8 @@
 import { useEffect, useState, type ReactNode } from "react";
 
 import type { AiState, SecretItem, SetupInfo, SetupStep } from "../lib/types";
-import { actions, useStore } from "../store";
+import { actions } from "../store/actions";
+import { useStore } from "../store";
 import { Icon, Skel } from "../ui";
 import { AddCard } from "./ai";
 import { RiskCard, presetName, presetOf } from "./bots";

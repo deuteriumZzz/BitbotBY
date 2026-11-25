@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { BotNode, SecretItem } from "../../lib/types";
-import { actions, useStore } from "../../store";
+import { actions } from "../../store/actions";
+import { useStore } from "../../store";
 import { Icon, Q, Toggle, useArm } from "../../ui";
 import { cfg } from "../bots";
 

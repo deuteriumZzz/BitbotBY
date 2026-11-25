@@ -5,7 +5,8 @@
 import { useEffect, useRef } from "react";
 
 import type { BotNode, SecretItem, SettingDef } from "../lib/types";
-import { actions, useStore } from "../store";
+import { actions } from "../store/actions";
+import { useStore } from "../store";
 import { Q, Seg } from "../ui";
 import { AiPane } from "./ai";
 import { Lane, isStep, useLanes } from "./blocks";

@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import type { SecretItem } from "../../lib/types";
-import { actions } from "../../store";
+import { actions } from "../../store/actions";
 
 // ── X / Twitter: бесплатный обход официального API ────────────────────────────
 

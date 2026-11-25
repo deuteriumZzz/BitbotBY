@@ -4,7 +4,8 @@
 
 import { useMemo, useState } from "react";
 
-import { actions, useStore } from "../store";
+import { actions } from "../store/actions";
+import { useStore } from "../store";
 import { cfg, stratName } from "./bots";
 import { STATUS } from "./chainops";
 import { RULES } from "./rules";

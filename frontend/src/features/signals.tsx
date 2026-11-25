@@ -4,7 +4,8 @@
 
 import type { SecretItem } from "../lib/types";
 import { plural } from "../lib/format";
-import { actions, useStore } from "../store";
+import { actions } from "../store/actions";
+import { useStore } from "../store";
 import { Q, Toggle } from "../ui";
 import { cfg } from "./bots";
 import { ParamList } from "./params";

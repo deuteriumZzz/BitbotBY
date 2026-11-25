@@ -1,6 +1,7 @@
 // Настройки → Основное: уведомления — тихие часы, уровни, cooldown тревог.
 
-import { actions, useStore } from "../../store";
+import { actions } from "../../store/actions";
+import { useStore } from "../../store";
 import { Q, Seg, Toggle } from "../../ui";
 import { cfg } from "../bots";
 

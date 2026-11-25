@@ -5,7 +5,8 @@ import { useEffect, useState, type FormEvent } from "react";
 import { plural } from "../../lib/format";
 
 import type { SecretItem, TgStatus } from "../../lib/types";
-import { actions, useStore } from "../../store";
+import { actions } from "../../store/actions";
+import { useStore } from "../../store";
 import { Q, Toggle } from "../../ui";
 import { cfg } from "../bots";
 import { ParamList } from "../params";

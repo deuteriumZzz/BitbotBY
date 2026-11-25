@@ -4,7 +4,8 @@ import { useEffect, useState, type FormEvent } from "react";
 
 import { inHours } from "../../lib/idle";
 import type { SecretItem } from "../../lib/types";
-import { actions, useStore } from "../../store";
+import { actions } from "../../store/actions";
+import { useStore } from "../../store";
 import { Q, Seg } from "../../ui";
 import { cfg } from "../bots";
 

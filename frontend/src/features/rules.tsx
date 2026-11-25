@@ -4,7 +4,8 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { ConfigValues, SettingDef } from "../lib/types";
-import { actions, useStore } from "../store";
+import { actions } from "../store/actions";
+import { useStore } from "../store";
 import { Q, Seg, Toggle } from "../ui";
 import { cfg } from "./bots";
 import { shown } from "./params";

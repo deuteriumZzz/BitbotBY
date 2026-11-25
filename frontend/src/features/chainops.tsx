@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { AiProvider, AiState } from "../lib/types";
-import { actions, useStore } from "../store";
+import { actions } from "../store/actions";
+import { useStore } from "../store";
 
 /** Провайдер, который решает в режиме «Один провайдер». */
 export const chosenId = (ai: AiState) => (ai.pinned !== "auto" ? ai.pinned : (ai.chain[0]?.provider ?? ""));

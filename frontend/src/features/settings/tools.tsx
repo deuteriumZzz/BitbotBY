@@ -5,7 +5,8 @@ import { useState } from "react";
 import { api } from "../../lib/api";
 
 import type { ConfigHistoryItem, ConfigValues, SettingDef } from "../../lib/types";
-import { actions, useStore } from "../../store";
+import { actions } from "../../store/actions";
+import { useStore } from "../../store";
 
 import { fmtVal, sameVal } from "./params";
 

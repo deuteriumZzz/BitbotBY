@@ -3,7 +3,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { actions, useStore } from "../store";
+import { actions } from "../store/actions";
+import { useStore } from "../store";
 
 interface Cmd {
   label: string;

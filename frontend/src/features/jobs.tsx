@@ -5,7 +5,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { base, fmtN, pct } from "../lib/format";
 import type { JobDone, JobId, JobState, ProfileInfo } from "../lib/types";
-import { actions, useStore } from "../store";
+import { actions } from "../store/actions";
+import { useStore } from "../store";
 import { Q } from "../ui";
 import { stratName } from "./bots";
 

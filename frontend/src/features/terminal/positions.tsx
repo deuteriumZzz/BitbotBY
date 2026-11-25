@@ -6,7 +6,8 @@ import { arrow, base, fmtN, pct, price, priceDecimals, tone, usd } from "../../l
 
 import { reducedMotion } from "../../lib/platform";
 import type { Position } from "../../lib/types";
-import { actions, positionPnl, useStore } from "../../store";
+import { actions } from "../../store/actions";
+import { positionPnl, useStore } from "../../store";
 import { stratName } from "../bots";
 
 import { TraceSteps } from "../trace";

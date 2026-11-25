@@ -9,7 +9,8 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "re
 import { plural } from "../lib/format";
 import { reducedMotion } from "../lib/platform";
 import type { BotNode, CycleTrace, SecretItem } from "../lib/types";
-import { actions, useStore } from "../store";
+import { actions } from "../store/actions";
+import { useStore } from "../store";
 import { Toggle } from "../ui";
 import { cfg } from "./bots";
 import { chanList } from "./settings/telegram";

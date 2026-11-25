@@ -6,7 +6,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { fmtN, opsSummary, plural, readinessReason, tone } from "../lib/format";
 import { reducedMotion } from "../lib/platform";
 import type { ConfigValues, RiskPreset, Strategy } from "../lib/types";
-import { actions, useStore } from "../store";
+import { actions } from "../store/actions";
+import { useStore } from "../store";
 import { Icon, Q, Seg, Toggle } from "../ui";
 import { ParamList } from "./params";
 

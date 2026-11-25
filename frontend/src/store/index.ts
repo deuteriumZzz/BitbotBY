@@ -1,10 +1,11 @@
+// Данные событий приходят нетипизированными — проверяем по месту.
+
 import { create } from "zustand";
 
-import { ApiError, api, command, isMock, subscribe } from "./lib/api";
-import { arrow, base, exitReason, plural, usd } from "./lib/format";
-import * as platform from "./lib/platform";
+import { ApiError, api, isMock, subscribe } from "../lib/api";
+import { arrow, base, exitReason, usd } from "../lib/format";
+import * as platform from "../lib/platform";
 import type {
-  AiChainChanges,
   AiState,
   Alert,
   BotEvent,
@@ -33,45 +34,20 @@ import type {
   Side,
   Strategy,
   Symbols,
-  TgStatus,
-  TgStep,
   TrustedPost,
   Tab,
-} from "./lib/types";
+} from "../lib/types";
 
-// Данные событий приходят нетипизированными — проверяем по месту.
-type Data = Record<string, any>;
+import { Data, Radar, emptyRadar, reduceRadar } from "./radar";
 
 export type FeedKind = "open" | "win" | "loss" | "skip" | "guard" | "edit";
+
 export interface FeedItem {
   id: number;
   at: number;
   kind: FeedKind;
   text: string;
 }
-
-export interface Radar {
-  cycle: number;
-  scan: string[];
-  prescore: string[];
-  signal: Record<string, { side: Side; confidence: number; strategy: string; reasoning?: string }>;
-  guards: string[];
-  /** lane — на каком этапе отсеяна: 0 скан, 1 отбор, 2 сигнал, 3 проверки. */
-  rejected: Record<string, { reason: string; at: number; lane: number }>;
-  opened: string[];
-  note: string;
-}
-
-const emptyRadar = (cycle = 0): Radar => ({
-  cycle,
-  scan: [],
-  prescore: [],
-  signal: {},
-  guards: [],
-  rejected: {},
-  opened: [],
-  note: "",
-});
 
 export const JOB_TITLE: Record<string, string> = {
   backtest: "бэктест стратегий",
@@ -203,8 +179,11 @@ export interface Store {
 }
 
 let feedSeq = 0;
+
 let toastSeq = 0;
+
 let unsubscribe: (() => void) | null = null;
+
 let refreshTimer: ReturnType<typeof setTimeout> | undefined;
 
 const MAX_FEED = 60;
@@ -212,7 +191,9 @@ const MAX_FEED = 60;
 const sideOf = (s: unknown): Side => (s === "sell" || s === "short" ? "short" : "long");
 
 export type Ui = "simple" | "pro";
+
 const UI_KEY = "bitbot.ui";
+
 /** По умолчанию «Профи»: у тех, кто уже работал с приложением, ничего не меняется само. */
 const savedUi = (): Ui => {
   try {
@@ -702,188 +683,9 @@ export const useStore = create<Store>((set, get) => {
   };
 });
 
-const n = (list: unknown): number => (Array.isArray(list) ? list.length : 0);
-
-/** Конвейер радара: scan → prescore → signal → guards → rejected | open. */
-export function reduceRadar(r: Radar, d: Data): Radar {
-  const sym: string = d.symbol;
-  switch (d.stage) {
-    case "scan":
-      return {
-        ...emptyRadar(r.cycle + 1),
-        scan: d.symbols ?? [],
-        note: `Сканирую ${n(d.symbols)} ${plural(n(d.symbols), ["монету", "монеты", "монет"])}`,
-      };
-    case "prescore":
-      return { ...r, prescore: d.symbols ?? [], note: `В отбор прошли ${n(d.symbols)}: объём, ATR и тренд` };
-    case "signal":
-      return {
-        ...r,
-        signal: {
-          ...r.signal,
-          [sym]: { side: d.side, confidence: d.confidence, strategy: d.strategy, reasoning: d.reasoning },
-        },
-        note: `Сигнал по ${base(sym)}: ${d.side === "long" ? "LONG" : "SHORT"}`,
-      };
-    case "guards":
-      return {
-        ...r,
-        guards: r.guards.includes(sym) ? r.guards : [...r.guards, sym],
-        note: `Проверяю риски по ${base(sym)}…`,
-      };
-    case "rejected": {
-      const lane = r.guards.includes(sym) ? 3 : r.signal[sym] ? 2 : r.prescore.includes(sym) ? 1 : 0;
-      return {
-        ...r,
-        guards: r.guards.filter((s) => s !== sym),
-        rejected: { ...r.rejected, [sym]: { reason: d.reason, at: Date.now(), lane } },
-        note: `Отсеял ${base(sym)}: ${d.reason}`,
-      };
-    }
-    case "open":
-      return {
-        ...r,
-        guards: r.guards.filter((s) => s !== sym),
-        opened: [...r.opened, sym],
-        note: `Открыл ${base(sym)}. SL и TP на бирже.`,
-      };
-    default:
-      return r;
-  }
-}
-
 /** P&L позиции по последней цене. */
 export function positionPnl(p: Position): { pnl: number; move: number } {
   const price = p.price ?? p.entry;
   const dir = p.side === "long" ? 1 : -1;
   return { pnl: (price - p.entry) * p.qty * dir, move: (price / p.entry - 1) * 100 * dir };
 }
-
-// ── Действия (вызываются из компонентов) ──────────────────────────────────────
-
-const st = () => useStore.getState();
-
-export interface PatchResult {
-  applied_hot: string[];
-  pending_restart: string[];
-}
-
-export const actions = {
-  pause: () => st().act(() => command("POST", "/api/bot/pause"), "Бот на паузе"),
-  resume: () => st().act(() => command("POST", "/api/bot/resume"), "Бот снова работает"),
-  panic: () =>
-    st().act(async () => {
-      const r = await command("POST", "/api/bot/panic");
-      const c = Number(r.closed ?? 0);
-      st().say(`Закрыто ${c} ${plural(c, ["позиция", "позиции", "позиций"])}. Бот на паузе.`);
-    }),
-  restart: () => st().act(() => command("POST", "/api/bot/restart"), "Бот перезапускается…"),
-  runJob: (id: JobId, profile?: string) =>
-    st().act(async () => {
-      await command("POST", `/api/jobs/${id}`, profile ? { profile } : undefined);
-      useStore.setState((s) => ({ jobs: { ...s.jobs, [id]: { running: true, info: { pct: 0 } } } }));
-    }),
-  resetConfig: () => st().act(() => api("POST", "/api/config/reset"), "Настройки сброшены к значениям из .env"),
-  rollbackModel: () => st().act(() => command("POST", "/api/model/rollback"), "Модель SAC откатана — бот подхватит её в следующем цикле"),
-  closePosition: (p: Position, fraction = 1) =>
-    st().act(
-      () => command("POST", `/api/positions/${p.trade_id}/close`, { fraction }),
-      fraction === 1 ? `${base(p.symbol)} закрыт по рынку` : `Закрыто ${Math.round(fraction * 100)}% ${base(p.symbol)}`,
-    ),
-  updatePosition: (p: Position, changes: { sl?: number; tp?: number; trailing?: boolean }) =>
-    st().act(() => command("PATCH", `/api/positions/${p.trade_id}`, changes), "Сохранено"),
-  answerSignal: (id: string, confirm: boolean) =>
-    st().act(
-      () => command("POST", `/api/signals/${id}/${confirm ? "confirm" : "reject"}`),
-      confirm ? "Сделка подтверждена" : "Сделка пропущена",
-    ),
-  accountMode: (paper: boolean, pin = "") =>
-    st().act(() => command("POST", "/api/account/mode", { paper, pin }), paper ? "Вернулись в Paper" : "Включён Live"),
-  async patchConfig(changes: Record<string, unknown>, opts?: { undo?: boolean }): Promise<PatchResult | null> {
-    // Прежние значения нужны для «Отменить»: возвращаем их тем же запросом.
-    const before = Object.fromEntries(
-      Object.keys(changes)
-        .map((k) => [k, st().config[k]?.value] as const)
-        .filter(([, v]) => v !== undefined),
-    );
-    let result: PatchResult | null = null;
-    const ok = await st().act(async () => {
-      result = await api<PatchResult>("PATCH", "/api/config", changes);
-    });
-    if (!ok || !result) return null;
-    const r: PatchResult = result;
-    const text = r.pending_restart.length
-      ? `Сразу: ${r.applied_hot.length}. После перезапуска: ${r.pending_restart.length}.`
-      : "Применено — бот уже работает с новыми настройками";
-    if (opts?.undo !== false && Object.keys(before).length) st().sayUndo(text, () => void actions.patchConfig(before, { undo: false }));
-    else st().say(text);
-    await st().loadConfig().catch(() => undefined);
-    return r;
-  },
-  setProfile: (name: string) =>
-    st().act(() => api("POST", "/api/profile", { name }).then(() => st().loadState()), "Профиль рынка переключён"),
-  setStrategy: (name: string, enabled: boolean) =>
-    st().act(() => api("PATCH", `/api/strategies/${name}`, { enabled }).then(() => st().loadStrategies())),
-  resetStrategies: () =>
-    st().act(() => api("POST", "/api/strategies/reset").then(() => st().loadStrategies()), "Основные стратегии включены, экспериментальные выключены"),
-  putSymbols: (symbols: Symbols) =>
-    st().act(() => api<Symbols>("PUT", "/api/symbols", symbols).then((v) => useStore.setState({ symbols: v }))),
-  patchAlert: (kind: string, changes: Partial<Alert>) =>
-    st().act(() => api("PATCH", `/api/alerts/${kind}`, changes).then(() => st().loadAlerts())),
-  putSecret: (service: string, fields: Record<string, string>, model?: string) =>
-    st().act(
-      () => api("PUT", `/api/secrets/${service}`, { fields, ...(model ? { model } : {}) }).then(() => st().loadSecrets()),
-      "Ключ сохранён. Заработает после перезапуска бота.",
-    ),
-  addXAccount: (body: { login: string; password: string; email: string; email_password: string }) =>
-    st().act(() => api("POST", "/api/secrets/twitter/accounts", body).then(() => st().loadSecrets()), "Аккаунт добавлен. Заработает после перезапуска бота."),
-  removeXAccount: (login: string) =>
-    st().act(() => api("DELETE", `/api/secrets/twitter/accounts/${encodeURIComponent(login)}`).then(() => st().loadSecrets()), "Аккаунт удалён."),
-  putAiChain: (changes: AiChainChanges, ok?: string) =>
-    st().act(() => api<AiState>("PUT", "/api/ai/chain", changes).then((ai) => useStore.setState({ ai })), ok),
-  /** Живой список моделей провайдера по сохранённому ключу. */
-  aiModels: async (provider: string): Promise<string[]> => {
-    try {
-      return (await api<{ models: string[] }>("GET", `/api/ai/providers/${provider}/models`)).models;
-    } catch (e) {
-      st().say(e instanceof ApiError ? e.message : "Не удалось загрузить список моделей.");
-      return [];
-    }
-  },
-  /** Проверка связи с провайдером: запрос списка моделей по сохранённому ключу (лимит не тратит). */
-  aiProbe: async (provider: string): Promise<{ ok: boolean; ms: number; message: string }> => {
-    const t0 = performance.now();
-    try {
-      await api("GET", `/api/ai/providers/${provider}/models`);
-      return { ok: true, ms: Math.round(performance.now() - t0), message: "" };
-    } catch (e) {
-      return { ok: false, ms: Math.round(performance.now() - t0), message: e instanceof ApiError ? e.message : "нет связи с сервером" };
-    }
-  },
-  /** Найти свой chat id: кто писал боту. Токен берётся из поля или из сохранённого. */
-  findTelegramChat: async (token: string, code: string): Promise<{ id: string; name: string }[] | null> => {
-    try {
-      return (await api<{ chats: { id: string; name: string }[] }>("POST", "/api/secrets/telegram/chat", { code, ...(token ? { token } : {}) })).chats;
-    } catch (e) {
-      st().say(e instanceof ApiError ? e.message : "Не удалось связаться с Telegram.");
-      return null;
-    }
-  },
-  /** Вход в Telegram для чтения каналов: «Войти» → код → облачный пароль, если он включён. */
-  tgLogin: async (path: "login" | "code" | "password", body?: Record<string, string>): Promise<TgStep | null> => {
-    try {
-      const r = await api<TgStep>("POST", `/api/secrets/telethon/${path}`, body);
-      if (r.step === "done") {
-        await st().loadSecrets();
-        st().say("Вход в Telegram выполнен — бот подключится к каналам в течение минуты.");
-      }
-      return r;
-    } catch (e) {
-      st().say(e instanceof ApiError ? e.message : "Не удалось связаться с Telegram.");
-      return null;
-    }
-  },
-  tgStatus: (): Promise<TgStatus | null> => api<TgStatus>("GET", "/api/secrets/telethon/status").catch(() => null),
-  deleteSecret: (service: string) =>
-    st().act(() => api("DELETE", `/api/secrets/${service}`).then(() => st().loadSecrets()), "Ключ удалён"),
-};

@@ -3,7 +3,8 @@
 // bots.tsx и settings.tsx могли его брать без циклического импорта.
 
 import type { SettingDef } from "../lib/types";
-import { actions, useStore } from "../store";
+import { actions } from "../store/actions";
+import { useStore } from "../store";
 import { Toggle } from "../ui";
 
 /** Значение так, как его вводят: проценты — в процентах. */
