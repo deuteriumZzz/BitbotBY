@@ -203,10 +203,17 @@ _MARKET_PROFILES = {
 _VALID_MODES = {"ai", "local", "hybrid", "dqn"}
 
 
-# Профиль монет, под который сейчас настроен бот: от него порог volume_spike.
-# Ставится при смене профиля и при старте (из Redis) — SAC_PROFILE в окружении
-# после рестарта не восстанавливается.
+# ── Что выбрано сейчас: для кода без ссылки на RuntimeConfig ─────────────────
+# Профиль монет и тип рынка ставит RuntimeConfig при смене и бот при старте
+# (из Redis). Раньше они копировались в os.environ, и после рестарта копия
+# терялась; дочерние процессы получают их явно — `child_env()`.
 _active_profile: str = ""
+_active_market_type: str = ""
+
+_EXPERIENCES_BY_PROFILE = {
+    "altcoin": "data/experiences_altcoin.jsonl",
+    "meme": "data/experiences_meme.jsonl",
+}
 
 
 def set_active_profile(name: str) -> None:
@@ -215,7 +222,38 @@ def set_active_profile(name: str) -> None:
 
 
 def active_profile() -> str:
+    """Профиль монет (bluechip | altcoin | meme); от него порог volume_spike."""
     return _active_profile
+
+
+def set_active_market_type(market_type: str) -> None:
+    global _active_market_type
+    _active_market_type = market_type or ""
+
+
+def active_market_type() -> str:
+    """spot | linear; до первой установки — значение из Config."""
+    return _active_market_type or getattr(Config, "MARKET_TYPE", "linear")
+
+
+def experiences_path(profile: str) -> str:
+    """Файл опыта сделок для обучения SAC своего профиля (bluechip — общий)."""
+    return _EXPERIENCES_BY_PROFILE.get(profile or "", "data/experiences.jsonl")
+
+
+def child_env() -> Dict[str, str]:
+    """Что дочерний процесс (обучение, тюнинг, отчёты) должен знать о режиме бота.
+
+    Режим и профиль меняются в приложении на ходу; дочерний процесс читает их из
+    окружения, поэтому их передают явно, а не через копию в os.environ бота.
+    """
+    profile = active_profile()
+    return {
+        "PAPER_TRADING": "true" if Config.PAPER_TRADING else "false",
+        "MARKET_TYPE": active_market_type(),
+        "SAC_PROFILE": profile,
+        "EXPERIENCES_PATH": experiences_path(profile),
+    }
 
 
 class RuntimeConfig:
@@ -568,12 +606,7 @@ class RuntimeConfig:
         if market_type not in _MARKET_TYPES:
             return False
         self._set(_KEY_MARKET_TYPE, market_type)
-        # Зеркалит паттерн apply_market_profile()'s SAC_PROFILE — env var
-        # даёт коду без ссылки на RuntimeConfig (напр. position_monitor.py
-        # при записи experiences.jsonl) увидеть актуальный тип рынка.
-        import os as _os
-
-        _os.environ["MARKET_TYPE"] = market_type
+        set_active_market_type(market_type)
         logger.info("Runtime: market_type → %s", market_type)
         return True
 
@@ -974,8 +1007,6 @@ class RuntimeConfig:
 
     def apply_market_profile(self, name: str) -> bool:
         """Применяет профиль рынка. Возвращает False если имя неизвестно."""
-        import os as _os
-
         profile = _MARKET_PROFILES.get(name)
         if not profile:
             return False
@@ -990,21 +1021,9 @@ class RuntimeConfig:
         self._set("bot:sl_percent", str(profile.get("sl_percent", 0.05)))
         self._set("bot:tp_multiplier", str(profile.get("tp_multiplier", 2.0)))
         self._set("bot:trading_interval", str(profile.get("trading_interval", 60)))
-        # Направляем сохранение сделок в профильный файл
-        _exp = (
-            "data/experiences_altcoin.jsonl"
-            if name == "altcoin"
-            else (
-                "data/experiences_meme.jsonl"
-                if name == "meme"
-                else "data/experiences.jsonl"
-            )
-        )
-        _os.environ["EXPERIENCES_PATH"] = _exp
-        _os.environ["SAC_PROFILE"] = name
 
         # Переключаем профиль-специфичные стратегии. volume_spike одна для всех
-        # профилей: порог берётся из SAC_PROFILE внутри стратегии. Старые
+        # профилей: порог берётся из active_profile() внутри стратегии. Старые
         # профильные имена из списка отключённых убираем — их больше нет.
         set_active_profile(name)
         # sentiment — во всех профилях: Telegram-каналы читаются по монетам
@@ -1077,10 +1096,7 @@ class RuntimeConfig:
         Общий путь для Telegram-кнопки и команды из приложения; после него
         вызывающий синхронизирует позиции (TradingBot._handle_mode_switch).
         """
-        import os as _os
-
         Config.PAPER_TRADING = paper
-        _os.environ["PAPER_TRADING"] = "true" if paper else "false"
         self.set_paper_trading_override(paper)
 
     # ── Season switch mode ────────────────────────────────────────────────────

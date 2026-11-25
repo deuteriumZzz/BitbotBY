@@ -34,7 +34,7 @@ from bitbot.config import ai_providers, login_link
 from bitbot.config.constants import REDIS_TTL_MARKET_DATA, SILENT_DEATH_ALERT_COOLDOWN
 from bitbot.config.registry import apply_overrides as apply_config_overrides
 from bitbot.config.registry import effective_config
-from bitbot.config.runtime import RuntimeConfig
+from bitbot.config.runtime import RuntimeConfig, set_active_market_type
 from bitbot.config.secrets import SERVICES as SECRET_SERVICES
 from bitbot.config.secrets import apply_secrets
 from bitbot.config.settings import Config
@@ -122,7 +122,6 @@ class TradingBot:
         override = self._runtime_config.get_paper_trading_override()
         if override is not None:
             Config.PAPER_TRADING = override
-            os.environ["PAPER_TRADING"] = "true" if override else "false"
         self.api = BybitAPI(runtime_config=self._runtime_config)
         self.data_loader = DataLoader()
         self.portfolio_manager = PortfolioManager(
@@ -2051,13 +2050,8 @@ class TradingBot:
         _off = self._runtime_config.ensure_experimental_disabled(experimental_names())
         if _off:
             logger.info("Экспериментальные стратегии выключены по умолчанию: %s", _off)
-        # Синхронизируем os.environ["MARKET_TYPE"] из Redis при старте —
-        # RuntimeConfig.set_market_type() зеркалит его в env только пока
-        # процесс жив; после рестарта переменная окружения откатывается к
-        # .env-дефолту, пока пользователь заново не дёрнет тумблер в
-        # Telegram, а position_monitor.py (без ссылки на RuntimeConfig)
-        # читает именно os.environ при тегировании experiences.jsonl.
-        os.environ["MARKET_TYPE"] = self._runtime_config.get_market_type()
+        # Тип рынка из Redis — для кода без ссылки на RuntimeConfig (монитор позиций).
+        set_active_market_type(self._runtime_config.get_market_type())
         start_balance = await self._get_balance_usdt()
         _providers_line = (
             " → ".join(

@@ -14,6 +14,7 @@ import shutil
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from bitbot.config import entrypoints
+from bitbot.config.runtime import child_env, experiences_path
 from bitbot.infra.heavy_job import limit_env, lower_priority
 from bitbot.ops.jobs import JOBS, JobSpec
 from bitbot.storage.bot_bus import emit, error
@@ -27,10 +28,6 @@ _REPORT_SCRIPTS = {
     "alpha_report": entrypoints.ALPHA_REPORT,
     "live_divergence": entrypoints.LIVE_DIVERGENCE,
     "ai_isolation": entrypoints.AI_ISOLATION,
-}
-_PROFILE_EXPERIENCES = {
-    "altcoin": "data/experiences_altcoin.jsonl",
-    "meme": "data/experiences_meme.jsonl",
 }
 
 
@@ -155,7 +152,12 @@ class JobRunner:
             # тяжёлая фоновая задача: ниже приоритет и потолок потоков, чтобы не
             # тормозить торговый цикл (backend/bitbot/infra/heavy_job.py)
             env=limit_env(
-                {**os.environ, "PYTHONPATH": entrypoints.package_root(), **env}
+                {
+                    **os.environ,
+                    **child_env(),  # режим бота сейчас (paper/live, рынок, профиль)
+                    "PYTHONPATH": entrypoints.package_root(),
+                    **env,  # своё у задачи (профиль обучения) — главнее
+                }
             ),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -229,9 +231,7 @@ class JobRunner:
             "TRAIN_TOP_N": str(cfg.get("train_top_n", 20)),
             "BT_TIMEFRAME": str(cfg.get("timeframe", "15m")),
             "SAC_PROFILE": profile or "",
-            "EXPERIENCES_PATH": _PROFILE_EXPERIENCES.get(
-                profile or "", "data/experiences.jsonl"
-            ),
+            "EXPERIENCES_PATH": experiences_path(profile),
         }
 
     async def _train_stage(

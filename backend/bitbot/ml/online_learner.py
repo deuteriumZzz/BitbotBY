@@ -37,6 +37,7 @@ from collections import defaultdict, deque
 from typing import Any, Dict
 
 from bitbot.config import entrypoints
+from bitbot.config.runtime import child_env
 from bitbot.config.settings import Config
 
 logger = logging.getLogger(__name__)
@@ -266,23 +267,19 @@ class OnlineLearner:
 
         tmp_path = Config.SAC_MODEL_PATH + ".new"
         try:
-            _profile = os.environ.get("SAC_PROFILE", "")
-            _exp_path = (
-                "data/experiences_altcoin.jsonl"
-                if _profile == "altcoin"
-                else "data/experiences.jsonl"
-            )
+            mode = child_env()  # профиль, рынок, файл опыта — как сейчас у бота
             env = {
                 "PATH": os.environ.get("PATH", ""),
                 "PYTHONPATH": os.environ.get("PYTHONPATH", ""),
                 "HOME": os.environ.get("HOME", ""),
                 "SAC_MODEL_PATH": tmp_path,
-                "SAC_PROFILE": _profile,
-                "MARKET_TYPE": os.environ.get("MARKET_TYPE", Config.MARKET_TYPE),
+                "SAC_PROFILE": mode["SAC_PROFILE"],
+                "MARKET_TYPE": mode["MARKET_TYPE"],
+                "PAPER_TRADING": mode["PAPER_TRADING"],
                 "TRAIN_TOP_N": str(self._get_train_top_n()),
                 "TRAIN_MIN_CANDLES": os.environ.get("TRAIN_MIN_CANDLES", "2880"),
                 "TOTAL_TIMESTEPS": os.environ.get("TOTAL_TIMESTEPS", "50000"),
-                "EXPERIENCES_PATH": _exp_path,
+                "EXPERIENCES_PATH": mode["EXPERIENCES_PATH"],
                 "TELEGRAM_BOT_TOKEN": os.environ.get("TELEGRAM_BOT_TOKEN", ""),
                 "TELEGRAM_CHAT_ID": os.environ.get("TELEGRAM_CHAT_ID", ""),
                 "LOG_LEVEL": os.environ.get("LOG_LEVEL", "INFO"),

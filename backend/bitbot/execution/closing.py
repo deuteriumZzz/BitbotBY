@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from typing import Any, Dict, Optional
 
+from bitbot.config.runtime import active_market_type, active_profile, experiences_path
 from bitbot.config.settings import Config
 from bitbot.domain.order_states import Placed, Rejected
 from bitbot.domain.types import PositionRecord
@@ -438,13 +438,9 @@ class ClosingMixin(BookingMixin):
             _side = side
             _entry = entry
             _price = price
-            _profile = os.environ.get("SAC_PROFILE", "")
-            _exp_path = (
-                "data/experiences_altcoin.jsonl"
-                if _profile == "altcoin"
-                else "data/experiences.jsonl"
-            )
-            _market_type = os.environ.get("MARKET_TYPE", Config.MARKET_TYPE)
+            _profile = active_profile()
+            _exp_path = experiences_path(_profile)
+            _market_type = active_market_type()
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(
                 None,
