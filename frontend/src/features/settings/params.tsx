@@ -136,13 +136,11 @@ export function AllParams({ go, basicOnly = false }: { go: (pane: Pane) => void;
         </div>
       )}
       <p className="cfg-legend">
-        <span className="tag hot">сразу</span> применяется без перезапуска · <span className="tag rst">перезапуск</span> вступит в силу после
-        перезапуска бота. Ключи — в «Подключения», ключи AI — в Бот → AI-цепочка, Paper/Live — в «Основное».
+        <span className="tag hot">сразу</span> без перезапуска · <span className="tag rst">перезапуск</span> после перезапуска бота
       </p>
       {!needle && !basicOnly && elsewhere > 0 && (
         <p className="cfg-legend">
-          {elsewhere} {plural(elsewhere, ["настройка", "настройки", "настроек"])} здесь не показано: у них есть свои разделы (риск, открытие сделок, режим, часы, AI,
-          обучение). Найти любую и перейти к ней можно поиском.
+          Ещё {elsewhere} — в своих разделах «Цепочки»; найти любую можно поиском (⌘K).
         </p>
       )}
       <div className="cfg">

@@ -128,7 +128,6 @@ export function ConnMap({ go, openKey }: { go: (pane: Pane | "map") => void; ope
         <div>
           <span className="label">Система</span>
           <h2>{missing.length ? `Осталось подключить: ${missing.join(", ")}` : "Всё подключено"}</h2>
-          <p>Что питает бота → бот → что он отдаёт. Нажмите на любой узел карты, чтобы настроить его.</p>
         </div>
         <div className="learn-meter" style={{ "--p": Math.round((ready / need.length) * 100) } as React.CSSProperties} role="img" aria-label={`Подключено ${ready} из ${need.length}`}>
           <b className="num">

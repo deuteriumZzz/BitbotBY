@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import { base, fmtN, pct } from "../lib/format";
+import { base, fmtN, pct, plural } from "../lib/format";
 import { api, command } from "../lib/api";
 import { EP } from "../api/endpoints";
 import type { JobDone, JobId, JobState, MetaStatus, ModelInfo, ModelsStatus, ProfileInfo } from "../lib/types";
@@ -270,7 +270,7 @@ function sacRole(mode: string): { used: boolean; text: string } {
     };
   return {
     used: false,
-    text: "Сейчас режим не использует SAC, и обучение ни на что не повлияет, пока вы не включите режим SAC или Hybrid (раздел «Цепочка» → «Кто принимает решение» вверху).",
+    text: "Режим сейчас без SAC — обучение пока ни на что не влияет. Включается в «Цепочке»: SAC или Hybrid.",
   };
 }
 
@@ -480,12 +480,6 @@ function AlphaCard() {
         <h2>Поиск преимущества (альфы)</h2>
         <Q tip="Альфа — это то, что стратегия зарабатывает сверх случайности. Эти проверки отвечают на вопрос: есть ли у ваших стратегий и у AI настоящее преимущество, или пока везение." />
       </div>
-      <p className="note-soon role">
-        Бэктест прогоняет стратегии по истории; значимость альфы проверяет ваши
-        закрытые Paper-сделки статистикой; остальные две сравнивают реальное
-        исполнение с моделью и отделяют вклад AI от индикаторов. Всё в фоне, бот
-        продолжает торговать.
-      </p>
       <ul className="jobs">
         {ALPHA_JOBS.map((id) => (
           <JobRow key={id} def={JOBS.find((j) => j.id === id)!} />
@@ -556,10 +550,7 @@ function LearnPath() {
       <div className="learn-hero-t">
         <span className="label">Лаборатория</span>
         <h2>Путь к реальным деньгам</h2>
-        <p>
-          Обучите модель и выполните четыре проверки на истории и живых сделках. Бот всё это время торгует на бумажном счёте, задачи
-          идут в фоне.
-        </p>
+        <p>Модель и четыре проверки. Всё идёт в фоне, бот торгует на бумаге.</p>
       </div>
       <div className="learn-meter" style={{ "--p": Math.round((done / steps.length) * 100) } as React.CSSProperties} role="img" aria-label={`Выполнено ${done} из ${steps.length}`}>
         <b className="num">
@@ -689,13 +680,12 @@ export function MetaCard() {
           </div>
           <p className="note-soon">
             {m.have
-              ? `Сделок с полной записью: ${String(m.have)} из ${String(m.need)}, в плюс — ${String(m.wins)}.`
-              : "Пока пусто: сделки копятся, пока бот торгует в paper."}{" "}
-            Когда наберётся {String(m.need)}, модель можно будет обучить и проверить; включить её сможете только вы.
+              ? `${String(m.have)} из ${String(m.need)} сделок для обучения, в плюс — ${String(m.wins)}.`
+              : `Сделки копятся в paper: нужно ${String(m.need)}.`}
           </p>
           {m.unmatched > 0 && (
             <p className="note-soon">
-              Ещё {String(m.unmatched)} сделок без записи решения (например, из доверенных каналов) — в обучение не идут.
+              Не идут в обучение: {m.unmatched} {plural(m.unmatched, ["сделка", "сделки", "сделок"])} без записи решения (доверенные каналы).
             </p>
           )}
         </>

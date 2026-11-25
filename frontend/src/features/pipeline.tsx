@@ -274,12 +274,10 @@ function usePipeline(mode: string): { status: Record<BotNode, string>; info: Rec
 /** Кто решает и какая роль у стратегий — одной фразой под переключателем (как в backend/bitbot/workers/bot.py). */
 const modeNote = (mode: string, fallback: boolean): string =>
   mode === "local"
-    ? "Решают стратегии: на каждой монете запускаются все включённые, входит самый уверенный сигнал. AI не участвует."
+    ? "Решают стратегии: входит самый уверенный сигнал. AI не участвует."
     : mode === "dqn"
-      ? `Решает нейросеть SAC. Стратегии ${fallback ? "включаются, только пока модель SAC не загружена (запасной путь)" : "не участвуют — запасной путь выключен"}.`
-      : `Решает ${mode === "hybrid" ? "пара SAC и AI: сделка — только если оба согласны" : "AI"}. Включённые стратегии — только подсказка о типах сетапов${
-          fallback ? "; если AI недоступен, решают они (запасной путь)" : ""
-        }. Чтобы решали сами стратегии — выберите Local.`;
+      ? `Решает нейросеть SAC.${fallback ? " Без модели — стратегии." : ""}`
+      : `Решает ${mode === "hybrid" ? "пара SAC и AI — нужно согласие обоих" : "AI"}, стратегии — подсказка.${fallback ? " Без AI — стратегии." : ""}`;
 
 export function Pipeline() {
   const node = useStore((s) => s.node);
@@ -379,8 +377,7 @@ export function Pipeline() {
           })}
         </PipeCanvas>
         <p className="pipe-hint">
-          Нажмите на шаг — его настройки откроются справа. Штекер <i className="pw-plug-ico" aria-hidden="true" /> на проводе в «Риск» перетащите на Стратегии, AI
-          или SAC — так меняется, кто решает. Числа на проводах — сколько монет прошло в последнем цикле. Ctrl + колесо — масштаб.
+          Шаг — настройки справа · штекер <i className="pw-plug-ico" aria-hidden="true" /> у «Риска» — кто решает · числа на проводах — монеты за цикл · Ctrl + колесо — масштаб
         </p>
       </div>
       <button type="button" className={`pipe-scrim${open ? " open" : ""}`} tabIndex={-1} aria-hidden="true" onClick={closeNode} />

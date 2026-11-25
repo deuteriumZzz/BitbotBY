@@ -88,9 +88,11 @@ const setFlag = (key: string): void => {
   }
 };
 
-// ── Карточка на терминале ─────────────────────────────────────────────────────
+// ── Чип в строке статуса на «Обзоре» ─────────────────────────────────────────
 
-export function ReadinessCard() {
+/** Готовность к работе: «3 из 5 →» открывает мастер на первом незаполненном шаге.
+ *  Совсем новому боту мастер открывается сам — один раз на устройстве. */
+export function ReadinessChip() {
   const info = useStore((s) => s.setupInfo);
   const ai = useStore((s) => s.ai);
   const open = useStore((s) => s.openSetup);
@@ -99,7 +101,6 @@ export function ReadinessCard() {
   const needed = missing.some((c) => c.need);
   const [hidden, setHidden] = useState(() => flag(HIDDEN));
 
-  // Совсем новый бот — один раз сразу открываем мастер.
   useEffect(() => {
     if (!info || !ai || flag(SEEN)) return;
     setFlag(SEEN);
@@ -114,44 +115,26 @@ export function ReadinessCard() {
   if (!info || !missing.length || (hidden && !needed)) return null;
   const done = checks.length - missing.length;
   return (
-    <article className="card ready">
-      <div className="card-h">
-        <h2>Готовность к работе</h2>
-        <span className="pill sp">
-          {done} из {checks.length}
-        </span>
-      </div>
-      <ul className="ready-list">
-        {checks.map((c) => (
-          <li key={c.step}>
-            <button type="button" className={`ready-row ${c.ok ? "ok" : c.need ? "need" : ""}`} onClick={() => open(c.step)}>
-              <span className="ready-ic" aria-hidden="true">
-                {c.ok ? Icon.check : c.need ? "!" : ""}
-              </span>
-              <b>{c.title}</b>
-              <small>{c.text}</small>
-            </button>
-          </li>
-        ))}
-      </ul>
-      <div className="btn-row">
-        <button className="btn primary" type="button" onClick={() => open(missing[0].step)}>
-          Настроить
+    <li className="health-act">
+      <span className={`dot ${needed ? "bad" : "warn"}`} />
+      <small>Готовность</small>
+      <button type="button" title={missing.map((c) => `${c.title}: ${c.text}`).join("\n")} onClick={() => open(missing[0].step)}>
+        {done} из {checks.length} · {needed ? "настроить" : missing[0].title.toLowerCase()} →
+      </button>
+      {!needed && (
+        <button
+          type="button"
+          className="health-x"
+          aria-label="Скрыть готовность"
+          onClick={() => {
+            setFlag(HIDDEN);
+            setHidden(true);
+          }}
+        >
+          ×
         </button>
-        {!needed && (
-          <button
-            className="btn"
-            type="button"
-            onClick={() => {
-              setFlag(HIDDEN);
-              setHidden(true);
-            }}
-          >
-            Скрыть
-          </button>
-        )}
-      </div>
-    </article>
+      )}
+    </li>
   );
 }
 

@@ -38,6 +38,7 @@ describe("«Почему бот молчит?»", () => {
     expect(idleReason({ ...base, hours: "8-20", hourUtc: 3 })).toMatchObject({ title: "Вне часов торговли", node: "scan" });
     expect(idleReason({ ...base, slots: { used: 3, max: 3 } })?.title).toBe("Все слоты заняты");
     expect(idleReason(base)?.title).toBe("Бот запускается");
+    expect(idleReason({ ...base, ran: true })).toBeNull();
   });
 
   it("читает последний цикл: стоп на шаге, защита, нет сигналов, сделка открыта", () => {

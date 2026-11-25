@@ -21,6 +21,8 @@ export interface Rule {
   on?: string;
   alert?: string;
   ifm: string;
+  /** Короткая подпись для пилюли на «Цепочке», где полное условие обрезается. */
+  chip?: string;
   cmp: string;
   /** Порог без ключа (не настраивается). */
   fixed?: string;
@@ -41,6 +43,7 @@ export const RULES: Rule[] = [
     cat: "Капитал",
     key: "DAILY_LOSS_LIMIT",
     ifm: "Убыток за сутки (UTC)",
+    chip: "Дневной убыток",
     cmp: "≥",
     then: () => "новые входы закрыты до 00:00 UTC или пока баланс не восстановится; открытые позиции живут по своим SL/TP",
     paperNotify: true,
@@ -51,6 +54,7 @@ export const RULES: Rule[] = [
     cat: "Капитал",
     key: "CIRCUIT_BREAKER_LOSSES",
     ifm: "Убыточных сделок подряд",
+    chip: "Серия убытков",
     cmp: "≥",
     then: () => "бот останавливается; запустить снова — вручную",
     paperNotify: true,
@@ -61,6 +65,7 @@ export const RULES: Rule[] = [
     cat: "Капитал",
     key: "MAX_DRAWDOWN_PERCENT",
     ifm: "Просадка от пика баланса",
+    chip: "Просадка: стоп",
     cmp: "≥",
     then: (c) =>
       `убыточные позиции закрыть, у прибыльных стоп в безубыток, новых входов нет ${cfg(c, "DRAWDOWN_HALT_HOURS", 4)} ч (если держится ${cfg(c, "DRAWDOWN_CONFIRM_CYCLES", 3)} цикла подряд)`,
@@ -72,7 +77,8 @@ export const RULES: Rule[] = [
     cat: "Капитал",
     key: "DRAWDOWN_SCALE_THRESHOLD",
     on: "DRAWDOWN_SCALE_ENABLED",
-    ifm: "Просадка от пика баланса",
+    ifm: "Просадка от пика: уменьшить ставку",
+    chip: "Снижение ставки",
     cmp: "≥",
     then: (c) => `новые сделки меньше: размер × ${cfg(c, "DRAWDOWN_SCALE_FACTOR", 0.5)}`,
   },
@@ -81,6 +87,7 @@ export const RULES: Rule[] = [
     cat: "Позиция",
     key: "STOP_LOSS_PERCENT",
     ifm: "Цена ушла против позиции",
+    chip: "Против позиции",
     cmp: "≥",
     then: () => "закрыть по стоп-лоссу (у профиля рынка может быть свой)",
   },
@@ -108,6 +115,7 @@ export const RULES: Rule[] = [
     cat: "Позиция",
     key: "SYMBOL_COOLDOWN_HOURS",
     ifm: "С прошлой сделки по монете прошло",
+    chip: "Пауза по монете",
     cmp: "<",
     then: () => "в эту монету не входить",
     guardsOff: true,
@@ -118,6 +126,7 @@ export const RULES: Rule[] = [
     cat: "Рынок",
     key: "ATR_SPIKE_MULT",
     ifm: "Волатильность выше обычной",
+    chip: "Всплеск волатильности",
     cmp: "≥",
     then: () => "закрыть все позиции и пропустить цикл",
     guardsOff: true,
@@ -127,6 +136,7 @@ export const RULES: Rule[] = [
     cat: "Рынок",
     on: "MACRO_BLACKOUT_ENABLED",
     ifm: "До или после FOMC, CPI, NFP",
+    chip: "Макро-новости",
     cmp: "<",
     fixed: "30 мин",
     then: () => "не входить (нужен ключ Finnhub)",
@@ -137,6 +147,7 @@ export const RULES: Rule[] = [
     cat: "Бот",
     key: "SILENT_DEATH_HOURS",
     ifm: "Бот не открывал сделок",
+    chip: "Нет сделок",
     cmp: "≥",
     then: () => "тревога в Telegram",
   },
@@ -145,6 +156,7 @@ export const RULES: Rule[] = [
     cat: "Бот",
     alert: "bot_stalled",
     ifm: "Бот не отвечает или цикл не начинался",
+    chip: "Бот молчит",
     cmp: ">",
     fixed: "интервал + 15 мин",
     then: () => "тревога в Telegram, потом «снова работает» (проверяет панель — работает, пока включён компьютер)",

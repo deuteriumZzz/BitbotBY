@@ -51,10 +51,10 @@ export function useLanes(): Record<Step, Item[]> {
       if (!r.key && !r.on) return false;
       if (r.on) return cfg<boolean>(config, r.on, true) !== false;
       return r.zeroOff && r.key ? Number(cfg(config, r.key, 0)) > 0 : true;
-    }).map((r) => ({ id: `rule:${r.id}`, title: r.ifm, sub: r.cat, tag: r.on || r.zeroOff ? undefined : "всегда" }));
+    }).map((r) => ({ id: `rule:${r.id}`, title: r.chip ?? r.ifm, sub: r.cat, tag: r.on || r.zeroOff ? undefined : "всегда" }));
     const track: Item[] = [
       ...(cfg<boolean>(config, "PARTIAL_TP_ENABLED", true) !== false
-        ? [{ id: "exit:ptp", title: "Частичная фиксация", sub: `${pct(cfg(config, "PARTIAL_TP_FRACTION", 0.5))} на ${pct(cfg(config, "PARTIAL_TP_TRIGGER", 0.6))} пути` }]
+        ? [{ id: "exit:ptp", title: "Частичный выход", sub: `${pct(cfg(config, "PARTIAL_TP_FRACTION", 0.5))} на ${pct(cfg(config, "PARTIAL_TP_TRIGGER", 0.6))} пути` }]
         : []),
       { id: "exit:trail", title: "Трейлинг-стоп", sub: `${cfg(config, "TRAILING_STOP_ATR_MULT", 1)} × ATR`, tag: "всегда" },
     ];
@@ -68,10 +68,11 @@ export function Lane({ step, items, onOpen }: { step: Step; items: Item[]; onOpe
   return (
     <div className="lane2 sum" onClick={onOpen} title="Открыть настройки шага">
       {items.slice(0, cap).map((b) => (
-        <span key={b.id} className="chip2" title={b.sub}>
+        // «всегда» стоит почти на каждой защите и съедает место у названия — уходит в подсказку.
+        <span key={b.id} className="chip2" title={b.tag === "всегда" ? `${b.sub} · работает всегда` : b.sub}>
           {b.dot !== undefined && <span className={`dot ${b.dot}`} aria-hidden="true" />}
           <span className="chip2-t">{b.title}</span>
-          {b.tag && <i className="chip2-lock">{b.tag}</i>}
+          {b.tag && b.tag !== "всегда" && <i className="chip2-lock">{b.tag}</i>}
         </span>
       ))}
       {items.length > cap && <span className="chip2 more">ещё {items.length - cap}</span>}

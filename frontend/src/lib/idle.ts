@@ -11,6 +11,8 @@ export interface IdleInput {
   hours: string;
   /** Текущий час UTC. */
   hourUtc: number;
+  /** Цикл уже идёт (пришло событие cycle), даже если разбор цикла ещё не опубликован. */
+  ran?: boolean;
 }
 
 export interface IdleReason {
@@ -65,7 +67,8 @@ export function idleReason(x: IdleInput): IdleReason | null {
       node: "risk",
     };
   const c = x.cycle;
-  if (!c || !Object.keys(c.nodes).length) return { tone: "ok", title: "Бот запускается", detail: "Первый цикл ещё не прошёл — причина появится через минуту-две." };
+  // Цикл идёт, но разбора ещё нет — «запускается» было бы неправдой, а причину назвать нечем.
+  if (!c || !Object.keys(c.nodes).length) return x.ran ? null : { tone: "ok", title: "Бот запускается", detail: "Первый цикл — через минуту-две." };
   if (c.nodes.order?.ok) return null;
   const stop = ORDER.map((n) => c.nodes[n]).find((s) => s?.ok === false);
   if (stop) return { tone: "warn", title: "Сделку остановил шаг цепочки", detail: cap(stop.text), node: stop.node };

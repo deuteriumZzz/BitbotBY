@@ -10,7 +10,7 @@ import type { AiState } from "../../lib/types";
 import { cfg } from "../bots";
 import { STATUS } from "../chainops";
 import { MarketPulse } from "../market";
-import { ReadinessCard } from "../setup";
+import { ReadinessChip } from "../setup";
 
 import { Seg } from "../../components/controls";
 import { Tween } from "../../components/motion";
@@ -110,7 +110,8 @@ function HealthStrip() {
     ["Telegram", light("telegram")],
   ];
   return (
-    <ul className="health" aria-label="Состояние системы">
+    <article className="status" aria-label="Состояние системы">
+    <ul className="health">
       {items.map(([k, v, c]) => (
         <li key={k}>
           <span className={`dot ${c}`} />
@@ -135,7 +136,11 @@ function HealthStrip() {
           </button>
         </li>
       )}
+      <ReadinessChip />
+      <TrustedChip />
     </ul>
+    <Idle />
+    </article>
   );
 }
 
@@ -168,21 +173,20 @@ function Idle() {
     return () => clearInterval(t);
   }, []);
   // Нет связи с сервером — об этом уже говорят шапка и строка здоровья.
-  const r = wsUp ? idleReason({ alive, paused, cycle, slots, hours, hourUtc }) : null;
+  const ran = useStore((s) => s.cycleAt !== null);
+  const r = wsUp ? idleReason({ alive, paused, cycle, slots, hours, hourUtc, ran }) : null;
   if (!r) return null;
   return (
-    <div className={`why ${r.tone}`} role="status">
+    <p className={`status-why ${r.tone}`} role="status">
       <span className={`dot ${r.tone}`} />
-      <div>
-        <b>{r.title}</b>
-        <p>{r.detail}</p>
-      </div>
+      <b>{r.title}</b>
+      <span>{r.detail}</span>
       {r.node && (
-        <button type="button" className="btn" onClick={() => openNode(r.node!)}>
-          Где настроить →
+        <button type="button" className="link" onClick={() => openNode(r.node!)}>
+          где настроить
         </button>
       )}
-    </div>
+    </p>
   );
 }
 
@@ -193,28 +197,25 @@ export const scrollWhenReady = (id: string, tries = 20): void => {
   else if (tries) setTimeout(() => scrollWhenReady(id, tries - 1), 50);
 };
 
-/** Последний пост доверенного канала: откуда, что разобрали, вход через сколько секунд или почему нет. */
-function TrustedLast() {
+/** Последний пост доверенного канала за сутки: вход через сколько секунд или почему нет. */
+function TrustedChip() {
   const t = useStore((s) => s.trusted);
   const openSettings = useStore((s) => s.setTab);
   if (!t || Date.now() / 1000 - t.at > 86_400) return null;
   const what = t.symbol ? `${base(t.symbol)} ${t.side === "buy" ? "LONG" : "SHORT"}` : "монета не разобрана";
   const when = new Date(t.at * 1000).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
   return (
-    <div className={`why ${t.ok ? "ok" : "warn"}`} role="status">
+    <li className="health-act">
       <span className={`dot ${t.ok ? "ok" : "warn"}`} />
-      <div>
-        <b>
-          Доверенный канал @{t.channel} · {what}
-        </b>
-        <p>
-          {t.ok ? `Вход открыт через ${t.latency_s} с после поста` : `Без сделки: ${t.reason}`} · {when}. Стратегии, AI и фильтры скана в этих сделках не участвуют.
-        </p>
-      </div>
-      <button type="button" className="btn" onClick={() => (openSettings("settings"), scrollWhenReady("tg-channels"))}>
-        Каналы →
+      <small>Канал</small>
+      <button
+        type="button"
+        title={`${t.ok ? `Вход через ${t.latency_s} с после поста` : `Без сделки: ${t.reason}`} · ${when}. Стратегии, AI и фильтры скана в этих сделках не участвуют.`}
+        onClick={() => (openSettings("settings"), scrollWhenReady("tg-channels"))}
+      >
+        @{t.channel} · {what} · {t.ok ? `вход ${t.latency_s} с` : "пропущен"}
       </button>
-    </div>
+    </li>
   );
 }
 
@@ -225,9 +226,6 @@ export function Terminal() {
   return (
     <section className="view term enter" aria-label="Терминал">
       <HealthStrip />
-      <Idle />
-      <TrustedLast />
-      <ReadinessCard />
       {simple && <PathBar />}
       <Hero />
       <MetricsCard />

@@ -22,14 +22,11 @@ const goTo = (pane: Pane | "map") => {
 };
 
 /** Заголовок раздела страницы настроек: номер, название, одна фраза о том, что внутри. */
-function SecHead({ n, title, sub }: { n: string; title: string; sub: string }) {
+function SecHead({ n, title }: { n: string; title: string }) {
   return (
     <div className="set-h">
       <span className="set-n">{n}</span>
-      <div>
-        <h2>{title}</h2>
-        <p>{sub}</p>
-      </div>
+      <h2>{title}</h2>
     </div>
   );
 }
@@ -87,18 +84,18 @@ export function Settings() {
       </nav>
       <ConnMap go={goTo} openKey={setKey} />
       <div id="set-main" className="set-sec">
-        <SecHead n="01" title="Уведомления и аккаунт" sub="Что присылать в Telegram и когда молчать, счёт, перезапуск и компьютер с ботом" />
+        <SecHead n="01" title="Уведомления и аккаунт" />
         <Main openKey={setKey} />
       </div>
       <div id="set-conn" className="set-sec">
-        <SecHead n="02" title="Ключи и доступ" sub="Ключи хранятся на сервере бота зашифрованными — приложение видит только последние 4 символа" />
+        <SecHead n="02" title="Ключи и доступ" />
         <Keys open={key} setOpen={setKey} />
       </div>
       <div id="set-all" className="set-sec">
         {simple ? (
-          <SecHead n="03" title="Основные параметры" sub="То, что чаще всего меняют. Остальное — в режиме «Профи»" />
+          <SecHead n="03" title="Основные параметры" />
         ) : (
-          <SecHead n="03" title="Все параметры" sub="Любой параметр бота: поиск, история изменений, копирование и сброс" />
+          <SecHead n="03" title="Все параметры" />
         )}
         <AllParams go={goTo} basicOnly={simple} />
       </div>

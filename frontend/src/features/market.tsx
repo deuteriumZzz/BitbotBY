@@ -94,11 +94,7 @@ function SeasonInfo({ data }: { data: Season }) {
           >
             <i style={{ width: `${Math.max(0, Math.min(100, idx))}%` }} />
           </div>
-          <span className="note-soon">
-            Индекс альтсезона {Math.round(idx)} из 100: доля альткоинов из
-            топ-100, которые за 30 дней выросли сильнее BTC. От 75 — альтсезон,
-            до 25 — сезон BTC.
-          </span>
+          <span className="note-soon">индекс {Math.round(idx)} из 100</span>
         </>
       )}
       <dl className="season-kv">
@@ -143,7 +139,7 @@ export function MarketPulse() {
         <div className="card-h">
           <span className="label">
             Сезон рынка{" "}
-            <Q tip="Альтсезон — когда большинство крупных альткоинов растёт быстрее BTC; сезон BTC — наоборот. Данные CoinGecko, бот проверяет их несколько раз в день." />
+            <Q tip="Индекс альтсезона — доля альткоинов из топ-100, выросших за 30 дней сильнее BTC. От 75 — альтсезон, до 25 — сезон BTC. Данные CoinGecko, бот обновляет их несколько раз в день." />
           </span>
         </div>
         {market?.season ? (
