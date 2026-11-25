@@ -43,7 +43,8 @@ function HealthStrip() {
   );
   const ai = useStore((s) => {
     const id = s.ai?.last || s.bot?.ai;
-    return id ? (s.ai?.providers.find((p) => p.id === id)?.name ?? id) : "";
+    const p = id ? s.ai?.providers.find((x) => x.id === id) : undefined;
+    return id ? (p ? `${p.name} · ${p.model}` : id) : "";
   });
   const secrets = useStore((s) => s.secrets);
   const aiState = useStore((s) => s.ai);

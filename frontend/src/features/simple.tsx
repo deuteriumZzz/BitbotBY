@@ -19,7 +19,7 @@ export function BotSimple() {
   const ops = useStore((s) => s.opsStatus);
   const score = useScoreboard();
   const mode = cfg<string>(c, "MODE", "ai");
-  const chain = (ai?.chain ?? []).map((x) => ai?.providers.find((p) => p.id === x.provider)?.name ?? x.provider);
+  const chain = (ai?.chain ?? []).map((x) => `${ai?.providers.find((p) => p.id === x.provider)?.name ?? x.provider} (${x.model})`);
   const when = cycle ? new Date(cycle.at * 1000).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }) : "";
   return (
     <section className="view enter simple" aria-label="Бот">

@@ -923,10 +923,8 @@ def _ai_view(rc: Any) -> Dict[str, Any]:
     """
     settings = rc.get_ai_chain() if rc else {}
     pinned = rc.get_ai_provider() if rc else Config.AI_PROVIDER
-    keyless = set(settings.get("keyless", []))
     models = settings.get("models", {})
-    order = [p for p in settings.get("order", []) if p in ai_providers.BY_ID]
-    order += [p.id for p in ai_providers.PROVIDERS if p.id not in order]
+    order = [p.id for p in ai_providers.PROVIDERS]
     now = time.time()
     available: List[str] = []
     providers = []
@@ -934,7 +932,7 @@ def _ai_view(rc: Any) -> Dict[str, Any]:
         p = ai_providers.BY_ID[pid]
         key_set = bool(_secret(p.key_env))
         url_ok = p.kind != "openai" or bool(p.url(_secret))
-        usable = (key_set or (p.key_optional and pid in keyless)) and url_ok
+        usable = key_set and url_ok
         if usable:
             available.append(pid)
         model = models.get(pid) or _model_env(p) or p.default_model
@@ -953,8 +951,6 @@ def _ai_view(rc: Any) -> Dict[str, Any]:
                 "key_set": key_set,
                 "url_ok": url_ok,
                 "usable": usable,
-                "keyless_on": pid in keyless,
-                "disabled": pid in settings.get("disabled", []),
                 "model": model,
                 "model_source": source,
                 "free": p.is_free(model),
@@ -978,9 +974,6 @@ def _ai_view(rc: Any) -> Dict[str, Any]:
     env_models = {p.id: _model_env(p) for p in ai_providers.PROVIDERS if _model_env(p)}
     chain = ai_providers.chain(settings, available, env_models, pinned)
     return {
-        "mode": settings.get("mode", ai_providers.DEFAULT_MODE),
-        "single": bool(settings.get("single", False)),
-        "pinned": pinned,
         "last": rc.get_last_ai_provider() if rc else "",
         "providers": providers,
         "chain": [{"provider": pid, "model": m} for pid, m in chain],
@@ -1027,48 +1020,6 @@ async def put_ai_chain(request: Request) -> JSONResponse:
         return _err(400, "bad_request", str(e))
     bot_bus.emit(r, "config.changed", {"keys": ["AI_CHAIN"]})
     return JSONResponse(_ai_view(rc))
-
-
-@router.get("/api/ai/providers/{provider_id}/models")
-async def get_ai_models(provider_id: str, request: Request) -> JSONResponse:
-    """Живой список моделей провайдера по сохранённому ключу (лимит не тратит)."""
-    denied = _control_denied(request)
-    if denied is not None:
-        return denied
-    p = ai_providers.BY_ID.get(provider_id)
-    if p is None:
-        return _err(404, "unknown_provider", "Нет такого провайдера.")
-    key = _secret(p.key_env)
-    if not key and not p.key_optional:
-        return _err(400, "no_key", "Сначала добавьте ключ.")
-    if p.kind == "anthropic":
-        url = "https://api.anthropic.com/v1/models"
-        headers = {"x-api-key": key, "anthropic-version": "2023-06-01"}
-    else:
-        base = p.url(_secret)
-        if not base:
-            return _err(400, "no_url", f"Укажите {p.url_label}.")
-        url = base + "/models"
-        headers = {"Authorization": f"Bearer {key}"} if key else {}
-    import httpx  # noqa: PLC0415
-
-    try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.get(url, headers=headers)
-        payload = resp.json() if resp.status_code == 200 else None
-    except (httpx.HTTPError, ValueError):
-        return _err(502, "provider_unreachable", f"{p.name} не ответил.")
-    if payload is None:
-        return _err(502, "provider_error", f"{p.name} ответил {resp.status_code}.")
-    items = payload.get("data") if isinstance(payload, dict) else payload
-    ids = sorted(
-        {
-            str(m["id"]).removeprefix("models/")
-            for m in items or []
-            if isinstance(m, dict) and m.get("id")
-        }
-    )
-    return JSONResponse({"provider": p.id, "models": ids})
 
 
 # ── Ключи API (backend/bitbot/config/secrets.py) ──────────────────────────────

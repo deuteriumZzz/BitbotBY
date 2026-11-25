@@ -57,7 +57,6 @@ export const EP = {
   ai: "/api/ai",
   aiChain: "/api/ai/chain",
   aiScoreboard: "/api/ai/scoreboard",
-  aiModels: (provider: string) => `/api/ai/providers/${provider}/models`,
 
   // настройки и уведомления
   config: "/api/config",

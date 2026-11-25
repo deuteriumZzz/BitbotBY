@@ -13,7 +13,6 @@ import { AiPane } from "./ai";
 import { Lane, isStep, useLanes } from "./blocks";
 import { ConfirmCard, OpsCard, RiskCard, StrategiesCard, TrackCard, WhatCard, cfg, levText, presetName, presetOf, profileName } from "./bots";
 import { EmergencyCard } from "./emergency";
-import { chosenId } from "./chainops";
 import { ModelCard } from "./jobs";
 import { RulesCard } from "./rules";
 import { UiSwitchRow } from "./uimode";
@@ -95,7 +94,6 @@ export function ModeSeg({ simple = false }: { simple?: boolean }) {
   );
 }
 
-const AI_MODE: Record<string, string> = { free: "бесплатные", auto: "смешанный", paid: "платные" };
 
 /** Участвует ли узел в решении при этом MODE (как в SignalCombiner): local — без AI и SAC, ai — без SAC, dqn — без AI. */
 export function takesPart(mode: string, node: BotNode): boolean {
@@ -177,7 +175,7 @@ function usePipeline(mode: string): { status: Record<BotNode, string>; info: Rec
             ? `запасной путь · ${strategies.filter((s) => s.enabled).length}`
             : "не участвуют"
           : `подсказка для AI · ${strategies.filter((s) => s.enabled).length}`,
-    ai: !ai ? "цепочка" : ai.single ? "один провайдер" : `${ai.chain.length} в цепочке`,
+    ai: !ai ? "цепочка" : `${ai.chain.length} в цепочке`,
     sac: mode === "dqn" ? "решает сам" : "вместе с AI",
     // Главные цифры риска прямо на холсте: пресет, риск на сделку, позиций сразу, плечо.
     risk: `${presetName(presetOf(c, presets))} · ${show("RISK_PER_TRADE")} · ${cfg(c, "MAX_POSITIONS", 3)} поз. · плечо ${levText(c, spot)}${guardsOff ? " · без защит" : ""}`,
@@ -214,16 +212,12 @@ function usePipeline(mode: string): { status: Record<BotNode, string>; info: Rec
       ],
     },
     ai: {
-      desc: ai?.single
-        ? "Решает один выбранный провайдер; остальные подключены, но не спрашиваются."
-        : "Подтверждает или отклоняет сделку. Провайдеры спрашиваются по очереди: ошибка или лимит — сразу следующий.",
+      desc: "Подтверждает или отклоняет сделку. Провайдеры спрашиваются по очереди — сначала бесплатные, потом платные: ошибка или лимит — сразу следующий.",
       fields: !ai
         ? [["Цепочка", "загружается"]]
         : [
-            ["Как работать", ai.single ? "один провайдер" : "цепочка"],
-            ["Какие модели", AI_MODE[ai.mode] ?? ai.mode],
-            ai.single ? ["Решает", name(chosenId(ai)) || "—"] : ["В цепочке", String(ai.chain.length)],
-            ["В резерве", String(ai.providers.filter((p) => p.disabled).length)],
+            ["Основной", ai.chain[0] ? `${name(ai.chain[0].provider)} · ${ai.chain[0].model}` : "нет ключа"],
+            ["В цепочке", String(ai.chain.length)],
             ["Последним ответил", ai.last ? name(ai.last) : "—"],
             ["Прогноз Chronos", `${show("CHRONOS_ENABLED")}${mode === "hybrid" ? "" : " · только Hybrid"}`],
             ["Если все молчат", fallback ? "решают стратегии" : "сделки нет"],

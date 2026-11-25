@@ -382,8 +382,10 @@ def test_ai_view_free_chain_by_default(client):
         _keys("GROQ_API_KEY", "DEEPSEEK_API_KEY"),
     ):
         body = client.get("/api/ai").json()
-    assert body["mode"] == "free"
-    assert [c["provider"] for c in body["chain"]] == ["groq"]  # DeepSeek платный
+    assert [c["provider"] for c in body["chain"]] == [
+        "groq",
+        "deepseek",
+    ]  # платный — после
     groq = next(p for p in body["providers"] if p["id"] == "groq")
     assert groq["key_set"] and groq["usable"] and groq["free"]
     assert len(body["providers"]) == 5
@@ -397,10 +399,10 @@ def test_put_ai_chain_applies_and_validates(keyed):
         patch.object(data, "get_redis", return_value=r),
         _keys("GROQ_API_KEY", "DEEPSEEK_API_KEY"),
     ):
-        bad = keyed.put("/api/ai/chain", json={"mode": "cheap"}, headers=h)
+        bad = keyed.put("/api/ai/chain", json={"models": {"nope": "m"}}, headers=h)
         ok = keyed.put(
             "/api/ai/chain",
-            json={"mode": "auto", "models": {"groq": "openai/gpt-oss-20b"}},
+            json={"models": {"groq": "openai/gpt-oss-20b"}},
             headers=h,
         )
     assert bad.status_code == 400
@@ -408,58 +410,15 @@ def test_put_ai_chain_applies_and_validates(keyed):
     chain = ok.json()["chain"]
     assert [c["provider"] for c in chain] == ["groq", "deepseek"]
     assert chain[0]["model"] == "openai/gpt-oss-20b"
-    assert json.loads(r.get("bot:ai_chain"))["mode"] == "auto"
+    assert json.loads(r.get("bot:ai_chain"))["models"] == {"groq": "openai/gpt-oss-20b"}
     assert r.published[-1][0] == keys.EVENTS
     assert r.published[-1][1]["data"] == {"keys": ["AI_CHAIN"]}
 
 
 def test_put_ai_chain_needs_login(client):
     with patch.object(data, "get_redis", return_value=StrRedis()):
-        resp = client.put("/api/ai/chain", json={"mode": "auto"})
+        resp = client.put("/api/ai/chain", json={"models": {}})
     assert resp.status_code in (401, 403)
-
-
-def test_ai_models_live_list(keyed, monkeypatch):
-    class Resp:
-        status_code = 200
-
-        def json(self):
-            return {"data": [{"id": "models/gemini-x"}, {"id": "b"}]}
-
-    class Client:
-        def __init__(self, **kw):
-            pass
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *exc):
-            return False
-
-        async def get(self, url, headers=None):
-            assert url.endswith("/openai/models")
-            assert headers == {"Authorization": f"Bearer {_KEY}"}
-            return Resp()
-
-    monkeypatch.setattr("httpx.AsyncClient", Client)
-    with _keys("GEMINI_API_KEY"):
-        resp = keyed.get(
-            "/api/ai/providers/gemini/models", headers={"X-API-Key": "secret"}
-        )
-    assert resp.json() == {"provider": "gemini", "models": ["b", "gemini-x"]}
-
-
-def test_single_provider_mode_via_api(keyed):
-    h = {"X-API-Key": "secret"}
-    with (
-        patch.object(data, "get_redis", return_value=StrRedis()),
-        _keys("GROQ_API_KEY", "GEMINI_API_KEY"),
-    ):
-        both = keyed.get("/api/ai", headers=h).json()
-        one = keyed.put("/api/ai/chain", json={"single": True}, headers=h).json()
-    assert [c["provider"] for c in both["chain"]] == ["groq", "gemini"]
-    assert one["single"] is True
-    assert [c["provider"] for c in one["chain"]] == ["groq"]
 
 
 def test_reset_config_route(keyed):

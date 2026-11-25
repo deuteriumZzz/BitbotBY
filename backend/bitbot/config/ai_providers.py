@@ -157,9 +157,6 @@ BY_ID: Dict[str, Provider] = {p.id: p for p in PROVIDERS}
 
 # Режимы цепочки: только бесплатные (по умолчанию — бот никогда сам не начнёт
 # тратить деньги), бесплатные впереди платных, только платные.
-MODES = ("free", "auto", "paid")
-DEFAULT_MODE = "free"
-
 # Пауза для провайдера после ошибки, секунд: лимит без срока в ответе,
 # нет денег, ключ не принят, модели нет.
 COOLDOWN_RATE_LIMIT = 7 * 60
@@ -169,39 +166,18 @@ COOLDOWN_BAD_MODEL = 10 * 60
 
 
 def clean_chain(raw: Any) -> Dict[str, Any]:
-    """Проверяет настройки цепочки из приложения; ValueError — что не так."""
+    """Настройки AI из приложения: только выбор модели у провайдера; ValueError — что не так."""
     if not isinstance(raw, dict):
-        raise ValueError("Ожидается объект с настройками цепочки.")
-    out: Dict[str, Any] = {}
-    if "mode" in raw:
-        if raw["mode"] not in MODES:
-            raise ValueError("Режим — free, auto или paid.")
-        out["mode"] = raw["mode"]
-    if "single" in raw:
-        if not isinstance(raw["single"], bool):
-            raise ValueError("single — true или false.")
-        out["single"] = raw["single"]
-    # keyless — провайдеры без ключа (LLM7, своя Ollama), которые пользователь
-    # включил сам: без его согласия данные не уходят новому сервису.
-    for key in ("order", "disabled", "keyless"):
-        if key in raw:
-            items = raw[key]
-            if not isinstance(items, list) or any(i not in BY_ID for i in items):
-                raise ValueError(f"{key}: список известных провайдеров.")
-            if key == "keyless" and any(not BY_ID[i].key_optional for i in items):
-                raise ValueError("Без ключа работают только LLM7 и Ollama.")
-            out[key] = list(dict.fromkeys(items))
-    if "models" in raw:
-        models = raw["models"]
-        if not isinstance(models, dict):
-            raise ValueError("models: объект «провайдер → модель».")
-        for pid, model in models.items():
-            if pid not in BY_ID:
-                raise ValueError(f"Нет провайдера {pid}.")
-            if not isinstance(model, str) or not 0 < len(model.strip()) <= 200:
-                raise ValueError(f"Модель для {pid} — непустая строка.")
-        out["models"] = {pid: m.strip() for pid, m in models.items()}
-    return out
+        raise ValueError("Ожидается объект с настройками AI.")
+    models = raw.get("models", {})
+    if not isinstance(models, dict):
+        raise ValueError("models: объект «провайдер → модель».")
+    for pid, model in models.items():
+        if pid not in BY_ID:
+            raise ValueError(f"Нет провайдера {pid}.")
+        if not isinstance(model, str) or not 0 < len(model.strip()) <= 200:
+            raise ValueError(f"Модель для {pid} — непустая строка.")
+    return {"models": {pid: m.strip() for pid, m in models.items()}}
 
 
 def chain(
@@ -210,36 +186,18 @@ def chain(
     env_models: Optional[Dict[str, str]] = None,
     pinned: str = "auto",
 ) -> List[Tuple[str, str]]:
-    """Порядок опроса: [(провайдер, модель)].
+    """Порядок опроса: [(провайдер, модель)] — решает бот, а не пользователь.
 
-    available — провайдеры с ключом (или без ключа, если он не нужен).
-    Модель: выбранная в приложении → из окружения → рекомендованная каталогом.
-    pinned (AI_PROVIDER, /provider в Telegram) идёт первым при любом режиме:
-    это явный выбор пользователя.
-
-    single — «один провайдер»: решения всегда принимает одна модель (закреплённая,
-    иначе первая в цепочке), без запасных. Недоступна — цикл идёт без AI, на
-    локальных стратегиях, а не на другой модели.
+    Провайдеры с ключом в порядке каталога: сначала бесплатные, потом платные (платный
+    зовётся, только если бесплатные не ответили). Модель: выбранная в приложении («Профи»)
+    → из окружения → рекомендованная каталогом. pinned (AI_PROVIDER в окружении) — первым.
+    Прежние настройки цепочки (режим, порядок, «один провайдер», резерв) не учитываются.
     """
-    order = [p for p in settings.get("order", []) if p in BY_ID]
-    ids = order + [p.id for p in PROVIDERS if p.id not in order]
-    disabled = set(settings.get("disabled", []))
     models = {**(env_models or {}), **settings.get("models", {})}
-    mode = settings.get("mode", DEFAULT_MODE)
-    out: List[Tuple[str, str]] = []
-    for pid in ids:
-        if pid not in available or (pid in disabled and pid != pinned):
-            continue
-        model = models.get(pid) or BY_ID[pid].default_model
-        free = BY_ID[pid].is_free(model)
-        if pid != pinned and (
-            (mode == "free" and not free) or (mode == "paid" and free)
-        ):
-            continue
-        out.append((pid, model))
-    if mode == "auto":
-        out.sort(key=lambda c: not BY_ID[c[0]].is_free(c[1]))  # стабильно
-    head = [c for c in out if c[0] == pinned]
-    if settings.get("single"):
-        return head if pinned != "auto" else out[:1]
-    return head + [c for c in out if c[0] != pinned]
+    out = [
+        (p.id, models.get(p.id) or p.default_model)
+        for p in PROVIDERS
+        if p.id in available
+    ]
+    out.sort(key=lambda c: not BY_ID[c[0]].is_free(c[1]))  # стабильно
+    return [c for c in out if c[0] == pinned] + [c for c in out if c[0] != pinned]

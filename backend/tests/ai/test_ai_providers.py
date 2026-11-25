@@ -27,45 +27,29 @@ def test_free_flag_for_custom_models():
     assert not ap.BY_ID["openai"].is_free("gpt-9")
 
 
-def test_clean_chain_validates():
-    assert ap.clean_chain({"mode": "auto", "order": ["groq", "groq", "gemini"]}) == {
-        "mode": "auto",
-        "order": ["groq", "gemini"],
+def test_clean_chain_keeps_only_models():
+    assert ap.clean_chain({"models": {"groq": " openai/gpt-oss-20b "}}) == {
+        "models": {"groq": "openai/gpt-oss-20b"}
     }
-    for bad in (
-        {"mode": "cheap"},
-        {"order": ["nope"]},
-        {"keyless": ["groq"]},  # без ключа работают только LLM7 и Ollama
-        {"models": {"groq": ""}},
-        [],
-    ):
-        with pytest.raises(ValueError):
-            ap.clean_chain(bad)
+    # прежние настройки цепочки больше ничего не значат
+    assert ap.clean_chain({"mode": "paid", "order": ["gemini"]}) == {"models": {}}
+    with pytest.raises(ValueError):
+        ap.clean_chain({"models": {"nope": "m"}})
+    with pytest.raises(ValueError):
+        ap.clean_chain({"models": {"groq": ""}})
 
 
-def test_chain_modes():
-    keys = ["groq", "deepseek", "gemini", "anthropic"]
-    assert [p for p, _ in ap.chain({}, keys)] == ["groq", "gemini"]
-    assert [p for p, _ in ap.chain({"mode": "paid"}, keys)] == [
+def test_chain_is_free_first_then_paid_and_ignores_old_settings():
+    avail = ["anthropic", "groq", "deepseek", "gemini"]
+    old = {"mode": "paid", "order": ["anthropic"], "disabled": ["groq"], "single": True}
+    assert [p for p, _ in ap.chain(old, avail)] == [
+        "groq",
+        "gemini",
         "deepseek",
         "anthropic",
     ]
-    auto = ap.chain({"mode": "auto", "order": ["deepseek", "gemini"]}, keys)
-    assert [p for p, _ in auto] == ["gemini", "groq", "deepseek", "anthropic"]
-    # Платная модель у бесплатного провайдера в режиме «только бесплатные» — мимо.
-    paid_model = {"models": {"gemini": "gemini-pro-latest"}}
-    assert [p for p, _ in ap.chain(paid_model, keys)] == ["groq"]
-
-
-def test_single_provider_mode():
-    keys = ["groq", "gemini", "deepseek"]
-    # Закреплён — только он, без запасных.
-    assert ap.chain({"single": True}, keys, pinned="gemini") == [
-        ("gemini", "gemini-flash-latest")
-    ]
-    # Не закреплён — первый в цепочке.
-    assert [p for p, _ in ap.chain({"single": True}, keys)] == ["groq"]
-    # Закреплённого нет среди доступных — AI в этом цикле не работает.
-    assert ap.chain({"single": True}, keys, pinned="openai") == []
-    with pytest.raises(ValueError):
-        ap.clean_chain({"single": "yes"})
+    # выбранная в приложении модель — главнее рекомендованной
+    assert ("groq", "openai/gpt-oss-20b") in ap.chain(
+        {"models": {"groq": "openai/gpt-oss-20b"}}, avail
+    )
+    assert ap.chain({}, []) == []

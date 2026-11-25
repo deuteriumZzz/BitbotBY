@@ -99,25 +99,6 @@ export const actions = {
     st().act(() => api("DELETE", EP.twitterAccount(login)).then(() => st().loadSecrets()), "Аккаунт удалён."),
   putAiChain: (changes: AiChainChanges, ok?: string) =>
     st().act(() => api<AiState>("PUT", EP.aiChain, changes).then((ai) => useStore.setState({ ai })), ok),
-  /** Живой список моделей провайдера по сохранённому ключу. */
-  aiModels: async (provider: string): Promise<string[]> => {
-    try {
-      return (await api<{ models: string[] }>("GET", EP.aiModels(provider))).models;
-    } catch (e) {
-      st().say(e instanceof ApiError ? e.message : "Не удалось загрузить список моделей.");
-      return [];
-    }
-  },
-  /** Проверка связи с провайдером: запрос списка моделей по сохранённому ключу (лимит не тратит). */
-  aiProbe: async (provider: string): Promise<{ ok: boolean; ms: number; message: string }> => {
-    const t0 = performance.now();
-    try {
-      await api("GET", EP.aiModels(provider));
-      return { ok: true, ms: Math.round(performance.now() - t0), message: "" };
-    } catch (e) {
-      return { ok: false, ms: Math.round(performance.now() - t0), message: e instanceof ApiError ? e.message : "нет связи с сервером" };
-    }
-  },
   /** Найти свой chat id: кто писал боту. Токен берётся из поля или из сохранённого. */
   findTelegramChat: async (token: string, code: string): Promise<{ id: string; name: string }[] | null> => {
     try {

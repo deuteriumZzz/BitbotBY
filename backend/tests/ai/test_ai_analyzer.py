@@ -126,9 +126,10 @@ class TestChainFromKeys:
         ai = self._make(GEMINI_API_KEY="g", GROQ_API_KEY="q")
         assert ai._provider_order == ["groq", "gemini"]
 
-    def test_paid_key_alone_is_not_used_in_free_mode(self):
+    def test_paid_key_alone_is_used(self):
+        # Режимов «бесплатные/платные» больше нет: есть только платный ключ — работает он.
         ai = self._make(DEEPSEEK_API_KEY="d", ANTHROPIC_API_KEY="a")
-        assert ai.enabled is False
+        assert ai._provider_order == ["deepseek", "anthropic"]
 
     def test_pinned_paid_provider_goes_first_even_in_free_mode(self):
         ai = self._make(
@@ -144,11 +145,6 @@ class TestChainFromKeys:
             GEMINI_API_KEY="g",
         )
         assert ai._provider_order == ["gemini", "deepseek", "anthropic"]
-
-    def test_user_order_and_disabled(self):
-        rc = self._rc({"order": ["gemini", "groq"], "disabled": ["groq"]})
-        ai = self._make(rc=rc, GEMINI_API_KEY="g", GROQ_API_KEY="q")
-        assert ai._provider_order == ["gemini"]
 
     def test_model_from_env_then_app_choice(self):
         cfg = _make_config(GEMINI_API_KEY="g", GEMINI_MODEL="gemini-2.5-flash")

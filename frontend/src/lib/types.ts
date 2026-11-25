@@ -437,8 +437,6 @@ export interface CommandResult {
 
 // ── AI-провайдеры (GET /api/ai) ───────────────────────────────────────────────
 
-export type AiMode = "free" | "auto" | "paid";
-
 export interface AiModel {
   id: string;
   free: boolean;
@@ -457,8 +455,6 @@ export interface AiProvider {
   key_set: boolean;
   url_ok: boolean;
   usable: boolean;
-  keyless_on: boolean;
-  disabled: boolean;
   model: string;
   model_source: "app" | "env" | "catalog";
   free: boolean;
@@ -472,20 +468,12 @@ export interface AiProvider {
 }
 
 export interface AiState {
-  mode: AiMode;
-  /** Один провайдер без запасных — иначе цепочка. */
-  single: boolean;
-  pinned: string;
   last: string;
   providers: AiProvider[];
   chain: { provider: string; model: string }[];
 }
 
 export interface AiChainChanges {
-  mode?: AiMode;
-  single?: boolean;
-  order?: string[];
-  disabled?: string[];
-  keyless?: string[];
+  /** Провайдер → модель, выбранная в «Профи». */
   models?: Record<string, string>;
 }

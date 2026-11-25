@@ -97,30 +97,12 @@ const ai = structuredClone(fixtures.ai) as AiState;
 
 /** Те же правила, что ai_providers.chain на сервере. */
 function recomputeAi(): void {
-  const ok = (p: AiState["providers"][number]) =>
-    p.id === ai.pinned || (ai.mode === "free" ? p.free : ai.mode === "paid" ? !p.free : true);
-  let chain = ai.providers.filter((p) => p.usable && (!p.disabled || p.id === ai.pinned) && ok(p));
-  if (ai.mode === "auto") chain = [...chain.filter((p) => p.free), ...chain.filter((p) => !p.free)];
-  chain = [...chain.filter((p) => p.id === ai.pinned), ...chain.filter((p) => p.id !== ai.pinned)];
-  if (ai.single) chain = ai.pinned !== "auto" ? chain.filter((p) => p.id === ai.pinned) : chain.slice(0, 1);
-  ai.chain = chain.map((p) => ({ provider: p.id, model: p.model }));
+  // с ключом, в порядке каталога: сначала бесплатные, потом платные
+  const chain = ai.providers.filter((p) => p.usable);
+  ai.chain = [...chain.filter((p) => p.free), ...chain.filter((p) => !p.free)].map((p) => ({ provider: p.id, model: p.model }));
 }
 
 function applyAi(b: Body): AiState {
-  if (b.mode !== undefined && !["free", "auto", "paid"].includes(b.mode)) fail(400, "bad_request", "Режим — free, auto или paid.");
-  if (b.mode) ai.mode = b.mode;
-  if (typeof b.single === "boolean") ai.single = b.single;
-  if (Array.isArray(b.order)) {
-    const rank = (id: string) => (b.order.includes(id) ? b.order.indexOf(id) : 1e3);
-    ai.providers.sort((x, y) => rank(x.id) - rank(y.id));
-  }
-  if (Array.isArray(b.disabled)) ai.providers.forEach((p) => (p.disabled = b.disabled.includes(p.id)));
-  if (Array.isArray(b.keyless))
-    ai.providers.forEach((p) => {
-      if (!p.key_optional) return;
-      p.keyless_on = b.keyless.includes(p.id);
-      p.usable = p.key_set || p.keyless_on;
-    });
   if (b.models && typeof b.models === "object")
     ai.providers.forEach((p) => {
       const m = b.models[p.id];
@@ -865,10 +847,6 @@ function patchConfig(changes: Body) {
   }
   if (did.length) configHistory.unshift({ ts: Date.now() / 1000, by: "app", changes: did });
   if (typeof changes.MODE === "string") bot.mode = changes.MODE;
-  if (typeof changes.AI_PROVIDER === "string") {
-    ai.pinned = changes.AI_PROVIDER;
-    recomputeAi();
-  }
   emit("config.changed", { keys: Object.keys(changes).sort() });
   // Демо: включили сделки по каналам — через пару секунд приходит пост доверенного канала.
   if (changes.TELEGRAM_TRUSTED_TRADING === true) setTimeout(() => emit("trusted.post", { ...state().trusted, at: Date.now() / 1000 }), 2000);
@@ -909,7 +887,7 @@ function secret(method: string, id: string, b: Body) {
   const aiProvider = ai.providers.find((p) => p.id === s.service);
   if (aiProvider) {
     aiProvider.key_set = s.fields.some((f) => f.set);
-    aiProvider.usable = aiProvider.key_set || aiProvider.keyless_on;
+    aiProvider.usable = aiProvider.key_set;
     recomputeAi();
   }
   emit("secret.changed", { service: s.service, status: s.status });

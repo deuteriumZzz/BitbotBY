@@ -163,12 +163,10 @@ class AIAnalyzer:
     def _chain(self) -> List[Tuple[str, str]]:
         """[(провайдер, модель)] по текущим настройкам — пересчёт каждый цикл."""
         settings = self._settings()
-        keyless = set(settings.get("keyless", []))
         available = [
             p.id
             for p in catalog.PROVIDERS
-            if (_env(p.key_env) or (p.key_optional and p.id in keyless))
-            and (p.kind != "openai" or p.url(_env))
+            if _env(p.key_env) and (p.kind != "openai" or p.url(_env))
         ]
         env_models = {
             p.id: _env(p.model_env)
