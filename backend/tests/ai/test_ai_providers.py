@@ -23,24 +23,8 @@ def test_catalog_is_consistent():
 
 
 def test_free_flag_for_custom_models():
-    orouter = ap.BY_ID["openrouter"]
-    assert orouter.is_free("some/new-model:free")
-    assert not orouter.is_free("some/new-model")
     assert ap.BY_ID["groq"].is_free("any-new-groq-model")
     assert not ap.BY_ID["openai"].is_free("gpt-9")
-
-
-def test_url_with_account_and_override():
-    cf = ap.BY_ID["cloudflare"]
-    assert cf.url(lambda env: "") == ""
-    assert cf.url(lambda env: "abc") == (
-        "https://api.cloudflare.com/client/v4/accounts/abc/ai/v1"
-    )
-    ollama = ap.BY_ID["ollama"]
-    assert ollama.url(lambda env: "") == "http://localhost:11434/v1"
-    assert ollama.url(lambda env: "http://gpu-box:11434/v1/") == (
-        "http://gpu-box:11434/v1"
-    )
 
 
 def test_clean_chain_validates():
@@ -74,7 +58,7 @@ def test_chain_modes():
 
 
 def test_single_provider_mode():
-    keys = ["groq", "gemini", "openrouter"]
+    keys = ["groq", "gemini", "deepseek"]
     # Закреплён — только он, без запасных.
     assert ap.chain({"single": True}, keys, pinned="gemini") == [
         ("gemini", "gemini-flash-latest")
@@ -82,6 +66,6 @@ def test_single_provider_mode():
     # Не закреплён — первый в цепочке.
     assert [p for p, _ in ap.chain({"single": True}, keys)] == ["groq"]
     # Закреплённого нет среди доступных — AI в этом цикле не работает.
-    assert ap.chain({"single": True}, keys, pinned="cerebras") == []
+    assert ap.chain({"single": True}, keys, pinned="openai") == []
     with pytest.raises(ValueError):
         ap.clean_chain({"single": "yes"})

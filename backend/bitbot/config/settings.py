@@ -166,19 +166,6 @@ class Config:
     GROQ_MODEL: str = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
     GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
-    # Бесплатные fallback-провайдеры — последними в цепочке (после платных
-    # и Groq/Gemini), чтобы не расходовать их скромные дневные лимиты, пока
-    # ещё доступны более щедрые/качественные провайдеры выше по списку.
-    # OpenRouter free-tier (":free" модели): 50 запросов/сутки без депозита,
-    # 1000/сутки после разового пополнения от $10 (openrouter.ai/docs).
-    OPENROUTER_API_KEY: str = os.getenv("OPENROUTER_API_KEY", "")
-    OPENROUTER_MODEL: str = os.getenv(
-        "OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free"
-    )
-    # NVIDIA NIM (build.nvidia.com) — точные бесплатные лимиты не публикуются
-    # в доках, зависят от аккаунта; проверять в личном кабинете build.nvidia.com.
-    NVIDIA_API_KEY: str = os.getenv("NVIDIA_API_KEY", "")
-    NVIDIA_MODEL: str = os.getenv("NVIDIA_MODEL", "meta/llama-3.3-70b-instruct")
     # Hard drawdown halt (trading_bot): закрыть всё и пауза DRAWDOWN_HALT_HOURS
     MAX_DRAWDOWN_PERCENT: float = float(os.getenv("MAX_DRAWDOWN_PERCENT", "0.2"))
     PUMPPORTAL_API_KEY: str = os.getenv("PUMPPORTAL_API_KEY", "")
@@ -564,8 +551,6 @@ class Config:
             "openai",
             "groq",
             "gemini",
-            "openrouter",
-            "nvidia",
         )
         if self.AI_PROVIDER not in _valid_providers:
             raise ValueError(
@@ -579,23 +564,20 @@ class Config:
                 "deepseek": self.DEEPSEEK_API_KEY,
                 "groq": self.GROQ_API_KEY,
                 "gemini": self.GEMINI_API_KEY,
-                "openrouter": self.OPENROUTER_API_KEY,
-                "nvidia": self.NVIDIA_API_KEY,
             }
             has_any_key = any(provider_key.values())
             if self.AI_PROVIDER == "auto" and not has_any_key:
                 raise ValueError(
                     "AI_PROVIDER=auto: нужен хотя бы один ключ — "
                     "ANTHROPIC_API_KEY, OPENAI_API_KEY, DEEPSEEK_API_KEY, "
-                    "GROQ_API_KEY, GEMINI_API_KEY, OPENROUTER_API_KEY "
-                    "или NVIDIA_API_KEY."
+                    "GROQ_API_KEY или GEMINI_API_KEY."
                 )
             if self.AI_PROVIDER != "auto" and not provider_key.get(self.AI_PROVIDER):
                 raise ValueError(
                     f"AI_PROVIDER={self.AI_PROVIDER}: ключ не задан. "
                     "Получить: console.anthropic.com / platform.deepseek.com / "
                     "platform.openai.com / console.groq.com / "
-                    "aistudio.google.com / openrouter.ai / build.nvidia.com"
+                    "aistudio.google.com"
                 )
 
         # Файл SAC-модели обязателен для режимов dqn/hybrid

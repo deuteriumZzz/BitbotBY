@@ -7,7 +7,7 @@ describe("detectProvider", () => {
     expect(detectProvider("gsk_abcdefghijklmnop")).toEqual(["groq"]);
     expect(detectProvider("  AIzaSyAbcdefghijkl ")).toEqual(["gemini"]);
     expect(detectProvider("sk-ant-api03-abcdefgh")).toEqual(["anthropic"]);
-    expect(detectProvider("sk-or-v1-abcdefgh")).toEqual(["openrouter"]);
+    expect(detectProvider("sk-or-v1-abcdefgh")).toEqual([]); // OpenRouter убран из каталога
   });
   it("sk- без уточнения — два кандидата, а не угадывание", () => {
     expect(detectProvider("sk-abcdefghijklmnop")).toEqual(["openai", "deepseek"]);

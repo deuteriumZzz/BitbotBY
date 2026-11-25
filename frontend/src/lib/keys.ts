@@ -5,12 +5,6 @@ const PREFIXES: readonly (readonly [string, string])[] = [
   ["gsk_", "groq"],
   ["AIza", "gemini"],
   ["sk-ant-", "anthropic"],
-  ["sk-or-", "openrouter"],
-  ["nvapi-", "nvidia"],
-  ["csk-", "cerebras"],
-  ["hf_", "huggingface"],
-  ["github_pat_", "github"],
-  ["ghp_", "github"],
 ];
 
 /** Провайдеры, у которых ключ с таким началом: один — уверенно, несколько — выбор, пусто — не узнали. */
@@ -19,6 +13,8 @@ export function detectProvider(raw: string): string[] {
   if (key.length < 8) return [];
   const hit = PREFIXES.find(([p]) => key.startsWith(p));
   if (hit) return [hit[1]];
+  // Ключ OpenRouter («sk-or-…») похож на OpenAI, но такого провайдера у нас нет — не угадываем.
+  if (key.startsWith("sk-or-")) return [];
   // «sk-…» без уточнения у OpenAI и DeepSeek одинаковое начало.
   if (key.startsWith("sk-")) return ["openai", "deepseek"];
   return [];

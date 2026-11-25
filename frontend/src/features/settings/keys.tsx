@@ -26,8 +26,6 @@ const KEY_INFO: Record<string, [string, string?]> = {
   anthropic: ["Лучшее качество анализа, платный.", "https://console.anthropic.com"],
   deepseek: ["Самый дешёвый из платных.", "https://platform.deepseek.com"],
   openai: ["Модели ChatGPT.", "https://platform.openai.com"],
-  openrouter: ["Много моделей по одному ключу, есть бесплатные.", "https://openrouter.ai/keys"],
-  nvidia: ["Бесплатные модели NVIDIA NIM.", "https://build.nvidia.com"],
   telegram: ["Токен от @BotFather и ваш chat_id (его покажет @userinfobot). Управлять ботом может только этот чат.", "https://t.me/BotFather"],
   news: ["Новости для оценки настроения рынка.", "https://newsapi.org"],
   finnhub: ["Календарь FOMC, CPI, NFP для макро-паузы. Без ключа пауза не работает.", "https://finnhub.io"],

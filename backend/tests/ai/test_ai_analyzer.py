@@ -24,8 +24,6 @@ def _make_config(**kwargs):
     cfg.GROQ_API_KEY = kwargs.get("GROQ_API_KEY", "")
     cfg.OPENAI_API_KEY = kwargs.get("OPENAI_API_KEY", "")
     cfg.GEMINI_API_KEY = kwargs.get("GEMINI_API_KEY", "")
-    cfg.OPENROUTER_API_KEY = kwargs.get("OPENROUTER_API_KEY", "")
-    cfg.NVIDIA_API_KEY = kwargs.get("NVIDIA_API_KEY", "")
     cfg.MIN_SIGNAL_CONFIDENCE = kwargs.get("MIN_SIGNAL_CONFIDENCE", 0.65)
     cfg.MIN_SIGNAL_CONFIDENCE_PAPER = kwargs.get("MIN_SIGNAL_CONFIDENCE_PAPER", 0.60)
     cfg.PAPER_TRADING = kwargs.get("PAPER_TRADING", False)
@@ -35,10 +33,6 @@ def _make_config(**kwargs):
     cfg.GROQ_MODEL = kwargs.get("GROQ_MODEL", "llama-3.3-70b-versatile")
     cfg.OPENAI_MODEL = kwargs.get("OPENAI_MODEL", "gpt-4o-mini")
     cfg.GEMINI_MODEL = kwargs.get("GEMINI_MODEL", "gemini-3.6-flash")
-    cfg.OPENROUTER_MODEL = kwargs.get(
-        "OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free"
-    )
-    cfg.NVIDIA_MODEL = kwargs.get("NVIDIA_MODEL", "meta/llama-3.3-70b-instruct")
     return cfg
 
 
@@ -129,8 +123,8 @@ class TestChainFromKeys:
         assert ai._provider_order == []
 
     def test_free_by_default_in_catalog_order(self):
-        ai = self._make(GEMINI_API_KEY="g", GROQ_API_KEY="q", OPENROUTER_API_KEY="o")
-        assert ai._provider_order == ["groq", "gemini", "openrouter"]
+        ai = self._make(GEMINI_API_KEY="g", GROQ_API_KEY="q")
+        assert ai._provider_order == ["groq", "gemini"]
 
     def test_paid_key_alone_is_not_used_in_free_mode(self):
         ai = self._make(DEEPSEEK_API_KEY="d", ANTHROPIC_API_KEY="a")
@@ -152,16 +146,9 @@ class TestChainFromKeys:
         assert ai._provider_order == ["gemini", "deepseek", "anthropic"]
 
     def test_user_order_and_disabled(self):
-        rc = self._rc({"order": ["gemini", "groq"], "disabled": ["openrouter"]})
-        ai = self._make(
-            rc=rc, GEMINI_API_KEY="g", GROQ_API_KEY="q", OPENROUTER_API_KEY="o"
-        )
-        assert ai._provider_order == ["gemini", "groq"]
-
-    def test_keyless_provider_only_when_switched_on(self):
-        assert self._make().enabled is False
-        ai = self._make(rc=self._rc({"keyless": ["llm7"]}))
-        assert ai._provider_order == ["llm7"]
+        rc = self._rc({"order": ["gemini", "groq"], "disabled": ["groq"]})
+        ai = self._make(rc=rc, GEMINI_API_KEY="g", GROQ_API_KEY="q")
+        assert ai._provider_order == ["gemini"]
 
     def test_model_from_env_then_app_choice(self):
         cfg = _make_config(GEMINI_API_KEY="g", GEMINI_MODEL="gemini-2.5-flash")
@@ -175,12 +162,6 @@ class TestChainFromKeys:
             assert ai._chain() == [("gemini", "gemini-2.5-flash")]
             ai._runtime_config = self._rc({"models": {"gemini": "gemini-3.6-flash"}})
             assert ai._chain() == [("gemini", "gemini-3.6-flash")]
-
-    def test_cloudflare_needs_account_id(self, monkeypatch):
-        monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "t" * 20)
-        assert self._make().enabled is False
-        monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "a" * 32)
-        assert self._make()._provider_order == ["cloudflare"]
 
 
 # ---------------------------------------------------------------------------
@@ -435,22 +416,24 @@ class TestAnalyze:
     @pytest.mark.asyncio
     async def test_rate_limit_pauses_provider_for_seven_minutes(self):
         ai = self._make_ai(
-            [("gemini", "m"), ("openrouter", "m"), ("llm7", "m"), ("nvidia", "m")]
+            [("gemini", "m"), ("groq", "m"), ("openai", "m"), ("deepseek", "m")]
         )
         result = await self._run(
             ai,
             {
                 "gemini": _http_error(429, "Too Many Requests"),
-                "openrouter": _http_error(429, "Rate limit, retry in 30s"),
-                "llm7": _http_error(429, "Too many requests. Retry after 10 seconds."),
-                "nvidia": _REC,
+                "groq": _http_error(429, "Rate limit, retry in 30s"),
+                "openai": _http_error(
+                    429, "Too many requests. Retry after 10 seconds."
+                ),
+                "deepseek": _REC,
             },
         )
         assert len(result) == 1
         now = time.time()
         assert 400 < ai._provider_retry_after["gemini"] - now <= 420
-        assert 30 < ai._provider_retry_after["openrouter"] - now <= 35
-        assert 10 < ai._provider_retry_after["llm7"] - now <= 15
+        assert 30 < ai._provider_retry_after["groq"] - now <= 35
+        assert 10 < ai._provider_retry_after["openai"] - now <= 15
 
     @pytest.mark.asyncio
     async def test_no_balance_bad_key_and_missing_model(self):
@@ -496,8 +479,8 @@ class TestAnalyze:
     async def test_bad_request_does_not_stop_the_chain(self):
         # Раньше 400 обрывал цикл; с десятком провайдеров один капризный
         # (не принял параметры запроса) не должен оставлять бота без AI.
-        ai = self._make_ai([("cohere", "m"), ("groq", "m")])
-        result = await self._run(ai, {"cohere": _http_error(400), "groq": _REC})
+        ai = self._make_ai([("openai", "m"), ("groq", "m")])
+        result = await self._run(ai, {"openai": _http_error(400), "groq": _REC})
         assert len(result) == 1
 
     @pytest.mark.asyncio

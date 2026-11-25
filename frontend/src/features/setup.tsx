@@ -265,12 +265,8 @@ function StepBody({ step }: { step: SetupStep }) {
           </>
         );
       if (!ai) return <Skel label="Загружаю список провайдеров" />;
-      // Первым — LLM7: работает без ключа, один клик. Ollama требует своего сервера —
-      // это в Бот → AI-цепочка. Без хранилища ключей — только то, что не требует ключа.
-      const free = ai.providers
-        .filter((p) => p.free_tier && !p.usable && p.id !== "ollama" && (info?.keys_in_app || p.key_optional))
-        .sort((a, b) => Number(b.key_optional) - Number(a.key_optional))
-        .slice(0, 4);
+      // Бесплатные провайдеры, к которым ещё нет ключа (ключ вводится прямо здесь).
+      const free = ai.providers.filter((p) => p.free_tier && !p.usable && info?.keys_in_app);
       return (
         <>
           <p className="setup-p">

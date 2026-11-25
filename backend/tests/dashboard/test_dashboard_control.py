@@ -386,7 +386,7 @@ def test_ai_view_free_chain_by_default(client):
     assert [c["provider"] for c in body["chain"]] == ["groq"]  # DeepSeek платный
     groq = next(p for p in body["providers"] if p["id"] == "groq")
     assert groq["key_set"] and groq["usable"] and groq["free"]
-    assert len(body["providers"]) == 16
+    assert len(body["providers"]) == 5
     assert _KEY not in json.dumps(body)  # значения ключей не отдаются
 
 

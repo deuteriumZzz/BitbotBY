@@ -62,70 +62,26 @@ LEVERAGE=3               # МАКСИМАЛЬНОЕ плечо. Бот расс�
 <details>
 <summary><b>🧠 AI-провайдер</b></summary>
 
+Провайдеров пять. Ключ вставляется в приложении (Настройки → Ключи и доступ): провайдер определяется по началу
+ключа, ключ хранится только зашифрованным. Модель у каждого провайдера — рекомендованная в каталоге
+(`backend/bitbot/config/ai_providers.py`).
+
+| Провайдер | Тариф | Модель по умолчанию |
+|---|---|---|
+| Groq | бесплатный лимит | gpt-oss-120b |
+| Gemini | бесплатный лимит | Gemini Flash |
+| DeepSeek | платный, самый дешёвый | deepseek-flash |
+| OpenAI | платный | gpt-5-mini |
+| Claude (Anthropic) | платный | claude-haiku |
+
+Один запрос (запрос v2, 5 монет) — около 1,2 тыс. токенов на вход и несколько сотен на ответ. Бот спрашивает AI раз за
+цикл: Bluechip ~96 раз в сутки, Altcoin ~288, Meme ~960. Бесплатных лимитов по обзорам на ноябрь 2026 (точные цифры —
+в консоли провайдера): Groq gpt-oss-120b — 200 тыс. токенов в сутки (≈100 запросов), Gemini Flash — около 20 запросов в
+сутки. Для Altcoin и Meme нужен платный провайдер. Не ответил ни один — решают локальные стратегии.
+
 ```env
-AI_PROVIDER=auto         # auto      → пробует Claude → OpenAI → DeepSeek → Groq → Gemini → локальные стратегии
-                         # anthropic → только Claude
-                         # deepseek  → только DeepSeek
-                         # groq      → только Groq (Llama 3.3 70B, самый быстрый)
-                         # openai    → только ChatGPT
-                         # gemini    → только Google Gemini Flash
-
-# ── Groq — БЕСПЛАТНЫЙ тир, 100k токенов/день, Llama 3.3 70B ──
-# console.groq.com → API Keys → Create
-GROQ_API_KEY=gsk_...
-GROQ_MODEL=llama-3.3-70b-versatile
-
-# ── Google Gemini Flash — БЕСПЛАТНЫЙ тир, 1500 запросов/день ──
-# aistudio.google.com → Get API Key (бесплатно, без карты)
-GEMINI_API_KEY=...
-GEMINI_MODEL=gemini-2.0-flash-lite
-
-# ── DeepSeek — САМЫЙ ДЕШЁВЫЙ (~$0.002 за запрос) ──
-# platform.deepseek.com → API Keys → Create
-DEEPSEEK_API_KEY=sk-...
-DEEPSEEK_MODEL=deepseek-chat
-
-# ── Claude (Anthropic) — лучшее качество анализа ──
-# console.anthropic.com → API Keys → Create Key
-ANTHROPIC_API_KEY=sk-ant-...
-AI_MODEL=claude-sonnet-4-6
-
-# ── ChatGPT (OpenAI) ──
-# platform.openai.com → API Keys
-OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-4o-mini
-
 AI_DAILY_BUDGET=500      # Лимит AI-вызовов в сутки (UTC). Сверх лимита → локальные стратегии.
-                         # Bluechip: 96 запросов/день. Altcoin: 288 запросов/день.
 ```
-
-> **Совет для старта (бесплатно):** добавь Groq + Gemini — хватает на весь день для обоих профилей.
-> Для лучшего качества дополнительно пополни DeepSeek на $5 (~9–26 дней торговли).
-
-**Цепочка надёжности — бот не останавливается никогда:**
-
-```
-Claude (Anthropic) — лучшее качество, платный
-    ↓ нет баланса → уведомление в Telegram
-OpenAI GPT-4o-mini — хорошее качество, платный
-    ↓ нет баланса → уведомление в Telegram
-DeepSeek — хорошее качество, самый дешёвый, ~$5 на 9–26 дней
-    ↓ нет баланса → уведомление в Telegram
-Groq + Gemini — бесплатные, хватает на весь день
-    ↓ исчерпались к концу дня → уведомление с обратным отсчётом до сброса
-Локальные стратегии — 10 базовых + до 4 профильных стратегий без AI, всегда работают
-```
-
-Настроены только те провайдеры, у которых есть ключ (Настройки → Ключи и доступ). Реальный порядок и статус каждого —
-в Telegram: ⚙️ Настройки → 🤖 AI-провайдер.
-
-| Провайдер | Стоимость | Качество | Лимит |
-|---|---|---|---|
-| DeepSeek | ~$5 на 9–26 дней | Хорошее | по балансу |
-| Groq (Llama 3.3 70B) | бесплатно | Хорошее | 100k токенов/день |
-| Gemini 2.0 Flash | бесплатно | Хорошее | 1500 запросов/день |
-| Claude Sonnet | ~$0.01/запрос | Отличное | по балансу |
-| OpenAI GPT-4o-mini | ~$0.003/запрос | Хорошее | по балансу |
 
 </details>
 
