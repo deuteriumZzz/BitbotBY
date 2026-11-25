@@ -11,7 +11,7 @@ import logging
 import os
 import time
 from datetime import datetime
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import ccxt
 import pandas as pd
@@ -171,6 +171,9 @@ class TradingBot:
             self.combiner.sac.position_provider = self._sac_position
         self.rag: Any = None  # индекс по Ledger (AI_RAG_CONTEXT)
         self.ai._rag_provider = lambda symbols: ops_tasks.rag_context(self, symbols)
+        # Провайдеры, чьи прогнозы не лучше монетки (табло честности, AI_TRUST_SCOREBOARD).
+        self.ai_untrusted: List[str] = []
+        self.ai._untrusted = lambda: self.ai_untrusted
         self.regime_detector = RegimeDetector()
         self._current_regime: str = "unknown"
         self.portfolio_optimizer = PortfolioOptimizer()
@@ -2073,6 +2076,10 @@ class TradingBot:
             self._backup_task = asyncio.create_task(ops_tasks.db_backup_loop(self))
         if Config.AI_RAG_CONTEXT:
             self._rag_task = asyncio.create_task(ops_tasks.rag_refresh_loop(self))
+        if Config.AI_FORECAST_PROMPT:
+            self._scoreboard_task = asyncio.create_task(
+                ops_tasks.ai_scoreboard_loop(self)
+            )
         await ops_tasks.apply_emergency_on_start(self)
         ops_tasks.run_config_record(
             self

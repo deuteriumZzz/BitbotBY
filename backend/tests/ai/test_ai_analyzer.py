@@ -29,6 +29,7 @@ def _make_config(**kwargs):
     cfg.MIN_SIGNAL_CONFIDENCE = kwargs.get("MIN_SIGNAL_CONFIDENCE", 0.65)
     cfg.MIN_SIGNAL_CONFIDENCE_PAPER = kwargs.get("MIN_SIGNAL_CONFIDENCE_PAPER", 0.60)
     cfg.PAPER_TRADING = kwargs.get("PAPER_TRADING", False)
+    cfg.AI_FORECAST_PROMPT = kwargs.get("AI_FORECAST_PROMPT", False)
     cfg.AI_MODEL = kwargs.get("AI_MODEL", "claude-sonnet-4-6")
     cfg.DEEPSEEK_MODEL = kwargs.get("DEEPSEEK_MODEL", "deepseek-chat")
     cfg.GROQ_MODEL = kwargs.get("GROQ_MODEL", "llama-3.3-70b-versatile")

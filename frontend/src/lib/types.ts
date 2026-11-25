@@ -400,6 +400,24 @@ export interface ModelsStatus {
   paper: boolean;
 }
 
+/** Табло честности AI (`GET /api/ai/scoreboard`): сбываются ли прогнозы лучше монетки. */
+export interface ScoreKind {
+  n: number;
+  /** Доля исходов «вверх» (прогнозы) или «тейк раньше стопа» (сделки). */
+  hit_rate: number;
+  brier: number;
+  brier_base: number;
+  /** > 0 — точнее, чем «всегда доля исходов»; ≤ 0 — не лучше. */
+  skill: number;
+  verdict: "мало данных" | "лучше монетки" | "не лучше монетки";
+}
+
+export interface AiScoreboard {
+  updated: string | null;
+  providers: Record<string, { forecast?: ScoreKind; trade?: ScoreKind }>;
+  min_n: number;
+}
+
 /** Данные для мета-модели (`GET /api/meta/status`). */
 export interface MetaStatus {
   have: number;

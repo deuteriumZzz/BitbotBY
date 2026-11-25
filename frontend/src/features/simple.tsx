@@ -8,6 +8,7 @@ import { ModeSeg, NODES, takesPart } from "./pipeline";
 import { TemplateSeg, templateLine } from "./rules";
 import { mark } from "./trace";
 import { protectionLines } from "../lib/format";
+import { useScoreboard } from "./ai";
 import { UiSwitchRow } from "./uimode";
 
 export function BotSimple() {
@@ -16,6 +17,7 @@ export function BotSimple() {
   const cycle = useStore((s) => s.lastCycle);
   const setUi = useStore((s) => s.setUi);
   const ops = useStore((s) => s.opsStatus);
+  const score = useScoreboard();
   const mode = cfg<string>(c, "MODE", "ai");
   const chain = (ai?.chain ?? []).map((x) => ai?.providers.find((p) => p.id === x.provider)?.name ?? x.provider);
   const when = cycle ? new Date(cycle.at * 1000).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }) : "";
@@ -33,6 +35,15 @@ export function BotSimple() {
         {mode === "ai" && (
           <p className="note-soon">
             {chain.length ? `AI по очереди: ${chain.join(" → ")}. Не ответит никто — решат стратегии.` : "Ключа AI ещё нет — добавьте его в «Профи» → AI-цепочка."}
+          </p>
+        )}
+        {mode === "ai" && score && Object.keys(score.providers).length > 0 && (
+          <p className="note-soon">
+            Честность прогнозов:{" "}
+            {Object.entries(score.providers)
+              .map(([id, k]) => `${ai?.providers.find((p) => p.id === id)?.name ?? id} — ${k.forecast?.verdict ?? "нет данных"}`)
+              .join(", ")}
+            .
           </p>
         )}
       </article>

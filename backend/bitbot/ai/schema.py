@@ -25,6 +25,8 @@ ALLOWED_KEYS = frozenset(
         "stop_loss",
         "take_profit",
         "reasoning",
+        "p_win",  # запрос v2: вероятность, что тейк сработает раньше стопа
+        "case_against",  # запрос v2: самый сильный довод против сделки
     }
 )
 REQUIRED_KEYS = ("symbol", "action", "strategy", "confidence")

@@ -1061,6 +1061,16 @@ function route(method: string, path: string, body: unknown): unknown {
       modelStage[b.profile] = "paper";
       emit("model.approved", { profile: b.profile });
       return done(b, { ok: true, approved: true, stage: "paper" });
+    case "GET /api/ai/scoreboard":
+      return {
+        updated: new Date().toISOString(),
+        min_n: 200,
+        providers: {
+          groq: { forecast: { n: 312, hit_rate: 0.49, brier: 0.252, brier_base: 0.2499, skill: -0.008, verdict: "не лучше монетки" },
+                  trade: { n: 18, hit_rate: 0.39, brier: 0.29, brier_base: 0.238, skill: -0.22, verdict: "мало данных" } },
+          gemini: { forecast: { n: 141, hit_rate: 0.52, brier: 0.244, brier_base: 0.2496, skill: 0.022, verdict: "мало данных" } },
+        },
+      };
     case "GET /api/meta/status":
       return { have: 37, need: 500, wins: 17, last: new Date().toISOString(), unmatched: 3, not_recorded: 0 };
     case "POST /api/model/rollback":

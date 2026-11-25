@@ -233,6 +233,15 @@ class Config:
         os.getenv("AI_STRICT_VALIDATION", os.getenv("PAPER_TRADING", "false")).lower()
         == "true"
     )
+    # Запрос v2 и табло честности прогнозов: в paper включены, в live — после проверки на paper.
+    AI_FORECAST_PROMPT: bool = (
+        os.getenv("AI_FORECAST_PROMPT", os.getenv("PAPER_TRADING", "false")).lower()
+        == "true"
+    )
+    AI_TRUST_SCOREBOARD: bool = (
+        os.getenv("AI_TRUST_SCOREBOARD", os.getenv("PAPER_TRADING", "false")).lower()
+        == "true"
+    )
     FORECASTER: str = os.getenv("FORECASTER", "chronos").strip().lower()
     WS_SHADOW_ENABLED: bool = (
         os.getenv("WS_SHADOW_ENABLED", os.getenv("PAPER_TRADING", "false")).lower()

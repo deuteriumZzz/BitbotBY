@@ -177,7 +177,7 @@ def ops_status(bot: Any) -> Dict[str, Any]:
     Публикуется в Redis `bot:ops_status` каждый цикл; приложение показывает это карточкой
     «Защита и наблюдение». Только чтение состояния, ничего не меняет.
     """
-    from bitbot.ai.analyzer import PROMPT_VERSION  # noqa: PLC0415
+    from bitbot.ai.analyzer import prompt_version  # noqa: PLC0415
 
     ws: Optional[Dict[str, Any]] = None
     stream = getattr(bot, "ws_stream", None)
@@ -201,7 +201,7 @@ def ops_status(bot: Any) -> Dict[str, Any]:
         level = 0
     return {
         "mode": "paper" if Config.PAPER_TRADING else "live",
-        "prompt_version": PROMPT_VERSION,
+        "prompt_version": prompt_version(),
         "flags": flags.current(Config),
         "forecaster": Config.FORECASTER,
         "ws": ws,
@@ -226,6 +226,35 @@ def run_config_record(bot: Any) -> Dict[str, Any]:
 
 # ── RAG по Ledger ─────────────────────────────────────────────────────────────
 RAG_REFRESH_S = 600.0
+SCOREBOARD_S = 1800.0
+
+
+async def ai_scoreboard_loop(
+    bot: Any,
+    *,
+    sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    path: Optional[str] = None,
+) -> None:
+    """Раз в 30 минут сверяет прогнозы AI со свечами (табло честности) и обновляет
+    список провайдеров, которые не лучше монетки (`bot.ai_untrusted`)."""
+    from bitbot.research import ai_scoreboard as sb  # noqa: PLC0415
+
+    async def fetch(symbol: str, tf: str, since: int, limit: int) -> Any:
+        return await bot.api.exchange.fetch_ohlcv(symbol, tf, since, limit)
+
+    while True:
+        try:
+            ledger_path = path or getattr(getattr(bot, "ledger", None), "path", None)
+            # ponytail: чтение журнала в цикле событий; в поток — если журнал вырастет за сотни МБ
+            summary = await sb.update(
+                ledger_path or "data/decision_ledger.jsonl", fetch
+            )
+            bot.ai_untrusted = sb.untrusted(summary)
+        except (
+            Exception
+        ) as exc:  # noqa: BLE001 — прежний список остаётся, цикл не падает
+            logger.warning("AI scoreboard update failed: %s", exc)
+        await sleep(SCOREBOARD_S)
 
 
 async def rag_refresh_loop(

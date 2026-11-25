@@ -5,7 +5,9 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { fmtN, plural } from "../lib/format";
 import { detectProvider } from "../lib/keys";
 import { reducedMotion } from "../lib/platform";
-import type { AiMode, AiModel, AiProvider, AiState, SecretItem } from "../lib/types";
+import type { AiMode, AiModel, AiProvider, AiScoreboard, AiState, ScoreKind, SecretItem } from "../lib/types";
+import { api } from "../lib/api";
+import { EP } from "../api/endpoints";
 import { actions } from "../store/actions";
 import { useStore } from "../store";
 import { Seg, Toggle } from "../components/controls";
@@ -53,6 +55,61 @@ async function setHow(ai: AiState, how: "chain" | "single"): Promise<void> {
   await actions.putAiChain({ single: how === "single" }, how === "single" ? "Работает один провайдер, без запасных" : "Работает цепочка провайдеров");
 }
 
+/** Табло честности одной строкой: проверено, угадывает, вердикт словами. */
+export function scoreLine(k: ScoreKind, minN: number): string {
+  const share = `${Math.round(k.hit_rate * 100)}%`;
+  if (k.verdict === "мало данных") return `проверено ${k.n} из ${minN} — пока рано судить`;
+  const skill = `${k.skill > 0 ? "+" : ""}${Math.round(k.skill * 100)}%`;
+  return `${k.verdict} · ${k.n} проверок · исходов вверх ${share} · точность против 50/50: ${skill}`;
+}
+
+/** Табло честности: каждый прогноз AI сверяется с тем, что потом сделала цена. */
+export function useScoreboard(): AiScoreboard | null {
+  const [s, setS] = useState<AiScoreboard | null>(null);
+  useEffect(() => {
+    api<AiScoreboard>("GET", EP.aiScoreboard).then(setS).catch(() => setS(null));
+  }, []);
+  return s;
+}
+
+function HonestyCard({ ai }: { ai: AiState }) {
+  const s = useScoreboard();
+  const rows = s ? Object.entries(s.providers) : [];
+  const name = (id: string) => ai.providers.find((p) => p.id === id)?.name ?? id;
+  return (
+    <article className="card">
+      <div className="card-h">
+        <h2>Честность прогнозов</h2>
+        <Q tip="AI отвечает вероятностями: «цена сначала пройдёт +ATR, а не −ATR, за 16 свечей — 58%». Через 16 свечей бот проверяет, что было на самом деле. Если прогнозы провайдера на 200+ проверках не точнее, чем «всегда 50/50», он теряет право открывать сделки (может только промолчать)." />
+      </div>
+      {!s || !rows.length ? (
+        <p className="note-soon">Прогнозов пока нет: табло заполнится, когда бот поработает в paper с новым запросом к AI.</p>
+      ) : (
+        <ul className="prot-list">
+          {rows.map(([id, kinds]) => (
+            <li key={id}>
+              <span>
+                <b>{name(id)}</b>
+                <br />
+                <small>{kinds.forecast ? scoreLine(kinds.forecast, s.min_n) : "прогнозов нет"}</small>
+                {kinds.trade && (
+                  <>
+                    <br />
+                    <small>сделки: {scoreLine(kinds.trade, s.min_n)}</small>
+                  </>
+                )}
+              </span>
+              <span className={`pill sp ${kinds.forecast?.verdict === "лучше монетки" ? "ok" : ""}`}>
+                {kinds.forecast?.verdict ?? "—"}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </article>
+  );
+}
+
 export function AiPane() {
   const ai = useStore((s) => s.ai);
   const secrets = useStore((s) => s.secrets);
@@ -92,6 +149,7 @@ export function AiPane() {
         </div>
       )}
       <ChainCard ai={ai} />
+      <HonestyCard ai={ai} />
       <article className="card">
         <div className="card-h">
           <h2>{ai.single ? "Подключённые провайдеры" : "В цепочке"}</h2>

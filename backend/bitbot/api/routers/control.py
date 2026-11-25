@@ -41,6 +41,7 @@ from bitbot.domain import strategies
 from bitbot.domain.types import is_trusted
 from bitbot.ops import emergency, reports
 from bitbot.ops import jobs as background_jobs
+from bitbot.research import ai_scoreboard as ai_scoreboard_mod
 from bitbot.research import meta_dataset
 from bitbot.storage import bot_bus
 
@@ -413,6 +414,12 @@ async def cmd_model_approve(request: Request) -> JSONResponse:
     return await _command(
         request, "approve_model", {"profile": str(body.get("profile", ""))}
     )
+
+
+@router.get("/api/ai/scoreboard")
+async def ai_scoreboard() -> JSONResponse:
+    """Табло честности: сбываются ли прогнозы каждого AI-провайдера лучше монетки."""
+    return JSONResponse(await asyncio.to_thread(ai_scoreboard_mod.read))
 
 
 @router.get("/api/meta/status")
