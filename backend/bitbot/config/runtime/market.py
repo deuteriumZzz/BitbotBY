@@ -174,7 +174,9 @@ class MarketSettings(ModelSettings):
         self.set_scan_top_n(int(str(profile.get("scan_top_n", 20))))
         self.set_train_top_n(int(str(profile.get("train_top_n", 20))))
         self.set_risk_per_trade(float(str(profile.get("risk_per_trade", 0.02))))
-        self.set_mode(str(profile.get("mode", "ai")))
+        # «Кто решает» (MODE) профиль не меняет: это выбор владельца. Раньше профиль
+        # ставил Hybrid, и без допущенной SAC бот после автосмены по сезону переставал
+        # открывать сделки.
         self._set(keys.SL_PERCENT, str(profile.get("sl_percent", 0.05)))
         self._set(keys.TP_MULTIPLIER, str(profile.get("tp_multiplier", 2.0)))
         self._set(keys.TRADING_INTERVAL, str(profile.get("trading_interval", 60)))

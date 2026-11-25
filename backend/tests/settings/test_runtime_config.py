@@ -388,6 +388,15 @@ class TestRuntimeConfigMarketProfile:
         rc, _, _ = rc_bundle
         assert rc.apply_market_profile("altcoin") is True
 
+    def test_profile_switch_keeps_who_decides(self, rc_bundle):
+        # Автосмена профиля по сезону не должна переводить бота в Hybrid: без допущенной
+        # SAC он тогда перестаёт открывать сделки.
+        rc, redis_mock, _ = rc_bundle
+        for name in ("bluechip", "altcoin", "meme"):
+            assert rc.apply_market_profile(name)
+        written = [c.args[0] for c in redis_mock.redis_client.set.call_args_list]
+        assert not any(str(k).endswith(":mode") or k == "bot:mode" for k in written)
+
     def test_apply_market_profile_unknown(self, rc_bundle):
         rc, _, _ = rc_bundle
         assert rc.apply_market_profile("unknown") is False

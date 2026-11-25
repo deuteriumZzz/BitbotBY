@@ -116,7 +116,6 @@ _MARKET_PROFILES = {
         "risk_per_trade": 0.02,
         "timeframe": "15m",
         "trading_interval": 900,  # раз в 15 мин = 96 AI запросов/день
-        "mode": "hybrid",
         "model_path": "models/sac_model.zip",
         "sl_percent": 0.05,  # SL 5%
         "tp_multiplier": 2.0,  # TP = 10% (консервативно)
@@ -130,7 +129,6 @@ _MARKET_PROFILES = {
         "risk_per_trade": 0.01,
         "timeframe": "5m",
         "trading_interval": 300,  # раз в 5 мин = 288 AI запросов/день
-        "mode": "hybrid",
         "model_path": "models/sac_model_altcoin.zip",
         "sl_percent": 0.04,  # SL 4%
         "tp_multiplier": 4.0,  # TP = 16% (ловим большие альт-движения)
@@ -144,7 +142,6 @@ _MARKET_PROFILES = {
         "risk_per_trade": 0.005,
         "timeframe": "3m",
         "trading_interval": 90,  # раз в 90 сек — быстрый цикл на коротком ТФ
-        "mode": "hybrid",
         "model_path": "models/sac_model_meme.zip",
         "sl_percent": 0.12,  # SL 12% — широкий стоп для волатильных монет
         "tp_multiplier": 6.0,  # TP = 72% (6×SL — ловим памп)
