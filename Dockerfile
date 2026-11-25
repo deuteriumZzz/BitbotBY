@@ -1,9 +1,9 @@
 # Фронтенд приложения (MiniApp / десктоп): собирается здесь, дашборд отдаёт его по /app/
-FROM node:20-alpine AS webapp
-WORKDIR /webapp
-COPY webapp/package.json webapp/package-lock.json ./
+FROM node:20-alpine AS frontend
+WORKDIR /frontend
+COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
-COPY webapp/ ./
+COPY frontend/ ./
 RUN npm run build
 
 FROM python:3.11-slim
@@ -28,7 +28,7 @@ RUN python -c "import tomllib; print('\\n'.join(tomllib.load(open('backend/pypro
 # Код: пакет bitbot ставится без зависимостей (они уже в слое выше)
 COPY . .
 RUN pip install --no-cache-dir --no-deps ./backend
-COPY --from=webapp /webapp/dist ./webapp/dist
+COPY --from=frontend /frontend/dist ./frontend/dist
 
 # Create data directory
 RUN mkdir -p data/cache models logs

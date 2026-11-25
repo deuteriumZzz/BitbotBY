@@ -16,7 +16,7 @@ from pathlib import Path
 
 # Собранный фронтенд (Mini App / Desktop), который раздаёт API на /app/.
 # Путь от рабочей папки: корень репозитория локально, /app в Docker.
-WEBAPP_DIST = Path(os.getenv("WEBAPP_DIST", "webapp/dist"))
+FRONTEND_DIST = Path(os.getenv("FRONTEND_DIST", "frontend/dist"))
 
 # ── Redis TTLs (seconds) ────────────────────────────────────────────────────
 

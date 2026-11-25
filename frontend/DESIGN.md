@@ -1,6 +1,6 @@
 # DESIGN — «Тёмный премиум-терминал»
 
-Источник вида для `webapp/`. Прежний стиль «Приборная панель» (`docs/design/DESIGN.md`) — анти-референс:
+Источник вида для `frontend/`. Прежний стиль «Приборная панель» (`docs/design/DESIGN.md`) — анти-референс:
 от него остаются механика движения и состав функций.
 Референсы (что берём): Dribbble — Multi-Asset Watchlist / Tactical Dashboard Blocks, Prop Firm Dashboard,
 Pro Trading Platform; traderwaves.com — карта связей «источники → центр → результаты»; cryptonislabs — кабинеты.

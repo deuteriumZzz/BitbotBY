@@ -21,7 +21,7 @@ from bitbot.api.routers import api as _api
 from bitbot.api.routers import control as _control
 from bitbot.api.routers import frontend as _frontend
 from bitbot.api.routers import ops as _ops
-from bitbot.config.constants import WEBAPP_DIST
+from bitbot.config.constants import FRONTEND_DIST
 
 
 @asynccontextmanager
@@ -43,8 +43,8 @@ MAX_BODY_BYTES = 1024 * 1024
 # MiniApp и браузер загружают её без заголовков, а данные берут из /api с сессией.
 _NO_AUTH_PREFIXES = ("/api/auth/", "/app/")
 
-# Собранный фронтенд (cd webapp && npm run build). Нет сборки — нет и /app.
-_WEBAPP_DIST = WEBAPP_DIST
+# Собранный фронтенд (cd frontend && npm run build). Нет сборки — нет и /app.
+_WEBAPP_DIST = FRONTEND_DIST
 
 
 def _host_allowed(host_header: str) -> bool:

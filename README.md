@@ -135,7 +135,7 @@ python3 launcher/launch.py server --domain=bot.example.com
 ```bash
 python3.11 -m venv .venv && source .venv/bin/activate
 pip install -e "backend[dev]"
-make webapp        # собрать приложение
+make frontend      # собрать приложение
 make local         # бот + дашборд: http://localhost:8080/app/
 ```
 
@@ -285,7 +285,7 @@ src/
   dashboard/     — FastAPI: API, WebSocket, приложение /app/
   research/      — бэктесты и отчёты: python -m bitbot.research.backtest и др.
 reinforcement_learning/ — SAC: среда, обучение, подбор гиперпараметров
-webapp/          — приложение (React + Vite + TypeScript), собирается в образ Docker
+frontend/          — приложение (React + Vite + TypeScript), собирается в образ Docker
 tests/           — тесты по тем же папкам, что и src/ (+ launcher/, integration/ для testnet)
 deploy/          — Caddyfile, monitoring/ (Prometheus/Grafana), legacy/ — старый запуск с .env
 docs/            — CONFIGURATION, DEPLOY_SERVER, STRATEGIES, RUNBOOK, design/, переводы README
@@ -352,7 +352,7 @@ Dynamic leverage (fixed/volatility/full, ATR-based) · Trailing stop + partial T
 
 ## 📲 Приложение: MiniApp, браузер, десктоп
 
-Всё, что есть в Telegram-меню, есть и в приложении (`webapp/`, React + Vite): Telegram MiniApp,
+Всё, что есть в Telegram-меню, есть и в приложении (`frontend/`, React + Vite): Telegram MiniApp,
 обычный браузер (`/app/`) и десктоп-оболочка открывают один и тот же интерфейс. Telegram и приложение
 управляют одним и тем же ботом: команды идут через общую очередь Redis, настройки и замки задач общие.
 
@@ -374,7 +374,7 @@ Dynamic leverage (fixed/volatility/full, ATR-based) · Trailing stop + partial T
 присылает владельцу в Telegram; при запуске лаунчером — одноразовая ссылка (только на этом компьютере).
 Управлять ботом может только владелец (`TELEGRAM_CHAT_ID`).
 
-Дизайн-система «Тёмный премиум-терминал» описана в [webapp/DESIGN.md](webapp/DESIGN.md) (токены — `webapp/src/styles/tokens.css`), контракт API
+Дизайн-система «Тёмный премиум-терминал» описана в [frontend/DESIGN.md](frontend/DESIGN.md) (токены — `frontend/src/styles/tokens.css`), контракт API
 приложения — в [docs/design/CONTRACT.md](docs/design/CONTRACT.md).
 
 ---
@@ -477,7 +477,7 @@ make ai-isolation       # даёт ли AI-слой edge поверх голых
 make test                     # pytest с покрытием (порог 50%)
 make lint                     # ruff + lint-imports + mypy
 make fmt                      # black + сортировка импортов (ruff)
-cd webapp && npx vitest run   # тесты приложения
+cd frontend && npx vitest run   # тесты приложения
 ```
 
 **2012 тестов бэкенда** (индикаторы, стратегии и порты из Argent, риск, CVaR, Kelly, Almgren-Chriss, SAC-инференс,
@@ -489,7 +489,7 @@ CI проверяет black, ruff, mypy, слои импортов (lint-imports
 
 | Команда | Назначение |
 |---|---|
-| `make local` / `make webapp` | Бот + дашборд без Docker / сборка приложения |
+| `make local` / `make frontend` | Бот + дашборд без Docker / сборка приложения |
 | `make paper` / `make paper-ai` / `make live` | Только бот: Paper (local / AI) / Live — читают `.env` |
 | `make train` / `make train-long` / `make train-docker` | Обучение SAC |
 | `make tune` / `make tune-bluechip` / `make tune-altcoin` | Подбор гиперпараметров (Optuna) |

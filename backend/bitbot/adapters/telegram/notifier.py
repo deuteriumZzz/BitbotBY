@@ -39,7 +39,7 @@ _HTTP_TIMEOUT = 15.0
 _POLL_TIMEOUT = 25  # long polling getUpdates, сек
 _POLL_RETRY_S = 5.0
 
-# Вкладки приложения, на которые ведут кнопки (webapp/src/lib/types.ts: Tab).
+# Вкладки приложения, на которые ведут кнопки (frontend/src/lib/types.ts: Tab).
 SCREEN_HOME = "terminal"
 SCREEN_PIPELINE = "bots"  # сигналы на подтверждение, риск, аварийное управление
 SCREEN_JOBS = "learn"  # обучение и проверки

@@ -13,12 +13,12 @@ from dotenv import load_dotenv
 load_dotenv(".env")
 
 from bitbot.api import app  # noqa: F401,E402 — re-exported for uvicorn discovery
-from bitbot.config.constants import WEBAPP_DIST  # noqa: E402
+from bitbot.config.constants import FRONTEND_DIST  # noqa: E402
 
 if __name__ == "__main__":
-    if not (WEBAPP_DIST / "index.html").exists():
+    if not (FRONTEND_DIST / "index.html").exists():
         print(
-            "Приложение /app/ не собрано: cd webapp && npm ci && npm run build",
+            "Приложение /app/ не собрано: cd frontend && npm ci && npm run build",
             file=sys.stderr,
         )
     import logging

@@ -2,7 +2,7 @@
 PY ?= $(shell [ -x .venv/bin/python ] && echo $(CURDIR)/.venv/bin/python || echo python3.11)
 LINT_IMPORTS ?= $(shell [ -x .venv/bin/lint-imports ] && echo $(CURDIR)/.venv/bin/lint-imports || echo lint-imports)
 
-.PHONY: train train-long train-docker tune tune-bluechip tune-altcoin retrain backtest backtest-eth alpha-report live-divergence ai-isolation paper paper-ai live test lint fmt local webapp
+.PHONY: train train-long train-docker tune tune-bluechip tune-altcoin retrain backtest backtest-eth alpha-report live-divergence ai-isolation paper paper-ai live test lint fmt local frontend
 
 # ── Training ───────────────────────────────────────────────────────────────────
 train:
@@ -82,8 +82,8 @@ local:
 	@echo ">>> Bot + dashboard on this computer. App: http://localhost:8080/app/"
 	$(PY) -m bitbot.workers.supervisor --with-dashboard
 
-webapp:
-	cd webapp && npm ci && npm run build
+frontend:
+	cd frontend && npm ci && npm run build
 
 # ── Live trading ───────────────────────────────────────────────────────────────
 live:

@@ -16,9 +16,9 @@ data/trades.db
 logs/
 
 # Фронтенд собирается в отдельной стадии Dockerfile; десктоп в образ не нужен
-webapp/node_modules
-webapp/dist
-desktop/
+frontend/node_modules
+frontend/dist
+frontend/desktop/
 
 # Лаунчер: мастер-ключ шифрования не должен попасть в слои образа
 .launcher/
