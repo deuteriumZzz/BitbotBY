@@ -47,6 +47,8 @@ class BotCommands:
             "account_mode": self.account_mode,
             "run_job": self.run_job,
             "rollback_model": self.rollback_model,
+            "model_status": self.model_status,
+            "approve_model": self.approve_model,
             "emergency": self.emergency,
         }
 
@@ -72,6 +74,14 @@ class BotCommands:
 
     async def rollback_model(self, args: Dict[str, Any]) -> Dict[str, Any]:
         return self._jobs.rollback()
+
+    async def model_status(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        return await asyncio.to_thread(
+            self._jobs.models
+        )  # отпечаток файла — чтение с диска
+
+    async def approve_model(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        return await asyncio.to_thread(self._jobs.approve, str(args.get("profile", "")))
 
     async def pause(self, args: Dict[str, Any]) -> Dict[str, Any]:
         self._bot._runtime_config.set_paused(True)

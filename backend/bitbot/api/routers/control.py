@@ -41,6 +41,7 @@ from bitbot.domain import strategies
 from bitbot.domain.types import is_trusted
 from bitbot.ops import emergency, reports
 from bitbot.ops import jobs as background_jobs
+from bitbot.research import meta_dataset
 from bitbot.storage import bot_bus
 
 
@@ -397,6 +398,30 @@ async def jobs_status() -> JSONResponse:
 @router.post("/api/model/rollback")
 async def cmd_rollback(request: Request) -> JSONResponse:
     return await _command(request, "rollback_model")
+
+
+@router.post("/api/model/status")
+async def cmd_model_status(request: Request) -> JSONResponse:
+    """Модели SAC по профилям: стадия в реестре и проверка при обучении (файлы — у бота)."""
+    return await _command(request, "model_status")
+
+
+@router.post("/api/model/approve")
+async def cmd_model_approve(request: Request) -> JSONResponse:
+    """Допуск модели профиля к Paper: решение владельца, меняет то, как бот торгует."""
+    body = await _body(request)
+    return await _command(
+        request, "approve_model", {"profile": str(body.get("profile", ""))}
+    )
+
+
+@router.get("/api/meta/status")
+async def meta_status() -> JSONResponse:
+    """Сколько сделок накоплено для мета-модели (из журнала решений)."""
+    try:
+        return JSONResponse(await asyncio.to_thread(meta_dataset.status))
+    except Exception:  # детали — в лог, наружу — общее сообщение
+        return _err(500, "report_failed", "Не удалось прочитать журнал решений.")
 
 
 # ── Аварийное управление и отчёты ─────────────────────────────────────────────

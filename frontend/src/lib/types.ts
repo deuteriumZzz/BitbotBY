@@ -381,6 +381,34 @@ export interface BotEvent {
   data: Record<string, unknown>;
 }
 
+/** Модель SAC профиля и её допуск (`POST /api/model/status`). */
+export interface ModelInfo {
+  profile: string;
+  exists: boolean;
+  trained: number | null;
+  /** candidate / validated — ждёт допуска; paper / canary / production — допущена; unregistered — не в реестре. */
+  stage: string;
+  model_id: string | null;
+  /** Проверка при обучении на отложенных данных: доходность SAC и «купить и держать», %. */
+  metrics: { sac_pct?: number; bh_pct?: number; worse?: boolean };
+}
+
+export interface ModelsStatus {
+  models: ModelInfo[];
+  paper: boolean;
+}
+
+/** Данные для мета-модели (`GET /api/meta/status`). */
+export interface MetaStatus {
+  have: number;
+  need: number;
+  wins: number;
+  last: string | null;
+  /** Закрытые сделки без записи решения в журнале (доверенные каналы и т. п.). */
+  unmatched: number;
+  not_recorded: number;
+}
+
 export interface CommandResult {
   ok: boolean;
   error?: { code: string; message: string };

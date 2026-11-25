@@ -518,6 +518,9 @@ export const useStore = create<Store>((set, get) => {
           void get().loadJobs().catch(() => undefined);
           break;
         }
+        case "model.approved":
+          feed("edit", "Модель SAC допущена к paper");
+          break;
         case "model.rolled_back":
           void get().loadJobs().catch(() => undefined);
           feed("edit", "Модель SAC откатана к предыдущей");

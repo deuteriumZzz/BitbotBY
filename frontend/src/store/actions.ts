@@ -40,6 +40,8 @@ export const actions = {
       useStore.setState((s) => ({ jobs: { ...s.jobs, [id]: { running: true, info: { pct: 0 } } } }));
     }),
   resetConfig: () => st().act(() => api("POST", EP.configReset), "Настройки сброшены к значениям из .env"),
+  approveModel: (profile: string) =>
+    st().act(() => command("POST", EP.modelApprove, { profile }), "Модель допущена к paper"),
   rollbackModel: () => st().act(() => command("POST", EP.modelRollback), "Модель SAC откатана — бот подхватит её в следующем цикле"),
   closePosition: (p: Position, fraction = 1) =>
     st().act(

@@ -17,7 +17,7 @@ import logging
 import os
 import threading
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, List
 
 from bitbot.infra.logger import TRACE_ID
 
@@ -91,7 +91,35 @@ class DecisionLedger:
 
     def _rotate_if_needed(self) -> None:
         try:
-            if os.path.getsize(self.path) > self.max_bytes:
-                os.replace(self.path, self.path + ".1")
+            if os.path.getsize(self.path) <= self.max_bytes:
+                return
         except OSError:
-            pass  # файла ещё нет
+            return  # файла ещё нет
+        try:
+            # Прежний .1 не затираем: из истории учится мета-модель, ей нужны все сделки.
+            # ponytail: архив без сжатия (переименование мгновенно, цикл не ждёт); gzip — если диск станет тесным
+            if os.path.exists(self.path + ".1"):
+                arch = archive_dir(self.path)
+                os.makedirs(arch, exist_ok=True)
+                stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")
+                os.replace(self.path + ".1", os.path.join(arch, f"{stamp}.jsonl"))
+            os.replace(self.path, self.path + ".1")
+        except OSError as exc:
+            logger.warning("DecisionLedger rotation failed: %s", exc)
+
+
+def archive_dir(path: str) -> str:
+    """Куда уходят старые части журнала: `data/decision_ledger_archive/`."""
+    root, _ = os.path.splitext(os.path.abspath(path))
+    return root + "_archive"
+
+
+def ledger_files(path: str) -> List[str]:
+    """Все части журнала от старых к новым: архив, `.1`, текущий файл."""
+    arch = archive_dir(path)
+    try:
+        names = sorted(n for n in os.listdir(arch) if n.endswith(".jsonl"))
+    except OSError:
+        names = []
+    old = [os.path.join(arch, n) for n in names]
+    return old + [p for p in (path + ".1", path) if os.path.exists(p)]

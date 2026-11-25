@@ -1,10 +1,12 @@
 // Фоновые задачи бота: бэктест, обучение и тюнинг SAC,
 // откат модели, отчёты. Бот продолжает торговать, пока задача идёт.
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { base, fmtN, pct } from "../lib/format";
-import type { JobDone, JobId, JobState, ProfileInfo } from "../lib/types";
+import { api, command } from "../lib/api";
+import { EP } from "../api/endpoints";
+import type { JobDone, JobId, JobState, MetaStatus, ModelInfo, ModelsStatus, ProfileInfo } from "../lib/types";
 import { actions } from "../store/actions";
 import { useStore } from "../store";
 import { Q } from "../components/tooltip";
@@ -408,6 +410,7 @@ export function ModelCard() {
             )}
           </li>
         )}
+        {chosen && <ApprovalRow profile={chosen} used={role.used} />}
         {MODEL_JOBS.map((id) => (
           <JobRow
             key={id}
@@ -547,6 +550,125 @@ function LearnPath() {
   );
 }
 
+const APPROVED = new Set(["paper", "canary", "production"]);
+
+/** Модели SAC по профилям; перечитываются после обучения, тюнинга и допуска. */
+function useModels(): [ModelsStatus | null, () => void] {
+  const [m, setM] = useState<ModelsStatus | null>(null);
+  const online = useStore((s) => s.alive);
+  const trained = useStore((s) => s.jobs.train?.done);
+  const tuned = useStore((s) => s.jobs.tune?.done);
+  const load = useCallback(() => {
+    command("POST", EP.modelStatus)
+      .then((r) => setM(r as unknown as ModelsStatus))
+      .catch(() => setM(null));
+  }, []);
+  useEffect(() => {
+    if (online) load();
+  }, [online, trained, tuned, load]);
+  return [m, load];
+}
+
+/** Допуск модели к торговле: без него нейросеть не голосует, даже если обучена. */
+function ApprovalRow({ profile, used }: { profile: ProfileInfo; used: boolean }) {
+  const [status, reload] = useModels();
+  const [confirm, setConfirm] = useState(false);
+  const busy = useStore((s) => "sac" in s.jobGroups);
+  const m: ModelInfo | undefined = status?.models.find((x) => x.profile === profile.id);
+  const head = (
+    <div className="job-h">
+      <b>Допуск к торговле</b>
+      <Q tip="Обученная модель сама торговать не начинает: сначала вы смотрите, как она прошла проверку на данных, которых не видела при обучении, и допускаете её. Новое обучение снимает допуск — новую модель нужно допустить снова." />
+    </div>
+  );
+  if (!status || !m) return <li className="job">{head}<p className="note-soon">Нет связи с ботом — статус модели появится, когда он ответит.</p></li>;
+  if (!m.exists) return <li className="job">{head}<p className="note-soon">Модели этого профиля ещё нет — обучите её кнопкой ниже.</p></li>;
+  const ok = APPROVED.has(m.stage);
+  const { sac_pct: sac, bh_pct: bh, worse } = m.metrics;
+  const check =
+    sac != null && bh != null
+      ? `Проверка после обучения: нейросеть ${pct(sac)}, рынок («купить и держать») ${pct(bh)}.`
+      : "Результата проверки нет: модель обучена вне приложения.";
+  return (
+    <li className="job">
+      {head}
+      <p className="note-soon">
+        <span className={`pill sp ${ok ? "ok" : ""}`}>{ok ? "допущена к paper" : "ждёт вашего решения"}</span> {check}
+        {worse && " Модель заметно хуже рынка — допускать не советуем."}
+      </p>
+      {ok ? (
+        <p className="note-soon">
+          {used ? "Нейросеть голосует в сделках этого профиля." : "Допущена, но в текущем режиме решений нейросеть не участвует."}
+          {!status.paper && " В live нужна полная проверка (от 14 дней в paper) — из приложения она не включается."}
+        </p>
+      ) : confirm ? (
+        <div className="confirm-box">
+          <span>
+            Нейросеть начнёт голосовать в сделках профиля «{profile.label}» в режимах SAC и Hybrid. Деньги виртуальные
+            (paper); снять допуск — откатом или новым обучением.
+          </span>
+          <div className="btn-row">
+            <button className="btn" type="button" onClick={() => setConfirm(false)}>
+              Отмена
+            </button>
+            <button
+              className="btn primary"
+              type="button"
+              onClick={() => {
+                setConfirm(false);
+                void actions.approveModel(profile.id).then(reload);
+              }}
+            >
+              Допустить
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button className="btn" type="button" disabled={busy} title={busy ? "Идёт обучение" : undefined} onClick={() => setConfirm(true)}>
+          Допустить к paper
+        </button>
+      )}
+    </li>
+  );
+}
+
+/** Мета-модель: пока только счётчик накопленных сделок. Обучение и включение — позже, по вашему решению. */
+export function MetaCard() {
+  const [m, setM] = useState<MetaStatus | null>(null);
+  useEffect(() => {
+    api<MetaStatus>("GET", EP.metaStatus).then(setM).catch(() => setM(null));
+  }, []);
+  const share = m ? Math.min(100, (m.have / m.need) * 100) : 0;
+  return (
+    <article className="card learn-meta">
+      <div className="card-h">
+        <h2>Мета-модель</h2>
+        <Q tip="Модель-судья: смотрит, что сказали стратегии, AI и нейросеть, и оценивает, с какой вероятностью такая сделка закроется в плюс. Учится на сделках бота, поэтому сначала их нужно накопить. Включается только вами." />
+      </div>
+      {!m ? (
+        <p className="note-soon">Журнал решений недоступен.</p>
+      ) : (
+        <>
+          <div className="prog" role="progressbar" aria-valuenow={m.have} aria-valuemin={0} aria-valuemax={m.need} aria-label="Сделки для мета-модели">
+            <i style={{ width: `${share}%` }} />
+          </div>
+          <p className="note-soon">
+            {m.have
+              ? `Сделок с полной записью: ${String(m.have)} из ${String(m.need)}, в плюс — ${String(m.wins)}.`
+              : "Пока пусто: сделки копятся, пока бот торгует в paper."}{" "}
+            Когда наберётся {String(m.need)}, модель можно будет обучить и проверить; включить её сможете только вы.
+          </p>
+          {m.unmatched > 0 && (
+            <p className="note-soon">
+              Ещё {String(m.unmatched)} сделок без записи решения (например, из доверенных каналов) — в обучение не идут.
+            </p>
+          )}
+        </>
+      )}
+    </article>
+  );
+}
+
 /** Раздел «Обучение»: путь к реальным деньгам, нейросеть и поиск преимущества. */
 export function Learn() {
   return (
@@ -555,6 +677,7 @@ export function Learn() {
       <div className="cols">
         <div className="col">
           <ModelCard />
+          <MetaCard />
         </div>
         <div className="col">
           <AlphaCard />

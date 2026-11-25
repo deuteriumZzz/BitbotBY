@@ -49,6 +49,9 @@ export const EP = {
   jobs: "/api/jobs",
   job: (id: string) => `/api/jobs/${id}`,
   modelRollback: "/api/model/rollback",
+  modelStatus: "/api/model/status",
+  modelApprove: "/api/model/approve",
+  metaStatus: "/api/meta/status",
 
   // AI
   ai: "/api/ai",

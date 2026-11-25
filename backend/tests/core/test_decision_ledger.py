@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pandas as pd
@@ -11,7 +12,7 @@ import pytest
 from bitbot.market.market_context import MarketContext
 from bitbot.market.market_scanner import MarketScanner
 from bitbot.signals.combiner import SignalCombiner
-from bitbot.storage.decision_ledger import DecisionLedger
+from bitbot.storage.decision_ledger import DecisionLedger, ledger_files
 from tests.ai.test_ai_analyzer import TestAnalyze, _http_error, _make_config
 from tests.core.test_signal_combiner import make_rec, make_snapshot
 
@@ -55,6 +56,18 @@ def test_ledger_rotates_by_size(tmp_path) -> None:
         led.write("x", i=i, pad="p" * 50)
     assert (tmp_path / "l.jsonl.1").exists()
     assert path.exists()
+
+
+def test_ledger_rotation_loses_nothing(tmp_path) -> None:
+    """Старые части уходят в архив, а не затираются: из истории учится мета-модель."""
+    path = tmp_path / "l.jsonl"
+    led = DecisionLedger(path=str(path), max_bytes=200, enabled=True)
+    for i in range(30):
+        led.write("x", i=i, pad="p" * 50)
+    files = ledger_files(str(path))
+    assert len(files) > 3 and files[-1] == str(path)
+    seen = [r["i"] for f in files for r in _lines(Path(f))]
+    assert seen == list(range(30))
 
 
 def test_ledger_never_raises_on_bad_path(tmp_path) -> None:

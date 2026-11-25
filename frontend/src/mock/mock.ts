@@ -718,6 +718,7 @@ const busyGroups = new Set<string>();
 let modelBackup = false;
 let backupProfile: string | null = null;
 const trainedAt: Record<string, string | null> = { bluechip: "2026-09-12T10:00:00Z", altcoin: "2026-10-02T08:30:00Z", meme: null };
+const modelStage: Record<string, string> = { bluechip: "paper" };
 const PROFILE_INFO = [
   { id: "bluechip", label: "Блючипы", timeframe: "15m", train_top_n: 20 },
   { id: "altcoin", label: "Альткоины", timeframe: "5m", train_top_n: 100 },
@@ -754,6 +755,7 @@ function startJob(job: string, b: Body) {
       modelBackup = true;
       backupProfile = profile;
       trainedAt[profile] = new Date().toISOString();
+      delete modelStage[profile]; // новый файл модели снова ждёт допуска
     }
     const result: Record<string, unknown> =
       job === "backtest"
@@ -1033,6 +1035,26 @@ function route(method: string, path: string, body: unknown): unknown {
           active: p.id === bot.profile,
         })),
       };
+    case "POST /api/model/status":
+      return done(b, {
+        ok: true,
+        paper: bot.paper,
+        models: PROFILE_INFO.map((p) => ({
+          profile: p.id,
+          exists: trainedAt[p.id] !== null,
+          trained: trainedAt[p.id] ? Math.round(Date.parse(trainedAt[p.id]!) / 1000) : null,
+          stage: trainedAt[p.id] === null ? "unregistered" : (modelStage[p.id] ?? "candidate"),
+          model_id: trainedAt[p.id] && `sac_${p.id}_demo`,
+          metrics: trainedAt[p.id] ? { sac_pct: 6.4, bh_pct: 4.1, worse: false } : {},
+        })),
+      });
+    case "POST /api/model/approve":
+      if (!trainedAt[b.profile]) return done(b, err("no_model", "Модели этого профиля нет — сначала обучите её."));
+      modelStage[b.profile] = "paper";
+      emit("model.approved", { profile: b.profile });
+      return done(b, { ok: true, approved: true, stage: "paper" });
+    case "GET /api/meta/status":
+      return { have: 37, need: 500, wins: 17, last: new Date().toISOString(), unmatched: 3, not_recorded: 0 };
     case "POST /api/model/rollback":
       if (!modelBackup) return done(b, err("no_backup", "Резервная копия модели не найдена."));
       modelBackup = false;

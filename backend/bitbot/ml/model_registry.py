@@ -17,6 +17,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import threading
@@ -47,6 +48,27 @@ def default_registry_path(model_path: str) -> str:
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+_hash_cache: Dict[str, Any] = {}
+
+
+def file_sha256(path: str) -> str:
+    """Отпечаток файла модели; пустая строка, если файла нет. Кэш по (mtime, size)."""
+    try:
+        st = os.stat(path)
+    except OSError:
+        return ""
+    key = (st.st_mtime_ns, st.st_size)
+    hit = _hash_cache.get(path)
+    if hit and hit[0] == key:
+        return str(hit[1])
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    _hash_cache[path] = (key, h.hexdigest())
+    return h.hexdigest()
 
 
 def _requirements(src: str, dst: str, ev: Dict[str, Any]) -> List[str]:
@@ -127,6 +149,9 @@ class ModelRegistry:
             entry = {
                 "model_id": model_id,
                 "path": os.path.abspath(model_path),
+                # отпечаток файла: перезапись модели (переобучение, онлайн-дообучение)
+                # снимает допуск — допущенным остаётся только тот файл, который смотрели
+                "sha256": file_sha256(model_path),
                 "stage": "candidate",
                 "created": _now(),
                 "dataset_version": dataset_version,
@@ -145,7 +170,12 @@ class ModelRegistry:
 
     def find_by_path(self, model_path: str) -> Optional[Dict[str, Any]]:
         target = os.path.abspath(model_path)
-        found = [m for m in self._load()["models"].values() if m["path"] == target]
+        digest = file_sha256(target)
+        found = [
+            m
+            for m in self._load()["models"].values()
+            if m["path"] == target and m.get("sha256", digest) == digest
+        ]
         return found[-1] if found else None
 
     def stage_of_path(self, model_path: str) -> str:
@@ -185,6 +215,28 @@ class ModelRegistry:
                         )
                         other["retired_from"] = "production"
             self._move(entry, dst, evidence, by)
+            self._save(data)
+            return entry
+
+    def approve_for_paper(
+        self, model_id: str, by: str, note: str = ""
+    ) -> Dict[str, Any]:
+        """Ручной допуск к Paper из приложения: candidate/validated → paper.
+
+        В Paper риск только виртуальный, поэтому человек может допустить модель без
+        walk-forward; в Live по-прежнему нужен весь путь до production с доказательствами.
+        """
+        if not by:
+            raise PromotionError("нужно, кто допускает")
+        with self._lock:
+            data = self._load()
+            entry = data["models"].get(model_id)
+            if entry is None:
+                raise PromotionError(f"нет модели {model_id}")
+            if entry["stage"] not in ("candidate", "validated"):
+                raise PromotionError(f"из стадии {entry['stage']} в paper не допускают")
+            evidence = {"approved_by": by, "manual_paper": True, "note": note}
+            self._move(entry, "paper", evidence, by)
             self._save(data)
             return entry
 

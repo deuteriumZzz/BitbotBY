@@ -253,3 +253,45 @@ def test_job_groups_exclude_each_other_only_where_needed():
     assert oj.JOBS["train"].group == oj.JOBS["tune"].group == "sac"
     groups = {j.group for j in oj.JOBS.values()}
     assert len(groups) == 5
+
+
+async def test_trained_model_needs_owner_approval(monkeypatch, tmp_path):
+    """Обученная модель — кандидат: торгует только после кнопки допуска; переобучение снимает допуск."""
+    monkeypatch.chdir(tmp_path)
+    model = tmp_path / "sac.zip"
+    model.write_text("m")
+    result = {"sac_pct": 25.0, "bh_pct": 20.0}
+    procs = [FakeProc(["TRAIN_RESULT:" + json.dumps(result)]) for _ in range(2)]
+    cmds, bot, r, rc, _ = _setup(monkeypatch, procs)
+    rc.model = str(model)
+    await cmds.run_job({"job": "train"})
+    await cmds._jobs._tasks["sac"]
+
+    alt = next(
+        m for m in (await cmds.model_status({}))["models"] if m["profile"] == "altcoin"
+    )
+    assert alt["exists"] and alt["stage"] == "candidate"
+    assert alt["metrics"] == {"sac_pct": 25.0, "bh_pct": 20.0, "worse": False}
+
+    assert (await cmds.approve_model({"profile": "nope"}))["error"][
+        "code"
+    ] == "unknown_profile"
+    res = await cmds.approve_model({"profile": "altcoin"})
+    assert res == {"approved": True, "stage": "paper"}
+    assert "model.approved" in _types(r)
+
+    model.write_text("retrained")  # новое обучение перезаписало файл
+    await cmds.run_job({"job": "train"})
+    await cmds._jobs._tasks["sac"]
+    alt = next(
+        m for m in (await cmds.model_status({}))["models"] if m["profile"] == "altcoin"
+    )
+    assert alt["stage"] == "candidate"  # новый файл снова ждёт допуска
+
+
+async def test_approve_without_model_file(monkeypatch, tmp_path):
+    cmds, *_ = _setup(monkeypatch, [])
+    cmds._bot._runtime_config.model = str(tmp_path / "missing.zip")
+    assert (await cmds.approve_model({"profile": "meme"}))["error"][
+        "code"
+    ] == "no_model"

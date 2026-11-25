@@ -11,11 +11,19 @@ import json
 import logging
 import os
 import shutil
+import time
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from bitbot.config import entrypoints
 from bitbot.config.runtime import child_env, experiences_path
+from bitbot.config.settings import Config
 from bitbot.infra.heavy_job import limit_env, lower_priority
+from bitbot.ml.model_registry import (
+    ModelRegistry,
+    PromotionError,
+    default_registry_path,
+    file_sha256,
+)
 from bitbot.ops.jobs import JOBS, JobSpec
 from bitbot.storage.bot_bus import emit, error
 
@@ -95,6 +103,69 @@ class JobRunner:
         shutil.copy2(backup, model)
         emit(self._r, "model.rolled_back", {})
         return {"rolled_back": True}
+
+    # ── Допуск моделей SAC ────────────────────────────────────────────────────
+
+    def models(self) -> Dict[str, Any]:
+        """По профилю: есть ли файл модели, её стадия и проверка при обучении."""
+        out = []
+        for pid in self._rc.profile_ids():
+            path = self._rc.get_sac_model_path_for_profile(pid)
+            entry = ModelRegistry(default_registry_path(path)).find_by_path(path)
+            out.append(
+                {
+                    "profile": pid,
+                    "exists": os.path.exists(path),
+                    "trained": (
+                        int(os.path.getmtime(path)) if os.path.exists(path) else None
+                    ),
+                    "stage": entry["stage"] if entry else "unregistered",
+                    "model_id": entry and entry["model_id"],
+                    "metrics": (entry or {}).get("metrics") or {},
+                }
+            )
+        return {"models": out, "paper": bool(Config.PAPER_TRADING)}
+
+    def approve(self, profile: str) -> Dict[str, Any]:
+        """Допуск модели профиля к Paper по кнопке владельца в приложении."""
+        if profile not in self._rc.profile_ids():
+            return error("unknown_profile", "Такого профиля нет.")
+        path = self._rc.get_sac_model_path_for_profile(profile)
+        if not os.path.exists(path):
+            return error("no_model", "Модели этого профиля нет — сначала обучите её.")
+        if self._rc.running_jobs(["sac"]):
+            return error("busy", "Идёт обучение — допуск подождёт его конца.")
+        reg = ModelRegistry(default_registry_path(path))
+        entry = reg.find_by_path(path) or self._register(path, profile, None)
+        if entry is None:
+            return error("registry_failed", "Не удалось внести модель в реестр.")
+        try:
+            entry = reg.approve_for_paper(
+                entry["model_id"], "owner", "кнопка в приложении"
+            )
+        except PromotionError as exc:
+            return error("not_allowed", str(exc))
+        emit(self._r, "model.approved", {"profile": profile})
+        return {"approved": True, "stage": entry["stage"]}
+
+    def _register(
+        self, path: str, profile: str, res: "Dict[str, Any] | None"
+    ) -> "Dict[str, Any] | None":
+        """Новый файл модели — кандидат в реестре; торговать без допуска не может."""
+        metrics: Dict[str, Any] = {
+            k: res[k] for k in ("sac_pct", "bh_pct") if res and k in res
+        }
+        if res:
+            metrics["worse"] = _is_worse(res)
+        stamp = time.strftime("%Y%m%d%H%M%S")
+        mid = f"sac_{profile or 'default'}_{stamp}_{file_sha256(path)[:8]}"
+        try:
+            return ModelRegistry(default_registry_path(path)).register(
+                mid, path, metrics=metrics
+            )
+        except (PromotionError, OSError) as exc:
+            logger.warning("model registry: %s", exc)
+            return None
 
     # ── Выполнение ────────────────────────────────────────────────────────────
 
@@ -252,6 +323,7 @@ class JobRunner:
         res = _parse_train_result(out)
         if res and res.get("backup"):
             self._rc.set_sac_backup_path(res["backup"], profile)
+        self._register(model, profile, res)
         return {
             "ok": True,
             "sac_pct": res and res.get("sac_pct"),

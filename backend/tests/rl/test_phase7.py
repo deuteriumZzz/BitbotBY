@@ -93,6 +93,34 @@ def test_demote_requires_reason_and_persists(reg, tmp_path):
 
 
 # ── допуск в SACSignal / режимы ───────────────────────────────────────────────
+def test_overwritten_model_loses_approval(reg, tmp_path):
+    """Переобучение перезаписывает файл: допуск был у старого файла, у нового его нет."""
+    path = tmp_path / "m.zip"
+    path.write_bytes(b"old weights")
+    reg.register("m1", str(path))
+    reg.approve_for_paper("m1", "owner")
+    assert reg.is_executable(str(path), paper=True)
+    path.write_bytes(b"new weights after retrain")
+    assert reg.stage_of_path(str(path)) == "unregistered"
+    path.write_bytes(b"old weights")  # откат на прежний файл возвращает его допуск
+    assert reg.is_executable(str(path), paper=True)
+
+
+def test_manual_paper_approval_only_paper(reg, tmp_path):
+    path = tmp_path / "m.zip"
+    path.write_bytes(b"w")
+    reg.register("m1", str(path))
+    with pytest.raises(PromotionError):
+        reg.approve_for_paper("m1", "")  # нужно, кто допускает
+    entry = reg.approve_for_paper("m1", "owner", "из приложения")
+    assert (
+        entry["stage"] == "paper" and entry["history"][-1]["evidence"]["manual_paper"]
+    )
+    assert not reg.is_executable(str(path), paper=False)  # в Live paper мало
+    with pytest.raises(PromotionError):
+        reg.approve_for_paper("m1", "owner")  # уже paper
+
+
 def test_readiness_sac_not_approved():
     assert tm.readiness("hybrid", sac_loaded=True, sac_approved=False) == (
         False,
