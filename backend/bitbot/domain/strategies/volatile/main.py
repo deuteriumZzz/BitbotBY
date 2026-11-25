@@ -140,7 +140,7 @@ class BreakoutStrategy(BaseStrategy):
         resistance = float(prev["high"].max())
         support = float(prev["low"].min())
 
-        high_vol = vol_ratio > 1.8
+        high_vol = vol_ratio > self.param("high_volume", 1.8)
 
         if close > resistance:
             conf = 0.85 if high_vol else 0.65
@@ -251,18 +251,22 @@ class MomentumBurstStrategy(BaseStrategy):
         vol_ratio = cur_vol / avg_vol if avg_vol > 0 else 0.0
 
         rsi = self._last(data, "rsi", 50)
+        strong, strong_vol = self.param("strong_move", 0.04), self.param(
+            "strong_volume", 2.0
+        )
+        weak, weak_vol = self.param("weak_move", 0.02), self.param("weak_volume", 1.5)
 
         # Сильный импульс вверх с объёмным подтверждением — входим в продолжение
-        if move_3 >= 0.04 and vol_ratio >= 2.0 and rsi < 80:
-            bonus = min((move_3 - 0.04) * 5, 0.15)
+        if move_3 >= strong and vol_ratio >= strong_vol and rsi < 80:
+            bonus = min((move_3 - strong) * 5, 0.15)
             conf = round(min(0.72 + bonus, 0.90), 2)
             return {"action": "buy", "confidence": conf, "price": close}
-        if move_3 >= 0.02 and vol_ratio >= 1.5 and rsi < 75:
+        if move_3 >= weak and vol_ratio >= weak_vol and rsi < 75:
             return {"action": "buy", "confidence": 0.62, "price": close}
 
         # Резкое падение с объёмом → шорт
-        if move_3 <= -0.04 and vol_ratio >= 2.0 and rsi > 20:
-            bonus = min((abs(move_3) - 0.04) * 5, 0.15)
+        if move_3 <= -strong and vol_ratio >= strong_vol and rsi > 20:
+            bonus = min((abs(move_3) - strong) * 5, 0.15)
             conf = round(min(0.72 + bonus, 0.90), 2)
             return {"action": "sell", "confidence": conf, "price": close}
 
@@ -314,11 +318,19 @@ class PumpExitStrategy(BaseStrategy):
         rsi = self._last(data, "rsi", 50)
 
         # Объём упал до <40% от пика + цена выросла на 5%+ → памп выдыхается
-        if vol_decline < 0.4 and pump_move >= 0.05 and rsi > 60:
+        if (
+            vol_decline < 0.4
+            and pump_move >= self.param("strong_pump", 0.05)
+            and rsi > 60
+        ):
             return {"action": "sell", "confidence": 0.85, "price": close}
 
         # Объём упал до <60% от пика + умеренный рост + ниже среднего → предупреждение
-        if vol_decline < 0.6 and pump_move >= 0.03 and cur_vol < avg_vol:
+        if (
+            vol_decline < 0.6
+            and pump_move >= self.param("weak_pump", 0.03)
+            and cur_vol < avg_vol
+        ):
             return {"action": "sell", "confidence": 0.68, "price": close}
 
         return {"action": "hold", "confidence": 0.40}

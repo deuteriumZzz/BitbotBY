@@ -163,6 +163,20 @@ STRATEGY_PARAMS: Dict[str, Dict[str, Dict[str, float]]] = {
     "volume_spike": {"spike": {"bluechip": 2.0, "altcoin": 3.0, "meme": 5.0}},
     # Скальпинг: «высокий объём» — во сколько раз выше среднего (пока одинаково везде).
     "scalping": {"high_volume": {"bluechip": 1.5, "altcoin": 1.5, "meme": 1.5}},
+    # Прорыв: пробой 20-свечного уровня считается сильным при объёме выше этого.
+    "breakout": {"high_volume": {"bluechip": 1.8, "altcoin": 1.8, "meme": 1.8}},
+    # Выход из пампа: насколько цена уже выросла от недавнего минимума.
+    "pump_exit": {
+        "strong_pump": {"bluechip": 0.05, "altcoin": 0.05, "meme": 0.05},
+        "weak_pump": {"bluechip": 0.03, "altcoin": 0.03, "meme": 0.03},
+    },
+    # Импульс за 3 свечи: сильный (рост/падение, объём) и слабый вход в продолжение.
+    "momentum_burst": {
+        "strong_move": {"bluechip": 0.04, "altcoin": 0.04, "meme": 0.04},
+        "strong_volume": {"bluechip": 2.0, "altcoin": 2.0, "meme": 2.0},
+        "weak_move": {"bluechip": 0.02, "altcoin": 0.02, "meme": 0.02},
+        "weak_volume": {"bluechip": 1.5, "altcoin": 1.5, "meme": 1.5},
+    },
 }
 
 
