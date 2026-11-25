@@ -7,6 +7,7 @@ import { RiskCard, WhatCard, cfg } from "./bots";
 import { ModeSeg, NODES, takesPart } from "./pipeline";
 import { TemplateSeg, templateLine } from "./rules";
 import { mark } from "./trace";
+import { protectionLines } from "../lib/format";
 import { UiSwitchRow } from "./uimode";
 
 export function BotSimple() {
@@ -14,6 +15,7 @@ export function BotSimple() {
   const ai = useStore((s) => s.ai);
   const cycle = useStore((s) => s.lastCycle);
   const setUi = useStore((s) => s.setUi);
+  const ops = useStore((s) => s.opsStatus);
   const mode = cfg<string>(c, "MODE", "ai");
   const chain = (ai?.chain ?? []).map((x) => ai?.providers.find((p) => p.id === x.provider)?.name ?? x.provider);
   const when = cycle ? new Date(cycle.at * 1000).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }) : "";
@@ -41,6 +43,20 @@ export function BotSimple() {
         </div>
         <TemplateSeg />
         <p className="note-soon">{templateLine(c)}</p>
+        {ops ? (
+          <ul className="prot-list">
+            {protectionLines(ops).map((p) => (
+              <li key={p.key}>
+                <span>
+                  {p.label} <Q tip={p.hint} />
+                </span>
+                <span className={`pill sp ${p.state === "ok" ? "ok" : ""}`}>{p.text}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="note-soon">Остальные защиты появятся здесь после первого цикла бота.</p>
+        )}
       </article>
       <article className="card simple-strip">
         <div className="card-h">

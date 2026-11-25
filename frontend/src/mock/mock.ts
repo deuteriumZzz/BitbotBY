@@ -426,11 +426,14 @@ function state() {
       trace: p.trace,
     })),
     cycle: lastCycle,
-    // В демо live: сверка 2 мин назад, один ордер ждёт ответа биржи.
-    ops_status: bot.paper
-      ? null
-      : { mode: "live", prompt_version: "demo", flags: {}, forecaster: "none", ws: null, backup: null, emergency: 0,
-          reconcile: { at: Date.now() / 1000 - 120, problems: [], pending_orders: 1 }, ts: new Date().toISOString() },
+    ops_status: {
+      mode: bot.paper ? "paper" : "live", prompt_version: "demo", forecaster: "none", ws: null, backup: null, emergency: 0,
+      flags: { MACRO_BLACKOUT_ENABLED: true, DRAWDOWN_SCALE_ENABLED: true, PARTIAL_TP_ENABLED: true, LIVE_ALPHA_KILL_ENABLED: true,
+        DATA_QUALITY_GATE: bot.paper, SAC_REQUIRE_APPROVAL: true, DB_BACKUP_ENABLED: true, RISK_GATE_SHADOW: true, AI_RAG_CONTEXT: false },
+      // В демо live: сверка 2 мин назад, один ордер ждёт ответа биржи.
+      reconcile: bot.paper ? null : { at: Date.now() / 1000 - 120, problems: [], pending_orders: 1 },
+      ts: new Date().toISOString(),
+    },
     trusted: config.TELEGRAM_TRUSTED_TRADING?.value
       ? {
           channel: "cryptomoonalerts",

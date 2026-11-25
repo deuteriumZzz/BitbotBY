@@ -81,6 +81,26 @@ const OPS_FLAG_INFO: Array<[string, string, string]> = [
   ["DATA_QUALITY_GATE", "Блокировка входа при плохих данных", "Нет входа по снимкам со статусом STALE/INVALID."],
 ];
 
+/** Защиты для обычного пользователя: [флаг, название, одна фраза, только наблюдает]. Технические флаги — в «Профи». */
+const PROTECTIONS: Array<[string, string, string, boolean]> = [
+  ["MACRO_BLACKOUT_ENABLED", "Пауза вокруг важных новостей", "Нет новых сделок вокруг решений ФРС и данных по инфляции и занятости — рынок там скачет.", false],
+  ["DRAWDOWN_SCALE_ENABLED", "Меньше риск при просадке", "Пока счёт ниже своего пика, сделки становятся меньше.", false],
+  ["PARTIAL_TP_ENABLED", "Частичная фиксация прибыли", "По пути к цели часть позиции закрывается, а стоп переносится в безубыток.", false],
+  ["LIVE_ALPHA_KILL_ENABLED", "Отключение плохой стратегии", "Стратегия, которая стабильно теряет, выключается до вашего решения.", false],
+  ["DATA_QUALITY_GATE", "Нет сделок по старым данным", "Если свечи монеты устарели или с пропусками, по ней не входим.", false],
+  ["SAC_REQUIRE_APPROVAL", "Нейросеть — только после допуска", "Обученная модель не торгует, пока вы её не допустите.", false],
+  ["DB_BACKUP_ENABLED", "Копия истории сделок", "Раз в сутки — проверенная копия базы сделок.", false],
+  ["RISK_GATE_SHADOW", "Единая проверка риска", "Проверяет каждый вход по всему портфелю. Пока только наблюдает и пишет, что сказала бы.", true],
+];
+
+/** Статус защиты словами: работает, только наблюдает или выключено. */
+export function protectionLines(ops: OpsStatus): { key: string; label: string; hint: string; state: "ok" | "watch" | "off"; text: string }[] {
+  return PROTECTIONS.filter(([k]) => k in ops.flags).map(([key, label, hint, watch]) => {
+    const state = !ops.flags[key] ? "off" : watch ? "watch" : "ok";
+    return { key, label, hint, state, text: { ok: "работает", watch: "только наблюдает", off: "выключено" }[state] };
+  });
+}
+
 export interface OpsLine {
   key: string;
   label: string;

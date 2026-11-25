@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { opsSummary } from "./format";
+import { opsSummary, protectionLines } from "./format";
 import type { OpsStatus } from "./types";
 
 const base: OpsStatus = {
@@ -23,5 +23,19 @@ describe("opsSummary", () => {
     const v = opsSummary({ ...base, ws: { streams: 4, silent: [], reconnects: 1, lag_p99_ms: 120.4, gaps: 0 }, backup: { ok: true, at: "2026-11-24T03:00:00+00:00", path: "x", error: null } });
     expect(v.ws).toContain("p99 задержки 120 мс");
     expect(v.backup).toBe("последняя копия 2026-11-24 03:00 UTC");
+  });
+});
+
+describe("protectionLines", () => {
+  it("три статуса словами; технических флагов в списке нет", () => {
+    const lines = protectionLines({
+      ...base,
+      flags: { MACRO_BLACKOUT_ENABLED: true, RISK_GATE_SHADOW: true, DATA_QUALITY_GATE: false, AI_STRICT_VALIDATION: true },
+    });
+    expect(lines.map((l) => [l.key, l.text])).toEqual([
+      ["MACRO_BLACKOUT_ENABLED", "работает"],
+      ["DATA_QUALITY_GATE", "выключено"],
+      ["RISK_GATE_SHADOW", "только наблюдает"],
+    ]);
   });
 });
