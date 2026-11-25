@@ -1,4 +1,4 @@
-"""Лаунчер (launcher/launch.py): ключи, токен, окружение compose."""
+"""Лаунчер (cli/launcher.py, команды ./bitbot): ключи, токен, окружение compose."""
 
 import importlib.util
 import json
@@ -10,7 +10,7 @@ import pytest
 from cryptography.fernet import Fernet
 
 _SPEC = importlib.util.spec_from_file_location(
-    "launch", Path(__file__).resolve().parents[3] / "launcher" / "launch.py"
+    "launch", Path(__file__).resolve().parents[3] / "cli" / "launcher.py"
 )
 launch = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(launch)

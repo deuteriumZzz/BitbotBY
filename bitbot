@@ -1,0 +1,65 @@
+#!/usr/bin/env python3
+"""BitbotBY — одна команда для всего: ./bitbot <команда>. Список — ./bitbot help."""
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent / "cli"))
+
+import dev  # noqa: E402 — cli/dev.py: разработка, задачи, тесты
+import launcher  # noqa: E402 — cli/launcher.py: Docker, телефон, сервер
+
+HELP = """BitbotBY — ./bitbot <команда>
+
+Запуск
+  start                       бот и приложение в Docker, открывает /app (Paper)
+  start --profile=monitoring  то же + Prometheus, Grafana, Alertmanager
+  start --native [--paper] [--mode=ai]   без Docker (нужны Redis и .venv); приложение собирается само
+  stop | status | logs        остановить, что запущено, последние логи
+  url                         новая ссылка входа, если окно закрыли
+  check                       настройки, Redis, ключи, база сделок
+
+Доступ и сервер
+  phone on|off|status         Mini App в Telegram: адрес до этого компьютера
+  server --domain=bot.example.com     развернуть на VPS с HTTPS (docs/DEPLOY_SERVER.md)
+  server logs | server stop
+  keys import [--env=путь] [--overwrite]   ключи из .env → зашифрованное хранилище
+  autostart on|off|status     запуск при входе в систему
+  awake on|off|status         не давать компьютеру уснуть
+
+Задачи и разработка
+  job train [--long] [--v2] [--docker] [--profile=altcoin] | tune [--profile=…] | retrain
+  job backtest [--symbol=ETH/USDT] [--months=6] [--timeframe=15m]
+  job report alpha|divergence|ai
+  test [backend|frontend]     тесты
+  lint                        ruff, black, слои импортов, mypy, типы фронтенда
+  fmt                         форматирование backend
+"""
+
+# Человеческие формы → команды лаунчера.
+_ALIASES = {("server", "logs"): "server-logs", ("server", "stop"): "server-stop"}
+
+
+def main(argv):
+    if not argv or argv[0] in ("help", "-h", "--help"):
+        print(HELP)
+        return 0
+    # «--profile monitoring» → «--profile=monitoring», как остальные флаги
+    norm = []
+    for a in argv:
+        if norm and norm[-1] in ("--profile", "--domain", "--env", "--url") and not a.startswith("--"):
+            norm[-1] = f"{norm[-1]}={a}"
+        else:
+            norm.append(a)
+    argv = norm
+    if tuple(argv[:2]) in _ALIASES:
+        argv = [_ALIASES[tuple(argv[:2])], *argv[2:]]
+    if argv[0] in dev.COMMANDS:
+        return dev.COMMANDS[argv[0]](argv)
+    if argv[0] == "start" and "--native" in argv:
+        return dev.start_native(argv)
+    return launcher.main(argv)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

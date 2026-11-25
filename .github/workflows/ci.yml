@@ -42,7 +42,7 @@ jobs:
         run: mypy bitbot
 
       - name: Syntax check
-        run: python -m compileall -q backend/bitbot launcher
+        run: python -m compileall -q backend/bitbot cli && python -m py_compile bitbot
 
       - name: Run tests with coverage
         run: pytest backend/tests --ignore=backend/tests/integration -v --tb=short --cov=bitbot --cov-report=term-missing --cov-fail-under=50

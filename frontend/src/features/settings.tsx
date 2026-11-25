@@ -203,7 +203,7 @@ function ComputerCard() {
         {MACHINE.map(([k, label, cmd]) => {
           const on = st[k];
           const can = st.helper && on !== null && (k !== "phone" || on);
-          const next = `python3 launcher/launch.py ${cmd} ${on ? "off" : "on"}`;
+          const next = `./bitbot ${cmd} ${on ? "off" : "on"}`;
           return (
             <li key={k}>
               <span className={`dot${on ? " ok" : ""}`} />

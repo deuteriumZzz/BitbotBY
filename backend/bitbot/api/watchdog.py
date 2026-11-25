@@ -60,7 +60,7 @@ async def check_once(r: Any, started: float, now: Optional[float] = None) -> Non
             await auth.send_owner(
                 f"🛑 Бот не работает: {issue}.\n"
                 "Перезапустите ярлыком BitbotBY или командой "
-                "python3 launcher/launch.py start"
+                "./bitbot start"
             )
     elif not issue and alerted:
         r.delete(keys.WATCHDOG_ALERT)

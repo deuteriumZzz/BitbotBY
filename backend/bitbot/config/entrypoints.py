@@ -24,6 +24,7 @@ TRAIN_SAC_V2 = "bitbot.ml.train_sac_v2"
 TUNE_SAC = "bitbot.ml.tune_sac"
 TIMESFM_WORKER = "bitbot.ai.forecast.timesfm_worker"
 SECRETS_IMPORT = "bitbot.config.secrets_import"
+CHECK = "bitbot.ops.check"
 
 ALL = (
     API,
@@ -37,6 +38,7 @@ ALL = (
     TUNE_SAC,
     TIMESFM_WORKER,
     SECRETS_IMPORT,
+    CHECK,
 )
 
 

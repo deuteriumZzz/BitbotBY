@@ -70,8 +70,8 @@ def _signin_hint(default: str) -> str:
     if os.getenv("BITBOT_LOCAL_MODE") == "1":
         return (
             "Вы не вошли в приложение. Откройте его ярлыком BitbotBY "
-            "(launcher/BitbotBY.command или launcher/BitbotBY.bat) — он войдёт сам. "
-            "Или в Терминале: python3 launcher/launch.py url, "
+            "(BitbotBY.command или BitbotBY.bat) — он войдёт сам. "
+            "Или в Терминале: ./bitbot url, "
             "или пришлите боту /app в Telegram."
         )
     return default
@@ -819,7 +819,7 @@ async def get_candles(symbol: str, tf: str = "15m", limit: int = 200) -> JSONRes
 
 
 # Переключатели компьютера: панель кладёт запрос в общую папку data, помощник
-# лаунчера на компьютере выполняет только разрешённое (launcher/launch.py, ALLOWED).
+# лаунчера на компьютере выполняет только разрешённое (cli/launcher.py, ALLOWED).
 # Включить доступ с телефона отсюда нельзя — только командой на компьютере.
 _LAUNCHER_DIR = Path("data")
 _LAUNCHER_ALLOWED = {

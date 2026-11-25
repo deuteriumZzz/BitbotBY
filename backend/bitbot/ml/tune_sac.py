@@ -12,8 +12,8 @@ train_sac.py загружает этот файл автоматически, е
 
 Использование:
     PYTHONPATH=. python3 backend/bitbot/ml/tune_sac.py
-    SAC_PROFILE=bluechip make tune
-    SAC_PROFILE=altcoin  make tune
+    ./bitbot job tune --profile=bluechip
+    ./bitbot job tune --profile=altcoin
 """
 
 from __future__ import annotations

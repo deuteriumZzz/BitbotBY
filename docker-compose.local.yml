@@ -1,4 +1,4 @@
-# Запуск на своём компьютере одной кнопкой (см. launcher/launch.py).
+# Запуск на своём компьютере одной кнопкой (см. ./bitbot, cli/launcher.py).
 # Только Redis, бот и дашборд; порт открыт на 127.0.0.1, наружу ничего не торчит.
 # Переменные подставляет лаунчер из .launcher/compose.env (ключи туда пишет он сам).
 name: bitbotby
@@ -48,7 +48,7 @@ services:
         condition: service_healthy
 
   # Выделенный воркер обучения SAC v2 (по запросу, не стартует с ботом):
-  #   docker compose -f docker-compose.local.yml --profile train run --rm trainer
+  #   ./bitbot job train --docker
   trainer:
     build: .
     profiles: ["train"]

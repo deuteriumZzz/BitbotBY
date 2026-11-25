@@ -420,7 +420,7 @@ class TelegramNotifier:
         return (
             "BitbotBY: сюда приходят уведомления о сделках и рисках. "
             "Приложение открывается на компьютере с ботом (ярлык BitbotBY); "
-            "для телефона включите доступ: python3 launcher/launch.py phone on. "
+            "для телефона включите доступ: ./bitbot phone on. "
             "Ссылка входа на компьютере — команда /app."
         )
 
@@ -429,7 +429,7 @@ class TelegramNotifier:
         if not port.isdigit() or self.login_issuer is None:
             return (
                 "Ссылка входа работает только при запуске бота на своём компьютере "
-                "(ярлык BitbotBY или launcher/launch.py)."
+                "(ярлык BitbotBY или ./bitbot start)."
             )
         from bitbot.config import login_link  # noqa: PLC0415
 

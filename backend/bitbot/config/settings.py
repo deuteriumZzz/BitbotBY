@@ -451,7 +451,7 @@ class Config:
 
     # ── Online Learning ────────────────────────────────────────────────────
     # Режим автообучения SAC-модели на реальных сделках:
-    #   disabled — выключено (вручную: make train)
+    #   disabled — выключено (вручную: ./bitbot job train)
     #   online   — gradient steps после каждой сделки [РИСКОВАННО, только эксперименты]
     #   periodic — полный ретрейн в фоне каждые N сделок [РЕКОМЕНДУЕТСЯ]
     #   hybrid   — periodic + динамические веса стратегий в реальном времени
@@ -594,7 +594,7 @@ class Config:
             if not os.path.exists(self.SAC_MODEL_PATH):
                 raise ValueError(
                     f"SAC model not found: {self.SAC_MODEL_PATH}. "
-                    f"Train it first: make train"
+                    f"Train it first: ./bitbot job train"
                 )
 
 

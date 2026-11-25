@@ -16,7 +16,7 @@
 
 ```bash
 git clone <адрес вашего репозитория> bitbotby && cd bitbotby
-python3 launcher/launch.py server --domain=bot.example.com
+./bitbot server --domain=bot.example.com
 ```
 
 Команда сама:
@@ -49,9 +49,9 @@ python3 launcher/launch.py server --domain=bot.example.com
 
 | Что | Команда |
 |---|---|
-| Обновить после `git pull` | `python3 launcher/launch.py server` |
-| Последние логи | `python3 launcher/launch.py server-logs` |
-| Остановить | `python3 launcher/launch.py server-stop` |
+| Обновить после `git pull` | `./bitbot server` |
+| Последние логи | `./bitbot server logs` |
+| Остановить | `./bitbot server stop` |
 
 Данные (`data/`, `models/`, `logs/`) и ключи при остановке и обновлении сохраняются.
 
@@ -63,7 +63,7 @@ python3 launcher/launch.py server --domain=bot.example.com
 ## Если что-то пошло не так
 
 - **Сертификат не выдаётся** — проверьте, что домен указывает на этот сервер и порты 80/443 открыты; логи Caddy:
-  `python3 launcher/launch.py server-logs`.
+  `./bitbot server logs`.
 - **«Токен не подошёл»** — скопируйте токен из @BotFather заново и запустите команду ещё раз.
 - **«Этого бота уже опрашивает другая программа»** — тот же бот запущен где-то ещё (например, на компьютере).
   Остановите его там или заведите на сервере отдельного бота.

@@ -1,5 +1,5 @@
 # Запуск на удалённом сервере (VPS): бот, дашборд и Caddy с HTTPS. Инструкция — docs/DEPLOY_SERVER.md.
-#   python3 launcher/launch.py server --domain=bot.example.com   # всё сам: ключи, запуск, Telegram
+#   ./bitbot server --domain=bot.example.com   # всё сам: ключи, запуск, Telegram
 # Ключи сервисов (Bybit, AI, Telegram) — только в зашифрованном хранилище data/, не в .env:
 # здесь лишь мастер-ключ хранилища, ключ панели и домен из .server/server.env (права 600).
 # Локальный запуск этим файлом не затрагивается: он живёт в docker-compose.local.yml.
@@ -10,8 +10,8 @@ x-bot-env: &bot-env
   PAPER_TRADING: "true"
   MODE: local
   # MiniApp в Telegram открывается по https-адресу этого сервера.
-  WEBAPP_URL: ${WEBAPP_URL:?запустите python3 launcher/launch.py server --domain=ваш-домен}
-  BITBOT_SECRETS_KEY: ${BITBOT_SECRETS_KEY:?запустите python3 launcher/launch.py server --domain=ваш-домен}
+  WEBAPP_URL: ${WEBAPP_URL:?запустите ./bitbot server --domain=ваш-домен}
+  BITBOT_SECRETS_KEY: ${BITBOT_SECRETS_KEY:?запустите ./bitbot server --domain=ваш-домен}
 
 services:
   redis:
@@ -82,7 +82,7 @@ services:
       <<: *bot-env
       REDIS_URL: redis://redis:6379/0
       # Обязателен: без него данные приложения читались бы без входа, пока не настроен Telegram.
-      DASHBOARD_API_KEY: ${DASHBOARD_API_KEY:?запустите python3 launcher/launch.py server --domain=ваш-домен}
+      DASHBOARD_API_KEY: ${DASHBOARD_API_KEY:?запустите ./bitbot server --domain=ваш-домен}
     volumes:
       - ./data:/app/data
     depends_on:
@@ -103,7 +103,7 @@ services:
       - "443:443"
       - "443:443/udp"
     environment:
-      DOMAIN: ${DOMAIN:?запустите python3 launcher/launch.py server --domain=ваш-домен}
+      DOMAIN: ${DOMAIN:?запустите ./bitbot server --domain=ваш-домен}
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

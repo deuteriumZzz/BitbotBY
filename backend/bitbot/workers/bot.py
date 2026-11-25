@@ -1988,7 +1988,7 @@ class TradingBot:
                     "cycle_stall",
                     f"⚠️ Торговый цикл завис — нет активности {stall_min:.0f} мин "
                     f"(ожидаемый интервал: {_interval // 60} мин). "
-                    f"Проверьте логи: `make logs`",
+                    f"Проверьте логи: `./bitbot logs`",
                 )
                 await self.telegram.pin_live_msg("cycle_stall")
 

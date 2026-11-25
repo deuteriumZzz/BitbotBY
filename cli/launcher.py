@@ -1,18 +1,11 @@
 #!/usr/bin/env python3
-"""Лаунчер BitbotBY: один запуск — и приложение открыто на этом компьютере.
+"""Запуск BitbotBY в Docker на этом компьютере или на сервере: команды `./bitbot`.
 
-    python launcher/launch.py          # запустить (по умолчанию) и открыть приложение
-    python launcher/launch.py stop     # остановить
-    python launcher/launch.py status   # что запущено
-    python launcher/launch.py logs     # последние логи
-    python launcher/launch.py url      # новая ссылка входа, если окно закрыли
-    python launcher/launch.py autostart on|off|status   # запуск при входе в систему
-    python launcher/launch.py awake on|off|status       # не давать компьютеру уснуть
-    python launcher/launch.py import-env [--env=путь] [--overwrite]   # ключи из .env → хранилище
-    python launcher/launch.py phone on|off|status       # MiniApp в Telegram: адрес до компьютера
-    python3 launcher/launch.py server --domain=bot.example.com   # на сервере (VPS), см. docs/DEPLOY_SERVER.md
+Здесь — то, что работает без зависимостей проекта (только Docker и Python 3,
+стандартная библиотека): start, stop, status, logs, url, phone, server, keys,
+autostart, awake. Команды разработчика (start --native, job, test, lint, fmt,
+check) — cli/dev.py. Список команд — `./bitbot help`.
 
-Нужны только Docker и Python 3 (стандартная библиотека, ничего ставить не надо).
 Бот стартует в Paper. Ключи API вводятся в самом приложении и хранятся зашифрованными.
 Мастер-ключ шифрования лаунчер создаёт сам и кладёт в .launcher/state.json (права 600,
 в git и в образ Docker не попадает).
@@ -41,6 +34,8 @@ from typing import Callable, Dict, List, Optional, Tuple
 ROOT = Path(__file__).resolve().parent.parent
 STATE_DIR = ROOT / ".launcher"
 COMPOSE_FILE = ROOT / "docker-compose.local.yml"
+MONITORING_FILE = ROOT / "deploy" / "monitoring" / "compose.yml"
+CLI = ROOT / "bitbot"  # точка входа: на неё ссылаются автозапуск и ярлыки
 DEFAULT_PORT = 8080
 
 
@@ -114,15 +109,12 @@ def login_url(port: int, token: str) -> str:
 
 
 def compose_cmd(args: List[str], state_dir: Path = STATE_DIR) -> List[str]:
-    return [
-        "docker",
-        "compose",
-        "-f",
-        str(COMPOSE_FILE),
-        "--env-file",
-        str(state_dir / "compose.env"),
-        *args,
-    ]
+    """docker compose с файлами запуска; мониторинг — вторым файлом, если включён
+    (`./bitbot start --profile=monitoring`): stop и logs должны видеть его тоже."""
+    files = ["-f", str(COMPOSE_FILE)]
+    if (state_dir / "monitoring").exists():
+        files += ["-f", str(MONITORING_FILE)]
+    return ["docker", "compose", *files, "--env-file", str(state_dir / "compose.env"), *args]
 
 
 def run(cmd: List[str], **kw) -> subprocess.CompletedProcess:
@@ -264,12 +256,12 @@ def cmd_start(port: int, data_dir: Optional[Path], open_browser: bool = True) ->
         "Следующие запуски быстрые."
     )
     if run(compose_cmd(["up", "-d", "--build"])).returncode != 0:
-        say("Не получилось запустить. Логи: python launcher/launch.py logs")
+        say("Не получилось запустить. Логи: ./bitbot logs")
         return 1
     if not wait_healthy(port):
         say(
             "Дашборд не ответил вовремя. "
-            "Посмотрите логи: python launcher/launch.py logs"
+            "Посмотрите логи: ./bitbot logs"
         )
         return 1
     say(f"\nГотово. Приложение: http://localhost:{port}/app/")
@@ -282,7 +274,7 @@ def cmd_start(port: int, data_dir: Optional[Path], open_browser: bool = True) ->
         "Ключи (Bybit, AI) вводите в приложении: Настройки → Подключения. "
         "Они хранятся зашифрованными."
     )
-    say("Остановить: python launcher/launch.py stop")
+    say("Остановить: ./bitbot stop")
     if load_state().get("keep_awake") == "1":
         spawn_awake()
     spawn_helper(port)
@@ -449,7 +441,7 @@ def cmd_import_env(env_path: Path, overwrite: bool) -> int:
         say(f"Не нашёл {env_path}. Укажите файл: import-env --env=/путь/к/.env")
         return 2
     if not (STATE_DIR / "compose.env").exists() or not own_dashboard_running():
-        say("Сначала запустите BitbotBY (launcher/BitbotBY.command), потом повторите.")
+        say("Сначала запустите BitbotBY (BitbotBY.command), потом повторите.")
         return 2
     say("Переношу ключи из .env в зашифрованное хранилище (значения не показываются)…")
     cmd = compose_cmd(["exec", "-T", "dashboard", "python", "-m", "bitbot.config.secrets_import"])
@@ -635,7 +627,7 @@ def cmd_server(flags: Dict[str, str]) -> int:
     )
     if not _DOMAIN.fullmatch(domain):
         say(
-            "Укажите домен сервера: python3 launcher/launch.py server --domain=bot.example.com"
+            "Укажите домен сервера: ./bitbot server --domain=bot.example.com"
         )
         return 2
     if not docker_ready():
@@ -645,7 +637,7 @@ def cmd_server(flags: Dict[str, str]) -> int:
     say(f"Запускаю BitbotBY на {domain} (Paper: сделки виртуальные).")
     say("Первая сборка занимает 5–15 минут, сертификат HTTPS Caddy получит сам.")
     if run(server_compose(["up", "-d", "--build", "--wait"])).returncode != 0:
-        say("Не получилось запустить. Логи: python3 launcher/launch.py server-logs")
+        say("Не получилось запустить. Логи: ./bitbot server logs")
         return 1
     if not server_telegram_ready() and not setup_server_telegram():
         return 1
@@ -721,7 +713,7 @@ def autostart_file() -> Path:
 
 def cmd_autostart(action: str) -> int:
     path = autostart_file()
-    script = Path(__file__).resolve()
+    script = CLI  # не путь к модулю: автозапуск переживёт перенос кода
     if action == "status":
         say("Автозапуск при входе: " + ("включён" if path.exists() else "выключен"))
         return 0
@@ -1045,10 +1037,16 @@ def _run(argv: List[str]) -> int:
         say("Ещё не запускалось: нечего показывать.")
         return 0
     if action == "start":
+        mark = STATE_DIR / "monitoring"
+        if flags.get("--profile") == "monitoring":
+            STATE_DIR.mkdir(parents=True, exist_ok=True)
+            mark.touch()
+        elif "--profile" not in flags:
+            mark.unlink(missing_ok=True)
         return cmd_start(port, data_dir, open_browser="--no-browser" not in argv)
     if action == "url":
         return cmd_url(port, data_dir)
-    if action == "import-env":
+    if action in ("import-env", "keys"):
         env = Path(flags["--env"]).expanduser() if "--env" in flags else ROOT / ".env"
         return cmd_import_env(env, "--overwrite" in argv)
     if action == "autostart":

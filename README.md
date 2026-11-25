@@ -89,7 +89,7 @@ perpetual-фьючерсами long/short или спотом — с риск-м
 
 | Что | macOS | Windows | Linux |
 |---|---|---|---|
-| Запустить | `launcher/BitbotBY.command` | `launcher\BitbotBY.bat` | `launcher/bitbotby.sh` |
+| Запустить | `BitbotBY.command` | `launcher\BitbotBY.bat` | `launcher/bitbotby.sh` |
 | Остановить | `launcher/BitbotBY-stop.command` | `launcher\BitbotBY-stop.bat` | `launcher/bitbotby.sh stop` |
 | Приложение на телефоне | `launcher/BitbotBY-phone.command` | `launcher\BitbotBY-phone.bat` | `launcher/bitbotby.sh phone on` |
 
@@ -98,7 +98,7 @@ perpetual-фьючерсами long/short или спотом — с риск-м
 - Старт в **Paper** и **Local** (решают локальные стратегии), поэтому ключи для начала не нужны. Ключи Bybit, AI и
   Telegram вводятся в приложении: **Настройки → Ключи и доступ** — и хранятся зашифрованными.
 - Вход: лаунчер открывает одноразовую ссылку, которая работает только на этом компьютере (порт открыт на 127.0.0.1).
-  Окно закрыли — `python3 launcher/launch.py url`.
+  Окно закрыли — `./bitbot url`.
 - **Телефон:** `phone on` поднимает туннель Cloudflare (нужен `cloudflared`), и в Telegram появляется кнопка «Терминал».
   Без входа через Telegram данные не отдаются. Выключить — `phone off`.
 
@@ -107,7 +107,7 @@ perpetual-фьючерсами long/short или спотом — с риск-м
 
 | Команда | Что делает |
 |---|---|
-| `python3 launcher/launch.py start [--data-dir=/путь]` | Запуск (то же, что ярлык); данные можно держать в другой папке |
+| `./bitbot start [--data-dir=/путь]` | Запуск (то же, что ярлык); данные можно держать в другой папке |
 | `stop` · `status` · `logs` · `url` | Остановка, состояние, логи, ссылка входа |
 | `phone on [--url=https://…]` · `phone off` | MiniApp с телефона через туннель или свой https-адрес |
 | `import-env [--overwrite]` | Один раз перенести ключи из старого `.env` в шифрованное хранилище (значения не печатаются) |
@@ -121,7 +121,7 @@ perpetual-фьючерсами long/short или спотом — с риск-м
 
 ```bash
 git clone https://github.com/deuteriumZzz/BitbotBY.git bitbotby && cd bitbotby
-python3 launcher/launch.py server --domain=bot.example.com
+./bitbot server --domain=bot.example.com
 ```
 
 Команда готовит мастер-ключ, запускает бота, дашборд, Redis и Caddy с HTTPS и подключает Telegram (спросит токен
@@ -135,8 +135,8 @@ python3 launcher/launch.py server --domain=bot.example.com
 ```bash
 python3.11 -m venv .venv && source .venv/bin/activate
 pip install -e "backend[dev]"
-make frontend      # собрать приложение
-make local         # бот + дашборд: http://localhost:8080/app/
+./bitbot start --native (собирает приложение сам)      # собрать приложение
+./bitbot start --native         # бот + дашборд: http://localhost:8080/app/
 ```
 
 Здесь бот читает переменные окружения и `.env` — список в [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
@@ -271,7 +271,7 @@ flowchart TB
 config.py · supervisor.py · dashboard.py — настройки по умолчанию и точки входа (бот, панель)
 docker-compose.local.yml / .server.yml  — свой компьютер (лаунчер) и сервер (Caddy + HTTPS)
 
-launcher/        — ярлыки BitbotBY (.command / .bat / .sh) и launch.py: локальный запуск, телефон, сервер
+cli/             — команды ./bitbot (launcher.py — Docker, телефон, сервер; dev.py — разработка); ярлыки BitbotBY.command / .bat в корне: локальный запуск, телефон, сервер
 src/
   core/          — торговый цикл: TradingBot, решение, ордер, сопровождение, риск, история, след решения
   strategies/    — стратегии, базовый класс, портированные наборы
@@ -406,7 +406,7 @@ Claude. Бесплатные идут по умолчанию; режим цеп
 - Ключи хранятся **только зашифрованными** (Fernet) в `data/secrets.enc.json`. Приложение показывает последние
   4 символа и никогда не отдаёт ключ обратно. Мастер-ключ `BITBOT_SECRETS_KEY` лаунчер кладёт в
   `.launcher/state.json`, серверная команда — в `.server/server.env` (права 600, в git и в образ не попадают).
-- Лаунчер и сервер `.env` не читают. Старые ключи из `.env` переносятся один раз: `python3 launcher/launch.py import-env`.
+- Лаунчер и сервер `.env` не читают. Старые ключи из `.env` переносятся один раз: `./bitbot keys import`.
 - Ключ Bybit создавайте **без права вывода средств** и с привязкой к IP — ключи с выводом приложение отклоняет.
 - Переход Paper → Live — только кнопкой с кодовым словом (`TRADING_MODE_PIN`), не обычными словами в Telegram.
 - Вход в приложение — только владельцу (`TELEGRAM_CHAT_ID`): подпись Telegram в MiniApp, 6-значный код в браузере,
@@ -434,9 +434,9 @@ Claude. Бесплатные идут по умолчанию; режим цеп
 ## 🎓 Обучение SAC-модели
 
 ```bash
-make train           # локальное обучение (Optuna + walk-forward)
-make train-docker     # то же самое в Docker (~60 мин)
-make tune             # только hyperparameter search
+./bitbot job train           # локальное обучение (Optuna + walk-forward)
+./bitbot job train --docker   # то же самое в Docker (~60 мин)
+./bitbot job tune             # только hyperparameter search
 ```
 
 Обучение и тюнинг можно запускать и **из приложения** (вкладка «Обучение»): у каждого профиля рынка
@@ -455,10 +455,10 @@ Telegram и приложения без перезапуска сразу пос
 Порядок важен — каждый шаг проверяет то, что предыдущий не может:
 
 ```bash
-make backtest          # walk-forward, holdout 20%, overfit ratio (должен быть <2×)
-make alpha-report       # bootstrap Sharpe + Wilcoxon — значима ли альфа статистически
-make live-divergence    # проскальзывание/задержка исполнения live vs бэктест
-make ai-isolation       # даёт ли AI-слой edge поверх голых индикаторов (жжёт AI-квоту)
+./bitbot job backtest          # walk-forward, holdout 20%, overfit ratio (должен быть <2×)
+./bitbot job report alpha       # bootstrap Sharpe + Wilcoxon — значима ли альфа статистически
+./bitbot job report divergence    # проскальзывание/задержка исполнения live vs бэктест
+./bitbot job report ai       # даёт ли AI-слой edge поверх голых индикаторов (жжёт AI-квоту)
 ```
 
 `alpha-report` требует минимум 30–50 сделок на группу, иначе `INSUFFICIENT DATA` — это сигнал
@@ -474,29 +474,29 @@ make ai-isolation       # даёт ли AI-слой edge поверх голых
 ## 🛠 Разработка и тесты
 
 ```bash
-make test                     # pytest с покрытием (порог 50%)
-make lint                     # ruff + lint-imports + mypy
-make fmt                      # black + сортировка импортов (ruff)
-cd frontend && npx vitest run   # тесты приложения
+./bitbot test                     # тесты backend и приложения (./bitbot test backend|frontend)
+./bitbot lint                     # ruff, black, слои импортов, mypy, типы приложения
+./bitbot fmt                      # black + сортировка импортов (ruff)
+./bitbot check                    # настройки, Redis, ключи, база сделок
 ```
 
-**2012 тестов бэкенда** (индикаторы, стратегии и порты из Argent, риск, CVaR, Kelly, Almgren-Chriss, SAC-инференс,
-монитор позиций, настройки, API приложения и вход, лаунчер, e2e цикл) и **77 тестов приложения** (vitest).
 CI проверяет black, ruff, mypy, слои импортов (lint-imports) и тесты. Зависимости и настройки инструментов — в `backend/pyproject.toml`.
 
 <details>
-<summary>Все команды Makefile</summary>
+<summary>Все команды ./bitbot</summary>
 
 | Команда | Назначение |
 |---|---|
-| `make local` / `make frontend` | Бот + дашборд без Docker / сборка приложения |
-| `make paper` / `make paper-ai` / `make live` | Только бот: Paper (local / AI) / Live — читают `.env` |
-| `make train` / `make train-long` / `make train-docker` | Обучение SAC |
-| `make tune` / `make tune-bluechip` / `make tune-altcoin` | Подбор гиперпараметров (Optuna) |
-| `make retrain` | Дообучение на новых данных |
-| `make backtest` / `make backtest-eth` | Walk-forward бэктест |
-| `make alpha-report` / `make live-divergence` / `make ai-isolation` | Значимость альфы / live против бэктеста / вклад AI |
-| `make test` / `make lint` / `make fmt` | Тесты / линтеры / форматирование |
+| `./bitbot start` / `./bitbot start --profile=monitoring` | Бот и приложение в Docker / то же с Prometheus, Grafana, Alertmanager |
+| `./bitbot start --native [--paper] [--mode=ai]` | Без Docker (нужны Redis и `.venv`); приложение собирается само |
+| `./bitbot stop` / `status` / `logs` / `url` | Остановить / что запущено / логи / новая ссылка входа |
+| `./bitbot job train [--long] [--v2] [--profile=altcoin]` | Обучение SAC |
+| `./bitbot job tune [--profile=bluechip\|altcoin]` | Подбор гиперпараметров (Optuna) |
+| `./bitbot job retrain` | Дообучение walk-forward на новых данных |
+| `./bitbot job backtest [--symbol=ETH/USDT]` | Walk-forward бэктест |
+| `./bitbot job report alpha\|divergence\|ai` | Значимость альфы / live против бэктеста / вклад AI |
+| `./bitbot phone on\|off`, `server --domain=…`, `keys import` | Телефон, сервер, перенос ключей |
+| `./bitbot test` / `lint` / `fmt` / `check` | Тесты / линтеры / форматирование / проверка перед запуском |
 
 </details>
 
@@ -516,7 +516,7 @@ CI проверяет black, ruff, mypy, слои импортов (lint-imports
 <details>
 <summary><b>Hybrid или SAC пишет, что нет модели</b></summary><br>
 
-Сначала обучите модель профиля: вкладка «Обучение» или `make train`. До этого — режим Local или AI.
+Сначала обучите модель профиля: вкладка «Обучение» или `./bitbot job train`. До этого — режим Local или AI.
 </details>
 
 <details>
@@ -593,9 +593,9 @@ CI проверяет black, ruff, mypy, слои импортов (lint-imports
 
 1. Минимум **2 недели** Paper с подтверждением сделок.
 2. «Обучение» → бэктест: overfit ratio < 2×, иначе сначала разбираться со стратегиями.
-3. «Проверка значимости альфы» (`make alpha-report`): альфа значима статистически, а не «выглядит неплохо».
+3. «Проверка значимости альфы» (`./bitbot job report alpha`): альфа значима статистически, а не «выглядит неплохо».
    Меньше 30–50 сделок — `INSUFFICIENT DATA`, значит наблюдать дольше.
-4. «Live против бэктеста» (`make live-divergence`) — если есть подозрение на проскальзывание.
+4. «Live против бэктеста» (`./bitbot job report divergence`) — если есть подозрение на проскальзывание.
 5. Ключ Bybit без вывода и с привязкой к IP; начать консервативно: риск на сделку 1%, 2 позиции, плечо 2,
    дневной лимит убытка 3%.
 6. Live — только после того, как шаг 3 показал значимую альфу.
