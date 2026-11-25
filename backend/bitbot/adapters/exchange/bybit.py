@@ -18,6 +18,7 @@ import ccxt.async_support as ccxt
 import pandas as pd
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
+from bitbot.adapters.exchange import constants as ex
 from bitbot.adapters.exchange.paper import PaperExchange, Realism
 from bitbot.config.settings import Config
 from bitbot.domain.order_states import (
@@ -84,9 +85,6 @@ async def _fetch_ohlcv_with_retry(
     return await exchange.fetch_ohlcv(symbol, timeframe, since=since, limit=limit)
 
 
-_CCXT_TIMEOUT_MS = 15_000  # любой вызов биржи — не дольше 15 с
-
-
 class BybitAPI:
     """
     Клиент Bybit API с поддержкой retry, кэширования через Redis и управления ордерами.
@@ -120,7 +118,7 @@ class BybitAPI:
         return {
             "defaultType": self._current_market_type(),
             "adjustForTimeDifference": True,
-            "recvWindow": 5000,
+            "recvWindow": ex.RECV_WINDOW_MS,
         }
 
     def market_type(self) -> str:
@@ -158,7 +156,7 @@ class BybitAPI:
                         "apiKey": api_key,
                         "secret": api_secret,
                         "enableRateLimit": True,
-                        "timeout": _CCXT_TIMEOUT_MS,
+                        "timeout": ex.CCXT_TIMEOUT_MS,
                         "options": self._ccxt_options(),
                         "urls": {
                             "api": {
@@ -174,7 +172,7 @@ class BybitAPI:
                         "apiKey": api_key,
                         "secret": api_secret,
                         "enableRateLimit": True,
-                        "timeout": _CCXT_TIMEOUT_MS,
+                        "timeout": ex.CCXT_TIMEOUT_MS,
                         "options": self._ccxt_options(),
                     }
                 )
@@ -337,7 +335,7 @@ class BybitAPI:
         client_order_id = _new_client_order_id()
         try:
             last_error: Optional[Exception] = None
-            for attempt in range(3):
+            for attempt in range(ex.ORDER_ATTEMPTS):
                 try:
                     order = await self.exchange.create_order(
                         symbol,
@@ -413,9 +411,10 @@ class BybitAPI:
                         )
                         break
                     self.logger.warning(
-                        "Попытка %d/3 создания ордера не удалась (BadRequest/"
+                        "Попытка %d/%d создания ордера не удалась (BadRequest/"
                         "InvalidOrder): %s",
                         attempt + 1,
+                        ex.ORDER_ATTEMPTS,
                         e,
                     )
                     await asyncio.sleep(2**attempt)
@@ -447,8 +446,9 @@ class BybitAPI:
                         return Placed(existing)
                     wait = 2**attempt
                     self.logger.warning(
-                        "Попытка %d/3 создания ордера не удалась: %s. Повтор через %dс",
+                        "Попытка %d/%d создания ордера не удалась: %s. Повтор через %dс",
                         attempt + 1,
+                        ex.ORDER_ATTEMPTS,
                         e,
                         wait,
                     )
@@ -456,20 +456,26 @@ class BybitAPI:
                 except Exception as e:
                     last_error = e
                     self.logger.warning(
-                        "Попытка %d/3 не удалась (неожиданная ошибка): %s",
+                        "Попытка %d/%d не удалась (неожиданная ошибка): %s",
                         attempt + 1,
+                        ex.ORDER_ATTEMPTS,
                         e,
                     )
                     await asyncio.sleep(2**attempt)
             self.logger.error(
-                "Ордер не создан после 3 попыток: %s", last_error, exc_info=True
+                "Ордер не создан после %d попыток: %s",
+                ex.ORDER_ATTEMPTS,
+                last_error,
+                exc_info=True,
             )
             if isinstance(last_error, ccxt.NetworkError):
                 # Сеть оборвалась, а биржа могла принять ордер: исход неизвестен,
                 # сверка выяснит по clientOrderId.
                 self._note_ambiguous(symbol, client_order_id, side, amount)
                 return Unknown(client_order_id)
-            return Rejected(str(last_error) or "ордер не создан после 3 попыток")
+            return Rejected(
+                str(last_error) or f"ордер не создан после {ex.ORDER_ATTEMPTS} попыток"
+            )
         finally:
             self.redis.release_lock(lock_name)
 
@@ -717,7 +723,7 @@ class BybitAPI:
                 await self.cancel_order(old["id"], symbol)
 
         client_order_id = _new_client_order_id()
-        for attempt in range(2):
+        for attempt in range(ex.PROTECTIVE_ORDER_ATTEMPTS):
             try:
                 order = await self.exchange.create_order(
                     symbol,
@@ -761,13 +767,14 @@ class BybitAPI:
                     )
                     return None
                 self.logger.warning(
-                    "Exchange %s for %s: attempt %d/2 failed: %s",
+                    "Exchange %s for %s: attempt %d/%d failed: %s",
                     label,
                     symbol,
                     attempt + 1,
+                    ex.PROTECTIVE_ORDER_ATTEMPTS,
                     e,
                 )
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(ex.PROTECTIVE_RETRY_PAUSE_S)
             except Exception as e:
                 self.logger.error(
                     "Failed to place exchange %s for %s: %s", label, symbol, e
@@ -908,7 +915,10 @@ class BybitAPI:
             self.logger.debug("Leverage set to %dx for %s", leverage, symbol)
         except Exception as e:
             # 110043 «leverage not modified» — плечо уже такое, это не ошибка.
-            if "110043" not in str(e) and "not modified" not in str(e).lower():
+            if (
+                ex.LEVERAGE_NOT_MODIFIED not in str(e)
+                and "not modified" not in str(e).lower()
+            ):
                 # Иначе на бирже осталось прежнее плечо: позиция с ним — другой риск.
                 self.logger.warning(
                     "set_leverage %s → %dx failed: %s", symbol, leverage, e
