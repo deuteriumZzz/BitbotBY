@@ -596,16 +596,43 @@ class OrderExecutor:
             )
 
             order_sent_at = time.time()
-            fill_price = float(entry)  # paper: симулированное исполнение
+            fill_price = float(entry)  # до ответа биржи — цена сигнала
             order_filled_at = order_sent_at
             # Плечо позиции: на споте его нет. Записывается в позицию — по нему
             # PortfolioManager при закрытии возвращает залог.
             pos_lev = 1 if _market_type == "spot" else max(1, dynamic_lev)
 
+            if _market_type != "spot":
+                try:
+                    lev_ok = await self._api.set_leverage(sym, dynamic_lev)
+                except Exception as _lev_err:
+                    logger.warning("set_leverage failed for %s: %s", sym, _lev_err)
+                    lev_ok = False
+                if lev_ok is False:
+                    # Плечо на бирже не то, что посчитал риск — не входим вслепую.
+                    self._stage(sym, "rejected", "не удалось выставить плечо")
+                    return
+            outcome = await self._api.create_order(sym, "market", action, quantity)
+            if not isinstance(outcome, Placed):
+                # Unknown: сверка по clientOrderId найдёт ордер, если он прошёл.
+                logger.error("Order creation failed for %s: %s", sym, outcome)
+                return
+            order = outcome.order
+            order_filled_at = time.time()
+            # Реальная цена исполнения, если биржа её вернула.
+            fill_price = float(order.get("average") or order.get("price") or fill_price)
+            # Use actual exchange fee when available — varies by user tier
+            # (VIP discounts) and order type (maker < taker).
+            fee_cost = float((order.get("fee") or {}).get("cost") or 0)
+            if fee_cost > 0:
+                commission = fee_cost
+            close_side = "sell" if action == "buy" else "buy"
+            exchange_sl_id, exchange_tp_id = await self._api.place_exchange_sl_tp(
+                sym, close_side, quantity, sl_price, tp_price
+            )
             if Config.PAPER_TRADING:
-                logger.info(
-                    "[PAPER] %s %.6f %s @ %.4f", action.upper(), quantity, sym, entry
-                )
+                # Баланс paper ведёт PortfolioManager (биржа-симулятор его не знает):
+                # залог блокируем после того, как ордер принят.
                 bal = self._get_paper_balance()
                 if action == "buy" or _market_type != "spot":
                     # LONG и LINEAR SHORT — как на бирже: блокируем залог
@@ -615,37 +642,6 @@ class OrderExecutor:
                 else:
                     # SPOT продажа: получаем деньги (закрытие лонга)
                     self._set_paper_balance(bal + quantity * entry - commission)
-            else:
-                if _market_type != "spot":
-                    try:
-                        lev_ok = await self._api.set_leverage(sym, dynamic_lev)
-                    except Exception as _lev_err:
-                        logger.warning("set_leverage failed for %s: %s", sym, _lev_err)
-                        lev_ok = False
-                    if lev_ok is False:
-                        # Плечо на бирже не то, что посчитал риск — не входим вслепую.
-                        self._stage(sym, "rejected", "не удалось выставить плечо")
-                        return
-                outcome = await self._api.create_order(sym, "market", action, quantity)
-                if not isinstance(outcome, Placed):
-                    # Unknown: сверка по clientOrderId найдёт ордер, если он прошёл.
-                    logger.error("Order creation failed for %s: %s", sym, outcome)
-                    return
-                order = outcome.order
-                order_filled_at = time.time()
-                # Реальная цена исполнения, если биржа её вернула.
-                fill_price = float(
-                    order.get("average") or order.get("price") or fill_price
-                )
-                # Use actual exchange fee when available — varies by user tier
-                # (VIP discounts) and order type (maker < taker).
-                fee_cost = float((order.get("fee") or {}).get("cost") or 0)
-                if fee_cost > 0:
-                    commission = fee_cost
-                close_side = "sell" if action == "buy" else "buy"
-                exchange_sl_id, exchange_tp_id = await self._api.place_exchange_sl_tp(
-                    sym, close_side, quantity, sl_price, tp_price
-                )
 
             try:
                 trade_id = await self._trade_history.record_open(
@@ -719,7 +715,7 @@ class OrderExecutor:
                 + (
                     "\n⚠️ Биржевой SL не выставлен — позицию защищает только "
                     "мониторинг бота"
-                    if (not Config.PAPER_TRADING and sl_price and not exchange_sl_id)
+                    if sl_price and not exchange_sl_id
                     else ""
                 ),
                 kind="position_open",

@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from bitbot.domain.order_states import Placed
 from tests.conftest import monitor_config
 
 # ---------------------------------------------------------------------------
@@ -67,8 +68,11 @@ def make_bot():
 
             bot = TradingBot()
             bot.api.get_current_price = AsyncMock(return_value=50000.0)
-            bot.api.create_order = AsyncMock()
-            bot.api.cancel_order = AsyncMock()
+            bot.api.create_order = AsyncMock(
+                return_value=Placed({"fee": {"cost": 0.0}})
+            )
+            bot.api.cancel_order = AsyncMock(return_value=True)
+            bot.api.place_exchange_sl_tp = AsyncMock(return_value=(None, None))
             bot.portfolio_manager.update_portfolio = AsyncMock()
             bot.trade_history.record_close = AsyncMock()
             bot.trade_history.get_summary = AsyncMock(
@@ -193,14 +197,15 @@ class TestSlTpTrigger:
 class TestPaperVsLive:
 
     @pytest.mark.asyncio
-    async def test_paper_trading_skips_create_order(self):
-        """In PAPER_TRADING mode, api.create_order must not be called."""
+    async def test_paper_closes_through_the_same_exchange_call(self):
+        """Paper закрывает тем же вызовом, что live; BybitAPI отдаёт его симулятору."""
         bot = make_bot()
         bot._monitored["BTC/USDT"] = _open_pos(side="buy", sl=49000, tp=52000)
 
         await _run_once(bot, price=48500.0, paper=True)
 
-        bot.api.create_order.assert_not_called()
+        bot.api.create_order.assert_awaited_once()
+        assert bot.api.create_order.call_args.kwargs.get("reduce_only") is True
 
     @pytest.mark.asyncio
     async def test_live_trading_calls_create_order(self):

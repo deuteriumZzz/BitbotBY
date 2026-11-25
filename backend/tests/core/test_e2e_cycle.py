@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pandas as pd
 import pytest
 
+from bitbot.domain.order_states import Placed
 from tests.conftest import runtime_config
 
 # ---------------------------------------------------------------------------
@@ -115,6 +116,13 @@ def make_bot(balance: float = 1000.0):
                 side_effect=lambda sym, qty: round(qty, 6)
             )
             bot.api.set_leverage = AsyncMock(return_value=True)
+            # Paper идёт тем же путём, что live: ордер и SL/TP — через api (симулятор).
+            bot.api.create_order = AsyncMock(
+                return_value=Placed({"fee": {"cost": 0.0}})
+            )
+            bot.api.place_exchange_sl_tp = AsyncMock(
+                return_value=("paper-sl-1", "paper-tp-2")
+            )
             bot.api.get_current_price = AsyncMock(return_value=50000.0)
             return bot
 

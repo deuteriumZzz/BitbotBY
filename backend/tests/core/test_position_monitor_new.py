@@ -495,7 +495,7 @@ class TestCheckPartialTp:
 
     @pytest.mark.asyncio
     async def test_paper_trading_partial_tp_triggered(self):
-        """Paper mode: no real orders, but monitored dict and return value updated."""
+        """Paper: частичное закрытие тем же вызовом, что live (ордер — симулятору)."""
         cfg = _make_cfg(paper=True, partial_tp_trigger=0.6, partial_tp_fraction=0.5)
         monitor = _make_monitor(cfg=cfg)
         # entry=50000, tp=55000 → range=5000, price=53500 → progress=0.7 > 0.6
@@ -509,7 +509,7 @@ class TestCheckPartialTp:
         assert result["partial_tp_triggered"] is True
         assert result["qty"] == pytest.approx(0.05)
         assert result["stop_loss"] == pytest.approx(50000.0)  # breakeven
-        monitor._api.create_order.assert_not_called()
+        monitor._api.create_order.assert_awaited_once()
         monitor._telegram.notify.assert_awaited_once()
 
     @pytest.mark.asyncio

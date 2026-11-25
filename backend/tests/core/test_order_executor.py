@@ -200,7 +200,8 @@ class TestPaperTrading:
         assert pos["trade_id"] == 42
 
     @pytest.mark.asyncio
-    async def test_does_not_call_create_order(self):
+    async def test_orders_through_the_same_exchange_call_as_live(self):
+        # paper и live — один путь; BybitAPI в paper отдаёт ордер симулятору
         executor, _ = _make_executor()
         with patch("bitbot.execution.order_executor.Config", _make_cfg()):
             with patch("bitbot.execution.order_executor._ac_impact", return_value=0.0):
@@ -210,7 +211,8 @@ class TestPaperTrading:
                 ):
                     await executor.execute(_TOP_BUY, {"BTC/USDT": _make_df()}, 10_000.0)
 
-        executor._api.create_order.assert_not_called()
+        executor._api.create_order.assert_awaited_once()
+        executor._api.place_exchange_sl_tp.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_paper_balance_decreases_on_buy(self):

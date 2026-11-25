@@ -438,6 +438,8 @@ FORECASTER=chronos         # chronos | timesfm. timesfm — поправка с�
 FUNDING_IN_PNL=false       # funding входит в результат сделки (paper — оценка, live — выплаты биржи).
                            # Знак выплат Bybit не проверен на реальной бирже — проверить на testnet
 PAPER_FUNDING_RATE_8H=0.0001  # ставка funding за 8 ч для оценки в paper (при FUNDING_IN_PNL=true)
+PAPER_SLIPPAGE_PCT=0          # paper-биржа: проскальзывание против нас, доля цены (0.0005 = 0.05%)
+PAPER_LATENCY_S=0             # paper-биржа: задержка исполнения ордера, секунды
 SAC_V2_ENABLED=false       # SAC v2 (train_sac_v2) вместо v1; допуск через реестр моделей
 SAC_V2_MODEL_PATH=models/sac_v2.zip
 SAC_REQUIRE_APPROVAL=true  # модель торгует только после допуска в реестре: Paper — стадии

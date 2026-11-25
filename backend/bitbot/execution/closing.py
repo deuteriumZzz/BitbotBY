@@ -107,19 +107,15 @@ class ClosingMixin(BookingMixin):
                 side,
                 reason,
             )
-            if not Config.PAPER_TRADING:
-                for oid in filter(
-                    None, [pos.get("exchange_sl_id"), pos.get("exchange_tp_id")]
-                ):
-                    try:
-                        await self._api.cancel_order(order_id=oid, symbol=sym)
-                    except Exception as _e:
-                        logger.debug("Cancel order %s failed: %s", oid, _e)
-                if (
-                    await self._send_close(sym, pos, qty, "close", monitored, lock)
-                    is None
-                ):
-                    continue
+            for oid in filter(
+                None, [pos.get("exchange_sl_id"), pos.get("exchange_tp_id")]
+            ):
+                try:
+                    await self._api.cancel_order(order_id=oid, symbol=sym)
+                except Exception as _e:
+                    logger.debug("Cancel order %s failed: %s", oid, _e)
+            if await self._send_close(sym, pos, qty, "close", monitored, lock) is None:
+                continue
             async with lock:
                 monitored.pop(sym, None)
             try:
@@ -170,19 +166,16 @@ class ClosingMixin(BookingMixin):
                     current,
                     reason,
                 )
-                if not Config.PAPER_TRADING:
-                    for oid in filter(
-                        None, [pos.get("exchange_sl_id"), pos.get("exchange_tp_id")]
-                    ):
-                        try:
-                            await self._api.cancel_order(order_id=oid, symbol=sym)
-                        except Exception as _e:
-                            logger.debug("Cancel order %s failed: %s", oid, _e)
-                    closed = await self._send_close(
-                        sym, pos, qty, "close", monitored, lock
-                    )
-                    if closed is None:
-                        continue
+                for oid in filter(
+                    None, [pos.get("exchange_sl_id"), pos.get("exchange_tp_id")]
+                ):
+                    try:
+                        await self._api.cancel_order(order_id=oid, symbol=sym)
+                    except Exception as _e:
+                        logger.debug("Cancel order %s failed: %s", oid, _e)
+                closed = await self._send_close(sym, pos, qty, "close", monitored, lock)
+                if closed is None:
+                    continue
                 async with lock:
                     monitored.pop(sym, None)
                 await self._book_close(sym, pos, current, reason)
@@ -196,35 +189,30 @@ class ClosingMixin(BookingMixin):
                     entry,
                 )
                 unprotected = False
-                if not Config.PAPER_TRADING:
-                    for oid in filter(
-                        None, [pos.get("exchange_sl_id"), pos.get("exchange_tp_id")]
-                    ):
-                        try:
-                            await self._api.cancel_order(order_id=oid, symbol=sym)
-                        except Exception as _e:
-                            logger.debug("Cancel SL/TP %s failed: %s", oid, _e)
+                for oid in filter(
+                    None, [pos.get("exchange_sl_id"), pos.get("exchange_tp_id")]
+                ):
                     try:
-                        new_sl_id, new_tp_id = await self._api.place_exchange_sl_tp(
-                            sym, close_side, qty, entry, tp_price
-                        )
-                        async with lock:
-                            if sym in monitored and monitored[sym] is not None:
-                                monitored[sym]["stop_loss"] = entry
-                                monitored[sym]["exchange_sl_id"] = new_sl_id
-                                monitored[sym]["exchange_tp_id"] = new_tp_id
-                    except Exception as exc:
-                        logger.critical(
-                            "Tighten SL for %s failed — old SL/TP already cancelled, "
-                            "position has NO exchange-side protection: %s",
-                            sym,
-                            exc,
-                        )
-                        unprotected = True
-                else:
+                        await self._api.cancel_order(order_id=oid, symbol=sym)
+                    except Exception as _e:
+                        logger.debug("Cancel SL/TP %s failed: %s", oid, _e)
+                try:
+                    new_sl_id, new_tp_id = await self._api.place_exchange_sl_tp(
+                        sym, close_side, qty, entry, tp_price
+                    )
                     async with lock:
                         if sym in monitored and monitored[sym] is not None:
                             monitored[sym]["stop_loss"] = entry
+                            monitored[sym]["exchange_sl_id"] = new_sl_id
+                            monitored[sym]["exchange_tp_id"] = new_tp_id
+                except Exception as exc:
+                    logger.critical(
+                        "Tighten SL for %s failed — old SL/TP already cancelled, "
+                        "position has NO exchange-side protection: %s",
+                        sym,
+                        exc,
+                    )
+                    unprotected = True
                 if unprotected:
                     await self._telegram.notify(
                         f"🚨 *{sym}* [{side}]: не удалось выставить SL/TP на "
@@ -268,15 +256,14 @@ class ClosingMixin(BookingMixin):
             reason,
         )
 
-        if not Config.PAPER_TRADING:
-            sl_tp_ids = [pos.get("exchange_sl_id"), pos.get("exchange_tp_id")]
-            for oid in filter(None, sl_tp_ids):
-                try:
-                    await self._api.cancel_order(order_id=oid, symbol=sym)
-                except Exception as _e:
-                    logger.debug("Cancel order %s failed: %s", oid, _e)
-            if await self._send_close(sym, pos, qty, "close", monitored, lock) is None:
-                return
+        sl_tp_ids = [pos.get("exchange_sl_id"), pos.get("exchange_tp_id")]
+        for oid in filter(None, sl_tp_ids):
+            try:
+                await self._api.cancel_order(order_id=oid, symbol=sym)
+            except Exception as _e:
+                logger.debug("Cancel order %s failed: %s", oid, _e)
+        if await self._send_close(sym, pos, qty, "close", monitored, lock) is None:
+            return
 
         await self._portfolio_manager.update_portfolio(
             sym, close_side, qty, price, entry=pos["entry"], lev=pos.get("lev", 1.0)
@@ -378,42 +365,39 @@ class ClosingMixin(BookingMixin):
         close_side = "sell" if side == "buy" else "buy"
         # Default exit commission — overridden with actual fee in live mode.
         exit_commission = qty * price * Config.COMMISSION_RATE
-        if not Config.PAPER_TRADING:
-            # Шаг 1: сначала отменяем биржевые условные ордера, чтобы избежать
-            # двойного закрытия (race condition между SL биржи и программным закрытием).
-            exchange_sl_id = pos.get("exchange_sl_id")
-            exchange_tp_id = pos.get("exchange_tp_id")
-            if exchange_sl_id:
-                try:
-                    await self._api.cancel_order(order_id=exchange_sl_id, symbol=sym)
-                except Exception as _ce:
-                    logger.warning(
-                        "Cancel SL order %s failed: %s — proceeding with close",
-                        exchange_sl_id,
-                        _ce,
-                    )
-            if exchange_tp_id:
-                try:
-                    await self._api.cancel_order(order_id=exchange_tp_id, symbol=sym)
-                except Exception as _ce:
-                    logger.warning(
-                        "Cancel TP order %s failed: %s — proceeding with close",
-                        exchange_tp_id,
-                        _ce,
-                    )
+        # Шаг 1: сначала отменяем биржевые условные ордера, чтобы избежать
+        # двойного закрытия (race condition между SL биржи и программным закрытием).
+        exchange_sl_id = pos.get("exchange_sl_id")
+        exchange_tp_id = pos.get("exchange_tp_id")
+        if exchange_sl_id:
+            try:
+                await self._api.cancel_order(order_id=exchange_sl_id, symbol=sym)
+            except Exception as _ce:
+                logger.warning(
+                    "Cancel SL order %s failed: %s — proceeding with close",
+                    exchange_sl_id,
+                    _ce,
+                )
+        if exchange_tp_id:
+            try:
+                await self._api.cancel_order(order_id=exchange_tp_id, symbol=sym)
+            except Exception as _ce:
+                logger.warning(
+                    "Cancel TP order %s failed: %s — proceeding with close",
+                    exchange_tp_id,
+                    _ce,
+                )
 
-            # Шаг 2: программное закрытие позиции (lock_suffix="close" не конкурирует
-            # с order_open:{sym} при открытии новой позиции).
-            close_order = await self._send_close(
-                sym, pos, qty, "close", monitored, lock
-            )
-            if close_order is None:
-                return False
+        # Шаг 2: программное закрытие позиции (lock_suffix="close" не конкурирует
+        # с order_open:{sym} при открытии новой позиции).
+        close_order = await self._send_close(sym, pos, qty, "close", monitored, lock)
+        if close_order is None:
+            return False
 
-            # Используем реальную комиссию из ответа биржи (зависит от уровня аккаунта).
-            fee_cost = float((close_order.get("fee") or {}).get("cost") or 0)
-            if fee_cost > 0:
-                exit_commission = fee_cost
+        # Используем реальную комиссию из ответа биржи (зависит от уровня аккаунта).
+        fee_cost = float((close_order.get("fee") or {}).get("cost") or 0)
+        if fee_cost > 0:
+            exit_commission = fee_cost
 
         await self._portfolio_manager.update_portfolio(
             sym, close_side, qty, price, entry=pos["entry"], lev=pos.get("lev", 1.0)

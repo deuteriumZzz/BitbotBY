@@ -127,56 +127,51 @@ class LevelsMixin(ClosingMixin):
         new_sl_id: str | None = None
         new_tp_id: str | None = None
         remaining_unprotected = False
-        if not Config.PAPER_TRADING:
-            # Отменяем биржевые SL/TP перед частичным закрытием —
-            # иначе биржа попытается закрыть полный объём при достижении TP.
-            exchange_sl_id = pos.get("exchange_sl_id")
-            exchange_tp_id = pos.get("exchange_tp_id")
-            for oid, kind in ((exchange_sl_id, "SL"), (exchange_tp_id, "TP")):
-                if oid:
-                    try:
-                        await self._api.cancel_order(order_id=oid, symbol=sym)
-                    except Exception as exc:
-                        logger.warning(
-                            "%s: cancel %s %s failed: %s", label, kind, oid, exc
-                        )
-            if (
-                await self._send_close(sym, pos, partial_qty, label, monitored, lock)
-                is None
-            ):
-                return None, False
-            # Выставляем SL и TP для оставшегося объёма
-            tp_price = float(pos.get("take_profit") or 0)
-            if new_sl or tp_price:
+        # Отменяем биржевые SL/TP перед частичным закрытием —
+        # иначе биржа попытается закрыть полный объём при достижении TP.
+        exchange_sl_id = pos.get("exchange_sl_id")
+        exchange_tp_id = pos.get("exchange_tp_id")
+        for oid, kind in ((exchange_sl_id, "SL"), (exchange_tp_id, "TP")):
+            if oid:
                 try:
-                    new_sl_id, new_tp_id = await self._api.place_exchange_sl_tp(
-                        sym, close_side, new_qty, new_sl, tp_price
-                    )
+                    await self._api.cancel_order(order_id=oid, symbol=sym)
                 except Exception as exc:
-                    logger.critical(
-                        "%s: re-place SL/TP for %s failed — remaining "
-                        "position has NO exchange-side protection: %s",
-                        label,
-                        sym,
-                        exc,
-                    )
-                    remaining_unprotected = True
-                    await self._telegram.notify(
-                        f"🚨 *{sym}*: часть позиции закрыта, но новый SL/TP на "
-                        f"оставшийся объём не выставлен — позиция БЕЗ защиты "
-                        f"на бирже! Требуется ручное вмешательство."
-                    )
+                    logger.warning("%s: cancel %s %s failed: %s", label, kind, oid, exc)
+        if (
+            await self._send_close(sym, pos, partial_qty, label, monitored, lock)
+            is None
+        ):
+            return None, False
+        # Выставляем SL и TP для оставшегося объёма
+        tp_price = float(pos.get("take_profit") or 0)
+        if new_sl or tp_price:
+            try:
+                new_sl_id, new_tp_id = await self._api.place_exchange_sl_tp(
+                    sym, close_side, new_qty, new_sl, tp_price
+                )
+            except Exception as exc:
+                logger.critical(
+                    "%s: re-place SL/TP for %s failed — remaining "
+                    "position has NO exchange-side protection: %s",
+                    label,
+                    sym,
+                    exc,
+                )
+                remaining_unprotected = True
+                await self._telegram.notify(
+                    f"🚨 *{sym}*: часть позиции закрыта, но новый SL/TP на "
+                    f"оставшийся объём не выставлен — позиция БЕЗ защиты "
+                    f"на бирже! Требуется ручное вмешательство."
+                )
 
         async with lock:
             if sym in monitored and monitored[sym] is not None:
                 monitored[sym]["qty"] = new_qty
                 monitored[sym]["stop_loss"] = new_sl
-                if not Config.PAPER_TRADING:
-                    monitored[sym]["exchange_sl_id"] = new_sl_id
-                    monitored[sym]["exchange_tp_id"] = new_tp_id
+                monitored[sym]["exchange_sl_id"] = new_sl_id
+                monitored[sym]["exchange_tp_id"] = new_tp_id
         updated = {**pos, "qty": new_qty, "stop_loss": new_sl}
-        if not Config.PAPER_TRADING:
-            updated.update(exchange_sl_id=new_sl_id, exchange_tp_id=new_tp_id)
+        updated.update(exchange_sl_id=new_sl_id, exchange_tp_id=new_tp_id)
         await self._book_partial(sym, pos, partial_qty, close_side, price)
         return updated, remaining_unprotected  # type: ignore[return-value]
 
@@ -231,19 +226,18 @@ class LevelsMixin(ClosingMixin):
         без защиты. Если новые не встали — старые не трогаем и бросаем ошибку.
         """
         updated: PositionRecord = {**pos, "stop_loss": sl, "take_profit": tp}
-        if not Config.PAPER_TRADING:
-            close_side = "sell" if pos.get("side", "buy") == "buy" else "buy"
-            new_sl_id, new_tp_id = await self._api.place_exchange_sl_tp(
-                sym, close_side, float(pos.get("qty") or 0), sl, tp
-            )
-            for oid in (pos.get("exchange_sl_id"), pos.get("exchange_tp_id")):
-                if oid:
-                    try:
-                        await self._api.cancel_order(order_id=oid, symbol=sym)
-                    except Exception as exc:
-                        logger.warning("update_levels: cancel %s failed: %s", oid, exc)
-            updated["exchange_sl_id"] = new_sl_id
-            updated["exchange_tp_id"] = new_tp_id
+        close_side = "sell" if pos.get("side", "buy") == "buy" else "buy"
+        new_sl_id, new_tp_id = await self._api.place_exchange_sl_tp(
+            sym, close_side, float(pos.get("qty") or 0), sl, tp
+        )
+        for oid in (pos.get("exchange_sl_id"), pos.get("exchange_tp_id")):
+            if oid:
+                try:
+                    await self._api.cancel_order(order_id=oid, symbol=sym)
+                except Exception as exc:
+                    logger.warning("update_levels: cancel %s failed: %s", oid, exc)
+        updated["exchange_sl_id"] = new_sl_id
+        updated["exchange_tp_id"] = new_tp_id
         async with lock:
             if sym in monitored and monitored[sym] is not None:
                 monitored[sym] = {

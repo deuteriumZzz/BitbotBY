@@ -18,6 +18,7 @@ import ccxt.async_support as ccxt
 import pandas as pd
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
+from bitbot.adapters.exchange.paper import PaperExchange, Realism
 from bitbot.config.settings import Config
 from bitbot.domain.order_states import (
     OrderOutcome,
@@ -98,6 +99,11 @@ class BybitAPI:
         self.exchange: Optional[ccxt.Exchange] = None
         self.redis = RedisClient()
         self.logger = logging.getLogger(__name__)
+        # Paper: торговые вызовы исполняет симулятор, данные — настоящие (см. paper.py).
+        self.paper = PaperExchange(
+            self.get_current_price,
+            Realism(Config.PAPER_SLIPPAGE_PCT, Config.PAPER_LATENCY_S),
+        )
         self._leverage_cache: dict[str, int] = {}  # {symbol: last_set_leverage}
         self._runtime_config = runtime_config
 
@@ -317,6 +323,10 @@ class BybitAPI:
         :return: Placed(ответ биржи) | Rejected(причина) — ордера точно нет |
             Unknown(clientOrderId) — сеть оборвалась, исход выяснит сверка.
         """
+        if Config.PAPER_TRADING:
+            return await self.paper.create_order(
+                symbol, order_type, side, amount, price, lock_suffix, reduce_only
+            )
         order_params: dict = {}
         if reduce_only and self._current_market_type() != "spot":
             order_params["reduceOnly"] = True
@@ -645,6 +655,10 @@ class BybitAPI:
         :param tp_price: Цена тейк-профита.
         :return: Кортеж (sl_order_id, tp_order_id).
         """
+        if Config.PAPER_TRADING:
+            return await self.paper.place_exchange_sl_tp(
+                symbol, close_side, qty, sl_price, tp_price
+            )
         sl_id: str | None = None
         tp_id: str | None = None
 
@@ -771,6 +785,8 @@ class BybitAPI:
         :param symbol: Символ торговой пары.
         :return: True если ордер отменён, False при ошибке.
         """
+        if Config.PAPER_TRADING:
+            return await self.paper.cancel_order(order_id, symbol)
         try:
             await self.exchange.cancel_order(order_id, symbol)
             self.logger.info("Ордер %s для %s отменён", order_id, symbol)
@@ -874,7 +890,7 @@ class BybitAPI:
     async def set_leverage(self, symbol: str, leverage: int) -> bool:
         """
         Устанавливает плечо для фьючерсного символа.
-        Для спота — no-op. Для paper trading — no-op.
+        Для спота — no-op. Для paper — симулятор (всегда успешно).
         Кэш per-symbol: если плечо уже выставлено в это значение — пропускаем.
 
         :param symbol: Торговый символ.
@@ -884,7 +900,7 @@ class BybitAPI:
         if self._current_market_type() == "spot":
             return True
         if Config.PAPER_TRADING:
-            return True
+            return await self.paper.set_leverage(symbol, leverage)
         if self._leverage_cache.get(symbol) == leverage:
             return True
         try:
