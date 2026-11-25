@@ -27,6 +27,16 @@ class BaseStrategy(ABC):
     # выключена; включается вручную (см. RuntimeConfig.ensure_experimental_disabled).
     experimental: bool = False
 
+    def param(self, key: str, default: float) -> float:
+        """Число стратегии для активного профиля монет (config.runtime.STRATEGY_PARAMS)."""
+        from bitbot.config.runtime import (
+            STRATEGY_PARAMS,
+            active_profile,
+        )  # noqa: PLC0415
+
+        by_profile = STRATEGY_PARAMS.get(self.name, {}).get(key, {})
+        return float(by_profile.get(active_profile(), default))
+
     @abstractmethod
     def generate_signal(self, data: pd.DataFrame) -> Dict[str, Any]:
         """

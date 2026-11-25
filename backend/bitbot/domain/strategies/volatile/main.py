@@ -5,7 +5,6 @@ from typing import Any, Dict, Optional, Tuple
 
 import pandas as pd
 
-from bitbot.config.runtime import active_profile
 from bitbot.config.settings import Config
 from bitbot.domain.strategies.base import BaseStrategy
 
@@ -92,7 +91,7 @@ class ScalpingStrategy(BaseStrategy):
         macd = self._last(data, "macd")
         macd_sig = self._last(data, "macd_signal")
 
-        high_vol = vol_ratio > 1.5
+        high_vol = vol_ratio > self.param("high_volume", 1.5)
 
         # Пороги 32/68 почти никогда не совпадают с close>ema_s / macd>macd_sig:
         # пока RSI ещё глубоко перепродан, цена и MACD обычно ещё не развернулись.
@@ -152,16 +151,6 @@ class BreakoutStrategy(BaseStrategy):
         return {"action": "hold", "confidence": 0.40}
 
 
-# Порог всплеска по профилю монет: у блючипов даже 2x — нетипичная активность
-# (новость, институционал), у альтов больше случайного шума, у мемов фоновый
-# шум объёма велик и настоящий памп виден только при кратном превышении.
-_VOLUME_SPIKE_BY_PROFILE: Dict[str, float] = {
-    "bluechip": 2.0,
-    "altcoin": 3.0,
-    "meme": 5.0,
-}
-
-
 class VolumeSpikeStrategy(BaseStrategy):
     """
     Стратегия на аномальном всплеске объёма.
@@ -188,10 +177,7 @@ class VolumeSpikeStrategy(BaseStrategy):
     @staticmethod
     def threshold() -> float:
         """Порог всплеска для текущего профиля монет."""
-        return (
-            _VOLUME_SPIKE_BY_PROFILE.get(active_profile())
-            or Config.VOLUME_SPIKE_THRESHOLD
-        )
+        return VolumeSpikeStrategy().param("spike", Config.VOLUME_SPIKE_THRESHOLD)
 
     def generate_signal(self, data: pd.DataFrame) -> Dict[str, Any]:
         if len(data) < 21:

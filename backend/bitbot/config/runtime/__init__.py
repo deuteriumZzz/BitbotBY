@@ -30,6 +30,7 @@ from bitbot.config.runtime.presets import (  # noqa: F401 — публичный
     CONFIRM_TIMEOUT_MAX,
     CONFIRM_TIMEOUT_MIN,
     RISK_PRESETS,
+    STRATEGY_PARAMS,
     confirm_policy,
 )
 
