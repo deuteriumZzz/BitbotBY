@@ -134,3 +134,10 @@ export const readinessReason = (code?: string | null): string =>
 
 export const exitReason = (code?: string | null): string =>
   code ? (EXIT_REASON[code] ?? EXIT_REASON[code.split(/[\s=]/)[0]] ?? code) : "";
+
+/** Причина сделки без служебных хвостов вроде «[SAC 64%, regime=trending_up]» — они для логов, не для человека. */
+export const plainReason = (s: string): string =>
+  s
+    .replace(/\s*\[[^\]]*(?:=|%)[^\]]*\]/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();

@@ -55,14 +55,15 @@ export const FEEDS: Record<string, [string, BotNode?][]> = {
 export const STEP: Partial<Record<BotNode, string>> = { scan: "Сканер", ai: "AI-цепочка", risk: "Риск", order: "Ордер" };
 
 /** Ключи как связки: сервис → что он питает в боте. Форма ключа открывается панелью справа, список остаётся на виду. */
+/** Эти ключи открываются с карты подключений — в списке их не повторяем. */
+const ON_MAP = new Set(["bybit", "telegram"]);
+
 export function Keys({ open, setOpen }: { open: string | null; setOpen: (service: string | null) => void }) {
   const secrets = useStore((s) => s.secrets);
   const note = useStore((s) => s.secretsNote);
-  const ai = useStore((s) => s.ai);
   const closeBtn = useRef<HTMLButtonElement>(null);
   // Ключи AI-провайдеров настраиваются в узле AI цепочки — здесь одна строка-связка.
   const groups = useMemo(() => [...new Set((secrets ?? []).map((s) => s.group))].filter((g) => g !== "AI-модели"), [secrets]);
-  const aiKeys = (secrets ?? []).filter((s) => s.group === "AI-модели");
   const cur = secrets?.find((s) => s.service === open);
   // Панель уезжает с прежним содержимым, а не пустой.
   const last = useRef(cur);
@@ -109,32 +110,20 @@ export function Keys({ open, setOpen }: { open: string | null; setOpen: (service
     const way = s.service === "twitter" ? xWay(s) : "";
     return row(s.service, c, s.name, `${t}${way ? ` · ${way}` : ""}${last4 ? ` · ••••${last4}` : ""}`, FEEDS[s.service] ?? [], () => setOpen(s.service));
   };
-  const aiOk = aiKeys.filter((s) => s.status === "ok").length;
   return (
     <div className="set-pane view enter">
       {!secrets && <p className="empty">{note || "Ключи недоступны."}</p>}
       <div className="klist">
-        {secrets && (
-          <section className="kl-g">
-            <h3>AI-модели</h3>
-            <ul>
-              {row(
-                "ai",
-                ai?.chain.length ? "ok" : "bad",
-                "AI-провайдеры",
-                `ключей ${aiOk} из ${aiKeys.length}${ai?.chain.length ? ` · в цепочке ${ai.chain.length}` : ""}`,
-                [["решение о сделке", "ai"]],
-                () => toStep("ai"),
-              )}
-            </ul>
-          </section>
-        )}
-        {groups.map((g) => (
-          <section className="kl-g" key={g}>
-            <h3>{g}</h3>
-            <ul>{secrets!.filter((s) => s.group === g).map(keyRow)}</ul>
-          </section>
-        ))}
+        {/* Bybit, Telegram и AI — на карте выше, их ключи открываются оттуда. */}
+        {groups.map((g) => {
+          const items = secrets!.filter((s) => s.group === g && !ON_MAP.has(s.service));
+          return items.length ? (
+            <section className="kl-g" key={g}>
+              <h3>{g}</h3>
+              <ul>{items.map(keyRow)}</ul>
+            </section>
+          ) : null;
+        })}
       </div>
       <button type="button" className={`pipe-scrim${isOpen ? " open" : ""}`} tabIndex={-1} aria-hidden="true" onClick={() => setOpen(null)} />
       <aside className={`pipe-panel${isOpen ? " open" : ""}`} role="dialog" aria-label={shown ? `Ключ «${shown.name}»` : "Ключ"} aria-hidden={!isOpen}>

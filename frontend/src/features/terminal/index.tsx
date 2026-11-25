@@ -17,7 +17,6 @@ import { Tween } from "../../components/motion";
 import { Q } from "../../components/tooltip";
 import { Chart } from "./chart";
 import { Equity } from "./equity";
-import { Feed } from "./feed";
 import { MetricsCard } from "./metrics";
 import { Positions } from "./positions";
 import { Radar } from "./radar";
@@ -232,7 +231,6 @@ export function Terminal() {
       <Radar />
       <Positions />
       <Chart />
-      <Feed />
       {/* Фон рынка — справочно, поэтому в самом конце. */}
       <MarketPulse />
     </section>

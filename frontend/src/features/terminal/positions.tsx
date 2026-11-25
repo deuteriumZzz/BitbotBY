@@ -2,7 +2,7 @@
 
 import { memo, useEffect, useRef, useState, type FormEvent } from "react";
 
-import { arrow, base, fmtN, pct, plural, price, priceDecimals, tone, usd } from "../../lib/format";
+import { arrow, base, fmtN, pct, plainReason, plural, price, priceDecimals, tone, usd } from "../../lib/format";
 
 import { reducedMotion } from "../../lib/platform";
 import type { OpsStatus, Position } from "../../lib/types";
@@ -12,7 +12,7 @@ import { stratName } from "../bots";
 
 import { TraceSteps } from "../trace";
 import { useArm } from "../../components/controls";
-import { Flash, Gauge } from "../../components/motion";
+import { Flash } from "../../components/motion";
 
 // ── Живые позиции ─────────────────────────────────────────────────────────────
 
@@ -311,9 +311,6 @@ const PositionCard = memo(function PositionCard({ p, enter }: { p: Position; ent
               : `сделка #${p.trade_id ?? "—"}`}
           </small>
         </div>
-        {p.confidence ? (
-          <Gauge value={p.confidence} label="Уверенность сигнала" />
-        ) : null}
         <div className="pos-pnl">
           <b className={`num ${tone(pnl)}`}>{`${arrow(pnl)} ${usd(pnl)}`}</b>
           <small>{pct(move)}</small>
@@ -331,10 +328,10 @@ const PositionCard = memo(function PositionCard({ p, enter }: { p: Position; ent
       {(p.reasoning || p.trace?.length) && (
         <p
           className={`pos-why ${whyOpen ? "open" : ""}`}
-          title={p.reasoning}
+          title={p.reasoning && plainReason(p.reasoning)}
           onClick={() => setWhyOpen(!whyOpen)}
         >
-          <em>Почему открыта:</em> {p.reasoning || "по шагам решения"}
+          <em>Почему открыта:</em> {(p.reasoning && plainReason(p.reasoning)) || "по шагам решения"}
           {p.trace?.length && !whyOpen ? <span className="pos-why-more"> · шаги ▸</span> : null}
         </p>
       )}

@@ -3,10 +3,10 @@
 import { Suspense, lazy, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 
 import { isMock } from "./lib/api";
-import { base, fmtN, plural, price, usd } from "./lib/format";
+import { base, fmtN, plainReason, plural, price, usd } from "./lib/format";
 import * as platform from "./lib/platform";
 import type { Tab } from "./lib/types";
-import { profileName, stratName } from "./features/bots";
+import { stratName } from "./features/bots";
 import { UiSwitch } from "./features/uimode";
 import { HelpButton, HelpSheet } from "./features/help";
 import { NotifButton, NotifSheet } from "./features/notifications";
@@ -14,7 +14,6 @@ import { Palette } from "./features/palette";
 import { Settings } from "./features/settings";
 import { Setup } from "./features/setup";
 import { Terminal } from "./features/terminal";
-import { cycleKind } from "./features/terminal/radar";
 import { GUARD_TEXT, useStore, type Ui } from "./store";
 import { actions } from "./store/actions";
 import { Toggle } from "./components/controls";
@@ -182,30 +181,14 @@ export function App() {
 
 // ── Верхняя панель ────────────────────────────────────────────────────────────
 
-const CYCLE: Record<string, [string, string, string]> = {
-  scan: ["Сканирую", "brand live", ""],
-  monitor: ["Слежу", "ok live", ""],
-  paused: ["Пауза", "warn", "· новые сделки не открываются"],
-  guard: ["Защита", "warn", "· входы остановлены"],
-  off: ["Нет связи", "bad", "· показаны последние данные"],
-};
-
+// Шапка — только управление: переключатель, счёт, «Стоп». Состояние цикла — в карточке статуса на «Обзоре»,
+// пауза видна на переключателе, защиты и потеря связи — в баннерах под шапкой.
 function TopBar({ onPanic }: { onPanic: () => void }) {
   const bot = useStore((s) => s.bot);
-  const kind = useStore(cycleKind);
-  const wsUp = useStore((s) => s.wsUp);
   const alive = useStore((s) => s.alive);
-  const used = useStore((s) => s.slots.used);
   const [busy, setBusy] = useState(false);
   const paper = bot?.paper ?? true;
   const paused = bot?.paused ?? false;
-  const [txt, dot, more] = CYCLE[kind];
-  const detail =
-    kind === "scan"
-      ? `· ${bot?.profile ? profileName(bot.profile) : "профиль по умолчанию"}`
-      : kind === "monitor"
-        ? `за ${used} ${plural(used, ["позицией", "позициями", "позициями"])}`
-        : more;
 
   const toggle = async (on: boolean) => {
     setBusy(true);
@@ -226,10 +209,6 @@ function TopBar({ onPanic }: { onPanic: () => void }) {
         {paper ? "PAPER" : "LIVE"}
       </span>
       {isMock && <span className="demo">демо</span>}
-      <span className="lat" title={wsUp ? "Поток событий подключён" : "Переподключаюсь к серверу"}>
-        <span className={`dot ${wsUp && alive ? "ok live" : wsUp ? "warn" : "bad"}`} />
-        <span className="lat-t">{wsUp ? (alive ? "онлайн" : "бот молчит") : "нет связи"}</span>
-      </span>
       <UiSwitch />
       <NotifButton />
       <HelpButton />
@@ -237,11 +216,6 @@ function TopBar({ onPanic }: { onPanic: () => void }) {
       <Toggle className="master" on={!paused} onChange={(on) => void toggle(on)} label="Бот" disabled={busy || !alive}>
         <span>{paused ? "На паузе" : "Работает"}</span>
       </Toggle>
-      <span className="cycle">
-        <span className={`dot ${dot}`} />
-        <span>{txt}</span>
-        <span className="more">{detail}</span>
-      </span>
       <PanicButton onFire={onPanic} disabled={!alive} />
     </header>
   );
@@ -502,7 +476,7 @@ function SignalSheet() {
         {sig.reasoning && (
           <>
             <dt>Почему</dt>
-            <dd>{sig.reasoning}</dd>
+            <dd>{plainReason(sig.reasoning)}</dd>
           </>
         )}
         <dt>В live</dt>

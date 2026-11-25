@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { fmtN, plural, tone } from "../../lib/format";
+import { fmtN, plural, tone, usd } from "../../lib/format";
 
 import { useStore } from "../../store";
 
@@ -71,11 +71,11 @@ export function MetricsCard() {
         </div>
         <div className="v small">
           <span className="up">
-            {m.avg_win === null ? "—" : `+$${fmtN(aw, 1)}`}
+            {m.avg_win === null ? "—" : usd(aw)}
           </span>{" "}
           /{" "}
           <span className="down">
-            {m.avg_loss === null ? "—" : `−$${fmtN(al, 1)}`}
+            {m.avg_loss === null ? "—" : usd(-al)}
           </span>
         </div>
         <div className="bar">

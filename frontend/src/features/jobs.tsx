@@ -544,7 +544,6 @@ export function PathBar() {
 
 function LearnPath() {
   const { steps, done } = usePath();
-  const note = { ok: "готово", run: "идёт…", bad: "ошибка", "": "не запускалось" } as const;
   return (
     <article className="card learn-hero">
       <div className="learn-hero-t">
@@ -559,19 +558,6 @@ function LearnPath() {
         </b>
         <span>выполнено</span>
       </div>
-      <ol className="learn-path">
-        {steps.map((s, i) => (
-          <li key={s.id} className={s.st}>
-            <span className="lp-dot" aria-hidden="true">
-              {s.st === "ok" ? "✓" : s.st === "bad" ? "✕" : i + 1}
-            </span>
-            <span className="lp-t">
-              {s.label}
-              <small>{note[s.st]}</small>
-            </span>
-          </li>
-        ))}
-      </ol>
     </article>
   );
 }

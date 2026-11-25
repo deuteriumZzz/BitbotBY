@@ -31,7 +31,6 @@ select.sel{background:var(--bg);color:var(--ink);border:1px solid var(--line-ui)
 .brand{display:flex;align-items:center;gap:8px;font:600 15px/1 var(--f-brand)}
 .brand svg{flex:none}
 .paper{font:600 11px/1 var(--f-label);padding:4px 6px;border-radius:var(--r-s);color:var(--cyan);border:1px solid color-mix(in oklab,var(--cyan) 40%,transparent)}
-.lat{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font:500 12px var(--f-num);color:var(--ink-2);white-space:nowrap}
 .dot{width:8px;height:8px;border-radius:50%;background:color-mix(in oklab,var(--ink-3) 60%,var(--bg));flex:none;box-shadow:inset 0 1px 1px rgba(0,0,0,.6)}
 .dot.ok{background:var(--up);color:var(--up)} .dot.warn{background:var(--warn);color:var(--warn)} .dot.bad{background:var(--down);color:var(--down)} .dot.brand{background:var(--brand);color:var(--brand)}
 .dot.ok,.dot.warn,.dot.bad,.dot.brand{box-shadow:0 0 6px currentColor,inset 0 0 1px rgba(255,255,255,.6)}
@@ -41,8 +40,6 @@ select.sel{background:var(--bg);color:var(--ink);border:1px solid var(--line-ui)
 .break{flex-basis:100%;height:0}
 
 
-.cycle{display:inline-flex;align-items:center;gap:7px;padding:5px 10px;border-radius:var(--r-s);background:var(--bg);border:1px solid var(--line);font:500 12px/1.2 var(--f-ui);white-space:nowrap;box-shadow:inset 0 1px 2px rgba(0,0,0,.5)}
-.cycle .more{color:var(--ink-3);display:none}
 
 .panic{all:unset;box-sizing:border-box;cursor:pointer;position:relative;overflow:hidden;display:inline-flex;align-items:center;gap:6px;padding:0 14px;height:36px;border-radius:var(--r-s);font:600 13px/1 var(--f-label);color:#fff;background:color-mix(in oklab,var(--down) 22%,var(--panel));border:1px solid color-mix(in oklab,var(--down) 70%,transparent);margin-left:auto;user-select:none;-webkit-user-select:none;touch-action:none}
 .panic::before{content:"";position:absolute;inset:0;background:var(--down);transform:scaleX(0);transform-origin:left;transition:transform .2s}
@@ -410,8 +407,7 @@ summary .chgb{font:600 10px/1 var(--f-num);padding:3px 6px;border-radius:var(--r
   .views{padding:16px 20px 28px}
   .topbar{flex-wrap:nowrap;padding:10px 20px;gap:14px}
   .break{display:none}
-  .brand{order:0} .master{order:1} .cycle{order:2} .lat{order:3} .paper{order:4} .panic{order:5;margin-left:0}
-  .cycle .more{display:inline}
+  .brand{order:0} .master{order:1} .paper{order:4} .panic{order:5;margin-left:0}
   .panic .long{display:inline}
   .term{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:12px;grid-auto-flow:row dense}
   .term>.hero{grid-column:span 5} .term>.metrics{grid-column:span 7}
@@ -420,7 +416,7 @@ summary .chgb{font:600 10px/1 var(--f-num);padding:3px 6px;border-radius:var(--r
   .term>.positions{grid-column:8/13} .term>.chart{grid-column:1/8;display:flex;flex-direction:column}
   .term>.chart .chart-wrap{flex:1;height:auto;min-height:360px}
   .term>.positions .pos-list{max-height:560px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
-  .term>.feed,.term>.cal,.term>.exec{grid-column:span 4}
+  .term>.cal,.term>.exec{grid-column:span 4}
   .lane-body{min-height:168px}
   .chip{height:28px;font-size:12px}
   .slot{height:28px}
@@ -1124,7 +1120,6 @@ select.sel{border-radius:var(--r-ctl);background:var(--c-inset);box-shadow:none}
 .topbar{background:var(--c-bg);border-bottom-color:var(--c-line);gap:8px 12px}
 .brand{font:700 16px/1 var(--font-text);letter-spacing:var(--track-display)}
 .paper{border-radius:var(--r-pill);font:600 11px/1 var(--font-text);padding:5px 10px}
-.cycle{border-radius:var(--r-pill);background:var(--c-s1);border-color:var(--c-line);box-shadow:none;padding:6px 12px}
 .panic{border-radius:var(--r-pill);font:600 13px/1 var(--font-text);color:var(--c-down);background:transparent;border-color:color-mix(in oklab,var(--c-down) 60%,transparent)}
 .panic.holding{color:var(--c-bg)}
 .top-find{all:unset;box-sizing:border-box;cursor:pointer;display:inline-grid;place-items:center;width:36px;height:36px;border-radius:var(--r-pill);background:var(--c-s1);border:1px solid var(--c-line);color:var(--c-ink2)}
@@ -1177,7 +1172,6 @@ select.sel{border-radius:var(--r-ctl);background:var(--c-inset);box-shadow:none}
   .term>.chart{grid-column:1/9;order:2}
   .term>.radar{grid-column:9/13;order:2}
   .term>.positions{grid-column:1/9;order:3}
-  .term>.feed{grid-column:9/13;order:3}
   .term>.cal,.term>.exec{grid-column:span 4;order:4}
   /* Одна строка на всю ширину: страх/жадность и сезон рядом, без пустых 8 колонок справа. */
   .term>.pulse{grid-column:1/-1;order:4}
@@ -1188,7 +1182,6 @@ select.sel{border-radius:var(--r-ctl);background:var(--c-inset);box-shadow:none}
   .term>.radar .lane-body{flex-direction:row;flex-wrap:wrap;min-height:28px;gap:6px;padding-top:0}
   .term>.radar .slot{flex:1 1 64px}
   .term>.positions .pos-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px;max-height:none;overflow:visible}
-  .term>.feed ul{max-height:420px}
 }
 .odo,.hero .bal,.tile .v,.pos-pnl b,.hero-stats b{font-variant-numeric:tabular-nums}
 .btn{white-space:nowrap}
@@ -1438,21 +1431,7 @@ button.cm-node:focus-visible{outline:2px solid var(--c-ink);outline-offset:2px}
 .learn-meter b{font:600 30px/1 var(--font-text);letter-spacing:var(--track-display);color:var(--c-ink)}
 .learn-meter b small{font-size:15px;color:var(--c-ink3)}
 .learn-meter span{font:12px var(--font-text);color:var(--c-ink3);margin-top:2px}
-.learn-path{grid-column:1/-1;list-style:none;margin:8px 0 0;padding:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr))}
-.learn-path li{position:relative;display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;padding:0 6px;animation:cardin .5s var(--ease-mech) backwards}
-.learn-path li:nth-child(2){animation-delay:.06s} .learn-path li:nth-child(3){animation-delay:.12s} .learn-path li:nth-child(4){animation-delay:.18s} .learn-path li:nth-child(5){animation-delay:.24s}
-.learn-path li::before{content:"";position:absolute;top:18px;left:-50%;right:50%;height:2px;background:var(--c-line2);transition:background var(--dur-slow) var(--ease-out)}
-.learn-path li:first-child::before{display:none}
-.learn-path li.ok::before{background:linear-gradient(90deg,var(--c-accent),color-mix(in oklab,var(--c-accent) 60%,transparent))}
-.lp-dot{position:relative;z-index:1;display:grid;place-items:center;width:38px;height:38px;border-radius:50%;background:var(--c-s3);border:1px solid var(--c-line2);font:600 13px var(--font-mono);color:var(--c-ink2);transition:background var(--dur-norm),border-color var(--dur-norm),color var(--dur-norm)}
-.learn-path li.ok .lp-dot{background:var(--g-accent);border-color:transparent;color:var(--c-bg);box-shadow:0 0 18px -4px color-mix(in oklab,var(--c-accent) 75%,transparent)}
-.learn-path li.run .lp-dot{border-color:var(--c-run);color:var(--c-run);animation:lp-pulse 1.6s var(--ease-out) infinite}
-.learn-path li.bad .lp-dot{border-color:var(--c-down);color:var(--c-down)}
 @keyframes lp-pulse{0%{box-shadow:0 0 0 0 color-mix(in oklab,var(--c-run) 55%,transparent)}100%{box-shadow:0 0 0 14px transparent}}
-.lp-t{display:flex;flex-direction:column;font:500 13px/1.3 var(--font-text);color:var(--c-ink)}
-.lp-t small{font-size:11.5px;color:var(--c-ink3);margin-top:3px}
-.learn-path li.ok .lp-t small{color:var(--c-accent)}
-.learn-path li.run .lp-t small{color:var(--c-run)}
 /* Проверки — пронумерованный таймлайн; идущая задача пульсирует, готовая — с галочкой. */
 .learn-alpha .jobs{counter-reset:step}
 .learn-alpha .job{position:relative;padding-left:52px;counter-increment:step}
@@ -1469,11 +1448,8 @@ button.cm-node:focus-visible{outline:2px solid var(--c-ink);outline-offset:2px}
   .learn-hero{grid-template-columns:minmax(0,1fr) auto;padding:18px}
   .learn-hero h2{font-size:21px}
   .learn-meter{width:84px;height:84px} .learn-meter b{font-size:22px}
-  .learn-path{grid-template-columns:minmax(0,1fr);gap:12px}
-  .learn-path li{flex-direction:row;text-align:left;align-items:center;gap:12px;padding:0}
-  .learn-path li::before{left:18px;right:auto;top:-12px;width:2px;height:12px}
 }
-@media (prefers-reduced-motion:reduce){ .learn-path li,.learn-path li.run .lp-dot,.learn-alpha .job.run::before{animation:none} }
+@media (prefers-reduced-motion:reduce){ .learn-alpha .job.run::before{animation:none} }
 @container dev (max-width:699px){ .learn-meter span{font-size:9.5px} }
 
 /* ---------- «Настройки» как «Обучение»: шапка-статус, нумерованные разделы, ключи-связки ---------- */
@@ -1688,3 +1664,12 @@ small.hr-act,.hr-act small{font-size:12px;color:var(--c-ink3);line-height:1.45}
 .status-why{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin:8px 0 0;padding-top:8px;border-top:1px solid var(--line-soft);font-size:12px;color:var(--ink-2)}
 .status-why b{font-weight:600;color:var(--ink)}
 .status-why .link{margin-left:auto}
+
+/* «онлайн» раньше толкал правую группу шапки вправо — теперь это делает колокольчик */
+.topbar .bell{margin-left:auto}
+/* Выпадающие списки: своя стрелка с отступом вместо системной, прилипшей к краю */
+select.sel{appearance:none;-webkit-appearance:none;padding-right:34px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%238b919c' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;background-size:12px;text-overflow:ellipsis}
+/* Модели AI — одной ширины, а не по длине названия */
+.ai-list .ai-model .sel{width:100%}
+/* Ленты на «Обзоре» больше нет — позиции занимают всю ширину */
+@container dev (min-width:900px){ .term>.positions{grid-column:1/-1} }
