@@ -505,7 +505,8 @@ const PATH: { id: JobId | "model"; label: string }[] = [
   { id: "ai_isolation", label: "Вклад AI" },
 ];
 
-function LearnPath() {
+/** Шаги пути к реальным деньгам и их состояние: «Обучение» и полоса на «Главной». */
+function usePath() {
   const jobs = useStore((s) => s.jobs);
   const active = useStore((s) => s.profiles.find((p) => p.active));
   const state = (id: JobId | "model"): "ok" | "run" | "bad" | "" => {
@@ -514,7 +515,41 @@ function LearnPath() {
     return j?.running ? "run" : j?.done ? (j.done.ok ? "ok" : "bad") : "";
   };
   const steps = PATH.map((p) => ({ ...p, st: state(p.id) }));
-  const done = steps.filter((s) => s.st === "ok").length;
+  return { steps, done: steps.filter((s) => s.st === "ok").length };
+}
+
+/** «Главная» в режиме «Простой»: путь к реальным деньгам одной полосой, подробности — в «Профи». */
+export function PathBar() {
+  const { steps, done } = usePath();
+  const next = steps.find((s) => s.st !== "ok");
+  const open = () => {
+    useStore.getState().setUi("pro");
+    useStore.getState().setTab("learn");
+  };
+  return (
+    <article className="card path-bar">
+      <div className="card-h">
+        <h2>Путь к реальным деньгам</h2>
+        <span className="pill sp">
+          {done} из {steps.length}
+        </span>
+      </div>
+      <div className="prog" role="progressbar" aria-valuenow={done} aria-valuemin={0} aria-valuemax={steps.length} aria-label="Путь к реальным деньгам">
+        <i style={{ width: `${(done / steps.length) * 100}%` }} />
+      </div>
+      <p className="note-soon">
+        {next ? `Следующий шаг — «${next.label}». ` : "Все проверки пройдены. "}
+        Пройдите его, прежде чем включать реальные деньги.{" "}
+        <button className="btn" type="button" onClick={open}>
+          Подробно
+        </button>
+      </p>
+    </article>
+  );
+}
+
+function LearnPath() {
+  const { steps, done } = usePath();
   const note = { ok: "готово", run: "идёт…", bad: "ошибка", "": "не запускалось" } as const;
   return (
     <article className="card learn-hero">

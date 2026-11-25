@@ -74,7 +74,7 @@ export function Settings() {
     ["map", "Карта"],
     ["main", "Уведомления и аккаунт"],
     ["conn", "Ключи и доступ"],
-    ...(simple ? [] : ([["all", "Все параметры"]] as [Pane, string][])),
+    ["all", simple ? "Основные параметры" : "Все параметры"],
   ];
   return (
     <section className="view enter" aria-label="Настройки">
@@ -94,12 +94,14 @@ export function Settings() {
         <SecHead n="02" title="Ключи и доступ" sub="Ключи хранятся на сервере бота зашифрованными — приложение видит только последние 4 символа" />
         <Keys open={key} setOpen={setKey} />
       </div>
-      {!simple && (
-        <div id="set-all" className="set-sec">
+      <div id="set-all" className="set-sec">
+        {simple ? (
+          <SecHead n="03" title="Основные параметры" sub="То, что чаще всего меняют. Остальное — в режиме «Профи»" />
+        ) : (
           <SecHead n="03" title="Все параметры" sub="Любой параметр бота: поиск, история изменений, копирование и сброс" />
-          <AllParams go={goTo} />
-        </div>
-      )}
+        )}
+        <AllParams go={goTo} basicOnly={simple} />
+      </div>
     </section>
   );
 }

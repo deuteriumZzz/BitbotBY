@@ -153,16 +153,18 @@ describe("ссылка лаунчера", () => {
 });
 
 describe("режим «Простой / Профи»", () => {
-  it("«Простой» оставляет цепочку и обучение в простом режиме, а «Все параметры» открывает в «Профи»", () => {
+  it("узел цепочки и поиск по всем параметрам открывают «Профи»; «Обучения» в «Простом» нет", () => {
     const st = useStore.getState();
-    st.setUi("simple");
-    st.setTab("journal");
-    expect(useStore.getState().ui).toBe("simple");
-    st.openNode("risk");
-    // Переход к узлу из другой вкладки сразу открывает его панель, обычная смена вкладки — закрывает.
-    expect(useStore.getState()).toMatchObject({ ui: "simple", tab: "bots", node: "risk", nodeOpen: true });
+    st.setUi("pro");
     st.setTab("learn");
-    expect(useStore.getState()).toMatchObject({ ui: "simple", tab: "learn", nodeOpen: false });
+    st.setUi("simple");
+    // в «Простом» нет вкладки «Обучение» — уходим на «Главную»
+    expect(useStore.getState()).toMatchObject({ ui: "simple", tab: "terminal" });
+    st.openNode("risk");
+    // Узел есть только в «Профи»: переход сразу открывает его панель там.
+    expect(useStore.getState()).toMatchObject({ ui: "pro", tab: "bots", node: "risk", nodeOpen: true });
+    st.setTab("journal");
+    expect(useStore.getState()).toMatchObject({ ui: "pro", tab: "journal", nodeOpen: false });
     st.setUi("simple");
     st.searchParams("риск");
     expect(useStore.getState()).toMatchObject({ ui: "pro", tab: "settings" });

@@ -523,7 +523,7 @@ li:last-child>.jr-strat{border-bottom:0}
 @container dev (min-width:900px){.jr.cols{grid-template-columns:minmax(0,2fr) minmax(0,3fr)}.jr .col:first-child{position:sticky;top:0}}
 
 /* ---------- first run ---------- */
-.term>.ready{grid-column:1/-1}
+.term>.ready,.term>.path-bar{grid-column:1/-1}
 .ready-list{list-style:none;margin:0 0 12px;padding:0;display:grid;gap:6px;grid-template-columns:minmax(0,1fr)}
 .ready-row{all:unset;box-sizing:border-box;cursor:pointer;width:100%;display:grid;grid-template-columns:22px minmax(0,1fr);gap:1px 10px;align-items:center;padding:8px 10px;border-radius:var(--r);background:var(--bg);border:1px solid var(--line-soft);transition:border-color .2s}
 .ready-row:hover{border-color:var(--ink-3)}
@@ -775,7 +775,7 @@ details.risk-box>:not(summary){margin-top:10px}
   .metrics:not(.open) .tile:nth-child(n+3){display:none}
   .metrics-more{display:inline-flex;grid-column:1/-1;justify-content:center}
   .term>*{order:3}
-  .term>.health,.term>.ready,.term>.hero{order:0}
+  .term>.health,.term>.ready,.term>.path-bar,.term>.hero{order:0}
   .term>.metrics{order:1}
   .term>.positions{order:2}
 }

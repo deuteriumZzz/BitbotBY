@@ -374,15 +374,19 @@ export const useStore = create<Store>((set, get) => {
       } catch {
         /* нет хранилища — режим живёт до перезагрузки */
       }
-      set({ ui });
+      // «Обучения» в «Простом» нет — с него уходим на «Главную».
+      set(ui === "simple" && get().tab === "learn" ? { ui, tab: "terminal" } : { ui });
     },
     needPro: () => {
       if (get().ui !== "simple") return;
       get().setUi("pro");
       get().say("Открыто в режиме «Профи» — здесь все настройки");
     },
-    // Цепочка и обучение одинаковы в обоих режимах: «Простой» только сворачивает тонкие настройки.
-    openNode: (node) => set({ tab: "bots", node, nodeOpen: true, setup: null }),
+    // Узел цепочки есть только в «Профи»: из «Простого» переход открывает «Профи».
+    openNode: (node) => {
+      get().needPro();
+      set({ tab: "bots", node, nodeOpen: true, setup: null });
+    },
     openKey: (keyJump) => set({ tab: "settings", keyJump, nodeOpen: false, setup: null }),
     closeNode: () => set({ nodeOpen: false }),
     openSetup: (setup) => set({ setup }),

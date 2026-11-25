@@ -34,7 +34,7 @@ const SOURCE: Record<string, string> = {
   default: "",
 };
 
-export function AllParams({ go }: { go: (pane: Pane) => void }) {
+export function AllParams({ go, basicOnly = false }: { go: (pane: Pane) => void; basicOnly?: boolean }) {
   const schema = useStore((s) => s.schema);
   const config = useStore((s) => s.config);
   const jump = useStore((s) => s.paramSearch);
@@ -64,7 +64,8 @@ export function AllParams({ go }: { go: (pane: Pane) => void }) {
   const needle = q.trim().toLowerCase();
   // Поиск ищет по всем параметрам; без поиска — основные или все.
   const hit = (d: SettingDef) =>
-    needle ? `${d.label} ${d.key} ${d.hint}`.toLowerCase().includes(needle) : !(d.key in OWN_HOME) && (advanced || d.basic || d.key in pending);
+    (!basicOnly || d.basic) &&
+    (needle ? `${d.label} ${d.key} ${d.hint}`.toLowerCase().includes(needle) : !(d.key in OWN_HOME) && (advanced || d.basic || d.key in pending));
   const found = schema.filter(hit).length;
   const elsewhere = schema.filter((d) => d.key in OWN_HOME).length;
 
@@ -124,19 +125,21 @@ export function AllParams({ go }: { go: (pane: Pane) => void }) {
     <div className="set-pane view enter">
       <div className="cfg-top">
         <input id="param-search" className="inp" type="search" placeholder="Поиск: плечо, стоп, RISK_PER_TRADE…  (Ctrl/⌘ K)" aria-label="Поиск параметра" autoComplete="off" value={q} onChange={(e) => setQ(e.target.value)} />
-        <span className="label">{needle ? `найдено ${found}` : `${found} из ${schema.length}`}</span>
+        <span className="label">{needle ? `найдено ${found}` : `${found} из ${basicOnly ? schema.filter((d) => d.basic).length : schema.length}`}</span>
       </div>
-      <div className="row-tgl">
-        <span>
-          Показать расширенные <Q tip="По умолчанию видны основные параметры. Расширенные — тонкая настройка фильтров, выхода, обучения и сервера." />
-        </span>
-        <Toggle on={advanced} label="Показать расширенные параметры" onChange={setAdvanced} />
-      </div>
+      {!basicOnly && (
+        <div className="row-tgl">
+          <span>
+            Показать расширенные <Q tip="По умолчанию видны основные параметры. Расширенные — тонкая настройка фильтров, выхода, обучения и сервера." />
+          </span>
+          <Toggle on={advanced} label="Показать расширенные параметры" onChange={setAdvanced} />
+        </div>
+      )}
       <p className="cfg-legend">
         <span className="tag hot">сразу</span> применяется без перезапуска · <span className="tag rst">перезапуск</span> вступит в силу после
         перезапуска бота. Ключи — в «Подключения», ключи AI — в Бот → AI-цепочка, Paper/Live — в «Основное».
       </p>
-      {!needle && elsewhere > 0 && (
+      {!needle && !basicOnly && elsewhere > 0 && (
         <p className="cfg-legend">
           {elsewhere} {plural(elsewhere, ["настройка", "настройки", "настроек"])} здесь не показано: у них есть свои разделы (риск, открытие сделок, режим, часы, AI,
           обучение). Найти любую и перейти к ней можно поиском.

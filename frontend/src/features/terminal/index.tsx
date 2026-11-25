@@ -1,6 +1,6 @@
 // Вкладка «Терминал»: баланс, метрики, радар монет, живые позиции, график, лента, календарь.
 
-import { useEffect, useRef, useState } from "react";
+import { lazy, useEffect, useRef, useState } from "react";
 
 import { arrow, base, fmtN, plural, tone, usd } from "../../lib/format";
 import { idleReason } from "../../lib/idle";
@@ -217,13 +217,17 @@ function TrustedLast() {
   );
 }
 
+const PathBar = lazy(() => import("../jobs").then((m) => ({ default: m.PathBar })));
+
 export function Terminal() {
+  const simple = useStore((s) => s.ui === "simple");
   return (
     <section className="view term enter" aria-label="Терминал">
       <HealthStrip />
       <Idle />
       <TrustedLast />
       <ReadinessCard />
+      {simple && <PathBar />}
       <Hero />
       <MetricsCard />
       <MarketPulse />

@@ -25,12 +25,14 @@ import { TipLayer, hideTip } from "./components/tooltip";
 // «Цепочка», «Обучение» и «Журнал» грузятся при первом открытии — первый экран легче.
 const Pipeline = lazy(() => import("./features/pipeline").then((m) => ({ default: m.Pipeline })));
 const Learn = lazy(() => import("./features/jobs").then((m) => ({ default: m.Learn })));
+const BotSimple = lazy(() => import("./features/simple").then((m) => ({ default: m.BotSimple })));
 const Journal = lazy(() => import("./features/journal").then((m) => ({ default: m.Journal })));
 
 export function App() {
   const ready = useStore((s) => s.ready);
   const needLogin = useStore((s) => s.needLogin);
   const tab = useStore((s) => s.tab);
+  const ui = useStore((s) => s.ui);
   const setup = useStore((s) => s.setup);
   const views = useRef<HTMLElement>(null);
   // Новая вкладка въезжает с той стороны, где стоит в меню.
@@ -152,7 +154,7 @@ export function App() {
         ) : (
           <Suspense fallback={<Skel rows={6} label="Загружаю раздел" />}>
             {tab === "terminal" && <Terminal />}
-            {tab === "bots" && <Pipeline />}
+            {tab === "bots" && (ui === "simple" ? <BotSimple /> : <Pipeline />)}
             {tab === "learn" && <Learn />}
             {tab === "journal" && <Journal />}
             {tab === "settings" && <Settings />}
@@ -369,7 +371,14 @@ const TABS: [Tab, string, JSX.Element][] = [
   ["journal", "Журнал", Icon.journal],
   ["settings", "Настройки", Icon.settings],
 ];
-const tabsFor = (_ui: Ui) => TABS;
+// «Простой»: четыре вкладки простыми словами; «Цепочка» и «Обучение» — в «Профи».
+const SIMPLE_TABS: [Tab, string, JSX.Element][] = [
+  ["terminal", "Главная", Icon.terminal],
+  ["bots", "Бот", Icon.bots],
+  ["journal", "История", Icon.journal],
+  ["settings", "Настройки", Icon.settings],
+];
+const tabsFor = (ui: Ui) => (ui === "simple" ? SIMPLE_TABS : TABS);
 const navTab = (tab: Tab): Tab => tab;
 
 function Nav() {
