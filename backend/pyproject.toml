@@ -36,7 +36,9 @@ dependencies = [
     "gymnasium>=0.29.1",
     "optuna>=3.6.0",
     "chronos-forecasting>=1.4.0",
-    "transformers>=4.41.0",
+    # <5: transformers 5 не признаёт torch 2.2.2 (последний для Intel-Mac) — Chronos и
+    # CryptoBERT тогда молча не загружаются.
+    "transformers>=4.41.0,<5",
     # настроение и новости
     "vaderSentiment==3.3.2",
     "twscrape>=0.16.0",
