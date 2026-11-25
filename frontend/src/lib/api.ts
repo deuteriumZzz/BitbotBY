@@ -1,5 +1,7 @@
 import * as platform from "./platform";
 import type { BotEvent, CommandResult } from "./types";
+import { EP } from "../api/endpoints";
+import { WS_RECONNECT_MAX_MS } from "../constants";
 
 export const isMock =
   new URLSearchParams(location.search).has("mock") || import.meta.env.VITE_MOCK === "1";
@@ -82,7 +84,7 @@ export async function command(
   let resp = await api<CommandResponse>(method, path, { ...body, request_id: requestId });
   for (let i = 0; resp.status !== "done" && i < 24; i++) {
     await new Promise((r) => setTimeout(r, 500));
-    resp = await api<CommandResponse>("GET", `/api/commands/${requestId}`);
+    resp = await api<CommandResponse>("GET", EP.command(requestId));
   }
   if (resp.status !== "done" || !resp.result) {
     throw new ApiError(504, "timeout", "Бот не ответил вовремя. Проверьте, что он запущен.");
@@ -146,7 +148,7 @@ export function subscribe(
         onDenied();
         return;
       }
-      if (!closed) timer = setTimeout(open, Math.min(30_000, 1000 * 2 ** retry++));
+      if (!closed) timer = setTimeout(open, Math.min(WS_RECONNECT_MAX_MS, 1000 * 2 ** retry++));
     };
   };
   open();

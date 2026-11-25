@@ -18,6 +18,7 @@ import type { Candle, Journal, JournalTrade } from "../../lib/types";
 import { useStore } from "../../store";
 
 import { Seg } from "../../components/controls";
+import { EP } from "../../api/endpoints";
 
 // ── График ────────────────────────────────────────────────────────────────────
 
@@ -194,7 +195,7 @@ export function Chart() {
     bars.current = [];
     void api<Candle[]>(
       "GET",
-      `/api/candles?symbol=${encodeURIComponent(sym)}&tf=15m&limit=200`,
+      EP.candles(sym),
     )
       .then((data) => {
         if (stale || !chart.current) return;
@@ -205,7 +206,7 @@ export function Chart() {
         paintFill();
         chart.current.c.timeScale().fitContent();
         setEmpty(!data.length);
-        void api<Journal>("GET", "/api/journal?period=7d")
+        void api<Journal>("GET", EP.journal("7d"))
           .then((j) => !stale && markTrades(j.trades.filter((t) => t.symbol === sym)))
           .catch(() => undefined);
       })

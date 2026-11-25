@@ -7,6 +7,7 @@ import { api } from "../../lib/api";
 import { useStore } from "../../store";
 import { Toggle } from "../../components/controls";
 import { Q } from "../../components/tooltip";
+import { EP } from "../../api/endpoints";
 
 interface Launcher {
   local: boolean;
@@ -36,7 +37,7 @@ export function ComputerCard() {
   const [busy, setBusy] = useState("");
   const [copied, setCopied] = useState("");
   const load = () =>
-    api<Launcher>("GET", "/api/launcher")
+    api<Launcher>("GET", EP.launcher)
       .then((v) => (setSt(v), v))
       .catch(() => null);
   useEffect(() => {
@@ -55,7 +56,7 @@ export function ComputerCard() {
   const toggle = async (setting: string, on: boolean) => {
     setBusy(setting);
     try {
-      const { id } = await api<{ id: string }>("POST", "/api/launcher", { setting, on });
+      const { id } = await api<{ id: string }>("POST", EP.launcher, { setting, on });
       // Помощник смотрит папку раз в 2 с; выключение телефона ещё и перезапускает приложение.
       for (let i = 0; i < 40; i++) {
         await sleep(1500);

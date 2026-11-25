@@ -8,6 +8,7 @@ import { api, command } from "../lib/api";
 import { useStore } from "../store";
 import { useArm } from "../components/controls";
 import { Icon } from "../components/icon";
+import { EP } from "../api/endpoints";
 
 interface EmergencyState {
   level: number;
@@ -31,7 +32,7 @@ export function EmergencyCard() {
   const [armed, arm] = useArm();
 
   const load = () =>
-    api<EmergencyState>("GET", "/api/emergency")
+    api<EmergencyState>("GET", EP.emergency)
       .then(setState)
       .catch(() => setErr("Не удалось получить аварийный уровень."));
   useEffect(() => {
@@ -41,7 +42,7 @@ export function EmergencyCard() {
   const ask = async (action: string) => {
     setErr("");
     try {
-      const p = await api<Preview>("POST", "/api/emergency", { action });
+      const p = await api<Preview>("POST", EP.emergency, { action });
       setPreview({ ...p, action });
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Не получилось.");
@@ -52,7 +53,7 @@ export function EmergencyCard() {
     if (!preview || !arm()) return; // первое нажатие только взводит кнопку
     setBusy(true);
     try {
-      await command("POST", "/api/emergency", { action: preview.action, confirm: true });
+      await command("POST", EP.emergency, { action: preview.action, confirm: true });
       useStore.getState().say(preview.reset ? "Авария снята. Бот на паузе — продолжите вручную." : "Аварийный уровень включён.");
       setPreview(null);
       await load();

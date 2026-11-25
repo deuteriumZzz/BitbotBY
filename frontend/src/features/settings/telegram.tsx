@@ -11,6 +11,7 @@ import { Toggle } from "../../components/controls";
 import { Q } from "../../components/tooltip";
 import { cfg } from "../bots";
 import { ParamList } from "../params";
+import { TG_STATUS_POLL_MS } from "../../constants";
 
 // ── Каналы Telegram: какие читать и каким доверять ────────────────────────────
 
@@ -72,7 +73,7 @@ export function TgChannelsCard({ openKey }: { openKey: (service: string) => void
   useEffect(() => {
     const load = () => void actions.tgStatus().then(setRt);
     load();
-    const t = setInterval(load, 30_000);
+    const t = setInterval(load, TG_STATUS_POLL_MS);
     return () => clearInterval(t);
   }, [listKey]);
   const reading = all.filter((ch) => rt?.per_channel?.[ch]?.state === "reading").length;

@@ -9,6 +9,7 @@ import { actions } from "../../store/actions";
 import { useStore } from "../../store";
 
 import { fmtVal, sameVal } from "./params";
+import { EP } from "../../api/endpoints";
 
 // ── Журнал изменений, копирование и вставка набора настроек ─────────────────────
 
@@ -23,7 +24,7 @@ export function SettingsTools({ schema, config, onImport }: { schema: SettingDef
   const [resetAsk, setResetAsk] = useState(false);
   const val = (d: SettingDef, v: unknown): string => (v === null || v === undefined ? "—" : fmtVal(d, v));
 
-  const loadHistory = () => void api<ConfigHistoryItem[]>("GET", "/api/config/history").then(setHist).catch(() => setHist([]));
+  const loadHistory = () => void api<ConfigHistoryItem[]>("GET", EP.configHistory).then(setHist).catch(() => setHist([]));
   // Набор — только то, что вы поменяли: значения по умолчанию и «только .env» не копируются.
   const mine = () =>
     Object.fromEntries(schema.filter((d) => !d.readonly && config[d.key] && !sameVal(config[d.key].value, d.default)).map((d) => [d.key, config[d.key].value]));

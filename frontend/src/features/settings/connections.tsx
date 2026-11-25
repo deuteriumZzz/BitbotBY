@@ -15,6 +15,7 @@ import { cfg } from "../bots";
 
 import { Pane } from "./index";
 import { STATUS } from "./trading";
+import { EP } from "../../api/endpoints";
 
 type Link = "ok" | "warn" | "bad" | "off";
 
@@ -37,7 +38,7 @@ export function ConnMap({ go, openKey }: { go: (pane: Pane | "map") => void; ope
   // Где работает бот: лаунчер на компьютере отвечает local=true, на сервере его нет.
   const [local, setLocal] = useState<boolean | null>(null);
   useEffect(() => {
-    api<{ local: boolean }>("GET", "/api/launcher")
+    api<{ local: boolean }>("GET", EP.launcher)
       .then((v) => setLocal(v.local))
       .catch(() => setLocal(false));
   }, []);

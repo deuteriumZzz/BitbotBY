@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { api } from "../lib/api";
 import { Seg } from "../components/controls";
+import { EP } from "../api/endpoints";
 
 type Hours = 6 | 24 | 168;
 const HOURS: readonly (readonly [Hours, string])[] = [
@@ -41,10 +42,10 @@ export function ReportsCard() {
       </div>
       <div className="btn-row">
         <Seg value={hours} options={HOURS} onChange={setHours} label="Период сводки" />
-        <button type="button" className="btn" disabled={busy} onClick={() => void run(`/api/reports/digest?hours=${hours}`)}>
+        <button type="button" className="btn" disabled={busy} onClick={() => void run(EP.reportsDigest(hours))}>
           Сводка
         </button>
-        <button type="button" className="btn" disabled={busy} onClick={() => void run("/api/reports/dbcheck")}>
+        <button type="button" className="btn" disabled={busy} onClick={() => void run(EP.reportsDbcheck)}>
           Проверить базу
         </button>
       </div>
@@ -52,7 +53,7 @@ export function ReportsCard() {
         className="btn-row"
         onSubmit={(e) => {
           e.preventDefault();
-          if (id) void run(`/api/reports/audit/${encodeURIComponent(id)}`);
+          if (id) void run(EP.reportsAudit(id));
         }}
       >
         <input className="inp" value={decision} onChange={(e) => setDecision(e.target.value)} placeholder="ID решения из журнала" aria-label="ID решения" />

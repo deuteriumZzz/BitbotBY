@@ -39,6 +39,8 @@ import type {
 } from "../lib/types";
 
 import { Data, Radar, emptyRadar, reduceRadar } from "./radar";
+import { EP } from "../api/endpoints";
+import { REFRESH_DEBOUNCE_MS } from "../constants";
 
 export type FeedKind = "open" | "win" | "loss" | "skip" | "guard" | "edit";
 
@@ -219,7 +221,7 @@ export const useStore = create<Store>((set, get) => {
       void get().loadDaily().catch(() => undefined);
       const j = get().journal;
       if (j) void get().loadJournal(j.period).catch(() => undefined);
-    }, 800);
+    }, REFRESH_DEBOUNCE_MS);
   };
 
   // Снимок /api/state не знает последней цены и флага трейлинга — берём из тиков.
@@ -310,7 +312,7 @@ export const useStore = create<Store>((set, get) => {
       }
       if (!isMock && platform.kind === "miniapp" && !platform.getToken()) {
         try {
-          const r = await api<{ token: string }>("POST", "/api/auth/telegram", {
+          const r = await api<{ token: string }>("POST", EP.authTelegram, {
             initData: platform.initData(),
           });
           platform.setToken(r.token);
@@ -322,7 +324,7 @@ export const useStore = create<Store>((set, get) => {
       const local = !isMock && platform.kind === "web" ? platform.takeLocalToken() : null;
       if (local) {
         try {
-          const r = await api<{ token: string }>("POST", "/api/auth/local", { token: local });
+          const r = await api<{ token: string }>("POST", EP.authLocal, { token: local });
           platform.setToken(r.token);
         } catch (e) {
           get().say(e instanceof ApiError ? e.message : "Не удалось войти по ссылке запуска.");
@@ -352,7 +354,7 @@ export const useStore = create<Store>((set, get) => {
         get().loadAi(),
         get().loadSetup(),
         get().loadJobs(),
-        api<PendingSignal[]>("GET", "/api/signals/pending").then((pending) => set({ pending })),
+        api<PendingSignal[]>("GET", EP.signalsPending).then((pending) => set({ pending })),
       ]);
       unsubscribe?.();
       unsubscribe = subscribe(
@@ -597,20 +599,20 @@ export const useStore = create<Store>((set, get) => {
     },
 
     async loadState() {
-      applyState(await api<BotState>("GET", "/api/state"));
+      applyState(await api<BotState>("GET", EP.state));
     },
     async loadMetrics(p) {
       const period = p ?? get().period;
-      const m = await api<Metrics>("GET", `/api/metrics?period=${period}`);
+      const m = await api<Metrics>("GET", EP.metrics(period));
       set((s) => ({ metrics: { ...s.metrics, [period]: m } }));
     },
     async loadExecution(p) {
       const period = p ?? get().period;
-      const m = await api<ExecutionMetrics>("GET", `/api/metrics/execution?period=${period}`);
+      const m = await api<ExecutionMetrics>("GET", EP.metricsExecution(period));
       set((s) => ({ execution: { ...s.execution, [period]: m } }));
     },
     async loadJobs() {
-      const st = await api<JobsStatus>("GET", "/api/jobs");
+      const st = await api<JobsStatus>("GET", EP.jobs);
       set((s) => {
         const jobs = { ...s.jobs };
         for (const id of ["backtest", "train", "tune"] as const) {
@@ -627,50 +629,50 @@ export const useStore = create<Store>((set, get) => {
       });
     },
     async loadSetup() {
-      set({ setupInfo: await api<SetupInfo>("GET", "/api/setup") });
+      set({ setupInfo: await api<SetupInfo>("GET", EP.setup) });
     },
     async loadJournal(period) {
-      set({ journal: await api<Journal>("GET", `/api/journal?period=${period}`) });
+      set({ journal: await api<Journal>("GET", EP.journal(period)) });
     },
     async loadDaily() {
-      set({ daily: await api<DailyRow[]>("GET", "/api/pnl/daily?days=35") });
+      set({ daily: await api<DailyRow[]>("GET", EP.pnlDaily(35)) });
     },
     async loadStrategies() {
-      set({ strategies: await api<Strategy[]>("GET", "/api/strategies") });
+      set({ strategies: await api<Strategy[]>("GET", EP.strategies) });
     },
     async loadConfig() {
       const have = get().riskPresets;
       const [schema, config, riskPresets] = await Promise.all([
-        get().schema.length ? get().schema : api<SettingDef[]>("GET", "/api/config/schema"),
-        api<ConfigValues>("GET", "/api/config"),
-        Object.keys(have).length ? have : api<Record<string, RiskPreset>>("GET", "/api/risk/presets").catch(() => have),
+        get().schema.length ? get().schema : api<SettingDef[]>("GET", EP.configSchema),
+        api<ConfigValues>("GET", EP.config),
+        Object.keys(have).length ? have : api<Record<string, RiskPreset>>("GET", EP.riskPresets).catch(() => have),
       ]);
       set({ schema, config, riskPresets });
     },
     async loadAlerts() {
-      set({ alerts: await api<Alert[]>("GET", "/api/alerts") });
+      set({ alerts: await api<Alert[]>("GET", EP.alerts) });
     },
     async loadSymbols() {
-      set({ symbols: await api<Symbols>("GET", "/api/symbols") });
+      set({ symbols: await api<Symbols>("GET", EP.symbols) });
     },
     async loadSecrets() {
       try {
-        set({ secrets: await api<SecretItem[]>("GET", "/api/secrets"), secretsNote: "" });
+        set({ secrets: await api<SecretItem[]>("GET", EP.secrets), secretsNote: "" });
       } catch (e) {
         set({ secrets: null, secretsNote: e instanceof ApiError ? e.message : "Ключи недоступны." });
       }
     },
 
     async loadAi() {
-      set({ ai: await api<AiState>("GET", "/api/ai") });
+      set({ ai: await api<AiState>("GET", EP.ai) });
     },
 
     requestCode() {
-      return get().act(() => api("POST", "/api/auth/desktop/request"), "Код отправлен вам в Telegram");
+      return get().act(() => api("POST", EP.authDesktopRequest), "Код отправлен вам в Telegram");
     },
     async verifyCode(code) {
       try {
-        const r = await api<{ token: string }>("POST", "/api/auth/desktop/verify", { code });
+        const r = await api<{ token: string }>("POST", EP.authDesktopVerify, { code });
         platform.setToken(r.token);
         set({ needLogin: false });
         await get().boot();
