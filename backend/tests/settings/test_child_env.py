@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from bitbot.config import runtime
+from bitbot.config.settings import Config
 
 
 @pytest.fixture(autouse=True)
@@ -30,7 +31,7 @@ def test_experiences_file_per_profile():
 def test_child_env_follows_what_the_bot_runs_now():
     runtime.set_active_profile("meme")
     runtime.set_active_market_type("spot")
-    with patch.object(runtime.Config, "PAPER_TRADING", True):
+    with patch.object(Config, "PAPER_TRADING", True):
         assert runtime.child_env() == {
             "PAPER_TRADING": "true",
             "MARKET_TYPE": "spot",

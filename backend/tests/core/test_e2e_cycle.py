@@ -12,6 +12,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pandas as pd
 import pytest
 
+from tests.conftest import runtime_config
+
 # ---------------------------------------------------------------------------
 # Вспомогательные функции
 # ---------------------------------------------------------------------------
@@ -122,7 +124,7 @@ def _patch_cfg(cfg):
     """Патчим Config в trading_bot, order_executor и runtime_config."""
     with patch("bitbot.workers.bot.Config", cfg):
         with patch("bitbot.execution.order_executor.Config", cfg):
-            with patch("bitbot.config.runtime.Config", cfg):
+            with runtime_config(cfg):
                 yield cfg
 
 

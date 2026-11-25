@@ -1,8 +1,10 @@
 """Tests for RuntimeConfig — basic get/set methods via mocked Redis."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
+
+from tests.conftest import runtime_config
 
 
 @pytest.fixture
@@ -30,7 +32,7 @@ def rc_bundle():
     cfg.MARKET_TYPE = "linear"
     cfg.TIMEFRAME = "15m"
 
-    with patch("bitbot.config.runtime.Config", cfg):
+    with runtime_config(cfg):
         from bitbot.config.runtime import RuntimeConfig
 
         rc = RuntimeConfig(redis_mock)

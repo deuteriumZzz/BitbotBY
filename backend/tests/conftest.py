@@ -34,13 +34,29 @@ _MONITOR_MODULES = (
 )
 
 
-def monitor_config(cfg):
-    """Подменяет Config во всех модулях монитора позиций (контекстный менеджер)."""
+# RuntimeConfig разложен по модулям пакета; Config читается в каждом из них.
+_RUNTIME_MODULES = tuple(
+    f"bitbot.config.runtime.{m}"
+    for m in ("base", "trading", "risk", "models", "market", "presets", "active")
+)
+
+
+def _patch_config(modules, cfg):
     stack = contextlib.ExitStack()
-    for name in _MONITOR_MODULES:
+    for name in modules:
         if hasattr(importlib.import_module(name), "Config"):
             stack.enter_context(patch(f"{name}.Config", cfg))
     return stack
+
+
+def monitor_config(cfg):
+    """Подменяет Config во всех модулях монитора позиций (контекстный менеджер)."""
+    return _patch_config(_MONITOR_MODULES, cfg)
+
+
+def runtime_config(cfg):
+    """Подменяет Config во всех модулях RuntimeConfig (контекстный менеджер)."""
+    return _patch_config(_RUNTIME_MODULES, cfg)
 
 
 def make_ohlcv(

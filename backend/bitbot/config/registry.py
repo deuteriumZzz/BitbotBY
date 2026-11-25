@@ -1244,7 +1244,10 @@ def load_overrides(r: Any) -> Dict[str, Any]:
 
 
 def _set_config(config_cls: Any, s: Setting, value: Any) -> None:
-    # Часть настроек модули читают через os.getenv, часть — через Config.
+    # Только при старте. Часть настроек есть лишь в реестре (поля в Config нет) и
+    # читается через os.getenv — в том числе дочерними процессами (обучение,
+    # бэктест), которым окружение и передаёт значение. Режим бота на ходу
+    # (профиль, рынок, paper/live) сюда не относится — см. runtime.child_env().
     os.environ[s.key] = str(value).lower() if isinstance(value, bool) else str(value)
     if hasattr(config_cls, s.config_attr):
         setattr(config_cls, s.config_attr, value)
