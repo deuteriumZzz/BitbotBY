@@ -77,7 +77,7 @@ def test_ledger_never_raises_on_bad_path(tmp_path) -> None:
     led.write("x", a=1)  # путь «внутри файла» — не должно бросить
 
 
-# ── AI provenance (H-2) ───────────────────────────────────────────────────────
+# ── AI provenance ───────────────────────────────────────────────────────
 
 _REPLY = json.dumps(
     [{"symbol": "BTC/USDT", "action": "buy", "strategy": "s", "confidence": 0.9}]
@@ -138,7 +138,7 @@ async def test_analyzer_works_without_ledger() -> None:
     assert recs[0]["ai_provider"] == "groq"
 
 
-# ── Трасса confidence (C-1/C-2, только измерение) ─────────────────────────────
+# ── Трасса confidence (только измерение) ─────────────────────────────
 
 
 def _rc(min_conf: float) -> MagicMock:
@@ -187,7 +187,7 @@ async def test_context_penalty_is_recorded_raw_and_capped() -> None:
     assert rec["ctx_penalty_raw"] > rec["ctx_penalty"] == 0.25
 
 
-# ── H-8: статусы данных ───────────────────────────────────────────────────────
+# ── статусы данных ───────────────────────────────────────────────────────
 
 
 def test_failed_sources_expire_after_ttl() -> None:
@@ -207,7 +207,7 @@ async def test_full_context_failure_is_flagged() -> None:
     assert out["BTC/USDT"]["funding_signal"] == "neutral"
 
 
-# ── H-13: метка свечи ─────────────────────────────────────────────────────────
+# ── метка свечи ─────────────────────────────────────────────────────────
 
 
 def test_candle_time_from_datetime_and_ms_index() -> None:

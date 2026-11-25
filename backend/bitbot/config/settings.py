@@ -199,7 +199,7 @@ class Config:
     # Теневой Risk Gate: после каждого фактического входа пишет в Ledger вердикт
     # единого гейта (backend/bitbot/risk/shadow.py). Ничего не блокирует и не меняет.
     RISK_GATE_SHADOW: bool = os.getenv("RISK_GATE_SHADOW", "true").lower() != "false"
-    # WS-shadow (Phase 4b): публичный поток Bybit параллельно REST, только метрики и
+    # WS-shadow: публичный поток Bybit параллельно REST, только метрики и
     # тревога при тишине; выключен по умолчанию — открывает внешнее соединение.
     # Решение на основе новых источников — ВСЕ выключены по умолчанию (меняют вход/выход AI):
     #   AI_SANITIZE_PROMPT   — заголовки новостей очищаются и помечаются как недоверенные;
@@ -207,7 +207,7 @@ class Config:
     #   AI_STRICT_VALIDATION — ответ LLM проходит строгую схему (лишние поля/выдуманные цены — отказ);
     #   FORECASTER           — chronos | timesfm (используется, если включён переключатель Chronos).
     # Funding в PnL сделки (backend/bitbot/execution/funding.py): выключен — меняет учёт результата.
-    # Шина событий (Redis Streams, ADR-005): копии записей Ledger как компактные отметки.
+    # Шина событий: копии записей Ledger как компактные отметки.
     EVENT_STREAM_ENABLED: bool = (
         os.getenv("EVENT_STREAM_ENABLED", "false").lower() == "true"
     )
@@ -345,7 +345,7 @@ class Config:
     ATR_SPIKE_MULT: float = float(os.getenv("ATR_SPIKE_MULT", "3.0"))
     # Кол-во свечей для расчёта базового ATR (медиана)
     ATR_SPIKE_LOOKBACK: int = int(os.getenv("ATR_SPIKE_LOOKBACK", "20"))
-    # Data Quality gate (Phase 2): не открывать новые позиции по символам, у которых
+    # Data Quality gate: не открывать новые позиции по символам, у которых
     # свечи не VALID (устарели, битые, неполные). Статусы пишутся в Decision Ledger
     # всегда; блокировка по умолчанию следует PAPER_TRADING: в paper включена
     # (отказы — data_quality_block в журнале), в live выключена; env главнее.
@@ -456,7 +456,7 @@ class Config:
     #   periodic — полный ретрейн в фоне каждые N сделок [РЕКОМЕНДУЕТСЯ]
     #   hybrid   — periodic + динамические веса стратегий в реальном времени
     # По умолчанию выключено: автоматическая подмена модели без Shadow/Paper-ворот
-    # недопустима (см. docs/architecture/AUDIT_REPORT.md, C-5).
+    # недопустима.
     ONLINE_LEARNING_MODE: str = os.getenv("ONLINE_LEARNING_MODE", "disabled")
     # Количество закрытых сделок до запуска переобучения (для periodic/hybrid)
     ONLINE_LEARNING_TRIGGER: int = int(os.getenv("ONLINE_LEARNING_TRIGGER", "50"))

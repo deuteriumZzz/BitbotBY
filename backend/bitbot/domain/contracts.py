@@ -1,15 +1,15 @@
-"""Единые контракты решений (Phase 1, MASTER_SPEC §2.1, TARGET_ARCHITECTURE §3).
+"""Единые контракты решений.
 
 Политики (AI, SAC, Chronos, контекст, локальная стратегия) только **предлагают**;
 здесь описано, как выглядит предложение (`ModelOutput`) и итоговое решение по
-символу (`TradingDecision`). Phase 1 строит контракты адаптером из существующих
+символу (`TradingDecision`). Контракты строятся адаптером из существующих
 словарей рекомендаций (`decision_from_rec`) — поток данных и значения
-confidence не меняются, контракты нужны журналу и дальнейшим фазам.
+confidence не меняются, контракты нужны журналу решений.
 
 Главное: у каждого confidence явно указано, **чем оно является**
 (`confidence_kind`). Самооценка LLM, величина действия SAC и вручную заданная
 константа контекстного сигнала — не вероятность прибыли и не сравнимы между
-собой (AUDIT_REPORT H-1).
+собой.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ def is_local_reasoning(reasoning: str) -> bool:
     return LOCAL_REASONING_PREFIX in reasoning or "Local analysis" in reasoning
 
 
-# Статусы решения (MASTER_SPEC §12.3).
+# Статусы решения.
 LONG = "LONG"
 SHORT = "SHORT"
 NO_TRADE = "NO_TRADE"
@@ -83,7 +83,7 @@ class TradingDecision:
     outputs: Tuple[ModelOutput, ...]
     conf_trail: Tuple[Tuple[str, float], ...]
     reason_codes: Tuple[str, ...]
-    # Signal Intelligence (Phase 3): описание опоры решения, confidence не трогает.
+    # Signal Intelligence: описание опоры решения, confidence не трогает.
     independent_groups: Tuple[str, ...] = ()
     redundant_groups: Tuple[str, ...] = ()
     channels: Optional[Dict[str, Tuple[str, ...]]] = None

@@ -54,7 +54,7 @@ class MarketScanner:
         self.data_loader = data_loader
         self._rc = rc
         self.logger = logging.getLogger(__name__)
-        # Качество свечей по символам за текущий цикл (Phase 2): пишется в
+        # Качество свечей по символам за текущий цикл: пишется в
         # снэпшот и Decision Ledger; торговлю само по себе не блокирует.
         self.quality: Dict[str, DataQuality] = {}
         self._timeframe = ""
@@ -371,10 +371,10 @@ class MarketScanner:
             "top_headlines": headlines[:3],
             "timestamp": datetime.now().isoformat(),
             # Время последней свечи и момент построения в UTC — чтобы проверять
-            # свежесть данных и воспроизводить снэпшот (AUDIT_REPORT H-13).
+            # свежесть данных и воспроизводить снэпшот.
             "candle_time": candle_time,
             "snapshot_utc": datetime.now(timezone.utc).isoformat(),
-            # Детерминированный id входных данных и статус их качества (Phase 2).
+            # Детерминированный id входных данных и статус их качества.
             "snapshot_id": make_snapshot_id(
                 symbol, getattr(self, "_timeframe", ""), candle_time, close
             ),

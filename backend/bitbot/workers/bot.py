@@ -167,7 +167,7 @@ class TradingBot:
             self.ai, rc=self._runtime_config, forecaster=self._forecaster
         )
         if getattr(self.combiner.sac, "needs_candles", False):
-            # v2 подаёт модели текущую позицию (а не 0, как v1 — C-3)
+            # v2 подаёт модели текущую позицию (а не 0, как v1)
             self.combiner.sac.position_provider = self._sac_position
         self.rag: Any = None  # индекс по Ledger (AI_RAG_CONTEXT)
         self.ai._rag_provider = lambda symbols: ops_tasks.rag_context(self, symbols)
@@ -190,7 +190,7 @@ class TradingBot:
         self._monitored: Dict[str, PositionRecord] = {}
         self._monitored_lock: asyncio.Lock = asyncio.Lock()
         self._monitor_task: Optional[asyncio.Task[None]] = None
-        # Периодическая сверка с биржей (Phase 5): задача, подтверждение проблем
+        # Периодическая сверка с биржей: задача, подтверждение проблем
         # на двух проверках подряд, кулдаун алертов, счётчик сбоев запроса.
         self._reconcile_task: Optional[asyncio.Task[None]] = None
         self._ws_task: Optional[asyncio.Task[None]] = None  # WS-shadow (флаг)
@@ -222,7 +222,7 @@ class TradingBot:
         )
         self.ai._telegram = self.telegram
         self.ai._emit = self._publish_event  # статусы AI-провайдеров для приложения
-        # Постоянный журнал решений (AUDIT_REPORT H-2/H-5): только запись.
+        # Постоянный журнал решений: только запись.
         self.ledger = DecisionLedger()
         self.ai._ledger = self.ledger
         if Config.EVENT_STREAM_ENABLED:
@@ -480,7 +480,7 @@ class TradingBot:
             return
         try:
             # fetch_positions_checked бросает ошибку вместо пустого списка, иначе
-            # сбой сети выглядел бы как «все позиции закрыты» (AUDIT H-7).
+            # сбой сети выглядел бы как «все позиции закрыты».
             exchange_positions = await self.api.fetch_positions_checked()
         except Exception as exc:
             logger.critical(
@@ -1238,7 +1238,7 @@ class TradingBot:
         """(экспозиция, результат) по символу для наблюдения SAC v2.
 
         Экспозиция — знаковая доля капитала в позиции на момент входа (notional / баланс при
-        входе), результат — 0: текущая цена здесь недоступна (приближение, см. AUDIT_REPORT §10q).
+        входе), результат — 0: текущая цена здесь недоступна.
         """
         pos = self._monitored.get(symbol)
         if not pos:
@@ -1285,7 +1285,7 @@ class TradingBot:
         market_context: Optional[Dict[str, Any]],
         recs: list,
     ) -> None:
-        """Пишет входы расчёта комбинатора в журнал для replay (Phase 4).
+        """Пишет входы расчёта комбинатора в журнал для replay.
 
         Только запись и только когда есть рекомендации: по символам без решений
         ничего не сохраняется, поэтому объём небольшой.
@@ -1308,7 +1308,7 @@ class TradingBot:
             self._ledger_write("replay_input", input=inp)
 
     def _record_decision_diagnostics(self, snapshots: list, recs: list) -> None:
-        """Отклонённые возможности и теневые вердикты стратегий объединения (Phase 6).
+        """Отклонённые возможности и теневые вердикты стратегий объединения.
 
         Только запись в журнал. «rejections» — предложения политик, не ставшие
         рекомендацией, с причиной (например, SAC hold отменил сигнал AI);
@@ -1877,7 +1877,7 @@ class TradingBot:
             if "_regime" not in rec:
                 sym = rec.get("symbol", "")
                 rec["_regime"] = regimes.get(sym, self._current_regime)
-        # Единый контракт решения (Phase 1): адаптер над рекомендациями, значения
+        # Единый контракт решения: адаптер над рекомендациями, значения
         # не меняет; decision_id связывает «signals» и «execution» в журнале.
         _trace = str(getattr(getattr(self, "ledger", None), "trace_id", "") or "")
         decisions = []

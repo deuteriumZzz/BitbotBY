@@ -1,4 +1,4 @@
-"""Daily Health Digest (Phase 11): компактная сводка суток по Decision Ledger.
+"""Daily Health Digest: компактная сводка суток по Decision Ledger.
 
 Строится из записей журнала за окно (по умолчанию 24 ч) и использует уже
 существующие расчёты (`signal_intelligence_report`, `ai_infra.health`), не

@@ -25,7 +25,7 @@ dependencies = [
     "scipy>=1.11.0",
     "scikit-learn>=1.0.0",  # нужен hmmlearn (детектор режима рынка)
     "hmmlearn>=0.3.2",
-    # Датасеты SAC: Parquet + ZSTD (ADR-001); кодек ZSTD встроен в pyarrow.
+    # Датасеты SAC: Parquet + ZSTD; кодек ZSTD встроен в pyarrow.
     'pyarrow>=21.0; sys_platform != "darwin" or platform_machine != "x86_64"',
     'pyarrow>=17,<20; sys_platform == "darwin" and platform_machine == "x86_64"',
     # AI и ML

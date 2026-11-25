@@ -829,7 +829,7 @@ class BybitAPI:
         return None
 
     def get_contract_spec(self, symbol: str) -> Optional[dict]:
-        """Спецификация контракта из загруженных рынков (Phase 2, MASTER_SPEC §3).
+        """Спецификация контракта из загруженных рынков.
 
         `tick_size`/`qty_step` — как отдаёт ccxt (число знаков или шаг, зависит от
         precisionMode биржи); `funding_interval_min` — фактический интервал

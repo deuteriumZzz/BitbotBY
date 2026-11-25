@@ -1,4 +1,4 @@
-"""Оценка SAC (Phase 7): walk-forward с embargo, метрики, bootstrap, ворота допуска.
+"""Оценка SAC: walk-forward с embargo, метрики, bootstrap, ворота допуска.
 
 Все пороги в `PROMOTION_THRESHOLDS` — ПРЕДЛОЖЕНИЕ для утверждения владельцем.
 Результат `promotion_verdict` — доказательство для реестра моделей

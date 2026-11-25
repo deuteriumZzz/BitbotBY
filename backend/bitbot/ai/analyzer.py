@@ -424,7 +424,7 @@ class AIAnalyzer:
     def _shadow_audit(
         valid: List[Dict[str, Any]], snapshots: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
-        """Теневая строгая проверка ответа и скан заголовков (Phase 10).
+        """Теневая строгая проверка ответа и скан заголовков.
 
         Только пишется в Ledger: рекомендации не фильтруются и не меняются.
         Любой сбой аудита гасится — он не должен влиять на цикл.
@@ -647,7 +647,7 @@ class AIAnalyzer:
             if getattr(self, "_down_since", None) is not None:
                 self._down_since = None
                 await self._notify_recovered(provider)
-            # Происхождение решения: какое звено цепочки ответило (H-2). Fallback
+            # Происхождение решения: какое звено цепочки ответило. Fallback
             # меняет источник решения, и без этого оценить AI по провайдерам нельзя.
             for rec in valid:
                 rec["ai_provider"] = provider

@@ -1,4 +1,4 @@
-"""Обучение SAC v2 (Phase 7): walk-forward на env_v2, кандидат в реестр — без допуска к торговле.
+"""Обучение SAC v2: walk-forward на env_v2, кандидат в реестр — без допуска к торговле.
 
 Конвейер: OHLCV → `features_v2` (причинные признаки) → расширяющееся окно с embargo
 (`evaluation.walk_forward_splits`) → на каждом фолде нормализация ТОЛЬКО по train,

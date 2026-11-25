@@ -24,7 +24,7 @@ MarketContext / News / Sentiment ─► SignalCombiner ─► контекстн
 | Состояние/настройки | Redis | позиции, пауза, режим, пульс, `bot:mode_readiness`, `bot:last_cycle` |
 | События | Redis pub/sub `bot:events` (+ Streams `bot:stream:events` за флагом) | приложение и потребители |
 | Журнал решений | `data/decision_ledger.jsonl` (ротация 50 МБ) | аудит, replay, отчёты, RAG |
-| Датасеты SAC | Parquet + ZSTD + манифест | воспроизводимое обучение (ADR-001) |
+| Датасеты SAC | Parquet + ZSTD + манифест | воспроизводимое обучение |
 | Модели | `models/*.zip`, `models/registry.json` | реестр и стадии допуска |
 
 ## Кто прав, если источники расходятся

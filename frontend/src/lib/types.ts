@@ -1,4 +1,4 @@
-// Типы ответов API и событий WebSocket — по docs/design/CONTRACT.md.
+// Типы ответов API и событий WebSocket — контракт с backend/bitbot/api/routers.
 
 export type Side = "long" | "short";
 export type Period = "24h" | "7d" | "30d" | "all";

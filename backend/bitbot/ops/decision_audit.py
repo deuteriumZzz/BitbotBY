@@ -1,4 +1,4 @@
-"""Decision Audit (Phase 11): сквозная цепочка Data → … → Outcome по одному решению.
+"""Decision Audit: сквозная цепочка Data → … → Outcome по одному решению.
 
 Склеивает записи Decision Ledger одного цикла (`trace_id`) вокруг решения
 (`decision_id`) и показывает, какие стадии есть, а каких нет. Пробел — это

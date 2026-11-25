@@ -1,4 +1,4 @@
-"""Единый Risk Gate (Phase 9, MASTER_SPEC §9.6): чистая функция, независимая от AI.
+"""Единый Risk Gate: чистая функция, независимая от AI.
 
 Принимает предложение входа и состояние портфеля, возвращает вердикт
 allow/reduce/deny с кодами причин. Не знает ни о моделях, ни о режимах: любой
@@ -75,7 +75,7 @@ class Proposal:
     cvar: float = 0.05
     max_corr_with_open: float = 0.0
     reduce_only: bool = False
-    ood: bool = False  # признак выхода за обучающее распределение (Phase 8)
+    ood: bool = False  # признак выхода за обучающее распределение
 
 
 @dataclass

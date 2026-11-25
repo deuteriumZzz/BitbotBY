@@ -1,4 +1,4 @@
-"""Data Quality (Phase 2, MASTER_SPEC §3): статус пригодности рыночных данных.
+"""Data Quality: статус пригодности рыночных данных.
 
 Чистые функции без обращений к сети: принимают DataFrame свечей или контекст
 рынка и возвращают `DataQuality`. Статусы: VALID, STALE, INCOMPLETE, INVALID,

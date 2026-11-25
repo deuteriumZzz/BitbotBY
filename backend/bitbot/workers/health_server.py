@@ -61,7 +61,7 @@ cycles_counter = Counter("bot_cycles_total", "Всего итераций тор
 _g_peak_balance = Gauge("bitbot_peak_balance", "Исторический пик баланса USDT")
 _g_balance = Gauge("bitbot_balance", "Текущий баланс USDT")
 
-# WS-shadow (Phase 4b): состояние публичных потоков
+# WS-shadow: состояние публичных потоков
 _g_ws_lag_p99 = Gauge(
     "bitbot_ws_lag_p99_ms",
     "p99 задержки WS-потока, мс (относительно лучшего)",
