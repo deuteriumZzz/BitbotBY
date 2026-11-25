@@ -6,7 +6,8 @@ import { fmtN, plural, tone } from "../../lib/format";
 
 import { useStore } from "../../store";
 
-import { Q, Tween } from "../../ui";
+import { Tween } from "../../components/motion";
+import { Q } from "../../components/tooltip";
 
 // ── Метрики ───────────────────────────────────────────────────────────────────
 

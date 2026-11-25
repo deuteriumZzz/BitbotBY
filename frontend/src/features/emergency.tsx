@@ -6,7 +6,8 @@ import { useEffect, useState } from "react";
 
 import { api, command } from "../lib/api";
 import { useStore } from "../store";
-import { Icon, useArm } from "../ui";
+import { useArm } from "../components/controls";
+import { Icon } from "../components/icon";
 
 interface EmergencyState {
   level: number;

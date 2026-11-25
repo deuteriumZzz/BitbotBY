@@ -6,7 +6,8 @@ import { useEffect, useState } from "react";
 import { fmtN, pct } from "../lib/format";
 import type { FearGreed, Season } from "../lib/types";
 import { useStore } from "../store";
-import { Q, Tween } from "../ui";
+import { Tween } from "../components/motion";
+import { Q } from "../components/tooltip";
 
 const ZONES: [number, number, string, string][] = [
   [0, 25, "Крайний страх", "var(--down)"],

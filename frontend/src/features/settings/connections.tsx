@@ -9,7 +9,8 @@ import { fmtN, plural } from "../../lib/format";
 import type { SecretItem } from "../../lib/types";
 import { actions } from "../../store/actions";
 import { useStore } from "../../store";
-import { Icon, useArm } from "../../ui";
+import { useArm } from "../../components/controls";
+import { Icon } from "../../components/icon";
 import { cfg } from "../bots";
 
 import { Pane } from "./index";

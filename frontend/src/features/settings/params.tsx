@@ -8,7 +8,8 @@ import { fmtN, plural } from "../../lib/format";
 import type { SettingDef } from "../../lib/types";
 import { actions, type PatchResult } from "../../store/actions";
 import { useStore } from "../../store";
-import { Q, Toggle } from "../../ui";
+import { Toggle } from "../../components/controls";
+import { Q } from "../../components/tooltip";
 
 import { shown, unitOf } from "../params";
 import { Pane } from "./index";

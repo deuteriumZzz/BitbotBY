@@ -6,7 +6,7 @@ import { arrow, fmtN, tone, usd } from "../../lib/format";
 
 import { useStore } from "../../store";
 
-import { hideTip, showTip } from "../../ui";
+import { hideTip, showTip } from "../../components/tooltip";
 
 const DAY = 86_400_000;
 

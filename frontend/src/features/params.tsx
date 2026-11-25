@@ -5,7 +5,7 @@
 import type { SettingDef } from "../lib/types";
 import { actions } from "../store/actions";
 import { useStore } from "../store";
-import { Toggle } from "../ui";
+import { Toggle } from "../components/controls";
 
 /** Значение так, как его вводят: проценты — в процентах. */
 export const shown = (d: SettingDef, v: unknown) => (d.type === "pct" ? +(Number(v) * 100).toFixed(4) : v);

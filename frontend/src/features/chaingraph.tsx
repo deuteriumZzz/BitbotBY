@@ -7,7 +7,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { reducedMotion } from "../lib/platform";
 import type { AiProvider, AiState } from "../lib/types";
 import { useStore } from "../store";
-import { Icon } from "../ui";
+import { Icon } from "../components/icon";
 import { Avatar, ChainMenu, STATUS, chosenId, hhmm, useChainOps } from "./chainops";
 
 const NW = 214; // ширина узла

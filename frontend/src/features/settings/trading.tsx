@@ -6,7 +6,8 @@ import { inHours } from "../../lib/idle";
 import type { SecretItem } from "../../lib/types";
 import { actions } from "../../store/actions";
 import { useStore } from "../../store";
-import { Q, Seg } from "../../ui";
+import { Seg } from "../../components/controls";
+import { Q } from "../../components/tooltip";
 import { cfg } from "../bots";
 
 const HOURS = [

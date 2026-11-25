@@ -17,7 +17,10 @@ import { Terminal } from "./features/terminal";
 import { cycleKind } from "./features/terminal/radar";
 import { GUARD_TEXT, useStore, type Ui } from "./store";
 import { actions } from "./store/actions";
-import { Icon, Skel, TipLayer, Toggle, hideTip } from "./ui";
+import { Toggle } from "./components/controls";
+import { Icon } from "./components/icon";
+import { Skel } from "./components/motion";
+import { TipLayer, hideTip } from "./components/tooltip";
 
 // «Цепочка», «Обучение» и «Журнал» грузятся при первом открытии — первый экран легче.
 const Pipeline = lazy(() => import("./features/pipeline").then((m) => ({ default: m.Pipeline })));

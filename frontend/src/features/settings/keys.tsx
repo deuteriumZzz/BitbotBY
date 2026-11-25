@@ -5,7 +5,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { BotNode, SecretItem } from "../../lib/types";
 import { actions } from "../../store/actions";
 import { useStore } from "../../store";
-import { Icon, Q, Toggle, useArm } from "../../ui";
+import { Toggle, useArm } from "../../components/controls";
+import { Icon } from "../../components/icon";
+import { Q } from "../../components/tooltip";
 import { cfg } from "../bots";
 
 import { ChatFinder, TgLogin } from "./telegram";

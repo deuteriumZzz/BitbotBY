@@ -11,7 +11,8 @@ import { positionPnl, useStore } from "../../store";
 import { stratName } from "../bots";
 
 import { TraceSteps } from "../trace";
-import { Flash, Gauge, useArm } from "../../ui";
+import { useArm } from "../../components/controls";
+import { Flash, Gauge } from "../../components/motion";
 
 // ── Живые позиции ─────────────────────────────────────────────────────────────
 

@@ -6,7 +6,7 @@ import { arrow, plural, tone, usd } from "../../lib/format";
 
 import { useStore } from "../../store";
 
-import { Q, hideTip, showTip } from "../../ui";
+import { Q, hideTip, showTip } from "../../components/tooltip";
 import { isoDay } from "./equity";
 
 const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];

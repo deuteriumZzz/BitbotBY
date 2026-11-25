@@ -8,7 +8,10 @@ import { reducedMotion } from "../lib/platform";
 import type { AiMode, AiModel, AiProvider, AiState, SecretItem } from "../lib/types";
 import { actions } from "../store/actions";
 import { useStore } from "../store";
-import { Icon, Q, Seg, Skel, Toggle } from "../ui";
+import { Seg, Toggle } from "../components/controls";
+import { Icon } from "../components/icon";
+import { Skel } from "../components/motion";
+import { Q } from "../components/tooltip";
 import { ChainGraph } from "./chaingraph";
 import { Avatar, ChainMenu, STATUS, chosenId, hhmm, pin, useChainOps, type Probe } from "./chainops";
 

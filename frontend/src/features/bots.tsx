@@ -8,7 +8,9 @@ import { reducedMotion } from "../lib/platform";
 import type { ConfigValues, RiskPreset, Strategy } from "../lib/types";
 import { actions } from "../store/actions";
 import { useStore } from "../store";
-import { Icon, Q, Seg, Toggle } from "../ui";
+import { Seg, Toggle } from "../components/controls";
+import { Icon } from "../components/icon";
+import { Q } from "../components/tooltip";
 import { ParamList } from "./params";
 
 export const STRATEGY_NAME: Record<string, string> = {

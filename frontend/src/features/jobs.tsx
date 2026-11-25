@@ -7,7 +7,7 @@ import { base, fmtN, pct } from "../lib/format";
 import type { JobDone, JobId, JobState, ProfileInfo } from "../lib/types";
 import { actions } from "../store/actions";
 import { useStore } from "../store";
-import { Q } from "../ui";
+import { Q } from "../components/tooltip";
 import { stratName } from "./bots";
 
 interface JobDef {

@@ -10,7 +10,9 @@ import { cfg } from "../bots";
 import { MarketPulse } from "../market";
 import { ReadinessCard } from "../setup";
 
-import { Q, Seg, Tween } from "../../ui";
+import { Seg } from "../../components/controls";
+import { Tween } from "../../components/motion";
+import { Q } from "../../components/tooltip";
 import { Chart } from "./chart";
 import { Equity } from "./equity";
 import { Feed } from "./feed";

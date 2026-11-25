@@ -2,7 +2,7 @@
 // Это вид интерфейса на этом устройстве — настройки бота он не меняет.
 
 import { useStore } from "../store";
-import { Seg } from "../ui";
+import { Seg } from "../components/controls";
 
 export function UiSwitch() {
   const ui = useStore((s) => s.ui);

@@ -4,7 +4,7 @@
 import { useState } from "react";
 
 import { api } from "../lib/api";
-import { Seg } from "../ui";
+import { Seg } from "../components/controls";
 
 type Hours = 6 | 24 | 168;
 const HOURS: readonly (readonly [Hours, string])[] = [

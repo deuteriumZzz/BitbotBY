@@ -7,7 +7,8 @@ import { plural } from "../../lib/format";
 import type { SecretItem, TgStatus } from "../../lib/types";
 import { actions } from "../../store/actions";
 import { useStore } from "../../store";
-import { Q, Toggle } from "../../ui";
+import { Toggle } from "../../components/controls";
+import { Q } from "../../components/tooltip";
 import { cfg } from "../bots";
 import { ParamList } from "../params";
 

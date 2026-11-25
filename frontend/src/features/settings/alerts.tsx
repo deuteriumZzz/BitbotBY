@@ -2,7 +2,8 @@
 
 import { actions } from "../../store/actions";
 import { useStore } from "../../store";
-import { Q, Seg, Toggle } from "../../ui";
+import { Seg, Toggle } from "../../components/controls";
+import { Q } from "../../components/tooltip";
 import { cfg } from "../bots";
 
 // Тихие часы выбираются по местному времени, а бот хранит их в UTC (QUIET_HOURS).

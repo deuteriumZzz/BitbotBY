@@ -9,7 +9,7 @@ import type { Position } from "../../lib/types";
 import { positionPnl, useStore, type Store } from "../../store";
 import { profileName } from "../bots";
 
-import { Q } from "../../ui";
+import { Q } from "../../components/tooltip";
 
 const EASE = "cubic-bezier(.2,.8,.2,1)";
 

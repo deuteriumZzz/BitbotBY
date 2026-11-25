@@ -2,7 +2,7 @@
 // Своих настроек здесь нет — те же карточки и переключатели, что в «Профи», только без деталей.
 
 import { useStore } from "../store";
-import { Q } from "../ui";
+import { Q } from "../components/tooltip";
 import { RiskCard, WhatCard, cfg } from "./bots";
 import { ModeSeg, NODES, takesPart } from "./pipeline";
 import { TemplateSeg, templateLine } from "./rules";

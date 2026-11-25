@@ -5,7 +5,8 @@ import { useEffect, useState } from "react";
 import { api } from "../../lib/api";
 
 import { useStore } from "../../store";
-import { Q, Toggle } from "../../ui";
+import { Toggle } from "../../components/controls";
+import { Q } from "../../components/tooltip";
 
 interface Launcher {
   local: boolean;

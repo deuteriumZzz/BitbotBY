@@ -17,7 +17,7 @@ import { reducedMotion } from "../../lib/platform";
 import type { Candle, Journal, JournalTrade } from "../../lib/types";
 import { useStore } from "../../store";
 
-import { Seg } from "../../ui";
+import { Seg } from "../../components/controls";
 
 // ── График ────────────────────────────────────────────────────────────────────
 
