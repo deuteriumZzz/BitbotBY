@@ -8,7 +8,7 @@
 Приоритет значения: изменение из UI > переменная окружения > значение по умолчанию.
 Ключи API здесь не хранятся — для них отдельное зашифрованное хранилище.
 
-DQN_WEIGHT, AI_WEIGHT, DQN_SOLO_CONFIDENCE, AI_STRATEGY_SELECTION из .env.example
+DQN_WEIGHT, AI_WEIGHT, DQN_SOLO_CONFIDENCE, AI_STRATEGY_SELECTION
 намеренно не включены: код их не читает (веса Hybrid зашиты по режиму рынка
 в signal_combiner.py), и ручка в UI ничего бы не меняла.
 

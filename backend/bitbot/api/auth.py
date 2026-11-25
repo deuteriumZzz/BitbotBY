@@ -37,7 +37,7 @@ def _sha(text: str) -> str:
 
 
 def owner_credentials() -> Tuple[Optional[str], Optional[str]]:
-    """(токен бота, chat_id владельца) — из хранилища ключей или .env."""
+    """(токен бота, chat_id владельца) — из хранилища ключей или окружения."""
     return (
         secrets_store.get_value("TELEGRAM_BOT_TOKEN"),
         secrets_store.get_value("TELEGRAM_CHAT_ID"),

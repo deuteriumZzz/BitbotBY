@@ -984,7 +984,7 @@ def _ai_view(rc: Any) -> Dict[str, Any]:
 async def get_setup() -> JSONResponse:
     """Для мастера первого запуска: что уже подключено.
 
-    Ключ считается заданным, если он есть в приложении или в .env; значения
+    Ключ считается заданным, если он есть в приложении или в окружении; значения
     не отдаются.
     """
 
@@ -1166,7 +1166,7 @@ async def put_secret(service_id: str, request: Request) -> JSONResponse:
         stored = secrets_store.load_values()
         values = {f.env: stored[f.env] for f in service.fields if f.env in stored}
         values.update({k: v.strip() for k, v in fields.items()})
-        # Тестовая сеть Bybit: значение из приложения важнее .env.
+        # Тестовая сеть Bybit: значение из приложения важнее окружения.
         testnet = registry.load_overrides(data.get_redis()).get(
             "TESTNET", os.getenv("TESTNET", "").lower() == "true"
         )

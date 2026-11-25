@@ -1,7 +1,7 @@
 """Runtime-конфигурация поверх Redis.
 
 Позволяет менять настройки бота без перезапуска контейнера.
-Все значения хранятся в Redis и переопределяют .env при наличии.
+Все значения хранятся в Redis и переопределяют умолчания Config.
 
 Пакет разложен по группам цепочкой классов (каждый видит методы нижних):
 base → trading → risk → models → market → RuntimeConfig. Ключи Redis — keys.py,
@@ -40,7 +40,7 @@ class RuntimeConfig(MarketSettings):
     """
     Обёртка над Redis для хранения изменяемых во время работы настроек.
 
-    Fallback: если ключ в Redis отсутствует, возвращает значение из Config (.env).
+    Fallback: если ключ в Redis отсутствует, возвращает значение из Config.
     """
 
     # ── Startup ───────────────────────────────────────────────────────────────
@@ -84,7 +84,7 @@ class RuntimeConfig(MarketSettings):
             self._r.redis_client.delete(
                 *self._ALL_KEYS, keys.EXPERIMENTAL_STRATEGIES_SEEN, *hot
             )
-            logger.info("RuntimeConfig: сброс к .env-дефолтам выполнен")
+            logger.info("RuntimeConfig: сброс к умолчаниям выполнен")
         except Exception as e:
             logger.warning("RuntimeConfig reset failed: %s", e)
             return

@@ -141,7 +141,7 @@ def apply_overrides(config_cls: Any, r: Any) -> List[str]:
             for k, v in overrides.items():
                 _set_config(config_cls, BY_KEY[k], v)
             return list(overrides)
-        logger.error("UI config overrides rejected at startup (%s) — using .env", e)
+        logger.error("UI config overrides rejected at startup (%s) — using defaults", e)
         return []
     logger.info("Applied UI config overrides: %s", ", ".join(sorted(overrides)))
     return list(overrides)
@@ -178,7 +178,7 @@ def current_values(config_cls: Any, rc: Any, r: Any) -> Dict[str, Dict[str, Any]
 def validate_patch(
     config_cls: Any, patch: Dict[str, Any], current: Dict[str, Dict[str, Any]]
 ) -> Tuple[Dict[str, Any], Dict[str, str]]:
-    """(значения, ошибки по ключам). None в значении — вернуть к .env / умолчанию."""
+    """(значения, ошибки по ключам). None в значении — вернуть к умолчанию."""
     values: Dict[str, Any] = {}
     errors: Dict[str, str] = {}
     for k, raw in patch.items():
@@ -186,7 +186,7 @@ def validate_patch(
         if s is None:
             errors[k] = "Нет такой настройки."
         elif s.readonly:
-            errors[k] = "Меняется только в .env на сервере."
+            errors[k] = "Меняется только в окружении сервера."
         elif raw is None:
             if s.hot:
                 errors[k] = "Укажите значение."

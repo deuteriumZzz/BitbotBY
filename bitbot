@@ -23,7 +23,6 @@ HELP = """BitbotBY — ./bitbot <команда>
   phone on|off|status         Mini App в Telegram: адрес до этого компьютера
   server --domain=bot.example.com     развернуть на VPS с HTTPS (docs/DEPLOY_SERVER.md)
   server logs | server stop
-  keys import [--env=путь] [--overwrite]   ключи из .env → зашифрованное хранилище
   autostart on|off|status     запуск при входе в систему
   awake on|off|status         не давать компьютеру уснуть
 

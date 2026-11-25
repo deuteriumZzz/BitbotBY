@@ -33,7 +33,7 @@ services:
     command: python -m bitbot.workers.supervisor
     # Потолок ресурсов контейнера бота (0 = без лимита). Обучение SAC и тяжёлые
     # фоновые задачи идут подпроцессами ВНУТРИ этого контейнера: задайте BOT_CPUS
-    # (например 3) и BOT_MEM_LIMIT (например 4g) в .env, чтобы PyTorch не душил бота.
+    # (например 3) и BOT_MEM_LIMIT (например 4g) в .server/server.env, чтобы PyTorch не душил бота.
     cpus: ${BOT_CPUS:-0}
     mem_limit: ${BOT_MEM_LIMIT:-0}
     environment:

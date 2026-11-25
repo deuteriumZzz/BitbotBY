@@ -54,7 +54,7 @@ def _tg_escape(s: str) -> str:
 
 
 def _send_telegram_sync(text: str) -> None:
-    token, chat_id = owner_credentials()  # хранилище ключей, иначе .env
+    token, chat_id = owner_credentials()  # хранилище ключей, иначе окружение
     if not token or not chat_id:
         return
     try:

@@ -615,7 +615,7 @@ class AIAnalyzer:
                 )
                 default = catalog.BY_ID[provider].default_model
                 if status == "bad_model" and model != default:
-                    # Модели из .env или приложения у провайдера больше нет —
+                    # Модели из настроек или приложения у провайдера больше нет —
                     # сразу пробуем рекомендованную, провайдер не на паузу.
                     queue.insert(0, (provider, default))
                     pause = 0.0

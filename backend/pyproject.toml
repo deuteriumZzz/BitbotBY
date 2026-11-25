@@ -55,7 +55,6 @@ dependencies = [
     "websockets>=12.0",  # без неё API не принимает /ws: приложение теряет поток событий
     "prometheus-client>=0.20.0",
     "cryptography>=41.0",  # зашифрованное хранилище ключей (Fernet)
-    "python-dotenv==1.0.0",
 ]
 
 [project.optional-dependencies]

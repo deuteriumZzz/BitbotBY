@@ -8,13 +8,6 @@ import os
 import subprocess
 import sys
 
-from dotenv import load_dotenv
-
-# Без Docker настройки берутся из .env рядом с кодом. Docker (env_file) и
-# ./bitbot задают переменные раньше — уже заданные значения не перезаписываются.
-# .env рядом с рабочей папкой (корень репозитория); в Docker переменные задаёт compose.
-load_dotenv(".env")
-
 from bitbot.infra.logger import setup_logging  # noqa: E402
 
 setup_logging(
@@ -125,7 +118,7 @@ def _start_dashboard() -> "subprocess.Popen[bytes]":
 
 
 if __name__ == "__main__":
-    # Ключи, введённые в приложении, участвуют в проверке так же, как .env.
+    # Ключи, введённые в приложении, участвуют в проверке так же, как окружение.
     apply_secrets(Config)
     try:
         effective_config(Config).validate()

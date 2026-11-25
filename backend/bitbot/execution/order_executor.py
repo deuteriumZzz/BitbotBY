@@ -67,7 +67,7 @@ def _calc_dynamic_leverage(
         lev_max = int(getattr(Config, "LEVERAGE_MAX", 5))
         fallback = max(lev_min, min(lev_max, int(getattr(Config, "LEVERAGE", 3))))
 
-        # Режим: из RuntimeConfig (Telegram) или из .env
+        # Режим: из RuntimeConfig (Telegram) или из настроек
         mode = "volatility"
         target_risk = float(getattr(Config, "LEVERAGE_TARGET_RISK", 0.01))
         if runtime_config is not None:

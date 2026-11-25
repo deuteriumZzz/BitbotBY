@@ -1717,22 +1717,6 @@
    "readonly": false,
    "hot": false,
    "basic": false
-  },
-  {
-   "key": "DASHBOARD_USER",
-   "group": "Сервер",
-   "label": "Логин дашборда",
-   "type": "str",
-   "default": "admin",
-   "min": null,
-   "max": null,
-   "step": null,
-   "unit": "",
-   "options": [],
-   "hint": "Меняется в .env, затем make htpasswd.",
-   "readonly": true,
-   "hot": false,
-   "basic": false
   }
  ],
  "config": {
@@ -2062,10 +2046,6 @@
   },
   "WEBAPP_URL": {
    "value": "",
-   "source": "default"
-  },
-  "DASHBOARD_USER": {
-   "value": "admin",
    "source": "default"
   },
   "LOCAL_FALLBACK": {

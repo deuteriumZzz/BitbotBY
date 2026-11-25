@@ -2,7 +2,7 @@
 """Запуск BitbotBY в Docker на этом компьютере или на сервере: команды `./bitbot`.
 
 Здесь — то, что работает без зависимостей проекта (только Docker и Python 3,
-стандартная библиотека): start, stop, status, logs, url, phone, server, keys,
+стандартная библиотека): start, stop, status, logs, url, phone, server,
 autostart, awake. Команды разработчика (start --native, job, test, lint, fmt,
 check) — cli/dev.py. Список команд — `./bitbot help`.
 
@@ -425,51 +425,12 @@ def cmd_phone(action: str, port: int, flags: Dict[str, str]) -> int:
     return cmd_start(port, None, open_browser=False)
 
 
-def env_for_import(text: str) -> str:
-    """Из .env берём только строки KEY=VALUE: комментарии и пустое не нужны."""
-    keep = [
-        ln
-        for ln in text.splitlines()
-        if "=" in ln and not ln.lstrip().startswith("#") and ln.split("=", 1)[1].strip()
-    ]
-    return "\n".join(keep) + "\n"
-
-
-def cmd_import_env(env_path: Path, overwrite: bool) -> int:
-    """Переносит ключи из .env в зашифрованное хранилище приложения."""
-    if not env_path.exists():
-        say(f"Не нашёл {env_path}. Укажите файл: import-env --env=/путь/к/.env")
-        return 2
-    if not (STATE_DIR / "compose.env").exists() or not own_dashboard_running():
-        say("Сначала запустите BitbotBY (BitbotBY.command), потом повторите.")
-        return 2
-    say("Переношу ключи из .env в зашифрованное хранилище (значения не показываются)…")
-    cmd = compose_cmd(["exec", "-T", "dashboard", "python", "-m", "bitbot.config.secrets_import"])
-    if overwrite:
-        cmd.append("--overwrite")
-    proc = run(
-        cmd,
-        input=env_for_import(env_path.read_text(encoding="utf-8")),
-        text=True,
-        capture_output=True,
-    )
-    say((proc.stdout or "").strip() or (proc.stderr or "").strip()[-300:])
-    if proc.returncode != 0:
-        return proc.returncode
-    run(compose_cmd(["restart", "bot"]), capture_output=True)
-    say(
-        "Бот перезапущен и подхватит ключи. Проверка у сервисов: Настройки → Подключения."
-    )
-    say("Теперь ключи из .env можно удалить — они уже в хранилище.")
-    return 0
-
-
 # ── Сервер (VPS): docker-compose.server.yml + Caddy с HTTPS ───────────────────
 #
 # Одна команда на сервере: готовит .server/server.env (мастер-ключ хранилища и ключ
 # панели — один раз и навсегда), запускает всё и, если Telegram ещё не подключён,
 # спрашивает токен бота и находит ваш чат по коду. Ключи уходят в зашифрованное
-# хранилище тем же bitbot.config.secrets_import, что и import-env; .env не нужен.
+# хранилище через bitbot.config.secrets_import; .env не нужен.
 
 SERVER_DIR = ROOT / ".server"
 SERVER_COMPOSE = ROOT / "docker-compose.server.yml"
@@ -1046,9 +1007,6 @@ def _run(argv: List[str]) -> int:
         return cmd_start(port, data_dir, open_browser="--no-browser" not in argv)
     if action == "url":
         return cmd_url(port, data_dir)
-    if action in ("import-env", "keys"):
-        env = Path(flags["--env"]).expanduser() if "--env" in flags else ROOT / ".env"
-        return cmd_import_env(env, "--overwrite" in argv)
     if action == "autostart":
         return cmd_autostart(args[1] if len(args) > 1 else "status")
     if action == "awake":

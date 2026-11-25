@@ -1,4 +1,4 @@
-"""Разовый перенос ключей из .env в зашифрованное хранилище.
+"""Перенос ключей из строк KEY=VALUE (stdin) в зашифрованное хранилище.
 
 Запускается лаунчером внутри контейнера (`./bitbot keys import`): строки `KEY=VALUE`
 приходят через stdin, значения нигде не печатаются — только названия полей. Уже
@@ -12,7 +12,7 @@ from bitbot.config import secrets as secrets_store
 
 
 def parse_env(text: str) -> Dict[str, str]:
-    """Простой разбор .env: комментарии, кавычки и `# …` после значения."""
+    """Простой разбор строк KEY=VALUE: комментарии, кавычки и `# …` после значения."""
     out: Dict[str, str] = {}
     for raw in text.splitlines():
         line = raw.strip()

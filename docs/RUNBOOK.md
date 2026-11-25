@@ -90,9 +90,7 @@ open http://localhost:8080
 # Подождите или перезапустите после анализа:
 docker compose restart bot
 
-# 3. Рассмотреть смену стратегии через .env
-# ACTIVE_STRATEGY=mean_reversion
-docker compose restart bot
+# 3. Рассмотреть смену стратегии: приложение → «Цепочка» → «Стратегии»
 ```
 
 ---
@@ -131,9 +129,7 @@ docker compose start bot
 # Проверить баланс через dashboard
 open http://localhost:8080
 
-# Снизить риск на сделку в .env
-# RISK_PER_TRADE=0.01  (с 2% до 1%)
-docker compose restart bot
+# Снизить риск на сделку: приложение → «Бот» → «Как рискуем» (например, с 2% до 1%)
 ```
 
 ---
@@ -148,9 +144,7 @@ docker compose restart bot
 # Запустить свежий бэктест для выбора лучшей стратегии
 docker compose exec bot python -m bitbot.research.backtest
 
-# После бэктеста — сменить стратегию в .env
-# ACTIVE_STRATEGY=<лучшая из бэктеста>
-docker compose restart bot
+# После бэктеста — включить лучшую стратегию: приложение → «Цепочка» → «Стратегии»
 ```
 
 ---

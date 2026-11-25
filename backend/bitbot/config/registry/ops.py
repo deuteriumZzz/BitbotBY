@@ -69,16 +69,16 @@ SETTINGS: Tuple[Setting, ...] = (
         "str",
         "redis://localhost:6379/0",
         readonly=True,
-        hint="Меняется только в .env: настройки сами хранятся в Redis.",
+        hint="Задаёт лаунчер или сервер: настройки сами хранятся в Redis.",
     ),
     Setting(
         "HEALTH_PORT",
         _G_SERVER,
         "Порт health-сервера",
         "int",
-        8080,
+        8081,
         readonly=True,
-        hint="Меняется только в .env и docker-compose.",
+        hint="Задаётся в docker-compose.",
     ),
     Setting(
         "WEBAPP_URL",
@@ -93,14 +93,5 @@ SETTINGS: Tuple[Setting, ...] = (
             if not v or str(v).startswith("https://")
             else "Только https-адрес (требование Telegram)."
         ),
-    ),
-    Setting(
-        "DASHBOARD_USER",
-        _G_SERVER,
-        "Логин дашборда",
-        "str",
-        "admin",
-        readonly=True,
-        hint="Меняется в .env, затем make htpasswd.",
     ),
 )

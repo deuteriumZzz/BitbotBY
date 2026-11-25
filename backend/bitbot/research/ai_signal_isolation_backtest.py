@@ -392,7 +392,9 @@ async def run_isolation_backtest(
 
     ai = AIAnalyzer()
     if not ai.enabled:
-        print("ОШИБКА: ни один AI-провайдер не сконфигурирован (см. .env)")
+        print(
+            "ОШИБКА: ни один AI-провайдер не сконфигурирован (добавьте ключ в приложении)"
+        )
         return None
     scanner = MarketScanner(
         api=None, data_loader=None

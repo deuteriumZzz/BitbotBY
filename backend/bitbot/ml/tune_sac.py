@@ -211,7 +211,7 @@ async def _get_tune_symbols(api: "Any", loader: "Any") -> List[str]:
     bluechip → фиксированный список крупных монет
     altcoin  → топ TUNE_TOP_N по объёму, исключая bluechip-монеты
     <пусто>  → топ TUNE_TOP_N по объёму без фильтра
-    Переопределяется через TUNE_SYMBOLS="BTC/USDT,ETH/USDT" в .env.
+    Переопределяется через TUNE_SYMBOLS="BTC/USDT,ETH/USDT" в окружении.
     """
     override = os.getenv("TUNE_SYMBOLS", "").strip()
     if override:

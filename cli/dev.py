@@ -59,7 +59,14 @@ def _flags(argv: List[str]) -> Dict[str, str]:
 
 
 def _run(cmd: List[str], env: Optional[Dict[str, str]] = None, cwd: Path = ROOT) -> int:
-    full = {**os.environ, "PYTHONPATH": str(BACKEND), **(env or {})}
+    # Мастер-ключ хранилища — тот же, что у Docker-запуска (.launcher/state.json): ключи сервисов
+    # читаются из зашифрованного хранилища, настройки — из приложения; .env не нужен.
+    from launcher import load_state  # noqa: PLC0415 — cli/ уже в sys.path у ./bitbot
+
+    key = {"BITBOT_SECRETS_KEY": load_state()["secrets_key"]}
+    # Как в Docker (docker-compose.*.yml): база — paper; реальный счёт включает только
+    # переключатель в приложении (кодовое слово), а не отсутствие переменной.
+    full = {"PAPER_TRADING": "true", **os.environ, "PYTHONPATH": str(BACKEND), **key, **(env or {})}
     return subprocess.call(cmd, cwd=cwd, env=full)
 
 

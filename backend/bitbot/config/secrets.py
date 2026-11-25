@@ -9,7 +9,7 @@
 - Наружу (API) значения не отдаются никогда: только «задан» и последние 4
   символа, а у паролей и PIN — даже их нет.
 - Бот при старте подставляет сохранённые значения в Config и os.environ
-  (`apply_secrets`): ключ из приложения важнее ключа из .env.
+  (`apply_secrets`): ключи сервисов берутся только из приложения.
 """
 
 from __future__ import annotations
@@ -178,7 +178,7 @@ SERVICES: Tuple[Service, ...] = (
             _key("TELEGRAM_SENTIMENT_API_HASH", "API Hash", min_len=32),
             Field("TELEGRAM_SENTIMENT_PHONE", "Телефон", secret=False, min_len=8),
             # Сессия Telethon после входа по коду: даёт доступ к аккаунту, поэтому
-            # хранится только здесь — не в файле, не в .env и не в os.environ.
+            # хранится только здесь — не в файле и не в os.environ.
             _key(
                 "TELEGRAM_SENTIMENT_SESSION",
                 "Вход в Telegram",
@@ -306,7 +306,7 @@ def x_encode(part: str) -> str:
 
 
 def x_parse(raw: Optional[str]) -> List[Tuple[str, str, str, str]]:
-    """Строка из хранилища или .env → список (логин, пароль, почта, пароль_почты)."""
+    """Строка из хранилища или окружения → список (логин, пароль, почта, пароль_почты)."""
     out: List[Tuple[str, str, str, str]] = []
     for entry in (raw or "").split(","):
         p = entry.strip().split(":")
@@ -396,7 +396,7 @@ def tg_save_session(session: str, name: str, source: str) -> None:
 
 
 # Ключи сервисов (биржа, AI, Telegram…) — только из зашифрованного хранилища:
-# значение из .env/окружения игнорируется. Секреты инфраструктуры (сервис
+# значение из окружения игнорируется. Секреты инфраструктуры (сервис
 # «server»: ключ панели, пароль Redis, секрет вебхука, PIN) задаёт окружение
 # compose/лаунчера, и они читаются оттуда, как раньше.
 STORE_ONLY = frozenset(
@@ -425,7 +425,7 @@ def apply_secrets(config_cls: Any) -> List[str]:
     except Exception as e:
         logger.error("Secrets store unreadable: %s", e)
         values, models = {}, {}
-    # Ключ сервиса, которого нет в хранилище, не берём из .env/окружения:
+    # Ключ сервиса, которого нет в хранилище, не берём из окружения:
     # убираем и из Config, и из os.environ (его читают модули и подпроцессы).
     ignored = []
     for env in sorted(STORE_ONLY - set(values) - {TG_SESSION_ENV}):
@@ -435,7 +435,7 @@ def apply_secrets(config_cls: Any) -> List[str]:
             setattr(config_cls, env, "")
     if ignored:
         logger.warning(
-            "Ignored API keys from .env/environment (only the encrypted store is used; "
+            "Ignored API keys from the environment (only the encrypted store is used; "
             "add them in the app): %s",
             ", ".join(ignored),
         )

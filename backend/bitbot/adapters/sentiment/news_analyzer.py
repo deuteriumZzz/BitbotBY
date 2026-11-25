@@ -87,7 +87,7 @@ class NewsAnalyzer:
     При отсутствии NEWS_API_KEY возвращает нейтральный сентимент
     вместо исключения.
 
-    AI-провайдер для сентимента выбирается через AI_PROVIDER (.env):
+    AI-провайдер для сентимента выбирается через AI_PROVIDER:
       auto      → Claude → DeepSeek → OpenAI (первый найденный ключ)
       anthropic → только Claude
       deepseek  → только DeepSeek

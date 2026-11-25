@@ -15,7 +15,7 @@ import pandas as pd
 from gymnasium import spaces
 
 HOLD_ZONE = float(_os.getenv("SAC_HOLD_ZONE", "0.3"))
-# Комиссия за сделку (синхронизирована с COMMISSION_RATE из .env)
+# Комиссия за сделку (синхронизирована с настройкой COMMISSION_RATE)
 COMMISSION = float(_os.getenv("COMMISSION_RATE", "0.001"))
 # Размер вектора наблюдения: 11 рыночных + 3 портфельных + 7 контекстных + 1 ATR
 OBS_DIM = 22

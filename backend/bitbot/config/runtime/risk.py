@@ -82,7 +82,7 @@ class RiskSettings(TradingSettings):
             return 2.0
 
     def get_trading_interval(self) -> int:
-        """Интервал торгового цикла в секундах (из профиля или .env)."""
+        """Интервал торгового цикла в секундах (из профиля или умолчание)."""
         try:
             val = self._get(keys.TRADING_INTERVAL)
             return int(val) if val else Config.TRADING_INTERVAL

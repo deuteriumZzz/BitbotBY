@@ -544,7 +544,7 @@ class Config:
                 raise ValueError(
                     f"Missing required env vars for live trading: "
                     f"{', '.join(missing)}. "
-                    f"Set them in .env or use PAPER_TRADING=true."
+                    f"Add them in the app or use PAPER_TRADING=true."
                 )
 
         # Валидация AI-провайдера

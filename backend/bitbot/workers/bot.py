@@ -128,7 +128,7 @@ class TradingBot:
         self.redis = RedisClient()
         # Настройки, изменённые в приложении, — до создания компонентов и validate().
         apply_config_overrides(Config, self._bus)
-        apply_secrets(Config)  # ключи из приложения важнее .env
+        apply_secrets(Config)  # ключи сервисов — только из приложения
         self._runtime_config = RuntimeConfig(redis_client=self.redis)
         # Восстанавливаем runtime-переключение Paper/Live после рестарта
         override = self._runtime_config.get_paper_trading_override()
@@ -255,7 +255,7 @@ class TradingBot:
         if Config.PAPER_TRADING:
             logger.warning("*** PAPER TRADING MODE — no real orders will be placed ***")
         # Регистрируем секреты для маскировки в логах
-        # (все секретные поля из реестра ключей — и из .env, и из приложения).
+        # (все секретные поля из реестра ключей — и из окружения, и из приложения).
         _SecretFilter.register(
             *(
                 str(getattr(Config, f.env, "") or os.getenv(f.env, ""))

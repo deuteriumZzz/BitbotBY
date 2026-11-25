@@ -7,13 +7,9 @@ import os
 import sys
 
 import uvicorn
-from dotenv import load_dotenv
 
-# Без Docker настройки берутся из .env; заданные раньше (Docker, shell) не трогаем.
-load_dotenv(".env")
-
-from bitbot.api import app  # noqa: F401,E402 — re-exported for uvicorn discovery
-from bitbot.config.constants import FRONTEND_DIST  # noqa: E402
+from bitbot.api import app  # noqa: F401 — re-exported for uvicorn discovery
+from bitbot.config.constants import FRONTEND_DIST
 
 if __name__ == "__main__":
     if not (FRONTEND_DIST / "index.html").exists():
