@@ -100,6 +100,14 @@ def test_slots_full_cycle_says_why():
     assert n["track"]["text"] == "сопровождает 3 позиции"
 
 
+def test_scan_step_names_coins_with_stale_data():
+    saved: list = []
+    t = DecisionTrace(mode=lambda: "ai", store=saved.append)
+    t.on_event("radar.stage", {"stage": "scan", "symbols": ["A", "B"], "bad_data": 1})
+    t.on_event("cycle", {"state": "monitor", "used": 1, "max": 1})
+    assert saved[-1]["nodes"]["scan"]["text"] == "2 монеты · данные устарели у 1"
+
+
 def test_local_fallback_is_named_honestly():
     t = DecisionTrace(mode=lambda: "ai")
     t.on_event("radar.stage", {"stage": "scan", "symbols": ["SOL/USDT"]})

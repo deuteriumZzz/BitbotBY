@@ -2,10 +2,10 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
-import { arrow, base, fmtN, pct, price, priceDecimals, tone, usd } from "../../lib/format";
+import { arrow, base, fmtN, pct, plural, price, priceDecimals, tone, usd } from "../../lib/format";
 
 import { reducedMotion } from "../../lib/platform";
-import type { Position } from "../../lib/types";
+import type { OpsStatus, Position } from "../../lib/types";
 import { actions } from "../../store/actions";
 import { positionPnl, useStore } from "../../store";
 import { stratName } from "../bots";
@@ -19,6 +19,41 @@ import { Flash, Gauge } from "../../components/motion";
 interface Leaving {
   p: Position;
   pnl: number;
+}
+
+const RECON_TEXT: Record<string, string> = {
+  untracked: "есть на бирже, бот её не ведёт",
+  stale: "бот ведёт, а на бирже её нет",
+  qty: "объём не совпадает с биржей",
+  side: "сторона не совпадает с биржей",
+};
+
+/** Сверка позиций с биржей (live): когда сверено и что не сошлось. В paper сверять не с чем. */
+function ReconcileLine() {
+  const r = useStore((s) => (s.opsStatus?.mode === "live" ? s.opsStatus.reconcile : null));
+  if (!r) return null;
+  const [cls, text] = reconText(r, Date.now() / 1000);
+  return (
+    <p className="note-soon recon" role="status">
+      <span className={`dot ${cls}`} /> {text}
+    </p>
+  );
+}
+
+export function reconText(r: NonNullable<OpsStatus["reconcile"]>, now: number): [string, string] {
+  const mins = Math.max(0, Math.round((now - r.at) / 60));
+  const problems = (r.problems ?? []).map((k) => {
+    const [kind, sym] = [k.slice(0, k.indexOf(":")), k.slice(k.indexOf(":") + 1)];
+    return `${base(sym)} — ${RECON_TEXT[kind] ?? kind}`;
+  });
+  const pending = r.pending_orders ?? 0;
+  return r.error
+    ? ["bad", "Не удалось получить позиции с биржи — сверка повторится"]
+    : problems.length
+      ? ["bad", `Расхождение с биржей: ${problems.join("; ")}. Бот ничего не менял — проверьте на бирже.`]
+      : pending
+        ? ["warn", `${pending} ${plural(pending, ["ордер отправлен", "ордера отправлены", "ордеров отправлены"])}, ждём ответа биржи`]
+        : ["ok", `Сверено с биржей ${mins ? `${mins} мин назад` : "только что"}`];
 }
 
 export function Positions() {
@@ -58,6 +93,7 @@ export function Positions() {
         <h2>Открытые позиции</h2>
         <span className="pill sp">{list.length}</span>
       </div>
+      <ReconcileLine />
       <div className="pos-list">
         {list.map((p) => (
           <PositionCard key={p.symbol} p={p} enter={fresh.has(p.symbol)} />

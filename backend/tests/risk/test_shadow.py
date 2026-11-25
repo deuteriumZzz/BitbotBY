@@ -184,3 +184,20 @@ def test_max_corr_receives_only_other_open_symbols():
     }
     call(positions_before=held, max_corr=lambda s, o: seen.append(o) or 0.0)
     assert seen == [["SOL/USDT"]]
+
+
+def test_gate_verdict_lands_in_trade_explanation():
+    """«Почему открыта»: шаг «риск» говорит, что сказал бы единый гейт."""
+    from types import SimpleNamespace
+
+    from bitbot.workers.bot import TradingBot
+
+    steps = [{"node": "risk", "ok": True, "text": "проверки пройдены"}]
+    bot = SimpleNamespace(_monitored={"ETH/USDT": {"trace": steps}})
+    out = {"would_block": True, "verdict": {"reasons": ["correlation"]}}
+    TradingBot._note_gate_in_trace(bot, "ETH/USDT", out)
+    assert steps[0]["text"] == (
+        "проверки пройдены · единый гейт риска (наблюдает): "
+        "был бы против — сильно связана с открытыми позициями"
+    )
+    TradingBot._note_gate_in_trace(bot, "BTC/USDT", out)  # нет позиции — ничего

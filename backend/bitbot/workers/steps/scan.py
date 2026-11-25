@@ -88,10 +88,14 @@ async def run(bot: "TradingBot", ctx: CycleContext) -> Optional[CycleContext]:
     snapshots = await bot._cycle.collect_snapshots(
         list(market_data.keys()), market_data
     )
-    bot._record_data_quality(snapshots)
+    bad_data = bot._record_data_quality(snapshots)
     bot._publish_event(
         "radar.stage",
-        {"stage": "scan", "symbols": [s.get("symbol") for s in snapshots]},
+        {
+            "stage": "scan",
+            "symbols": [s.get("symbol") for s in snapshots],
+            "bad_data": bad_data,
+        },
     )
     balance = await bot._get_balance_usdt()
     return replace(

@@ -52,6 +52,7 @@ def test_ops_status_shape_without_ws():
     assert all(isinstance(v, bool) for v in st["flags"].values())
     assert st["ws"] is None and st["backup"] is None and st["emergency"] == 0
     assert st["mode"] in ("paper", "live")
+    assert st["reconcile"] is None  # paper: сверки с биржей нет
 
 
 def test_run_config_record_writes_ledger_and_swallows_errors():

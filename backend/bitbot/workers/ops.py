@@ -207,6 +207,7 @@ def ops_status(bot: Any) -> Dict[str, Any]:
         "ws": ws,
         "backup": getattr(bot, "_last_backup", None),
         "emergency": level,
+        "reconcile": getattr(bot, "_reconcile_last", None),
         "ts": datetime.now(timezone.utc).isoformat(),
     }
 

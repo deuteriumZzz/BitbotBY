@@ -56,6 +56,8 @@ export interface OpsStatus {
   backup: { ok: boolean; at: string; path: string | null; error: string | null } | null;
   /** 0 — норма, 1–4 — аварийный уровень. */
   emergency: number;
+  /** Последняя сверка с биржей (только live): проблемы вида "untracked:BTC/USDT". */
+  reconcile?: { at: number; problems?: string[]; pending_orders?: number; error?: boolean } | null;
   ts: string;
 }
 

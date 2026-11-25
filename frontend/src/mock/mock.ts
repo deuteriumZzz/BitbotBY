@@ -426,6 +426,11 @@ function state() {
       trace: p.trace,
     })),
     cycle: lastCycle,
+    // В демо live: сверка 2 мин назад, один ордер ждёт ответа биржи.
+    ops_status: bot.paper
+      ? null
+      : { mode: "live", prompt_version: "demo", flags: {}, forecaster: "none", ws: null, backup: null, emergency: 0,
+          reconcile: { at: Date.now() / 1000 - 120, problems: [], pending_orders: 1 }, ts: new Date().toISOString() },
     trusted: config.TELEGRAM_TRUSTED_TRADING?.value
       ? {
           channel: "cryptomoonalerts",

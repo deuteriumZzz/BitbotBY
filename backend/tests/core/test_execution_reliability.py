@@ -262,6 +262,9 @@ async def test_untracked_alerts_only_after_two_checks_and_once(tmp_path) -> None
         assert "ничего не менял" in text
         await bot._reconcile_tick()
         assert bot.telegram.notify.await_count == 1  # кулдаун: без спама
+    # итог последней сверки уходит в приложение через ops_status
+    assert bot._reconcile_last["problems"] == ["untracked:DOGE/USDT"]
+    assert bot._reconcile_last["pending_orders"] == 0
     rec = next(r for r in _ledger(tmp_path) if r["kind"] == "reconcile")
     assert rec["untracked"] == ["DOGE/USDT"]
 

@@ -89,6 +89,18 @@ _REGIME_RU = {
 # RotatingFileHandler на общий logs/trading.log.
 logger = logging.getLogger(__name__)
 
+# Причины единого гейта риска (`risk.risk_gate`) словами для объяснения сделки.
+_GATE_REASON = {
+    "correlation": "сильно связана с открытыми позициями",
+    "symbol_exposure": "слишком большая доля в одной монете",
+    "gross_exposure": "общая нагрузка портфеля",
+    "net_beta": "перекос в одну сторону рынка",
+    "stress_cvar": "риск при обвале рынка",
+    "ood": "рынок ведёт себя необычно",
+    "no_equity": "нет средств",
+    **{f"circuit_breaker_l{n}": f"аварийный уровень {n}" for n in range(1, 5)},
+}
+
 
 def _opened_at(entry_time: Optional[str]) -> Optional[float]:
     """entry_time из истории (ISO) → unix-время; без даты — None."""
@@ -188,6 +200,9 @@ class TradingBot:
         self._reconcile_tracker = ConfirmTracker()
         self._reconcile_alerted: Dict[str, float] = {}
         self._reconcile_failures = 0
+        self._reconcile_last: Optional[Dict[str, Any]] = (
+            None  # итог сверки для приложения
+        )
         self._command_task: Optional[asyncio.Task[None]] = None
         self.trade_history = TradeHistory()
         # След решения для приложения: только слушает события и ничего не решает.
@@ -608,6 +623,7 @@ class TradingBot:
             positions = await self.api.fetch_positions_checked()
         except Exception as exc:
             self._reconcile_failures += 1
+            self._reconcile_last = {"at": time.time(), "error": True}
             logger.warning(
                 "Periodic reconcile: positions unavailable (%d in a row): %s",
                 self._reconcile_failures,
@@ -624,6 +640,12 @@ class TradingBot:
             monitored = dict(self._monitored)
         diff = diff_positions(monitored, positions)
         confirmed = self._reconcile_tracker.update(diff.keys())
+        # Итог сверки для приложения (ops_status): когда сверено и что не сошлось.
+        self._reconcile_last = {
+            "at": time.time(),
+            "problems": sorted(confirmed),
+            "pending_orders": len(self.api.__dict__.get("ambiguous_orders") or {}),
+        }
         current = diff.keys()
         for key in list(self._reconcile_alerted):
             if key not in current:
@@ -1150,8 +1172,33 @@ class TradingBot:
                 decision_id=rec.get("decision_id"),
                 **out,
             )
+            self._note_gate_in_trace(str(rec.get("symbol") or ""), out)
         except Exception as exc:  # тень не имеет права ломать цикл
             logger.debug("Shadow risk gate failed: %s", exc)
+
+    def _note_gate_in_trace(self, sym: str, out: Dict[str, Any]) -> None:
+        """Вердикт теневого гейта — в шаг «риск» объяснения сделки («Почему открыта»)."""
+        pos = self._monitored.get(sym)
+        if pos is None:
+            return
+        steps = pos.get("trace") or []
+        risk = next((s for s in steps if s.get("node") == "risk"), None)
+        if risk is None:
+            return
+        reasons = (out.get("verdict") or {}).get("reasons") or []
+        why = ", ".join(_GATE_REASON.get(r, r) for r in reasons[:2])
+        risk["text"] = (
+            risk["text"]
+            + " · единый гейт риска (наблюдает): "
+            + (f"был бы против — {why}" if out.get("would_block") else "одобрил")
+        )[:200]
+        trade_id = pos.get("trade_id")
+        if trade_id:
+            task = asyncio.get_running_loop().create_task(
+                self.trade_history.set_trace(int(trade_id), steps)
+            )
+            self._bg_tasks.add(task)
+            task.add_done_callback(self._bg_tasks.discard)
 
     async def _close_all_open_positions(self, reason: str) -> None:
         """Принудительно закрывает все открытые позиции — делегирует PositionMonitor."""
@@ -1309,8 +1356,8 @@ class TradingBot:
         if items:
             self._ledger_write("shadow_decisions", items=items[:30])
 
-    def _record_data_quality(self, snapshots: list) -> None:
-        """Сводка качества данных цикла в Decision Ledger (только наблюдение)."""
+    def _record_data_quality(self, snapshots: list) -> int:
+        """Сводка качества данных цикла в Decision Ledger; возвращает, у скольких монет данные плохие."""
         counts: Dict[str, int] = {}
         issues: list = []
         for snap in snapshots:
@@ -1342,6 +1389,7 @@ class TradingBot:
             issues=issues[:20],
             dropped=dropped[:20],
         )
+        return len(issues) + len(dropped)
 
     def _quality_filter(self, snapshots: list) -> list:
         """Убирает из входов символы с не-VALID свечами, если включён DATA_QUALITY_GATE.

@@ -134,6 +134,7 @@ select.sel{background:var(--bg);color:var(--ink);border:1px solid var(--line-ui)
 .radar-note b{color:var(--ink);font-weight:600}
 
 .pos-list{display:flex;flex-direction:column;gap:8px}
+.recon{display:flex;align-items:center;gap:8px;margin:0 0 10px}
 .pos{background:var(--panel-2);border:1px solid var(--line);border-radius:var(--r);padding:12px;display:flex;flex-direction:column;gap:10px;overflow:hidden;position:relative;flex:none}
 .pos-h{display:flex;align-items:center;gap:10px;min-width:0}
 .coin{width:36px;height:36px;border-radius:var(--r);display:grid;place-items:center;background:var(--bg);border:1px solid var(--line);font:700 9px/1 var(--f-num);flex:none;letter-spacing:-.02em}

@@ -99,6 +99,7 @@ class DecisionTrace:
         self._state = state
         self._at = time.time()
         self._scanned = 0
+        self._bad_data = 0
         self._candidates: Set[str] = set()
         self._ai: List[Tuple[str, str]] = []
         self._signals: Dict[str, Dict[str, Any]] = {}
@@ -124,6 +125,7 @@ class DecisionTrace:
             if stage == "scan":
                 self._reset("scan")
                 self._scanned = len(d.get("symbols") or [])
+                self._bad_data = int(d.get("bad_data") or 0)
             elif stage == "prescore":
                 self._candidates = {str(s) for s in d.get("symbols") or []}
             elif stage == "signal" and sym:
@@ -220,13 +222,11 @@ class DecisionTrace:
         scanned = (
             f"{self._scanned} {_plural(self._scanned, 'монета', 'монеты', 'монет')}"
         )
-        n = {
-            "scan": _step(
-                "scan",
-                True if self._scanned else None,
-                f"{scanned} · {cand} в кандидаты" if cand else scanned,
-            )
-        }
+        scan_text = f"{scanned} · {cand} в кандидаты" if cand else scanned
+        if self._bad_data:
+            # Свечи устарели или с дырами: при DATA_QUALITY_GATE по ним нет входа.
+            scan_text += f" · данные устарели у {self._bad_data}"
+        n = {"scan": _step("scan", True if self._scanned else None, scan_text)}
         skipped = ""
         if self._state == "monitor":
             skipped = "пропущено: все слоты заняты"

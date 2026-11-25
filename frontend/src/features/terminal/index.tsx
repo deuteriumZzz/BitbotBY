@@ -6,7 +6,9 @@ import { arrow, base, fmtN, plural, tone, usd } from "../../lib/format";
 import { idleReason } from "../../lib/idle";
 
 import { positionPnl, useStore } from "../../store";
+import type { AiState } from "../../lib/types";
 import { cfg } from "../bots";
+import { STATUS } from "../chainops";
 import { MarketPulse } from "../market";
 import { ReadinessCard } from "../setup";
 
@@ -44,13 +46,15 @@ function HealthStrip() {
     return id ? (s.ai?.providers.find((p) => p.id === id)?.name ?? id) : "";
   });
   const secrets = useStore((s) => s.secrets);
-  const aiOk = useStore((s) => Boolean(s.ai?.chain.length));
+  const aiState = useStore((s) => s.ai);
   const setTab = useStore((s) => s.setTab);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 5000);
     return () => clearInterval(t);
   }, []);
+  const aiOut = aiDown(aiState, now);
+  const aiOk = Boolean(aiState?.chain.length) && !aiOut;
   const ago = cycleAt ? Math.max(0, Math.round((now - cycleAt) / 1000)) : null;
   const agoText =
     ago === null
@@ -76,10 +80,12 @@ function HealthStrip() {
       "Решает",
       mode === "local"
         ? "локальные стратегии"
-        : ai && ai !== "local"
-          ? `AI · ${ai}`
-          : "AI, ждёт ответа",
-      mode === "local" || ai ? "ok" : "warn",
+        : aiOut
+          ? `стратегии — AI не отвечает (${aiOut})`
+          : ai && ai !== "local"
+            ? `AI · ${ai}`
+            : "AI, ждёт ответа",
+      mode === "local" ? "ok" : aiOut ? "bad" : ai ? "ok" : "warn",
     ],
     ["Цикл", agoText, stale ? "bad" : ago === null ? "warn" : "ok"],
     ...(guardsOff
@@ -130,6 +136,20 @@ function HealthStrip() {
       )}
     </ul>
   );
+}
+
+/** Все звенья цепочки AI сейчас недоступны — коротко, почему; иначе пусто. */
+export function aiDown(ai: AiState | null, now: number): string {
+  if (!ai?.chain.length) return "";
+  const reasons = ai.chain.map(({ provider }) => {
+    const p = ai.providers.find((x) => x.id === provider);
+    if (!p) return "";
+    const paused = (p.cooldown_until ?? 0) * 1000 > now;
+    const fine = p.status === "ok" || p.status === "unknown";
+    if (fine && !paused) return "";
+    return `${p.name} — ${fine ? "пауза" : (STATUS[p.status]?.[1] ?? p.status)}`;
+  });
+  return reasons.every(Boolean) ? reasons.join(", ") : "";
 }
 
 /** «Почему бот молчит?»: одна причина простыми словами и переход к шагу, где это настраивается. */
