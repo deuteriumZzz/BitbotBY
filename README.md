@@ -11,7 +11,7 @@
 [![Python 3.11](https://img.shields.io/badge/python-3.11-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/dashboard-FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![Docker](https://img.shields.io/badge/run-Docker-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
-[![Tests](https://img.shields.io/badge/tests-1953%20python%20%2B%2057%20web-brightgreen)](#-разработка-и-тесты)
+[![Tests](https://img.shields.io/badge/tests-2500%2B%20python%20%2B%2084%20web-brightgreen)](#-разработка-и-тесты)
 [![Bybit](https://img.shields.io/badge/exchange-Bybit-F7A600)](https://www.bybit.com/)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
@@ -23,15 +23,13 @@ BitbotBY сканирует рынок Bybit, сводит сигналы AI-м�
 рыночным контекстом (funding, ликвидации, Fear & Greed, ордербук, деривативы, сентимент) и торгует
 perpetual-фьючерсами long/short или спотом — с риск-менеджментом (Kelly, CVaR, Almgren-Chriss).
 Решать может AI, SAC, Hybrid или **только локальные стратегии без AI**. Управление — из **приложения**
-(MiniApp в Telegram, браузер, десктоп) и из Telegram-бота: оба работают с одним и тем же ботом.
+(MiniApp в Telegram, браузер, десктоп); Telegram присылает уведомления с кнопкой «Открыть в приложении».
 
 Три профиля рынка: **Bluechip** (топ-20), **Altcoin** (топ-100), **Meme** (топ-200, памп-стратегии и сентимент соцсетей).
 
 > **Честный статус.** Бот стартует в **Paper** (виртуальные сделки). Бэктесты пока не нашли
 > статистически значимого преимущества ни у одной стратегии ([docs/STRATEGIES.md](docs/STRATEGIES.md)),
 > поэтому реальные деньги — только после [чек-листа](#-перед-реальной-торговлей).
-
-> Переводы в `docs/README.*.md` отстают от этой версии; актуален русский README.
 
 ---
 
@@ -85,35 +83,39 @@ perpetual-фьючерсами long/short или спотом — с риск-м
 
 ### На своём компьютере — один ярлык
 
-Нужны [Docker Desktop](https://www.docker.com/products/docker-desktop/) и Python 3. Ярлыки лежат в папке `launcher/`:
+Нужны [Docker Desktop](https://www.docker.com/products/docker-desktop/) и Python 3. Всё запускается одной командой
+`./bitbot` из корня проекта; для двойного щелчка рядом лежат ярлыки `BitbotBY.command` (macOS) и `BitbotBY.bat` (Windows).
 
-| Что | macOS | Windows | Linux |
-|---|---|---|---|
-| Запустить | `BitbotBY.command` | `launcher\BitbotBY.bat` | `launcher/bitbotby.sh` |
-| Остановить | `launcher/BitbotBY-stop.command` | `launcher\BitbotBY-stop.bat` | `launcher/bitbotby.sh stop` |
-| Приложение на телефоне | `launcher/BitbotBY-phone.command` | `launcher\BitbotBY-phone.bat` | `launcher/bitbotby.sh phone on` |
+```bash
+./bitbot start        # запустить и открыть приложение
+./bitbot stop         # остановить
+./bitbot phone on     # приложение на телефоне (Telegram Mini App)
+./bitbot help         # все команды
+```
 
-- Первый запуск собирает образ (5–15 минут), поднимает Redis, бота и дашборд и сам открывает приложение.
-  Порт 8080 занят — лаунчер возьмёт ближайший свободный и покажет адрес.
+- Первый запуск собирает образ (5–15 минут), поднимает Redis, бота и API и сам открывает приложение.
+  Порт 8080 занят — берётся ближайший свободный, адрес будет показан.
 - Старт в **Paper** и **Local** (решают локальные стратегии), поэтому ключи для начала не нужны. Ключи Bybit, AI и
   Telegram вводятся в приложении: **Настройки → Ключи и доступ** — и хранятся зашифрованными.
-- Вход: лаунчер открывает одноразовую ссылку, которая работает только на этом компьютере (порт открыт на 127.0.0.1).
+- Вход: открывается одноразовая ссылка, которая работает только на этом компьютере (порт открыт на 127.0.0.1).
   Окно закрыли — `./bitbot url`.
-- **Телефон:** `phone on` поднимает туннель Cloudflare (нужен `cloudflared`), и в Telegram появляется кнопка «Терминал».
-  Без входа через Telegram данные не отдаются. Выключить — `phone off`.
+- **Телефон:** `./bitbot phone on` поднимает туннель Cloudflare (нужен `cloudflared`), и в Telegram появляется кнопка
+  приложения. Без входа через Telegram данные не отдаются. Выключить — `./bitbot phone off`.
+- Проверить, всё ли готово (настройки, Redis, ключи, база сделок): `./bitbot check`.
 
 <details>
-<summary>Все команды лаунчера</summary>
+<summary>Команды запуска</summary>
 
 | Команда | Что делает |
 |---|---|
-| `./bitbot start [--data-dir=/путь]` | Запуск (то же, что ярлык); данные можно держать в другой папке |
+| `./bitbot start [--data-dir=/путь]` | Запуск; данные можно держать в другой папке |
+| `./bitbot start --profile=monitoring` | То же + Prometheus, Grafana, Alertmanager (`deploy/monitoring/`) |
 | `stop` · `status` · `logs` · `url` | Остановка, состояние, логи, ссылка входа |
-| `phone on [--url=https://…]` · `phone off` | MiniApp с телефона через туннель или свой https-адрес |
-| `import-env [--overwrite]` | Один раз перенести ключи из старого `.env` в шифрованное хранилище (значения не печатаются) |
+| `phone on [--url=https://…]` · `phone off` | Mini App с телефона через туннель или свой https-адрес |
+| `keys import [--overwrite]` | Один раз перенести ключи из старого `.env` в шифрованное хранилище (значения не печатаются) |
 | `autostart on/off` · `awake on/off` | Запуск при входе в систему; не давать компьютеру уснуть, пока бот работает |
 
-Данные (`data/`, `models/`, `logs/`) и ключи при остановке сохраняются. Мастер-ключ хранилища лаунчер создаёт сам
+Данные (`data/`, `models/`, `logs/`) и ключи при остановке сохраняются. Мастер-ключ хранилища создаётся сам
 в `.launcher/state.json` (права 600, в git и в образ не попадает).
 </details>
 
@@ -135,13 +137,11 @@ git clone https://github.com/deuteriumZzz/BitbotBY.git bitbotby && cd bitbotby
 ```bash
 python3.11 -m venv .venv && source .venv/bin/activate
 pip install -e "backend[dev]"
-./bitbot start --native (собирает приложение сам)      # собрать приложение
-./bitbot start --native         # бот + дашборд: http://localhost:8080/app/
+./bitbot start --native --paper   # бот и приложение: http://localhost:8080/app/ (приложение собирается само)
 ```
 
-Здесь бот читает переменные окружения и `.env` — список в [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
-Мониторинг (Prometheus, Alertmanager, Grafana) подключается вторым файлом compose:
-`docker compose -f docker-compose.local.yml -f deploy/monitoring/compose.yml up -d`.
+Здесь бот читает переменные окружения и `.env` (кроме ключей — они только в шифрованном хранилище) — список в
+[docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 
 ---
 
@@ -182,16 +182,16 @@ flowchart LR
 
 | # | Шаг | Что делает |
 |---|---|---|
-| 1 | **Снэпшоты** ([cycle.py](backend/bitbot/workers/cycle.py)) | OHLCV → индикаторы (RSI/MACD/BB/ATR/тренд) + новостной сентимент на монету |
+| 1 | **Снэпшоты** ([steps/scan.py](backend/bitbot/workers/steps/scan.py)) | OHLCV → индикаторы (RSI/MACD/BB/ATR/тренд) + новостной сентимент на монету |
 | 2 | **Prescore** | `score = vol×0.35 + rsi×0.30 + atr×0.20 + regime_bonus×0.15` → топ-30 в AI |
 | 3 | **Рыночный контекст** ([market_context.py](backend/bitbot/market/market_context.py)) | 13 сигналов: funding, OI+ликвидации, F&G, basis, orderbook, Deribit PCR/IV, Google Trends, Glassnode, ETF flows, Reddit (CryptoBERT), stablecoin supply |
-| 4 | **SignalCombiner** ([signal_combiner.py](backend/bitbot/signals/combiner.py)) | `local` / `ai` / `dqn` / **`hybrid`** (SAC+AI согласие, вес зависит от режима: trending 50/50, ranging 40/60) / **`hybrid+Chronos`** (±0.05…0.15 модификатор) |
+| 4 | **SignalCombiner** ([combiner.py](backend/bitbot/signals/combiner.py)) | `local` / `ai` / `dqn` / **`hybrid`** (SAC+AI согласие, вес зависит от режима: trending 50/50, ranging 40/60) / **`hybrid+Chronos`** (±0.05…0.15 модификатор) |
 | 5 | **Контекстный фильтр** | Каждый из 13 сигналов двигает confidence на ±0.05…0.15 (напр. F&G ≤15 + каскад ликвидаций → confidence = 0) |
 | 6 | **Прямые контекстные сигналы** | Экстремумы (funding overheated, squeeze, imbalance >0.4, F&G ≤10/≥92) генерируют отдельные сигналы |
 | 7 | **Локальный fallback** | Если сигналов нет — индикаторная стратегия, TP шире в тренде, уже в боковике |
 | 8 | **Приоритизация** | `composite_score = confidence × (1+tp_bonus) × (1+volume_bonus) × regime_mult` |
 | 9 | **Portfolio allocation** | CVaR/Markowitz ([portfolio_optimizer.py](backend/bitbot/risk/portfolio_optimizer.py)) при ≥2 сигналах, cap ×3 |
-| 10 | **Execution guards** ([order_executor.py](backend/bitbot/execution/order_executor.py)) | macro blackout → слоты/cooldown → торговые часы → дубликат символа → **correlation guard** → подтверждение в Telegram → **liquidity filter** → валидация SL/TP → **Kelly sizing** → drawdown scaling → **Almgren-Chriss** → dynamic leverage → ордер |
+| 10 | **Execution guards** ([order_executor.py](backend/bitbot/execution/order_executor.py)) | macro blackout → слоты/cooldown → торговые часы → дубликат символа → **correlation guard** → подтверждение в приложении → **liquidity filter** → валидация SL/TP → **Kelly sizing** → drawdown scaling → **Almgren-Chriss** → dynamic leverage → ордер |
 | 11 | **После открытия** | PositionMonitor каждые 5с: те же 13 сигналов контекста управляют выходом (force_close / tighten_sl) |
 
 **Отдельный путь — доверенные каналы Telegram** ([trusted_trader.py](backend/bitbot/execution/trusted_trader.py)). Пост канала,
@@ -210,85 +210,54 @@ correlation guard, Almgren-Chriss) идентична во всех профил
 
 ## 🏗 Архитектура
 
+Монорепозиторий: `backend/` (Python-пакет `bitbot`) и `frontend/` (React + Vite, десктоп-оболочка Tauri в
+`frontend/desktop/`). Бот и API — два процесса, связь между ними — Redis (команды, события, состояние).
+
 ```mermaid
 flowchart TB
-    SUP["supervisor.py\nrestart on crash · SIGTERM"] --> BOT["TradingBot\nsrc/core/trading_bot.py"]
-
-    subgraph DATA["Данные и сигналы"]
-        SCAN["MarketScanner"]
-        DL["DataLoader\nccxt async · CSV cache 24ч"]
-        REGIME["RegimeDetector\nGaussianHMM"]
-        CTX["MarketContext\n10+ источников, TTL 5–240мин"]
-        NEWS["NewsAnalyzer\nNewsAPI + RSS + VADER"]
-        TW["TwitterAnalyzer\nMeme профиль"]
-        TG["TelegramSentiment\nTelethon MTProto"]
-        POLL["SentimentPoller\nasyncio → Redis"]
+    subgraph PROC["Процессы"]
+        W["workers — бот: цикл, фоновые задачи, супервизор"]
+        A["api — FastAPI: приложение /app, REST, WebSocket"]
     end
+    W & A --> L2["ops · research — эксплуатация, отчёты, бэктесты"]
+    L2 --> L3["execution · risk — ордера, сопровождение позиций, риск"]
+    L3 --> L4["signals — сводит AI, SAC, Chronos и стратегии"]
+    L4 --> L5["ml · ai · market — модели, LLM-цепочка, данные рынка"]
+    L5 --> L6["adapters — Bybit, paper-биржа, Telegram, соцсети"]
+    L6 --> L7["domain — стратегии, контракты, жизненный цикл ордера"]
+    L7 --> L8["storage · config · infra — БД, Redis, журнал, настройки, логи"]
 
-    subgraph BRAIN["Принятие решений"]
-        COMBINER["SignalCombiner\nSAC + AI [+Chronos]"]
-        CHRONOS["ChronosAnalyzer\namazon/chronos-t5-small"]
-        CRYPTOBERT["CryptoSentimentAnalyzer\nElKulako/cryptobert"]
-        PORT["PortfolioOptimizer\nCVaR / Markowitz"]
-        CORR["CorrelationFilter"]
-        MACRO["MacroCalendar\nFOMC/CPI/NFP blackout"]
-        ARB["FundingArbDetector"]
-    end
-
-    subgraph EXEC["Исполнение"]
-        OE["OrderExecutor\nKelly → CVaR → Almgren-Chriss"]
-        PM["PositionMonitor\nSL/TP · trailing · partial TP"]
-        API["BybitAPI\nccxt async, linear+spot"]
-        LEARN["OnlineLearner\nSAC auto-retrain"]
-    end
-
-    subgraph OUT["Наблюдаемость"]
-        NOTIFY["TelegramNotifier"]
-        HIST["TradeHistory\nSQLite"]
-        HEALTH["HealthServer\n/health /metrics"]
-    end
-
-    BOT --> SCAN & DL & REGIME & CTX
-    CTX --> NEWS & TW & TG & POLL
-    BOT --> COMBINER
-    COMBINER --> CHRONOS & CRYPTOBERT
-    BOT --> PORT & CORR & MACRO & ARB
-    BOT --> OE --> API
-    OE --> PM --> LEARN
-    BOT --> NOTIFY & HIST & HEALTH
-
-    style SUP fill:#1c1c1c,stroke:#888,color:#fff
-    style BOT fill:#0d3b2e,stroke:#2ecc71,color:#fff
-    style DATA fill:#16213e,stroke:#4a90e2,color:#fff
-    style BRAIN fill:#2b2340,stroke:#9b6bff,color:#fff
-    style EXEC fill:#3a2c14,stroke:#f39c12,color:#fff
-    style OUT fill:#3a1414,stroke:#e74c3c,color:#fff
+    style PROC fill:#0d3b2e,stroke:#2ecc71,color:#fff
 ```
+
+Слой видит только нижние слои — это проверяет `lint-imports` в CI. Подробно: слои, торговый цикл по шагам и
+«как рождается сделка» от свечи до SL на бирже — в [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md);
+термины — в [docs/GLOSSARY.md](docs/GLOSSARY.md); кто прав, если источники данных расходятся, — в
+[docs/architecture/DATA_FLOW.md](docs/architecture/DATA_FLOW.md).
 
 **Структура проекта:**
 
 ```
-config.py · supervisor.py · dashboard.py — настройки по умолчанию и точки входа (бот, панель)
-docker-compose.local.yml / .server.yml  — свой компьютер (лаунчер) и сервер (Caddy + HTTPS)
-
-cli/             — команды ./bitbot (launcher.py — Docker, телефон, сервер; dev.py — разработка); ярлыки BitbotBY.command / .bat в корне: локальный запуск, телефон, сервер
-src/
-  core/          — торговый цикл: TradingBot, решение, ордер, сопровождение, риск, история, след решения
-  strategies/    — стратегии, базовый класс, портированные наборы
-  ai/            — AI-провайдеры и анализ, Chronos, SAC-сигнал, онлайн-обучение
-  market/        — свечи, сканер, режим и сезон рынка, корреляции, макро-календарь, индикаторы
-  sentiment/     — новости, Twitter, Telegram-каналы, CryptoBERT
-  exchange/      — Bybit (ccxt)
-  telegram_bot/  — команды и уведомления в Telegram
-  settings/      — настройки во время работы, реестр параметров, шифрованное хранилище ключей, вход
-  infra/         — Redis, шина событий, логи, health, фоновые задачи
-  dashboard/     — FastAPI: API, WebSocket, приложение /app/
-  research/      — бэктесты и отчёты: python -m bitbot.research.backtest и др.
-reinforcement_learning/ — SAC: среда, обучение, подбор гиперпараметров
-frontend/          — приложение (React + Vite + TypeScript), собирается в образ Docker
-tests/           — тесты по тем же папкам, что и src/ (+ launcher/, integration/ для testnet)
-deploy/          — Caddyfile, monitoring/ (Prometheus/Grafana), legacy/ — старый запуск с .env
-docs/            — CONFIGURATION, DEPLOY_SERVER, STRATEGIES, RUNBOOK, design/, переводы README
+bitbot                    — единая команда: запуск, задачи, тесты, проверка (./bitbot help)
+cli/                      — её реализация: launcher.py (Docker, телефон, сервер), dev.py (разработка)
+backend/
+  bitbot/
+    workers/              — бот: TradingBot, шаги цикла (steps/), фоновые задачи, супервизор
+    api/                  — FastAPI: роутеры, вход, отдача приложения
+    ops/ · research/      — аварийное управление, отчёты, проверка (check); бэктесты и проверки альфы
+    execution/            — исполнитель ордеров, монитор позиций, сверка с биржей
+    risk/ · signals/      — риск-менеджер и гейт; объединение сигналов
+    ml/ · ai/ · market/   — SAC и обучение; LLM-провайдеры, Chronos/TimesFM; свечи, сканер, контекст
+    adapters/             — Bybit (ccxt), PaperExchange, Telegram-уведомления, новости и соцсети
+    domain/               — 69 стратегий по семействам, контракты решений, состояния ордера
+    storage/ · config/ · infra/ — SQLite, Redis, журнал решений; настройки, флаги, ключи Redis, хранилище ключей; логи
+  tests/                  — тесты по тем же слоям + golden replay торговой логики
+frontend/
+  src/features/           — экраны (settings/ и terminal/ — папками), src/store/, src/components/, src/api/endpoints.ts
+  desktop/                — Tauri
+docker-compose.local.yml / .server.yml — свой компьютер и сервер (Caddy + HTTPS)
+deploy/                   — Caddyfile, monitoring/ (Prometheus/Grafana/Alertmanager)
+docs/                     — ARCHITECTURE, GLOSSARY, CONFIGURATION, DEPLOY_SERVER, STRATEGIES, RUNBOOK, design/, architecture/
 ```
 
 ---
@@ -352,9 +321,9 @@ Dynamic leverage (fixed/volatility/full, ATR-based) · Trailing stop + partial T
 
 ## 📲 Приложение: MiniApp, браузер, десктоп
 
-Всё, что есть в Telegram-меню, есть и в приложении (`frontend/`, React + Vite): Telegram MiniApp,
-обычный браузер (`/app/`) и десктоп-оболочка открывают один и тот же интерфейс. Telegram и приложение
-управляют одним и тем же ботом: команды идут через общую очередь Redis, настройки и замки задач общие.
+Приложение (`frontend/`, React + Vite) — единственный интерфейс управления: Telegram Mini App, обычный браузер
+(`/app/`) и десктоп-оболочка открывают одно и то же. Команды боту идут через очередь Redis, события — обратно
+через WebSocket.
 
 | Вкладка | Что внутри |
 |---|---|
@@ -408,7 +377,7 @@ Claude. Бесплатные идут по умолчанию; режим цеп
   `.launcher/state.json`, серверная команда — в `.server/server.env` (права 600, в git и в образ не попадают).
 - Лаунчер и сервер `.env` не читают. Старые ключи из `.env` переносятся один раз: `./bitbot keys import`.
 - Ключ Bybit создавайте **без права вывода средств** и с привязкой к IP — ключи с выводом приложение отклоняет.
-- Переход Paper → Live — только кнопкой с кодовым словом (`TRADING_MODE_PIN`), не обычными словами в Telegram.
+- Переход Paper → Live — только в приложении, кнопкой с кодовым словом (`TRADING_MODE_PIN`).
 - Вход в приложение — только владельцу (`TELEGRAM_CHAT_ID`): подпись Telegram в MiniApp, 6-значный код в браузере,
   одноразовая ссылка лаунчера — только на этом компьютере. Сессии хранятся в Redis хэшем, а не токеном.
 - На сервере наружу открыт только Caddy (HTTPS); `/metrics` и `/webhook/*` снаружи отвечают 404.
@@ -417,14 +386,12 @@ Claude. Бесплатные идут по умолчанию; режим цеп
 
 ## 📱 Telegram
 
-- Кнопка **«Терминал»** открывает приложение прямо в Telegram (нужен https-адрес: сервер или `phone on`).
-- `/app` присылает одноразовую ссылку входа, которая работает только на компьютере, где запущен бот.
-- Можно писать словами: «статус», «позиции», «пауза», «продолжи», «закрой все», «риск 1.5%», «сделок 3»,
-  «добавь PEPE», «выключи стратегию bb».
-- Команды: `/pnl` `/pos` `/scan` `/symbols` `/strategies` `/risk` `/lev` `/hours` `/provider` `/alerts` `/closeall`.
-- Прежние меню (профиль, режим, риск, позиции, стратегии, обучение) остаются запасным путём, пока нет https;
-  в них есть кнопка «Настройки в приложении».
-- Сообщения о сделках и сигналах подчиняются переключателям уведомлений и тихим часам из приложения.
+- **Уведомления**: открытие и закрытие позиций, тревоги риска, итоги задач, сигнал на подтверждение. Под каждым —
+  кнопка «Открыть в приложении» на нужный экран. Подчиняются переключателям уведомлений и тихим часам приложения.
+- **Вход в приложение**: кнопка в меню чата открывает Mini App (нужен https-адрес: сервер или `./bitbot phone on`);
+  `/start` присылает эту кнопку, `/app` — одноразовую ссылку входа, которая работает только на компьютере с ботом.
+- Других команд нет: управление, настройки и подтверждения — в приложении. Писать боту может только владелец
+  (`TELEGRAM_CHAT_ID`).
 
 Один Telegram-токен нельзя использовать у двух запущенных ботов сразу (конфликт polling) — например, на сервере и
 на компьютере. Для второго заведите отдельного бота.
@@ -444,8 +411,8 @@ Claude. Бесплатные идут по умолчанию; режим цеп
 возвращает модель именно этого профиля. Параметр `TRAIN_TOP_N` («Монет для автодообучения») влияет только на
 автоматическое дообучение, ручное берёт число монет из профиля.
 
-До завершения обучения используйте `MODE=ai` (или `MODE=local`); переключение на `dqn`/`hybrid` доступно из
-Telegram и приложения без перезапуска сразу после того, как обучение завершится. `OnlineLearner` дообучает модель автоматически
+До завершения обучения используйте `MODE=ai` (или `MODE=local`); переключение на `dqn`/`hybrid` доступно в
+приложении без перезапуска сразу после того, как обучение завершится. `OnlineLearner` дообучает модель автоматически
 после каждой закрытой сделки (`periodic`/`hybrid`/`online` режимы).
 
 ---

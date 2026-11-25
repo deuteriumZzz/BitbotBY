@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 from bitbot.config.flags import FLAGS
 
@@ -35,3 +36,11 @@ def test_registry_matches_config_defaults():
 def test_live_status_means_on_in_both_modes():
     assert {f.status for f in FLAGS} <= {"shadow", "gated", "live"}
     assert all(f.paper and f.live for f in FLAGS if f.status == "live")
+
+
+def test_every_flag_is_documented():
+    doc = (Path(__file__).resolve().parents[2] / "docs" / "CONFIGURATION.md").read_text(
+        encoding="utf-8"
+    )
+    missing = [f.key for f in FLAGS if f"`{f.key}`" not in doc]
+    assert not missing, f"флаги без описания в docs/CONFIGURATION.md: {missing}"

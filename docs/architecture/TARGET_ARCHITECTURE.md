@@ -74,4 +74,4 @@ flowchart LR
 
 ## 7. Точки интеграции (файлы)
 
-`backend/bitbot/ai/analyzer.py` (provenance), `backend/bitbot/signals/combiner.py` (Decision Engine, trail), `backend/bitbot/storage/decision_ledger.py` (журнал), `backend/bitbot/domain/contracts.py` (контракты), `backend/bitbot/domain/trading_modes.py` (режимы), `backend/bitbot/workers/bot.py` (оркестрация, запись в ledger), `backend/bitbot/execution/order_executor.py` + `position_monitor.py` (Risk/Execution), `src/market/*` (данные).
+`backend/bitbot/ai/analyzer.py` (provenance), `backend/bitbot/signals/combiner.py` (Decision Engine, trail), `backend/bitbot/storage/decision_ledger.py` (журнал), `backend/bitbot/domain/contracts.py` (контракты), `backend/bitbot/domain/trading_modes.py` (режимы), `backend/bitbot/workers/bot.py` (оркестрация, запись в ledger), `backend/bitbot/execution/order_executor.py` + `position_monitor.py` (Risk/Execution), `backend/bitbot/market/*` (данные).

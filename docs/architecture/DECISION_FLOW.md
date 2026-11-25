@@ -9,7 +9,7 @@
 7. **Журнал:** каждое решение (`signals`), попытка исполнения (`execution`), отказ (`rejections`), исход (`outcome`) связаны по `decision_id`; цикл — по `trace_id`.
 
 ## Что объясняет решение
-`python -m bitbot.domain.decision.explain <decision_id>`, Telegram `/audit <decision_id>`: участники и природа их confidence, стадии уверенности, конфликты, группы и избыточные каналы, итог исполнения и исход.
+`python -m bitbot.domain.decision.explain <decision_id>`, в приложении Журнал → Отчёты → аудит (`/api/reports/audit/<decision_id>`): участники и природа их confidence, стадии уверенности, конфликты, группы и избыточные каналы, итог исполнения и исход.
 
 ## Оркестратор L1–L4 (спроектирован, не подключён)
 `backend/bitbot/ai/orchestrator.py`: L1 Signal Intelligence + Meta-Model → L2 + SAC/прогноз → L3 + LLM/RAG → L4 перепроверка конфликта; безопасный отказ при плохих данных; бюджет времени; ранняя остановка, если решение уже уверенное. Сегодня маршрутизацию выполняет `combine()` по режиму; оркестратор заменит её, когда появятся Meta-Model и ≥ 2 тяжёлых компонента.
