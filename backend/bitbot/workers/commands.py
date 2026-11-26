@@ -90,6 +90,7 @@ class BotCommands:
 
     async def resume(self, args: Dict[str, Any]) -> Dict[str, Any]:
         self._bot._runtime_config.set_paused(False)
+        self._bot._runtime_config.mark_setup_done()
         emit(self._r, "cycle", {"state": "scan"})
         return {"paused": False}
 

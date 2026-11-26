@@ -1,5 +1,6 @@
 // Терминал: живые позиции — прогресс к SL/TP, анимация входа с радара.
 
+import { Coin } from "../../components/coin";
 import { memo, useEffect, useRef, useState, type FormEvent } from "react";
 
 import { arrow, base, fmtN, pct, plainReason, plural, price, priceDecimals, tone, usd } from "../../lib/format";
@@ -105,7 +106,7 @@ export function Positions() {
             aria-hidden="true"
           >
             <div className="pos-h">
-              <span className="coin">{base(p.symbol)}</span>
+              <Coin symbol={p.symbol} />
               <div className="pos-t">
                 <b>{p.symbol}</b>
                 <small>закрыта</small>
@@ -297,7 +298,7 @@ const PositionCard = memo(function PositionCard({ p, enter }: { p: Position; ent
       onClick={() => revealed && setDx(0)}
     >
       <div className="pos-h">
-        <span className="coin">{base(p.symbol)}</span>
+        <Coin symbol={p.symbol} />
         <div className="pos-t">
           <b>
             {p.symbol}
@@ -363,8 +364,8 @@ const PositionCard = memo(function PositionCard({ p, enter }: { p: Position; ent
         <span>
           Сейчас <Flash className="num" value={cur} text={price(cur)} />
         </span>
-        <span>
-          Объём <b className="num">${fmtN(p.entry * p.qty, 0)}</b>
+        <span title="Сколько долларов в сделке: цена входа × количество. Не прибыль.">
+          Размер <b className="num">${fmtN(p.entry * p.qty, 0)}</b>
         </span>
       </div>
       <div className="acts">

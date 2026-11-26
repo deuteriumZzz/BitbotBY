@@ -494,6 +494,12 @@ export const useStore = create<Store>((set, get) => {
           refreshSoon();
           break;
         }
+        case "price": {
+          // Живая цена с биржи (дашборд, WebSocket Bybit): только цена, уровни — из тиков бота.
+          const cur = get().positions[d.symbol];
+          if (cur && typeof d.price === "number") set({ positions: { ...get().positions, [d.symbol]: { ...cur, price: d.price } } });
+          break;
+        }
         case "position.updated": {
           const cur = get().positions[d.symbol];
           if (cur)

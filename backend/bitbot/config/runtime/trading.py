@@ -51,6 +51,23 @@ class TradingSettings(RuntimeBase):
         self._set(keys.PAUSED, "1" if paused else "0")
         logger.info("Runtime: бот %s", "на паузе" if paused else "возобновлён")
 
+    def hold_until_setup(self) -> bool:
+        """Самый первый запуск: новых входов нет, пока владелец сам не включит бота.
+
+        Срабатывает, только если бот ещё ни разу не запускался (нет даты первого старта),
+        поэтому уже работающие установки после обновления не встают на паузу.
+        True — пауза поставлена.
+        """
+        if self._get(keys.FIRST_START_DATE) or self._get(keys.SETUP_DONE) == "1":
+            return False
+        self.set_paused(True)
+        self._set(keys.SETUP_DONE, "0")
+        return True
+
+    def mark_setup_done(self) -> None:
+        """Владелец включил бота — первый запуск пройден."""
+        self._set(keys.SETUP_DONE, "1")
+
     # ── Auto-execute ──────────────────────────────────────────────────────────
     def get_auto_execute(self) -> bool:
         val = self._get(keys.AUTO_EXECUTE)

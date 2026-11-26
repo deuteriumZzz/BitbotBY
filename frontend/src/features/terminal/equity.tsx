@@ -47,8 +47,12 @@ export function Equity() {
   const H = 88;
   const n = pts.length;
   const bs = pts.map((p) => p.b);
-  const mn = Math.min(...bs);
-  const mx = Math.max(...bs);
+  // Шкала не уже 5% от баланса: иначе изменение на 2% рисуется обрывом во всю высоту.
+  const lo = Math.min(...bs);
+  const hi = Math.max(...bs);
+  const span = Math.max(hi - lo, Math.abs(hi) * 0.05 || 1);
+  const mn = (hi + lo) / 2 - span / 2;
+  const mx = mn + span;
   const x = (i: number) => (i * (W - 8)) / (n - 1) + 4;
   const y = (v: number) => H - 8 - ((v - mn) / (mx - mn || 1)) * (H - 20);
   const line = pts

@@ -1,5 +1,6 @@
 // Журнал сделок: закрытые сделки с причинами входа и выхода, итоги по стратегиям.
 
+import { Coin } from "../components/coin";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { arrow, base, exitReason, fmtN, pct, price, tone, usd } from "../lib/format";
@@ -350,8 +351,8 @@ function TradeList({ trades }: { trades: JournalTrade[] }) {
             <button type="button" className={`jr-tr ${tone(x.pnl)}`} onClick={() => setOpen(x)} aria-label={`Чек сделки ${x.symbol}: ${usd(x.pnl)}`}>
               <span className="jr-id num">#{x.id}</span>
               <span className="jr-coin">
-                <span className="coin">{base(x.symbol)}</span>
-                <b>{x.symbol}</b>
+                <Coin symbol={x.symbol} />
+                <b>{base(x.symbol)}</b>
                 <span className={`side ${x.side}`}>{x.side === "long" ? "LONG" : "SHORT"}</span>
               </span>
               <span className="jr-px num">
@@ -360,7 +361,7 @@ function TradeList({ trades }: { trades: JournalTrade[] }) {
               <span>
                 <span className={`jr-tag num ${tone(x.pnl)}`}>{usd(x.pnl)}</span>
               </span>
-              <span className="jr-cell">{x.reason ? exitReason(x.reason) : "—"}</span>
+              <span className="jr-cell jr-why">{x.reason ? exitReason(x.reason) : "—"}</span>
               <span className="jr-cell">{stratName(x.strategy)}</span>
               <span className="jr-cell">{when(x.closed)}</span>
             </button>
@@ -372,8 +373,8 @@ function TradeList({ trades }: { trades: JournalTrade[] }) {
         {t && (
           <>
             <div className="pipe-panel-h">
-              <span className="coin">{base(t.symbol)}</span>
-              <b>{t.symbol}</b>
+              <Coin symbol={t.symbol} />
+              <b>{base(t.symbol)}</b>
               <span className={`side ${t.side}`}>{t.side === "long" ? "LONG" : "SHORT"}</span>
               <span className="label">чек сделки</span>
               <button ref={closeBtn} type="button" className="btn pipe-close" aria-label="Закрыть чек" onClick={() => setOpen(null)}>

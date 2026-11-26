@@ -34,7 +34,8 @@ function HealthStrip() {
   const wsUp = useStore((s) => s.wsUp);
   const mode = useStore((s) => s.bot?.mode);
   const paused = useStore((s) => s.bot?.paused ?? false);
-  const cycleAt = useStore((s) => s.cycleAt);
+  // Время последнего цикла: из живого события, а сразу после открытия — из снимка состояния (секунды).
+  const cycleAt = useStore((s) => s.cycleAt ?? (s.lastCycle?.at ? s.lastCycle.at * 1000 : null));
   const guardsOff = useStore(
     (s) =>
       (s.bot?.paper ?? true) &&
@@ -172,8 +173,9 @@ function Idle() {
     return () => clearInterval(t);
   }, []);
   // Нет связи с сервером — об этом уже говорят шапка и строка здоровья.
-  const ran = useStore((s) => s.cycleAt !== null);
-  const r = wsUp ? idleReason({ alive, paused, cycle, slots, hours, hourUtc, ran }) : null;
+  const ran = useStore((s) => s.cycleAt !== null || Boolean(s.lastCycle?.at));
+  const firstRun = useStore((s) => s.bot?.first_run ?? false);
+  const r = wsUp ? idleReason({ alive, paused, cycle, slots, hours, hourUtc, ran, firstRun }) : null;
   if (!r) return null;
   return (
     <p className={`status-why ${r.tone}`} role="status">

@@ -2100,6 +2100,11 @@ class TradingBot:
             ai_status,
         )
         mode = "paper" if Config.PAPER_TRADING else "live"
+        # До записи даты первого старта: по ней видно, что бот уже запускался.
+        if self._runtime_config.hold_until_setup():
+            logger.info(
+                "Первый запуск: бот на паузе — включите его в приложении после настройки"
+            )
         self._runtime_config.ensure_first_start_date()
         self._runtime_config.ensure_default_market_profile()
         _off = self._runtime_config.ensure_experimental_disabled(experimental_names())

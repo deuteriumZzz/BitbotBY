@@ -26,6 +26,8 @@ DRAWDOWN_SCALE_ENABLED = "bot:drawdown_scale_enabled"
 EXCLUDED_SYMBOLS = "bot:excluded_symbols"
 EXPERIMENTAL_STRATEGIES_SEEN = "bot:experimental_strategies_seen"
 FIRST_START_DATE = "bot:first_start_date"
+# Первый запуск: "0" — бот на паузе, ждёт, пока владелец его настроит и включит; "1" — включён.
+SETUP_DONE = "bot:setup_done"
 FORCED_SYMBOLS = "bot:forced_symbols"
 # Настройки реестра «сразу» без своего геттера (RuntimeConfig.hot).
 HOT_PREFIX = "bot:hot:"

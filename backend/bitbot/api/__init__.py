@@ -16,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 
 from bitbot.api import auth as _auth
 from bitbot.api import data as _data
+from bitbot.api import live_prices as _live_prices
 from bitbot.api import watchdog as _watchdog
 from bitbot.api.routers import api as _api
 from bitbot.api.routers import control as _control
@@ -27,8 +28,11 @@ from bitbot.config.constants import FRONTEND_DIST
 @asynccontextmanager
 async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     watchdog = asyncio.create_task(_watchdog.run())
+    # Живые цены открытых позиций для приложения (Bybit WebSocket, только отображение).
+    prices = asyncio.create_task(_live_prices.run())
     yield
     watchdog.cancel()
+    prices.cancel()
 
 
 app = FastAPI(title="BitbotBY Dashboard", docs_url=None, lifespan=_lifespan)

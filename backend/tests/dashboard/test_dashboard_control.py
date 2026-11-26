@@ -211,14 +211,25 @@ def test_state_day_ref_only_for_today(client):
 
     today = datetime.utcnow().date()
     r = FakeRedis()
-    r.set("bot:risk:daily_ref:paper", json.dumps({"date": today.isoformat(), "balance": 1000.0}))
+    r.set(
+        "bot:risk:daily_ref:paper",
+        json.dumps({"date": today.isoformat(), "balance": 1000.0}),
+    )
     with (
         patch.object(data, "get_redis", return_value=r),
         patch.object(data, "paper_mode", return_value=True),
         patch.object(data, "check_healthcheck", return_value=True),
     ):
-        assert client.get("/api/state").json()["day_ref"] == {"date": today.isoformat(), "balance": 1000.0}
-        r.set("bot:risk:daily_ref:paper", json.dumps({"date": (today - timedelta(days=1)).isoformat(), "balance": 1.0}))
+        assert client.get("/api/state").json()["day_ref"] == {
+            "date": today.isoformat(),
+            "balance": 1000.0,
+        }
+        r.set(
+            "bot:risk:daily_ref:paper",
+            json.dumps(
+                {"date": (today - timedelta(days=1)).isoformat(), "balance": 1.0}
+            ),
+        )
         assert client.get("/api/state").json()["day_ref"] is None
 
 
@@ -319,7 +330,50 @@ def test_pending_signals_survive_reconnect(client):
 H = {"X-API-Key": "secret"}
 
 
+def test_candles_live_from_bybit_sorted_oldest_first(client, monkeypatch):
+    class _Resp:
+        def json(self):
+            return {
+                "result": {
+                    "list": [
+                        ["1758593700000", "2", "3", "1", "2.5", "10", "25"],
+                        ["1758592800000", "1", "2", "0.5", "1.5", "10", "15"],
+                    ]
+                }
+            }
+
+    class _Client:
+        def __init__(self, **_):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return False
+
+        async def get(self, url, params):
+            assert params == {
+                "category": "linear",
+                "symbol": "SOLUSDT",
+                "interval": "15",
+                "limit": 200,
+            }
+            return _Resp()
+
+    monkeypatch.setattr("httpx.AsyncClient", _Client)
+    assert client.get("/api/candles?symbol=SOL/USDT&tf=15m").json() == [
+        {"time": 1758592800, "open": 1.0, "high": 2.0, "low": 0.5, "close": 1.5},
+        {"time": 1758593700, "open": 2.0, "high": 3.0, "low": 1.0, "close": 2.5},
+    ]
+
+
 def test_candles_from_cache(client, tmp_path, monkeypatch):
+    # Без связи с биржей — файл истории DataLoader.
+    async def _offline(*_):
+        return []
+
+    monkeypatch.setattr(control, "_bybit_candles", _offline)
     monkeypatch.chdir(tmp_path)
     (tmp_path / "data" / "cache").mkdir(parents=True)
     (tmp_path / "data" / "cache" / "SOL_USDT_15m.csv").write_text(

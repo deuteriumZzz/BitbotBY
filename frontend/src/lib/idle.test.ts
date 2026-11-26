@@ -35,6 +35,7 @@ describe("«Почему бот молчит?»", () => {
   it("называет одну причину по старшинству", () => {
     expect(idleReason({ ...base, alive: false })?.title).toBe("Бот не отвечает");
     expect(idleReason({ ...base, paused: true, hours: "8-20", hourUtc: 3 })?.title).toBe("Пауза");
+    expect(idleReason({ ...base, paused: true, firstRun: true })?.title).toBe("Бот ещё не запущен");
     expect(idleReason({ ...base, hours: "8-20", hourUtc: 3 })).toMatchObject({ title: "Вне часов торговли", node: "scan" });
     expect(idleReason({ ...base, slots: { used: 3, max: 3 } })?.title).toBe("Все слоты заняты");
     expect(idleReason(base)?.title).toBe("Бот запускается");

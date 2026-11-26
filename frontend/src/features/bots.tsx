@@ -14,6 +14,7 @@ import { Q } from "../components/tooltip";
 import { ParamList } from "./params";
 
 export const STRATEGY_NAME: Record<string, string> = {
+  context_signal: "Сигнал контекста",
   scalping: "Скальпинг",
   sentiment: "Настроение соцсетей",
   amd: "AMD: накопление → выброс",

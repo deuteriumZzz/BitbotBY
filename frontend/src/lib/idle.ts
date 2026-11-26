@@ -13,6 +13,8 @@ export interface IdleInput {
   hourUtc: number;
   /** Цикл уже идёт (пришло событие cycle), даже если разбор цикла ещё не опубликован. */
   ran?: boolean;
+  /** Первый запуск: бот ждёт настройки и включения. */
+  firstRun?: boolean;
 }
 
 export interface IdleReason {
@@ -51,6 +53,12 @@ const ORDER: BotNode[] = ["scan", "strat", "ai", "sac", "risk", "order", "track"
 /** null — молчать не о чем: сделка только что открыта. Порядок проверок — от причины, которая перекрывает остальные. */
 export function idleReason(x: IdleInput): IdleReason | null {
   if (!x.alive) return { tone: "bad", title: "Бот не отвечает", detail: "Процесс бота не присылает отчёты. Перезапустите его на компьютере или сервере." };
+  if (x.paused && x.firstRun)
+    return {
+      tone: "warn",
+      title: "Бот ещё не запущен",
+      detail: "Первый запуск: проверьте ключи и риск, затем включите переключатель «Работает» вверху.",
+    };
   if (x.paused) return { tone: "warn", title: "Пауза", detail: "Новые входы остановлены, открытые позиции сопровождаются. Снимите паузу переключателем вверху." };
   if (!inHours(x.hours, x.hourUtc))
     return {

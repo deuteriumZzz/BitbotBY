@@ -993,7 +993,7 @@ details.extra[open]>.card{animation:viewin .28s var(--ease-mech)}
 .miniapp .brand svg{width:26px;height:26px}
 .miniapp .views{padding-bottom:calc(24px + var(--tg-safe-area-inset-bottom,0px))}
 .miniapp .nav{padding-bottom:max(8px,env(safe-area-inset-bottom,0px),var(--tg-safe-area-inset-bottom,0px))}
-/* Конвейер решений — вкладка «Бот» (DESIGN.md, 22.10.2026) */
+/* Конвейер решений — вкладка «Бот» */
 .pipe-canvas{margin-bottom:12px;padding:14px;border:1px solid var(--line-soft);border-radius:var(--r);background-color:var(--bg);background-image:radial-gradient(circle,var(--line-soft) 1px,transparent 1.3px);background-size:24px 24px;min-width:0}
 .pipe-top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 16px;margin-bottom:14px}
 .pipe-mode{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
@@ -1169,18 +1169,13 @@ select.sel{border-radius:var(--r-ctl);background:var(--c-inset);box-shadow:none}
 @container dev (min-width:900px){
   .term{gap:16px}
   .term>.metrics{order:1}
-  .term>.chart{grid-column:1/9;order:2}
-  .term>.radar{grid-column:9/13;order:2}
+  /* Радар — на всю ширину, этапы столбцами: монеты едут слева направо и отлетают в сторону при отказе. */
+  .term>.radar{grid-column:1/-1;order:2}
+  .term>.chart{grid-column:1/-1;order:3}
   .term>.positions{grid-column:1/9;order:3}
   .term>.cal,.term>.exec{grid-column:span 4;order:4}
   /* Одна строка на всю ширину: страх/жадность и сезон рядом, без пустых 8 колонок справа. */
   .term>.pulse{grid-column:1/-1;order:4}
-  /* Сканер в узкой колонке: этапы — строки ленты, монеты едут сверху вниз по этапам. */
-  .term>.radar .lanes{grid-template-columns:minmax(0,1fr);gap:0}
-  .term>.radar .lane{display:grid;grid-template-columns:96px minmax(0,1fr);gap:10px;align-items:start;padding:9px 0;border-top:1px solid var(--c-line)}
-  .term>.radar .lane-h{border-bottom:0;padding:3px 0 0}
-  .term>.radar .lane-body{flex-direction:row;flex-wrap:wrap;min-height:28px;gap:6px;padding-top:0}
-  .term>.radar .slot{flex:1 1 64px}
   .term>.positions .pos-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px;max-height:none;overflow:visible}
 }
 .odo,.hero .bal,.tile .v,.pos-pnl b,.hero-stats b{font-variant-numeric:tabular-nums}
@@ -1673,3 +1668,49 @@ select.sel{appearance:none;-webkit-appearance:none;padding-right:34px;background
 .ai-list .ai-model .sel{width:100%}
 /* Ленты на «Обзоре» больше нет — позиции занимают всю ширину */
 @container dev (min-width:900px){ .term>.positions{grid-column:1/-1} }
+
+/* ══ Apple-слой: материал и управление как в iOS. Цвета «Стали» не меняются. Слой последним. ══ */
+
+/* Стекло — только там, где под слоем что-то прокручивается или лежит: шапка, вкладки, всплывающие окна. */
+.topbar,.nav{background:var(--glass)!important;-webkit-backdrop-filter:var(--glass-blur);backdrop-filter:var(--glass-blur)}
+.topbar{border-bottom-color:var(--glass-edge)}
+.nav{border-color:var(--glass-edge)}
+.sheet,.toast,.ctx,.help-sheet,.pal,.applybar{background:var(--glass-strong);-webkit-backdrop-filter:var(--glass-blur);backdrop-filter:var(--glass-blur);border-color:var(--glass-edge)}
+
+/* Кнопки: плоская заливка, без бегущего блика и подъёма; нажатие — лёгкое сжатие. */
+.btn{background:var(--c-s3);box-shadow:none;transition:background var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out),opacity var(--dur-fast)}
+.btn::after{display:none}
+.btn:hover:not(:disabled){transform:none;box-shadow:none;background:color-mix(in oklab,var(--c-s3) 70%,var(--c-ink3))}
+.btn:active:not(:disabled){transform:scale(.97)}
+.btn.primary,.btn[aria-pressed="true"]{background:var(--c-ink);color:var(--c-bg);box-shadow:none}
+.btn.primary:hover:not(:disabled),.btn[aria-pressed="true"]:hover:not(:disabled){background:color-mix(in oklab,var(--c-ink) 88%,var(--c-bg));box-shadow:none}
+.btn.danger{background:color-mix(in oklab,var(--c-down) 14%,var(--c-s1));border-color:transparent;color:var(--c-down)}
+.btn.danger:hover:not(:disabled){background:color-mix(in oklab,var(--c-down) 24%,var(--c-s1))}
+.btn.armed,.btn.danger.armed{background:var(--c-down);border-color:transparent;color:#fff}
+
+/* Сегменты: серый жёлоб, выбранный — та же светлая пилюля, с мягкой тенью. */
+.seg{background:rgba(118,118,128,.24);border-color:transparent}
+.seg-ind,.seg:not(.has-ind) button[aria-pressed="true"]{background:var(--c-ink);box-shadow:0 3px 8px rgba(0,0,0,.35)}
+
+/* Переключатель: 51×31, белая круглая ручка с тенью, включённый — зелёный, как в iOS. */
+.tgl .tr{box-sizing:border-box;width:51px;height:31px;border:0;border-radius:var(--r-pill);background:rgba(120,120,128,.32);box-shadow:none}
+.tgl .tr::before{display:none}
+.tgl .kn{top:2px;left:2px;width:27px;height:27px;border-radius:var(--r-pill);background:#fff;background-image:none;box-shadow:0 3px 8px rgba(0,0,0,.15),0 3px 1px rgba(0,0,0,.06);transition:transform .25s var(--ease-out),width .2s var(--ease-out)}
+.tgl:hover .tr{border-color:transparent}
+.tgl:active .kn{width:31px}
+.tgl[aria-checked="true"] .tr,.tgl.brand[aria-checked="true"] .tr{background:var(--c-up);box-shadow:none}
+.tgl[aria-checked="true"] .kn{transform:translateX(20px);background:#fff}
+.tgl[aria-checked="true"]:active .kn{transform:translateX(16px)}
+/* Значок монеты: официальная иконка — круг во весь размер; без иконки — тикер в круге. */
+.coin{border-radius:50%}
+.coin.img{background:none;border:0;overflow:hidden}
+.coin.img svg{width:100%;height:100%;display:block}
+/* Журнал: «Отчёты» — внизу во всю ширину, всё в одну строку; причина закрытия переносится, а не обрезается. */
+.jr .rep{order:3;grid-column:1/-1}
+.rep .btn-row{flex-wrap:wrap;align-items:center}
+.rep .card-h+.btn-row{display:inline-flex;margin-right:12px}
+.rep .rep-audit{display:flex;flex-wrap:nowrap;max-width:560px;margin-top:10px}
+.rep .rep-audit .btn{flex:none}
+.rep .rep-audit .inp{flex:1 1 200px;min-width:0}
+.jr-cell.jr-why{white-space:normal;line-height:1.3}
+.jr-coin b{min-width:0;overflow:hidden;text-overflow:ellipsis}

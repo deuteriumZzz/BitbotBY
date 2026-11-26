@@ -139,6 +139,8 @@ def build_state() -> Dict[str, Any]:
         "bot": {
             "alive": data.check_healthcheck(),
             "paused": _redis_str(r, keys.PAUSED) == "1",
+            # Первый запуск: бот ждёт, пока владелец его настроит и включит.
+            "first_run": _redis_str(r, keys.SETUP_DONE) == "0",
             "paper": paper,
             "mode": _redis_str(r, keys.MODE) or Config.MODE,
             "profile": _redis_str(r, keys.MARKET_PROFILE),
@@ -840,16 +842,65 @@ async def set_alert(kind: str, request: Request) -> JSONResponse:
 _TIMEFRAMES = {"1m", "3m", "5m", "15m", "1h", "4h", "1d"}
 
 
+_BYBIT_INTERVAL = {
+    "1m": "1",
+    "3m": "3",
+    "5m": "5",
+    "15m": "15",
+    "1h": "60",
+    "4h": "240",
+    "1d": "D",
+}
+
+
+async def _bybit_candles(base: str, tf: str, limit: int) -> List[Dict[str, Any]]:
+    """Свежие свечи с открытого API Bybit (без ключей); [] — биржа не ответила."""
+    import httpx  # noqa: PLC0415 — нужен только графику
+
+    params: Dict[str, str | int] = {
+        "category": "linear",
+        "symbol": f"{base}USDT",
+        "interval": _BYBIT_INTERVAL[tf],
+        "limit": limit,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                "https://api.bybit.com/v5/market/kline", params=params
+            )
+        rows = (resp.json().get("result") or {}).get("list") or []
+        out = [
+            {
+                "time": int(x[0]) // 1000,
+                "open": float(x[1]),
+                "high": float(x[2]),
+                "low": float(x[3]),
+                "close": float(x[4]),
+            }
+            for x in rows
+        ]
+    except (httpx.HTTPError, ValueError, TypeError, IndexError, AttributeError):
+        return []
+    return sorted(out, key=lambda c: c["time"])  # Bybit отдаёт от новых к старым
+
+
 @router.get("/api/candles")
 async def get_candles(symbol: str, tf: str = "15m", limit: int = 200) -> JSONResponse:
-    """Свечи из кэша DataLoader (data/cache/{BASE}_USDT_{tf}.csv)."""
+    """Свечи для графика: живые с Bybit, а без связи — из кэша истории DataLoader.
+
+    Живой цикл бота свечи на диск не пишет: data/cache появляется только после бэктеста
+    и может быть старым, поэтому он лишь запасной путь.
+    """
     base = symbol.upper().split("/")[0]
     if not re.fullmatch(r"[A-Z0-9]{2,15}", base) or tf not in _TIMEFRAMES:
         return _err(400, "bad_request", "Неверный символ или таймфрейм.")
+    limit = max(10, min(limit, 1000))
+    live = await _bybit_candles(base, tf, limit)
+    if live:
+        return JSONResponse(live)
     path = Path("data/cache") / f"{base}_USDT_{tf}.csv"
     if not path.exists():
         return JSONResponse([])
-    limit = max(10, min(limit, 1000))
     rows = path.read_text().strip().splitlines()[1:][-limit:]
     out = []
     for line in rows:

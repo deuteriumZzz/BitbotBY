@@ -36,7 +36,7 @@ export function ReportsCard() {
 
   const id = decision.trim();
   return (
-    <article className="card">
+    <article className="card rep">
       <div className="card-h">
         <h2>Отчёты</h2>
       </div>
@@ -50,7 +50,7 @@ export function ReportsCard() {
         </button>
       </div>
       <form
-        className="btn-row"
+        className="btn-row rep-audit"
         onSubmit={(e) => {
           e.preventDefault();
           if (id) void run(EP.reportsAudit(id));

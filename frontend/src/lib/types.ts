@@ -65,6 +65,8 @@ export interface BotState {
   bot: {
     alive: boolean;
     paused: boolean;
+    /** Первый запуск: бот на паузе и ждёт, пока его настроят и включат. */
+    first_run?: boolean;
     paper: boolean;
     mode: string;
     profile: string | null;

@@ -1,5 +1,6 @@
 // Оболочка приложения: верхняя панель, баннеры защиты, вкладки, предложение сделки, вход.
 
+import { Coin } from "./components/coin";
 import { Suspense, lazy, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 
 import { isMock } from "./lib/api";
@@ -443,9 +444,7 @@ function SignalSheet() {
   return (
     <div className="sheet" role="dialog" aria-labelledby="sheetTitle" key={sig.id}>
       <h3 id="sheetTitle">
-        <span className="coin" style={{ width: 30, height: 30 }}>
-          {base(sig.symbol)}
-        </span>
+        <Coin symbol={sig.symbol} style={{ width: 30, height: 30 }} />
         <span>
           Открыть {base(sig.symbol)} {sig.side === "long" ? "LONG" : "SHORT"}?
         </span>

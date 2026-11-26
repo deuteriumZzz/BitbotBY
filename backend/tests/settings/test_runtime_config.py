@@ -749,3 +749,21 @@ class TestNotifyGate:
         assert rc.should_notify("position_close", hour=12) is False
         assert rc.set_quiet_hours("25-3") is False
         assert rc.set_quiet_hours("") is True
+
+
+class TestFirstRunHold:
+    def test_first_ever_start_pauses_and_waits_for_setup(self, rc_bundle):
+        rc, redis_mock, _ = rc_bundle
+        assert rc.hold_until_setup() is True
+        written = {
+            c.args[0]: c.args[1] for c in redis_mock.redis_client.set.call_args_list
+        }
+        assert written["bot:paused"] == "1" and written["bot:setup_done"] == "0"
+
+    def test_bot_that_already_ran_is_not_paused(self, rc_bundle):
+        rc, redis_mock, _ = rc_bundle
+        redis_mock.redis_client.get.side_effect = lambda k: (
+            "2026-11-01" if k == "bot:first_start_date" else None
+        )
+        assert rc.hold_until_setup() is False
+        redis_mock.redis_client.set.assert_not_called()

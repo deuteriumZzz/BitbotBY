@@ -90,6 +90,9 @@ class TelegramNotifier:
         if not self._enabled:
             return
         self._client = httpx.AsyncClient(timeout=_HTTP_TIMEOUT)
+        # Старые версии регистрировали список команд — Telegram хранит его, пока не удалить.
+        # Команд у бота нет: только приветствие и кнопка приложения.
+        await self._call("deleteMyCommands")
         if webapp_url():
             await self._call(
                 "setChatMenuButton",
@@ -412,16 +415,11 @@ class TelegramNotifier:
     @staticmethod
     def _welcome_text() -> str:
         if webapp_url():
-            return (
-                "BitbotBY: сюда приходят уведомления о сделках и рисках. "
-                "Управление и настройки — в приложении: кнопка ниже или "
-                "«Приложение» в меню."
-            )
+            return "👋 BitbotBY. Всё управление — в приложении, кнопка ниже. Сюда придут только уведомления, которые вы включите."
+        # Без https Telegram не откроет Mini App — приложение пока только на компьютере с ботом.
         return (
-            "BitbotBY: сюда приходят уведомления о сделках и рисках. "
-            "Приложение открывается на компьютере с ботом (ярлык BitbotBY); "
-            "для телефона включите доступ: ./bitbot phone on. "
-            "Ссылка входа на компьютере — команда /app."
+            "👋 BitbotBY. Приложение сейчас открывается на компьютере с ботом (ярлык BitbotBY). "
+            "Кнопка для телефона появится, когда включите доступ с телефона."
         )
 
     def _login_link_text(self) -> str:
