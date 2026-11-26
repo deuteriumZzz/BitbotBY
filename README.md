@@ -175,8 +175,6 @@ docs/             архитектура, настройки, словарь, ч
 | [docs/GLOSSARY.md](docs/GLOSSARY.md) | Словарь: режимы, профили, слоты, флаги |
 | [docs/RUNBOOK.md](docs/RUNBOOK.md) | Что делать, когда что-то пошло не так |
 | [docs/DEPLOY_SERVER.md](docs/DEPLOY_SERVER.md) | Сервер: установка, обновление, безопасность |
-| [docs/architecture/](docs/architecture/) | Потоки данных, решение, отказы, жизненный цикл модели |
-| [frontend/DESIGN.md](frontend/DESIGN.md) | Дизайн-система приложения |
 
 Поведение торговой логики охраняет **golden replay** (`backend/tests/replay/`): индикаторы, все стратегии,
 комбайнер и paper-позиции сверяются с эталоном.
