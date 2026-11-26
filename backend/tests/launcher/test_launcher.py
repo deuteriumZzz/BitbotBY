@@ -1,3 +1,5 @@
+import subprocess
+
 """Лаунчер (cli/launcher.py, команды ./bitbot): ключи, токен, окружение compose."""
 
 import importlib.util
@@ -216,3 +218,21 @@ def test_server_compose_has_no_env_file_and_hides_the_panel():
     )
     assert ".server/" in (root / ".gitignore").read_text()
     assert ".server/" in (root / ".dockerignore").read_text()
+
+
+def test_tunnel_in_docker_is_alive_only_while_container_runs(monkeypatch):
+    calls = []
+
+    def fake_run(cmd, **_):
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, stdout="true\n", stderr="")
+
+    monkeypatch.setattr(launch, "run", fake_run)
+    assert launch.tunnel_alive({"container": launch.TUNNEL_CONTAINER}) is True
+    assert calls[-1][:3] == ["docker", "inspect", "-f"]
+    monkeypatch.setattr(
+        launch,
+        "run",
+        lambda cmd, **_: subprocess.CompletedProcess(cmd, 1, stdout="", stderr=""),
+    )
+    assert launch.tunnel_alive({"container": launch.TUNNEL_CONTAINER}) is False

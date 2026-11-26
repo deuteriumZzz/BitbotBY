@@ -19,9 +19,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Зависимости отдельным слоем (кэш): список берётся из backend/pyproject.toml
 COPY backend/pyproject.toml backend/pyproject.toml
-# CPU-only torch — избегаем скачивания 1GB+ CUDA библиотек
+# CPU-only torch — избегаем скачивания CUDA-библиотек (nvidia-*, несколько ГБ).
+# Именно --index-url: с --extra-index-url pip выбирает и из PyPI и на amd64 берёт сборку с CUDA.
 RUN pip install --no-cache-dir --timeout 300 \
-    "torch>=2.0.0" --extra-index-url https://download.pytorch.org/whl/cpu
+    "torch>=2.0.0" --index-url https://download.pytorch.org/whl/cpu
 RUN python -c "import tomllib; print('\\n'.join(tomllib.load(open('backend/pyproject.toml','rb'))['project']['dependencies']))" > /tmp/deps.txt \
     && pip install --no-cache-dir --timeout 300 -r /tmp/deps.txt
 

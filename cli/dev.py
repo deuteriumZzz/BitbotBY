@@ -144,13 +144,20 @@ def job(argv: List[str]) -> int:
     return 2
 
 
+def _run_clean(cmd: List[str], cwd: Path = ROOT) -> int:
+    """Тесты и проверки — без рабочего окружения бота: тесты ждут live по умолчанию и не должны
+    видеть настоящее хранилище ключей (с ним дашборд считает вход настроенным и отвечает 401)."""
+    env = {k: v for k, v in os.environ.items() if k not in ("PAPER_TRADING", "BITBOT_SECRETS_KEY")}
+    return subprocess.call(cmd, cwd=cwd, env={**env, "PYTHONPATH": str(BACKEND)})
+
+
 def test(argv: List[str]) -> int:
     part = argv[1] if len(argv) > 1 else "all"
     code = 0
     if part in ("all", "backend"):
-        code |= _run([python(), "-m", "pytest", "backend/tests", "--ignore=backend/tests/integration", "-q"])
+        code |= _run_clean([python(), "-m", "pytest", "backend/tests", "--ignore=backend/tests/integration", "-q"])
     if part in ("all", "frontend"):
-        code |= _run(["npx", "vitest", "run"], cwd=FRONTEND)
+        code |= _run_clean(["npx", "vitest", "run"], cwd=FRONTEND)
     return code
 
 
@@ -163,7 +170,7 @@ def lint(argv: List[str]) -> int:
         ([py, "-m", "mypy", "bitbot"], BACKEND),
         (["npx", "tsc", "-b"], FRONTEND),
     ]
-    return max(_run(cmd, cwd=cwd) for cmd, cwd in steps)
+    return max(_run_clean(cmd, cwd=cwd) for cmd, cwd in steps)
 
 
 def fmt(argv: List[str]) -> int:

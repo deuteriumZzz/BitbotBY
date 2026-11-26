@@ -335,8 +335,24 @@ def tunnel_info(state_dir: Path = STATE_DIR) -> Dict[str, object]:
         return {}
 
 
+# Туннель живёт в контейнере: у Docker свой DNS, поэтому туннель не зависит от сети компьютера
+# (на macOS /etc/resolv.conf бывает пустым — cloudflared на хосте тогда не находит Cloudflare).
+TUNNEL_CONTAINER = "bitbotby-tunnel"
+TUNNEL_IMAGE = "cloudflare/cloudflared:latest"
+
+
 def tunnel_alive(info: Dict[str, object]) -> bool:
-    try:
+    if info.get("container"):
+        try:
+            r = run(
+                ["docker", "inspect", "-f", "{{.State.Running}}", str(info["container"])],
+                capture_output=True,
+                text=True,
+            )
+        except OSError:
+            return False
+        return r.returncode == 0 and r.stdout.strip() == "true"
+    try:  # старый туннель — процесс cloudflared на компьютере
         os.kill(int(str(info.get("pid", ""))), 0)
         return True
     except (OSError, ValueError):
@@ -345,49 +361,55 @@ def tunnel_alive(info: Dict[str, object]) -> bool:
 
 def stop_tunnel(state_dir: Path = STATE_DIR) -> None:
     info = tunnel_info(state_dir)
-    if tunnel_alive(info):
+    if info.get("pid") and tunnel_alive(info):
         try:
             os.kill(int(str(info["pid"])), 15)
         except OSError:
             pass
+    if shutil.which("docker"):
+        run(["docker", "rm", "-f", TUNNEL_CONTAINER], capture_output=True)
     (state_dir / TUNNEL_FILE).unlink(missing_ok=True)
 
 
-def start_tunnel(port: int, wait: int = 45) -> Optional[str]:
-    """Адрес https для MiniApp; None, если cloudflared нет или туннель не поднялся."""
+def start_tunnel(port: int, wait: int = 90) -> Optional[str]:
+    """Адрес https для MiniApp; None, если туннель не поднялся.
+
+    Готов только когда Cloudflare подтвердил соединение: адрес выдаётся раньше, и без
+    соединения он ведёт в никуда.
+    """
     info = tunnel_info()
     if tunnel_alive(info) and info.get("port") == port and info.get("url"):
         return str(info["url"])
     stop_tunnel()
-    exe = shutil.which("cloudflared")
-    if not exe:
-        say("Для доступа с телефона нужен cloudflared: brew install cloudflared")
-        say("(или другой https-адрес до этого компьютера: phone on --url=https://…)")
+    started = run(
+        [
+            "docker", "run", "-d", "--name", TUNNEL_CONTAINER,
+            "--add-host", "host.docker.internal:host-gateway",
+            TUNNEL_IMAGE, "tunnel", "--no-autoupdate",
+            "--url", f"http://host.docker.internal:{port}",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if started.returncode != 0:
+        say("Туннель не запустился в Docker: " + (started.stderr or "").strip()[:200])
         return None
-    log_path = STATE_DIR / "tunnel.log"
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
-    with open(log_path, "w", encoding="utf-8") as log:
-        proc = subprocess.Popen(
-            [exe, "tunnel", "--url", f"http://localhost:{port}", "--no-autoupdate"],
-            stdout=log,
-            stderr=subprocess.STDOUT,
-            stdin=subprocess.DEVNULL,
-            start_new_session=not sys.platform.startswith("win"),
-        )
     deadline = time.time() + wait
     while time.time() < deadline:
-        url = find_tunnel_url(log_path.read_text(encoding="utf-8", errors="replace"))
-        if url:
+        logs = run(["docker", "logs", TUNNEL_CONTAINER], capture_output=True, text=True)
+        text = (logs.stdout or "") + (logs.stderr or "")
+        url = find_tunnel_url(text)
+        if url and "Registered tunnel connection" in text:
             write_private(
                 STATE_DIR / TUNNEL_FILE,
-                json.dumps({"pid": proc.pid, "url": url, "port": port}),
+                json.dumps({"container": TUNNEL_CONTAINER, "url": url, "port": port}),
             )
             return url
-        if proc.poll() is not None:
+        if not tunnel_alive({"container": TUNNEL_CONTAINER}):
             break
         time.sleep(1)
-    say("Туннель не поднялся. Смотрите .launcher/tunnel.log")
-    proc.terminate()
+    say(f"Туннель не поднялся. Логи: docker logs {TUNNEL_CONTAINER}")
+    stop_tunnel()
     return None
 
 
