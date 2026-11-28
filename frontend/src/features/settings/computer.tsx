@@ -23,7 +23,7 @@ interface Launcher {
 const MACHINE = [
   ["autostart", "Запуск при входе в систему", "autostart"],
   ["keep_awake", "Не давать компьютеру уснуть", "awake"],
-  ["phone", "MiniApp в Telegram (доступ с телефона)", "phone"],
+  ["phone", "Доступ с телефона (Telegram)", "phone"],
 ] as const;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -80,31 +80,28 @@ export function ComputerCard() {
       {st.at !== null && !st.helper && (
         <p className="note-soon">Помощник на компьютере не отвечает — переключать можно командой в Терминале. Он запускается вместе с ботом ярлыком BitbotBY.</p>
       )}
-      <ul className="machine">
+      <div className="list-tgl">
         {MACHINE.map(([k, label, cmd]) => {
           const on = st[k];
           const can = st.helper && on !== null && (k !== "phone" || on);
           const next = `./bitbot ${cmd} ${on ? "off" : "on"}`;
           return (
-            <li key={k}>
-              <span className={`dot${on ? " ok" : ""}`} />
-              <span>
-                {label}: <b>{busy === k ? "меняю…" : on === null ? "неизвестно" : on ? "включено" : "выключено"}</b>
-              </span>
-              <span className="machine-act">
-                {can ? (
-                  <Toggle on={Boolean(on)} label={label} disabled={busy !== ""} onChange={(v) => void toggle(k, v)} />
-                ) : (
-                  <button className="btn mono" type="button" title="Скопировать команду" onClick={() => void copy(next)}>
-                    {copied === next ? "Скопировано ✓" : next}
-                  </button>
-                )}
-              </span>
-              {k === "phone" && !on && st.helper && <p className="machine-note">Включается только на компьютере: это открывает приложение в интернет.</p>}
-            </li>
+            <div className="alert-row" key={k}>
+              <div>
+                <b>{label}</b>
+                {busy === k ? <small>меняю…</small> : on === null ? <small>неизвестно</small> : k === "phone" && !on && st.helper ? <small>включается только на компьютере</small> : null}
+              </div>
+              {can ? (
+                <Toggle on={Boolean(on)} label={label} disabled={busy !== ""} onChange={(v) => void toggle(k, v)} />
+              ) : (
+                <button className="btn mono" type="button" title="Скопировать команду" onClick={() => void copy(next)}>
+                  {copied === next ? "Скопировано ✓" : next}
+                </button>
+              )}
+            </div>
           );
         })}
-      </ul>
+      </div>
       <p className="note-soon">Нет доступа к Терминалу? Ссылку входа присылает бот в Telegram по команде /app.</p>
     </article>
   );

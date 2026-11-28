@@ -1,13 +1,11 @@
-// Вкладка «Настройки»: подключения, Telegram, счёт и компьютер, расширенные параметры.
+// Вкладка «Настройки»: только то, без чего бот не работает. Всё про поведение бота —
+// в блоках вкладки «Стратегия»; параметры целиком — поиском (Ctrl/⌘ K).
 
 import { useEffect, useState } from "react";
 
 import { type SettingsPane } from "../../lib/where";
 
 import { useStore } from "../../store";
-
-import { OpsCard } from "../bots";
-import { ReportsCard } from "../reports";
 
 import { AlertsCard } from "./alerts";
 import { ComputerCard } from "./computer";
@@ -18,118 +16,58 @@ import { TgChannelsCard } from "./telegram";
 
 export type Pane = SettingsPane;
 
-/** Прокрутка к разделу страницы настроек (вместо переключения «папок»). */
 const goTo = (pane: Pane | "map") => {
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
   document.getElementById(`set-${pane}`)?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
 };
 
-/** Заголовок раздела страницы настроек. */
-function SecHead({ title }: { title: string }) {
-  return (
-    <div className="set-h">
-      <h2>{title}</h2>
-    </div>
-  );
-}
-
-/** Одна страница вместо разделов-папок: карта подключений, основное, ключи и (в «Профи») все параметры. */
 export function Settings() {
   const simple = useStore((s) => s.ui === "simple");
   const jump = useStore((s) => s.paramSearch);
-  // Cmd/Ctrl+K: сразу к «Все параметры» с курсором в поиске.
+  // Параметры показываются только по поиску: Ctrl/⌘ K или кнопка внизу.
+  const [params, setParams] = useState(false);
   useEffect(() => {
-    if (jump !== null) setTimeout(() => goTo("all"), 0);
+    if (jump === null) return;
+    setParams(true);
+    setTimeout(() => goTo("all"), 0);
   }, [jump]);
-  // Подсвечиваем пилюлю раздела, который сейчас на экране.
-  const [active, setActive] = useState<Pane | "map">("map");
-  // Ключ, открытый в боковой панели: с карты или из списка связок.
+  // Ключ, открытый в боковой панели (с карты или переходом из другой вкладки).
   const [key, setKey] = useState<string | null>(null);
-  // Переход к ключу из других вкладок («Подключить →» в «Сигналах для решения»).
   const keyJump = useStore((s) => s.keyJump);
   useEffect(() => {
     if (!keyJump) return;
     setKey(keyJump);
     useStore.setState({ keyJump: null });
   }, [keyJump]);
-  useEffect(() => {
-    const root = document.querySelector("main.views");
-    const seen = new Map<string, number>();
-    const io = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) seen.set(e.target.id.replace("set-", ""), e.isIntersecting ? e.intersectionRatio : 0);
-        const top = [...seen.entries()].sort((a, b) => b[1] - a[1])[0];
-        if (top && top[1] > 0) setActive(top[0] as Pane | "map");
-      },
-      { root, threshold: [0, 0.25, 0.5, 0.75, 1] },
-    );
-    for (const id of ["map", "conn", "main", "acct", "all"]) {
-      const el = document.getElementById(`set-${id}`);
-      if (el) io.observe(el);
-    }
-    return () => io.disconnect();
-  }, [simple]);
-  const chips: [Pane | "map", string][] = [
-    ["map", "Карта"],
-    ["conn", "Подключения"],
-    ["main", "Telegram"],
-    ["acct", "Счёт и компьютер"],
-    ["all", "Расширенные"],
-  ];
-  // «Простой»: подключения, Telegram и счёт; параметры — в «Профи».
-  const shown = simple ? chips.filter(([id]) => id !== "all") : chips;
   return (
-    <section className="view enter" aria-label="Настройки">
-      <nav className="set-jump" aria-label="Разделы настроек">
-        {shown.map(([id, label]) => (
-          <button key={id} type="button" className={`btn${active === id ? " on" : ""}`} aria-current={active === id ? "true" : undefined} onClick={() => goTo(id)}>
-            {label}
-          </button>
-        ))}
-      </nav>
+    <section className="view enter set-page" aria-label="Настройки">
       <ConnMap go={goTo} openKey={setKey} />
-      <div id="set-conn" className="set-sec">
-        <SecHead title="Подключения" />
-        <Keys open={key} setOpen={setKey} />
-      </div>
-      <div id="set-main" className="set-sec">
-        <SecHead title="Telegram" />
-        <div className="set-pane view enter">
-          <div className="cols">
-            <div className="col">
-              <AlertsCard />
-            </div>
-            <div className="col">
-              <TgChannelsCard openKey={setKey} />
-            </div>
-          </div>
+      <Keys open={key} setOpen={setKey} only={[]} />
+      <div className="cols">
+        <div className="col" id="set-main">
+          <AlertsCard />
         </div>
-      </div>
-      <div id="set-acct" className="set-sec">
-        <SecHead title="Счёт и компьютер" />
-        <div className="set-pane view enter">
-          <div className="cols">
-            <div className="col">
-              <AccountCard openKey={setKey} />
-            </div>
-            <div className="col">
-              <ComputerCard />
-              {!simple && (
-                <details className="card dev">
-                  <summary>Для разработчика</summary>
-                  <OpsCard />
-                  <ReportsCard dev />
-                </details>
-              )}
-            </div>
-          </div>
+        <div className="col" id="set-acct">
+          <AccountCard openKey={setKey} />
+          <ComputerCard />
+          <TgChannelsCard openKey={setKey} />
         </div>
       </div>
       {!simple && (
-      <div id="set-all" className="set-sec">
-        <SecHead title="Расширенные параметры" />
-        <AllParams go={goTo} basicOnly={false} />
-      </div>
+        <div id="set-all" className="set-params">
+          {params ? (
+            <>
+              <AllParams go={goTo} />
+              <button className="btn" type="button" onClick={() => setParams(false)}>
+                Скрыть параметры
+              </button>
+            </>
+          ) : (
+            <button className="btn" type="button" onClick={() => setParams(true)}>
+              Найти параметр
+            </button>
+          )}
+        </div>
       )}
     </section>
   );

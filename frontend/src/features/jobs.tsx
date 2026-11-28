@@ -10,8 +10,9 @@ import type { JobDone, JobId, JobState, MetaStatus, ModelInfo, ModelsStatus, Pro
 import { actions } from "../store/actions";
 import { useStore } from "../store";
 import { Q } from "../components/tooltip";
-import { stratName } from "./bots";
 import { HonestyCard } from "./ai";
+import { OpsCard, stratName } from "./bots";
+import { ReportsCard } from "./reports";
 import { Journal } from "./journal";
 import { MetricsCard } from "./terminal/metrics";
 
@@ -694,6 +695,8 @@ export function Learn() {
           <MetaCard />
           <AlphaCard />
           <HonestyCard />
+          <OpsCard />
+          <ReportsCard dev />
         </div>
       </div>
     </section>

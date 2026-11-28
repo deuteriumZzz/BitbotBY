@@ -58,12 +58,16 @@ export const STEP: Partial<Record<BotNode, string>> = { scan: "Сканер", ai
 /** Эти ключи открываются с карты подключений — в списке их не повторяем. */
 const ON_MAP = new Set(["bybit", "telegram"]);
 
-export function Keys({ open, setOpen }: { open: string | null; setOpen: (service: string | null) => void }) {
+/** only — какие группы показать списком (по умолчанию все); панель ключа открывается для любого. */
+export function Keys({ open, setOpen, only }: { open: string | null; setOpen: (service: string | null) => void; only?: string[] }) {
   const secrets = useStore((s) => s.secrets);
   const note = useStore((s) => s.secretsNote);
   const closeBtn = useRef<HTMLButtonElement>(null);
   // Ключи AI-провайдеров настраиваются в узле AI цепочки — здесь одна строка-связка.
-  const groups = useMemo(() => [...new Set((secrets ?? []).map((s) => s.group))].filter((g) => g !== "AI-модели"), [secrets]);
+  const groups = useMemo(
+    () => [...new Set((secrets ?? []).map((s) => s.group))].filter((g) => g !== "AI-модели" && (!only || only.includes(g))),
+    [secrets, only],
+  );
   const cur = secrets?.find((s) => s.service === open);
   // Панель уезжает с прежним содержимым, а не пустой.
   const last = useRef(cur);
@@ -111,8 +115,8 @@ export function Keys({ open, setOpen }: { open: string | null; setOpen: (service
     return row(s.service, c, s.name, `${t}${way ? ` · ${way}` : ""}${last4 ? ` · ••••${last4}` : ""}`, FEEDS[s.service] ?? [], () => setOpen(s.service));
   };
   return (
-    <div className="set-pane view enter">
-      {!secrets && <p className="empty">{note || "Ключи недоступны."}</p>}
+    <div className={only?.length === 0 ? "" : "set-pane view enter"}>
+      {!secrets && only?.length !== 0 && <p className="empty">{note || "Ключи недоступны."}</p>}
       <div className="klist">
         {/* Bybit, Telegram и AI — на карте выше, их ключи открываются оттуда. */}
         {groups.map((g) => {

@@ -49,7 +49,7 @@ export function useLanes(): Record<Step, Item[]> {
     });
     // Защиты: те же правила, что выполняет бот; выключаемые — тумблером или нулём в пороге.
     const risk = RULES.filter((r) => {
-      if (!r.key && !r.on) return false;
+      if (r.cat === "Бот" || (!r.key && !r.on)) return false;
       if (r.on) return cfg<boolean>(config, r.on, true) !== false;
       return r.zeroOff && r.key ? Number(cfg(config, r.key, 0)) > 0 : true;
     }).map((r) => ({ id: `rule:${r.id}`, title: r.chip ?? r.ifm, sub: r.cat, tag: r.on || r.zeroOff ? undefined : "всегда" }));

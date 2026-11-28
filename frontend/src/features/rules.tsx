@@ -283,17 +283,21 @@ export function RulesCard() {
   );
 }
 
-/** Правила «бот молчит / не отвечает» — это тревоги, живут в уведомлениях. */
+/** «Бот не открывал сделок N ч» — тревога, живёт в уведомлениях одной строкой. «Бот не отвечает» —
+ * это уведомление «Бот перестал работать», отдельной строки не нужно. */
 export function BotRules() {
   const c = useStore((s) => s.config);
   const schema = useStore((s) => s.schema);
-  const alerts = useStore((s) => s.alerts);
+  const d = schema.find((x) => x.key === "SILENT_DEATH_HOURS");
+  if (!d) return null;
   return (
-    <ul className="rules">
-      {RULES.filter((r) => r.cat === "Бот").map((r) => (
-        <RuleRow key={r.id} r={r} c={c} schema={schema} guardsOff={false} alertOn={alerts.find((a) => a.kind === r.alert)?.enabled} />
-      ))}
-    </ul>
+    <div className="alert-row">
+      <div>
+        <b>Нет сделок дольше</b>
+        <small>тревога в Telegram</small>
+      </div>
+      <Threshold d={d} value={c[d.key]?.value} />
+    </div>
   );
 }
 

@@ -82,12 +82,11 @@ export function AlertsCard() {
             )}
           </div>
         ))}
+        <BotRules />
       </div>
       <button className="btn" type="button" style={{ marginTop: 8 }} aria-expanded={freq} onClick={() => setFreq(!freq)}>
         {freq ? "Скрыть частоту" : "Настроить частоту"}
       </button>
-      <h3 className="sig-h">Если бот молчит</h3>
-      <BotRules />
     </article>
   );
 }

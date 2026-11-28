@@ -1736,3 +1736,5 @@ select.sel{appearance:none;-webkit-appearance:none;padding-right:34px;background
   .term-side>.pulse{order:5}
 }
 .term-dock>.seg{align-self:flex-start}
+/* Плашка «что мешает блоку работать» на схеме: нет ключа, модель не обучена. */
+.pipe-node .need{display:inline-flex;align-self:flex-start;margin-top:6px;padding:2px 8px;border-radius:var(--r-pill);font:600 11px/1.4 var(--font-text);color:var(--c-down);background:color-mix(in srgb,var(--c-down) 14%,transparent);border:1px solid color-mix(in srgb,var(--c-down) 40%,transparent)}

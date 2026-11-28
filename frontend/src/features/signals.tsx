@@ -2,6 +2,8 @@
 // этого настраивается: ключи подключений, Chronos и пороги. Остальные сигналы рынка бесплатные и работают
 // сами — без ключей и тумблеров. Дом порогов уверенности, настроения и Chronos (lib/where.ts).
 
+import { useState } from "react";
+
 import type { SecretItem } from "../lib/types";
 import { actions } from "../store/actions";
 import { useStore } from "../store";
@@ -10,6 +12,7 @@ import { Q } from "../components/tooltip";
 import { cfg } from "./bots";
 import { scrollWhenReady } from "./terminal";
 import { ParamList } from "./params";
+import { Keys } from "./settings/keys";
 import { chanList } from "./settings/telegram";
 
 /** Фильтр рынка — 13 сигналов _apply_market_context_filter; key — источнику нужен ключ. */
@@ -35,6 +38,7 @@ export const SIGNAL_KEYS = ["news", "twitter", "telethon", "reddit", "glassnode"
 export const setChronos = (on: boolean) => void actions.patchConfig({ CHRONOS_ENABLED: on });
 
 export function SignalsCard() {
+  const [key, setKey] = useState<string | null>(null);
   const config = useStore((s) => s.config);
   const secrets = useStore((s) => s.secrets);
   const fg = useStore((s) => s.market?.fear_greed ?? null);
@@ -52,17 +56,8 @@ export function SignalsCard() {
       </div>
       {mode === "local" && <p className="sig-note">Сейчас режим «Стратегии»: решают стратегии, промпт AI, фильтр рынка и Chronos не работают. Соцсети читает стратегия «Настроение».</p>}
 
-      <div className="alert-row">
-        <div>
-          <b>Источники с ключом</b>
-          <small>
-            подключено {on} из {keyed.length}: новости, X, Telegram-каналы, Reddit, Glassnode, Finnhub
-          </small>
-        </div>
-        <button type="button" className="btn" onClick={() => useStore.getState().setTab("settings")}>
-          Подключить
-        </button>
-      </div>
+      <h3 className="sig-h">Источники с ключом · {on} из {keyed.length}</h3>
+      <Keys open={key} setOpen={setKey} only={["Данные и соцсети"]} />
 
       <h3 className="sig-h">Chronos — прогноз цены</h3>
       <div className="alert-row">

@@ -131,7 +131,7 @@ interface Info {
 }
 
 /** Строка состояния под узлом и сводка полей для каждого узла — только из того, что бот уже отдаёт. */
-function usePipeline(mode: string): { status: Record<BotNode, string>; info: Record<BotNode, Info> } {
+function usePipeline(mode: string): { status: Record<BotNode, string>; info: Record<BotNode, Info>; need: Partial<Record<BotNode, string>> } {
   const c = useStore((s) => s.config);
   const presets = useStore((s) => s.riskPresets);
   const schema = useStore((s) => s.schema);
@@ -163,6 +163,19 @@ function usePipeline(mode: string): { status: Record<BotNode, string>; info: Rec
   const name = (id: string) => ai?.providers.find((p) => p.id === id)?.name ?? id;
   const active = profiles.find((p) => p.active);
   const guardsOff = paper && cfg<boolean>(c, "PAPER_GUARDS_OFF", false);
+  // Что мешает блоку работать — плашка прямо на схеме, клик открывает его панель.
+  const need: Partial<Record<BotNode, string>> = {
+    ai: takesPart(mode, "ai") && ai && !ai.chain.length ? "нужен ключ AI" : undefined,
+    sac: takesPart(mode, "sac") && active && !active.model_exists ? "модель не обучена" : undefined,
+    order:
+      !bybit || bybit.status === "unset"
+        ? "нужен ключ Bybit"
+        : bybit.status === "bad"
+          ? "ключ Bybit не работает"
+          : !auto && !paper && tg?.status !== "ok"
+            ? "нужен Telegram для подтверждений"
+            : undefined,
+  };
   const status: Record<BotNode, string> = {
     scan: `${bot?.profile ? profileName(bot.profile) : "профиль —"} · ${spot ? "спот" : "фьючерсы"}`,
     // Роль стратегий зависит от режима: решают сами только в Local, иначе — подсказка для AI или запасной путь.
@@ -267,7 +280,7 @@ function usePipeline(mode: string): { status: Record<BotNode, string>; info: Rec
       ],
     },
   };
-  return { status, info };
+  return { status, info, need };
 }
 
 /** Кто решает и какая роль у стратегий — одной фразой под переключателем (как в backend/bitbot/workers/bot.py). */
@@ -284,7 +297,7 @@ export function Pipeline() {
   const setTab = useStore((s) => s.setTab);
   const mode = useStore((s) => cfg<string>(s.config, "MODE", "ai"));
   const fallback = useStore((s) => cfg<boolean>(s.config, "LOCAL_FALLBACK", false));
-  const { status, info } = usePipeline(mode);
+  const { status, info, need } = usePipeline(mode);
   const at = NODES.findIndex((n) => n.id === node);
   const cur = NODES[at] ?? NODES[0];
   const part = takesPart(mode, cur.id);
@@ -359,7 +372,7 @@ export function Pipeline() {
                     <i>{String(i + 1).padStart(2, "0")}</i>
                   </span>
                   <b>{title}</b>
-                  <span className="st">{on ? status[id] : "не участвует"}</span>
+                  {on && need[id] ? <span className="need">{need[id]}</span> : <span className="st">{on ? status[id] : "не участвует"}</span>}
                   {on && res && (
                     <span className={`res ${cls}`}>
                       <i aria-hidden="true">{glyph}</i> {res.text}
