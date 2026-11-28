@@ -1722,9 +1722,11 @@ select.sel{appearance:none;-webkit-appearance:none;padding-right:34px;background
 .jr-list>.cols{margin:0}
 .jr-an{display:flex;flex-direction:column;gap:12px}
 @container dev (min-width:900px){
-  .term>.radar{grid-column:1/-1;order:1}
+  /* Первый экран: радар и баланс рядом, график под ними на всю ширину, ниже позиции и журнал. */
+  .term>.radar{grid-column:1/9;order:1}
+  .term>.term-side{grid-column:9/13;order:1}
   .term>.chart{grid-column:1/9;order:2}
-  .term>.term-side{grid-column:9/13;order:2}
+  .term>.pulse{grid-column:9/13;order:2}
   .term>.term-dock{order:3}
   .term-dock>.positions .pos-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px;max-height:none;overflow:visible}
 }
@@ -1733,7 +1735,7 @@ select.sel{appearance:none;-webkit-appearance:none;padding-right:34px;background
   .term>.term-side{display:contents}
   .term-side>.hero{order:0}
   .term>.term-dock{order:1}
-  .term-side>.pulse{order:5}
+  .term>.pulse{order:5}
 }
 .term-dock>.seg{align-self:flex-start}
 /* Плашка «что мешает блоку работать» на схеме: нет ключа, модель не обучена. */

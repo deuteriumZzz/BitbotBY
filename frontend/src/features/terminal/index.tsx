@@ -231,11 +231,11 @@ export function Terminal() {
       <HealthStrip />
       {simple && <PathBar />}
       {!simple && <Radar />}
-      {!simple && <Chart />}
       <div className="term-side">
         <Hero />
-        {!simple && <MarketPulse />}
       </div>
+      {!simple && <Chart />}
+      {!simple && <MarketPulse />}
       <div className="term-dock">
         <Seg
           className="sm"
