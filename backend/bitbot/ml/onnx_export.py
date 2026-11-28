@@ -45,7 +45,7 @@ def export_actor(
 
     torch.onnx.export(
         Deterministic(actor),
-        torch.zeros(1, obs_dim),
+        (torch.zeros(1, obs_dim),),
         out_path,
         input_names=["obs"],
         output_names=["action"],
