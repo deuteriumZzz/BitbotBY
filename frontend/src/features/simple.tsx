@@ -5,7 +5,7 @@ import { useStore } from "../store";
 import { Q } from "../components/tooltip";
 import { RiskCard, WhatCard, cfg } from "./bots";
 import { ModeSeg, NODES, takesPart } from "./pipeline";
-import { TemplateSeg, templateLine } from "./rules";
+import { templateLine } from "./rules";
 import { mark } from "./trace";
 import { protectionLines } from "../lib/format";
 import { useScoreboard } from "./ai";
@@ -51,9 +51,8 @@ export function BotSimple() {
       <article className="card">
         <div className="card-h">
           <h2>Защита</h2>
-          <Q tip="Когда бот останавливает входы: дневной лимит убытка, серия убытков, предельная просадка. Подробные правила — в «Профи» → Риск." />
+          <Q tip="Когда бот останавливает входы: дневной лимит убытка, серия убытков, предельная просадка. Пороги ставит выбор «Как рискуем» выше." />
         </div>
-        <TemplateSeg />
         <p className="note-soon">{templateLine(c)}</p>
         {ops ? (
           <ul className="prot-list">

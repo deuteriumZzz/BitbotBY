@@ -14,7 +14,8 @@ const HOURS: readonly (readonly [Hours, string])[] = [
   [168, "Неделя"],
 ];
 
-export function ReportsCard() {
+/** dev — инструменты разработчика (проверка базы, разбор решения) для «Настройки → Для разработчика». */
+export function ReportsCard({ dev = false }: { dev?: boolean }) {
   const [hours, setHours] = useState<Hours>(24);
   const [decision, setDecision] = useState("");
   const [text, setText] = useState("");
@@ -38,17 +39,21 @@ export function ReportsCard() {
   return (
     <article className="card rep">
       <div className="card-h">
-        <h2>Отчёты</h2>
+        <h2>{dev ? "Проверки" : "Отчёты"}</h2>
       </div>
-      <div className="btn-row">
-        <Seg value={hours} options={HOURS} onChange={setHours} label="Период сводки" />
-        <button type="button" className="btn" disabled={busy} onClick={() => void run(EP.reportsDigest(hours))}>
-          Сводка
-        </button>
+      {dev ? (
         <button type="button" className="btn" disabled={busy} onClick={() => void run(EP.reportsDbcheck)}>
           Проверить базу
         </button>
-      </div>
+      ) : (
+        <div className="btn-row">
+          <Seg value={hours} options={HOURS} onChange={setHours} label="Период сводки" />
+          <button type="button" className="btn" disabled={busy} onClick={() => void run(EP.reportsDigest(hours))}>
+            Сводка
+          </button>
+        </div>
+      )}
+      {dev && (
       <form
         className="btn-row rep-audit"
         onSubmit={(e) => {
@@ -61,6 +66,7 @@ export function ReportsCard() {
           Разобрать решение
         </button>
       </form>
+      )}
       {err && <p className="err">{err}</p>}
       {text && <pre className="job-out">{text}</pre>}
     </article>

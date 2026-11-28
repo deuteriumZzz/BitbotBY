@@ -230,7 +230,7 @@ export function AccountCard({ openKey }: { openKey: (service: string) => void })
           ) : !pinSet ? (
             <>
               <b>Сначала задайте PIN.</b>
-              <span>Без PIN переход на реальные деньги невозможен. Он хранится в «Ключи и доступ → Пароли и PIN».</span>
+              <span>Без PIN переход на реальные деньги невозможен. Задаётся кнопкой ниже.</span>
               <div className="btn-row">
                 <button className="btn primary" type="button" onClick={() => openKey("server")}>
                   Задать PIN

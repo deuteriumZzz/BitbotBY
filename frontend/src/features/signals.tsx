@@ -3,7 +3,6 @@
 // сами — без ключей и тумблеров. Дом порогов уверенности, настроения и Chronos (lib/where.ts).
 
 import type { SecretItem } from "../lib/types";
-import { plural } from "../lib/format";
 import { actions } from "../store/actions";
 import { useStore } from "../store";
 import { Toggle } from "../components/controls";
@@ -11,7 +10,6 @@ import { Q } from "../components/tooltip";
 import { cfg } from "./bots";
 import { scrollWhenReady } from "./terminal";
 import { ParamList } from "./params";
-import { FEEDS, STEP } from "./settings/keys";
 import { chanList } from "./settings/telegram";
 
 /** Фильтр рынка — 13 сигналов _apply_market_context_filter; key — источнику нужен ключ. */
@@ -36,19 +34,16 @@ export const SIGNAL_KEYS = ["news", "twitter", "telethon", "reddit", "glassnode"
 /** Единственное место, где меняется CHRONOS_ENABLED (тумблер в карточке и на узле холста). */
 export const setChronos = (on: boolean) => void actions.patchConfig({ CHRONOS_ENABLED: on });
 
-const state = (s?: SecretItem): string =>
-  !s ? "—" : s.status === "ok" ? "▲ подключено" : s.status === "bad" ? "▼ не работает" : s.status === "unset" ? "не подключено" : "не проверено";
-
 export function SignalsCard() {
   const config = useStore((s) => s.config);
   const secrets = useStore((s) => s.secrets);
   const fg = useStore((s) => s.market?.fear_greed ?? null);
-  const openKey = useStore((s) => s.openKey);
   const mode = cfg<string>(config, "MODE", "ai");
   const chronos = cfg<boolean>(config, "CHRONOS_ENABLED", false);
   const chans = chanList(`${cfg(config, "TELEGRAM_SENTIMENT_CHANNELS", "")},${cfg(config, "TELEGRAM_TRUSTED_CHANNELS", "")}`).length;
   const keyed = SIGNAL_KEYS.map((id) => secrets?.find((s) => s.service === id)).filter((s): s is SecretItem => Boolean(s));
   const free = MARKET.filter((m) => !m.key);
+  const on = keyed.filter((s) => (s.service === "telethon" ? Boolean(s.signed_in) && chans > 0 : s.status === "ok")).length;
   return (
     <article className="card sig">
       <div className="card-h">
@@ -57,26 +52,17 @@ export function SignalsCard() {
       </div>
       {mode === "local" && <p className="sig-note">Сейчас режим Local: решают стратегии, промпт AI, фильтр рынка и Chronos не работают. Соцсети читает стратегия «Настроение».</p>}
 
-      <h3 className="sig-h">Подключения — добавляются ключом</h3>
-      <ul className="sig-list">
-        {keyed.map((s) => {
-          const ok = s.service === "telethon" ? Boolean(s.signed_in) : s.status === "ok";
-          return (
-            <li key={s.service}>
-              <div>
-                <b>{s.service === "telethon" ? "Telegram-каналы" : s.name}</b>
-                <small>{(FEEDS[s.service] ?? []).map(([what, step]) => (step ? `${what} → ${STEP[step]}` : what)).join(" · ")}</small>
-              </div>
-              <span className="sig-a">
-                <span>{s.service === "telethon" ? (ok ? `▲ ${chans} ${plural(chans, ["канал", "канала", "каналов"])}` : "нужен вход") : state(s)}</span>
-                <button type="button" className="btn" onClick={() => openKey(s.service)}>
-                  {ok ? "Ключ →" : "Подключить →"}
-                </button>
-              </span>
-            </li>
-          );
-        })}
-      </ul>
+      <div className="alert-row">
+        <div>
+          <b>Источники с ключом</b>
+          <small>
+            подключено {on} из {keyed.length}: новости, X, Telegram-каналы, Reddit, Glassnode, Finnhub
+          </small>
+        </div>
+        <button type="button" className="btn" onClick={() => useStore.getState().setTab("settings")}>
+          Подключить
+        </button>
+      </div>
 
       <h3 className="sig-h">Chronos — прогноз цены</h3>
       <div className="alert-row">
@@ -90,11 +76,11 @@ export function SignalsCard() {
         <Toggle on={chronos} label="Прогноз Chronos" onChange={setChronos} />
       </div>
 
-      <h3 className="sig-h">Работают сами — без ключей</h3>
+      <h3 className="sig-h">
+        Работают сами, без ключей <Q tip="Бесплатные источники (alternative.me, Bybit, Deribit). После решения каждый сдвигает уверенность на ±0.05…0.15, крайние значения сами дают сигнал." />
+      </h3>
       <p className="kf-h">
-        {free.map((m) => m.name).join(", ")} — бесплатные источники (alternative.me, Bybit, Deribit и другие). Подключать и включать их не нужно, пороги
-        заданы в коде бота: после решения в AI, SAC и Hybrid каждый сдвигает уверенность на ±0.05…0.15, крайние значения сами дают сигнал.
-        {fg ? ` Индекс страха и жадности сейчас — ${fg.value} (${fg.label}).` : ""}
+        {free.length} сигналов рынка{fg ? `, страх и жадность сейчас ${fg.value}` : ""}.
       </p>
       <details className="sig-more">
         <summary>Как каждый влияет</summary>

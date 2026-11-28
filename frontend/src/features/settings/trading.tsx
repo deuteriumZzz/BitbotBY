@@ -45,7 +45,7 @@ export function HoursCard() {
         onChange={(v) => void actions.patchConfig({ TRADING_HOURS: v })}
         label="Часы торговли"
       />
-      {custom && <p className="note-soon" style={{ marginTop: 8 }}>Свой диапазон: {hours} UTC (задаётся в «Все параметры»).</p>}
+      {custom && <p className="note-soon" style={{ marginTop: 8 }}>Свой диапазон: {hours} UTC (задаётся в расширенных параметрах).</p>}
       <div className="hours-bar">
         {Array.from({ length: 24 }, (_, i) => (
           <i key={i} className={`${on(i) ? "on" : ""}${i === h ? " now" : ""}`} title={`${String(i).padStart(2, "0")}:00 UTC`} />

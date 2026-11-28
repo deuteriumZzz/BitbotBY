@@ -11,9 +11,8 @@ import { Seg } from "../components/controls";
 import { Q } from "../components/tooltip";
 import { AiPane } from "./ai";
 import { Lane, isStep, useLanes } from "./blocks";
-import { ConfirmCard, OpsCard, RiskCard, StrategiesCard, TrackCard, WhatCard, cfg, levText, presetName, presetOf, profileName } from "./bots";
+import { ConfirmCard, RiskCard, StrategiesCard, TrackCard, WhatCard, cfg, levText, presetName, presetOf, profileName } from "./bots";
 import { EmergencyCard } from "./emergency";
-import { ModelCard } from "./jobs";
 import { RulesCard } from "./rules";
 import { UiSwitchRow } from "./uimode";
 import { HoursCard, SymbolsCard } from "./settings/trading";
@@ -410,7 +409,8 @@ export function Pipeline() {
               <span>итогов пока нет — бот ещё не прошёл цикл после обновления</span>
             )}
           </p>
-          {info[cur.id].fields.length > 0 && (
+          {/* Сводка повторяет настройки ниже; остаётся только у SAC, где настроек в панели нет. */}
+          {cur.id === "sac" && info[cur.id].fields.length > 0 && (
             <dl className="pipe-fields">
               {info[cur.id].fields.map(([k, v]) => (
                 <div key={k}>
@@ -435,7 +435,6 @@ export function Pipeline() {
         {cur.id === "strat" && (
           <div className="cols">
             <div className="col">
-              <SignalsCard />
               <StrategiesCard />
             </div>
           </div>
@@ -449,14 +448,13 @@ export function Pipeline() {
         {cur.id === "sac" && (
           <div className="cols">
             <div className="col">
-              <ModelCard />
               <div className="btn-row">
                 <button
                   className="btn"
                   type="button"
                   onClick={toLearn}
                 >
-                  Обучить модель и проверить →
+                  Обучение и допуск модели
                 </button>
               </div>
             </div>
@@ -469,7 +467,6 @@ export function Pipeline() {
             </div>
             <div className="col">
               <RulesCard />
-              <OpsCard />
               <EmergencyCard />
             </div>
           </div>

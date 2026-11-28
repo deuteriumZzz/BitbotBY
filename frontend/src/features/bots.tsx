@@ -12,6 +12,7 @@ import { Seg, Toggle } from "../components/controls";
 import { Icon } from "../components/icon";
 import { Q } from "../components/tooltip";
 import { ParamList } from "./params";
+import { templateValues } from "./rules";
 
 export const STRATEGY_NAME: Record<string, string> = {
   context_signal: "Сигнал контекста",
@@ -105,6 +106,9 @@ const ico = (d: string) => (
   </svg>
 );
 /** Подписи пресетов. Сами значения — из бота (GET /api/risk/presets), одни на приложение и бота. */
+/** Пресет риска ставит и пороги защит: один выбор вместо двух. */
+const PRESET_TPL = { conservative: "strict", moderate: "base", aggressive: "loose" } as const;
+
 const PRESET_META: Record<string, { name: string; d: string; icon: JSX.Element }> = {
   conservative: {
     name: "Консервативный",
@@ -232,6 +236,7 @@ export function OpsCard() {
 
 export function RiskCard({ simple = false }: { simple?: boolean }) {
   const c = useStore((s) => s.config);
+  const schema = useStore((s) => s.schema);
   const presets = useStore((s) => s.riskPresets);
   const balance = useStore((s) => s.balance);
   const paper = useStore((s) => s.bot?.paper ?? true);
@@ -263,7 +268,7 @@ export function RiskCard({ simple = false }: { simple?: boolean }) {
         {Object.entries(PRESET_META).map(([k, m]) => {
           const p = presets[k];
           return (
-            <button key={k} className="preset" type="button" aria-pressed={k === active} disabled={!p} onClick={() => p && k !== active && void actions.patchConfig({ ...p })}>
+            <button key={k} className="preset" type="button" aria-pressed={k === active} disabled={!p} onClick={() => p && k !== active && void actions.patchConfig({ ...p, ...(k in PRESET_TPL ? templateValues(PRESET_TPL[k as keyof typeof PRESET_TPL], schema) : {}) })}>
               <span className="pi">{m.icon}</span>
               <b>{m.name}</b>
               <span className="pd">{m.d}</span>
@@ -414,40 +419,13 @@ export function ConfirmCard() {
     if (clamped !== v) say(`Время на решение — от ${DECISION_MIN} до ${DECISION_MAX} секунд.`);
     if (clamped !== timeout) void actions.patchConfig({ TELEGRAM_CONFIRM_TIMEOUT: clamped });
   };
-  return (
-    <article className="card">
-      <div className="card-h">
-        <h2>Открытие сделок</h2>
-      </div>
-      <div className="field">
-        <div className="field-h">
-          <span>
-            Как открывать <Q tip="Автоматически — бот нашёл сигнал и сразу открыл сделку. С подтверждением — каждая сделка приходит вам в Telegram и сюда." />
-          </span>
-        </div>
-        <Seg
-          className="full"
-          value={auto ? "auto" : "confirm"}
-          options={[
-            ["auto", "Автоматически"],
-            ["confirm", "С подтверждением"],
-          ]}
-          label="Как открывать сделки"
-          onChange={(v) => void actions.patchConfig({ AUTO_EXECUTE: v === "auto" })}
-        />
-        <p>
-          {auto
-            ? "Нашёл сигнал — сразу открывает сделку, без ожидания: в торговле важна скорость."
-            : "Бот присылает каждую сделку в Telegram и в приложение и ждёт вашего решения."}
-        </p>
-        {paper && <p className="note-soon">Сейчас Paper: бот не спрашивает ни в каком режиме — сделки виртуальные. Подтверждение работает в Live.</p>}
-      </div>
-      {!auto && (
-        <>
+  // Время и «если не ответил» — только при подтверждении; в Paper свёрнуты: там не спрашивают.
+  const timing = (
+    <>
           <div className="field">
             <div className="field-h">
               <span>
-                Время на решение <Q tip="Не больше 2 минут: цена уходит, и сигнал устаревает." />
+                Время на решение
               </span>
               <output className="num">{timeout} с</output>
             </div>
@@ -495,7 +473,42 @@ export function ConfirmCard() {
               Не ответили за {timeout} с — {onTimeout === "execute" ? "бот откроет сделку сам." : "сделка будет пропущена."}
             </p>
           </div>
-        </>
+    </>
+  );
+  return (
+    <article className="card">
+      <div className="card-h">
+        <h2>Открытие сделок</h2>
+      </div>
+      <div className="field">
+        <div className="field-h">
+          <span>
+            Как открывать <Q tip="Автоматически — бот нашёл сигнал и сразу открыл сделку. С подтверждением — каждая сделка приходит вам в Telegram и сюда." />
+          </span>
+        </div>
+        <Seg
+          className="full"
+          value={auto ? "auto" : "confirm"}
+          options={[
+            ["auto", "Автоматически"],
+            ["confirm", "С подтверждением"],
+          ]}
+          label="Как открывать сделки"
+          onChange={(v) => void actions.patchConfig({ AUTO_EXECUTE: v === "auto" })}
+        />
+        <p>
+          {auto
+            ? "Нашёл сигнал — сразу открывает сделку, без ожидания: в торговле важна скорость."
+            : "Бот присылает каждую сделку в Telegram и в приложение и ждёт вашего решения."}
+        </p>
+        {paper && <p className="note-soon">В Paper бот не спрашивает: подтверждение работает только в Live.</p>}
+      </div>
+      {!auto && !paper && timing}
+      {!auto && paper && (
+        <details className="sig-more">
+          <summary>Время на решение и «если не ответил» (для Live)</summary>
+          {timing}
+        </details>
       )}
     </article>
   );
@@ -712,8 +725,7 @@ export function StrategiesCard() {
           return (
             <li key={s.name} data-name={s.name} className={`strat${s.enabled ? "" : " off"}`}>
               <div className="nm">
-                <b>{stratName(s.name)}</b>
-                <code>{s.name}</code>
+                <b title={s.name}>{stratName(s.name)}</b>
               </div>
               <div className="row-r">
                 {s.experimental && (
@@ -807,7 +819,6 @@ export function TrackCard() {
   const c = useStore((s) => s.config);
   const schema = useStore((s) => s.schema);
   const setTab = useStore((s) => s.setTab);
-  const searchParams = useStore((s) => s.searchParams);
   const on = cfg(c, "PARTIAL_TP_ENABLED", true);
   const at = cfg(c, "PARTIAL_TP_TRIGGER", 0.6);
   const part = cfg(c, "PARTIAL_TP_FRACTION", 0.5);
@@ -860,9 +871,6 @@ export function TrackCard() {
       <div className="btn-row">
         <button className="btn" type="button" onClick={() => setTab("terminal")}>
           Открыть позиции
-        </button>
-        <button className="btn" type="button" onClick={() => searchParams("PARTIAL_TP")}>
-          Частичный TP в «Все параметры» →
         </button>
       </div>
     </article>

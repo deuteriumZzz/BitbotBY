@@ -373,10 +373,9 @@ function SignalWires({ mode }: { mode: string }) {
         trade,
         [
           `M ${SX + SW} ${TY} L ${xOf("sac")} ${TY}`,
-          `M ${xOf("sac") + NW} ${TY} L ${xOf("risk")} ${TY}`,
-          `M ${xOf("risk") + NW} ${TY} C ${x2} ${TY}, ${x2} ${TY}, ${x2} ${ROW}`,
+          `M ${xOf("sac") + NW} ${TY} L ${x2 - 24} ${TY} C ${x2} ${TY}, ${x2} ${TY}, ${x2} ${ROW}`,
         ],
-        [[SX + SW, TY], [xOf("sac"), TY], [xOf("sac") + NW, TY], [xOf("risk"), TY], [xOf("risk") + NW, TY], [x2, ROW]],
+        [[SX + SW, TY], [xOf("sac"), TY], [xOf("sac") + NW, TY], [x2, ROW]],
         "trade",
       )}
     </>
@@ -461,7 +460,10 @@ function SignalLane({ mode }: { mode: string }) {
         <button type="button" className="pw-open" onClick={toChannels}>
           <b>Доверенные каналы</b>
           <span className="st">{!signed ? "нужен вход в Telegram" : trusted.length ? `${trusted.length} ${plural(trusted.length, ["канал", "канала", "каналов"])}` : "не выбраны"}</span>
-          <span className="st">сделка по посту — мимо сигналов, стратегий и AI</span>
+          <span className="st">
+            сделка по посту · риск {pct(config.TELEGRAM_TRUSTED_RISK?.value, 0.005)} · стоп {pct(config.TELEGRAM_TRUSTED_SL?.value, 0.03)} · {slots}{" "}
+            {plural(slots, ["слот", "слота", "слотов"])}
+          </span>
           {fresh && (
             <span className={`res ${fresh.ok ? "ok" : "bad"}`} title={fresh.ok ? undefined : fresh.reason}>
               <i aria-hidden="true">{fresh.ok ? "▲" : "▼"}</i> @{fresh.channel}
@@ -475,13 +477,6 @@ function SignalLane({ mode }: { mode: string }) {
           {on ? "сделки вкл" : "сделки выкл"}
         </span>
       </div>
-      <button type="button" className={`pipe-node pw-tg${trade ? "" : " idle"}`} style={{ left: xOf("risk"), top: TOP, width: NW, height: TH }} onClick={toChannels}>
-        <b>Лимиты каналов</b>
-        <span className="st">
-          риск {pct(config.TELEGRAM_TRUSTED_RISK?.value, 0.005)} · стоп {pct(config.TELEGRAM_TRUSTED_SL?.value, 0.03)} · {slots}{" "}
-          {plural(slots, ["слот", "слота", "слотов"])}
-        </span>
-      </button>
     </>
   );
 }

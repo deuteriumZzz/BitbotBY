@@ -39,7 +39,7 @@ const JOBS: JobDef[] = [
     title: "Обучение SAC",
     what: "Переобучает нейросеть SAC на свежих данных профиля монет.",
     warn: "Около 60 минут на процессоре. Новая модель заменит текущую; прежняя сохранится, и её можно вернуть кнопкой «Откатить модель».",
-    button: "Обучить модель",
+    button: "Обучить (≈1 ч)",
   },
   {
     id: "tune",
@@ -47,7 +47,7 @@ const JOBS: JobDef[] = [
     title: "Тюнинг и обучение SAC",
     what: "Optuna перебирает 30 вариантов параметров нейросети, затем обучает модель с лучшими. Рекомендуется раз в 1–2 месяца.",
     warn: "Около 3 часов на процессоре, два этапа. По итогу модель заменится новой, прежнюю можно будет откатить.",
-    button: "Запустить тюнинг",
+    button: "С подбором параметров (≈3 ч)",
   },
   {
     id: "alpha_report",
@@ -131,12 +131,14 @@ function Ring({ pct }: { pct: number }) {
   );
 }
 
-function JobRow({ def, profile }: { def: JobDef; profile?: ProfileInfo }) {
-  const job: JobState | undefined = useStore((s) => s.jobs[def.id]);
+function JobRow({ def: main, alt, profile }: { def: JobDef; alt?: JobDef; profile?: ProfileInfo }) {
   const jobs = useStore((s) => s.jobs);
+  // Строка с двумя вариантами (обучение и тюнинг): показываем тот, что идёт или закончился последним.
+  const def = alt && (jobs[alt.id]?.running || (!jobs[main.id] && jobs[alt.id])) ? alt : main;
+  const job: JobState | undefined = jobs[def.id];
   const groupSource = useStore((s) => s.jobGroups[def.group]);
   const online = useStore((s) => s.alive);
-  const [confirm, setConfirm] = useState(false);
+  const [confirm, setConfirm] = useState<JobDef | null>(null);
   // Обучение и тюнинг делят один замок: пока идёт одно, второе недоступно.
   const sibling = JOBS.some(
     (j) => j.group === def.group && j.id !== def.id && jobs[j.id]?.running,
@@ -147,8 +149,8 @@ function JobRow({ def, profile }: { def: JobDef; profile?: ProfileInfo }) {
   return (
     <li className={`job${job?.running ? " run" : d ? (d.ok ? " ok" : " bad") : ""}`}>
       <div className="job-h">
-        <b>{def.title}</b>
-        <Q tip={def.what} />
+        <b>{main.title}</b>
+        <Q tip={alt ? `${main.what} С подбором параметров: ${alt.what}` : main.what} />
       </div>
       {job?.running ? (
         <>
@@ -206,13 +208,13 @@ function JobRow({ def, profile }: { def: JobDef; profile?: ProfileInfo }) {
             <div className="confirm-box">
               <span>
                 {profile && <>Профиль «{profile.label}». </>}
-                {def.warn}
+                {confirm.warn}
               </span>
               <div className="btn-row">
                 <button
                   className="btn"
                   type="button"
-                  onClick={() => setConfirm(false)}
+                  onClick={() => setConfirm(null)}
                 >
                   Отмена
                 </button>
@@ -220,8 +222,8 @@ function JobRow({ def, profile }: { def: JobDef; profile?: ProfileInfo }) {
                   className="btn primary"
                   type="button"
                   onClick={() => {
-                    setConfirm(false);
-                    void actions.runJob(def.id, profile?.id);
+                    setConfirm(null);
+                    void actions.runJob(confirm.id, profile?.id);
                   }}
                 >
                   Запустить
@@ -229,19 +231,20 @@ function JobRow({ def, profile }: { def: JobDef; profile?: ProfileInfo }) {
               </div>
             </div>
           ) : (
-            <button
-              className="btn"
-              type="button"
-              disabled={!online || sibling || foreign}
-              title={
-                sibling || foreign
-                  ? "Идёт другая задача этой группы"
-                  : undefined
-              }
-              onClick={() => setConfirm(true)}
-            >
-              {def.button}
-            </button>
+            <div className="btn-row">
+              {[main, ...(alt ? [alt] : [])].map((j) => (
+                <button
+                  key={j.id}
+                  className="btn"
+                  type="button"
+                  disabled={!online || sibling || foreign}
+                  title={sibling || foreign ? "Идёт другая задача этой группы" : undefined}
+                  onClick={() => setConfirm(j)}
+                >
+                  {j.button}
+                </button>
+              ))}
+            </div>
           )}
         </>
       )}
@@ -249,7 +252,6 @@ function JobRow({ def, profile }: { def: JobDef; profile?: ProfileInfo }) {
   );
 }
 
-const MODEL_JOBS: JobId[] = ["train", "tune"];
 const ALPHA_JOBS: JobId[] = [
   "backtest",
   "alpha_report",
@@ -412,13 +414,7 @@ export function ModelCard() {
           </li>
         )}
         {chosen && <ApprovalRow profile={chosen} used={role.used} />}
-        {MODEL_JOBS.map((id) => (
-          <JobRow
-            key={id}
-            def={JOBS.find((j) => j.id === id)!}
-            profile={chosen}
-          />
-        ))}
+        <JobRow def={JOBS.find((j) => j.id === "train")!} alt={JOBS.find((j) => j.id === "tune")!} profile={chosen} />
         <li className="job">
           <div className="job-h">
             <b>Откат модели SAC</b>

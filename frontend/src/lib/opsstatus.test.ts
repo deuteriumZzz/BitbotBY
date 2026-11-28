@@ -27,7 +27,7 @@ describe("opsSummary", () => {
 });
 
 describe("protectionLines", () => {
-  it("три статуса словами; технических флагов в списке нет", () => {
+  it("статусы словами; технических флагов (в т. ч. теневой проверки риска) в списке нет", () => {
     const lines = protectionLines({
       ...base,
       flags: { MACRO_BLACKOUT_ENABLED: true, RISK_GATE_SHADOW: true, DATA_QUALITY_GATE: false, AI_STRICT_VALIDATION: true },
@@ -35,7 +35,6 @@ describe("protectionLines", () => {
     expect(lines.map((l) => [l.key, l.text])).toEqual([
       ["MACRO_BLACKOUT_ENABLED", "работает"],
       ["DATA_QUALITY_GATE", "выключено"],
-      ["RISK_GATE_SHADOW", "только наблюдает"],
     ]);
   });
 });

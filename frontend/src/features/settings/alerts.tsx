@@ -1,10 +1,13 @@
-// Настройки → Основное: уведомления — тихие часы, уровни, cooldown тревог.
+// Настройки → Telegram: уведомления — тихие часы, уровни, cooldown тревог.
+
+import { useState } from "react";
 
 import { actions } from "../../store/actions";
 import { useStore } from "../../store";
 import { Seg, Toggle } from "../../components/controls";
 import { Q } from "../../components/tooltip";
 import { cfg } from "../bots";
+import { BotRules } from "../rules";
 
 // Тихие часы выбираются по местному времени, а бот хранит их в UTC (QUIET_HOURS).
 const TZ = Math.round(-new Date().getTimezoneOffset() / 60);
@@ -23,6 +26,7 @@ const QUIET = [
 const LEVEL: Record<string, string> = { critical: "приходит всегда", trade: "сделки", info: "сведения" };
 
 export function AlertsCard() {
+  const [freq, setFreq] = useState(false);
   const alerts = useStore((s) => s.alerts);
   const quietUtc = useStore((s) => cfg<string>(s.config, "QUIET_HOURS", ""));
   const quietLocal = shiftRange(quietUtc, TZ);
@@ -51,6 +55,7 @@ export function AlertsCard() {
               {a.level && <span className={`lvl ${a.level}`}>{LEVEL[a.level]}</span>}
             </div>
             <Toggle on={a.enabled} label={a.label} onChange={(on) => void actions.patchAlert(a.kind, { enabled: on })} />
+            {freq && (
             <label className="cool">
               <span>Не чаще раза в</span>
               <span className="numf">
@@ -74,9 +79,15 @@ export function AlertsCard() {
               </span>
               <span>{a.cooldown_min ? "" : "каждый раз"}</span>
             </label>
+            )}
           </div>
         ))}
       </div>
+      <button className="btn" type="button" style={{ marginTop: 8 }} aria-expanded={freq} onClick={() => setFreq(!freq)}>
+        {freq ? "Скрыть частоту" : "Настроить частоту"}
+      </button>
+      <h3 className="sig-h">Если бот молчит</h3>
+      <BotRules />
     </article>
   );
 }

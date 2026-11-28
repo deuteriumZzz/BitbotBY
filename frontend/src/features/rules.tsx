@@ -273,24 +273,31 @@ export function RulesCard() {
           </details>
         </div>
       )}
-      <div className="field">
-        <div className="field-h">
-          <span>Шаблон порогов</span>
-          {templateOf(c, schema) === null && <span className="pill sp">свои пороги</span>}
-        </div>
-        <TemplateSeg />
-        <p className="note-soon">Меняет дневной лимит, серию убытков, предельную просадку, паузу по монете и порог уменьшения сделок.</p>
-      </div>
+      {paper && !guardsOff && <p className="note-soon">В Paper правила капитала только присылают сообщение в Telegram.</p>}
       <ul className="rules">
-        {RULES.map((r) => (
-          <RuleRow key={r.id} r={r} c={c} schema={schema} paper={paper} guardsOff={guardsOff} alertOn={alerts.find((a) => a.kind === r.alert)?.enabled} />
+        {RULES.filter((r) => r.cat !== "Бот").map((r) => (
+          <RuleRow key={r.id} r={r} c={c} schema={schema} guardsOff={guardsOff} alertOn={alerts.find((a) => a.kind === r.alert)?.enabled} />
         ))}
       </ul>
     </article>
   );
 }
 
-function RuleRow({ r, c, schema, paper, guardsOff, alertOn }: { r: Rule; c: ConfigValues; schema: SettingDef[]; paper: boolean; guardsOff: boolean; alertOn?: boolean }) {
+/** Правила «бот молчит / не отвечает» — это тревоги, живут в уведомлениях. */
+export function BotRules() {
+  const c = useStore((s) => s.config);
+  const schema = useStore((s) => s.schema);
+  const alerts = useStore((s) => s.alerts);
+  return (
+    <ul className="rules">
+      {RULES.filter((r) => r.cat === "Бот").map((r) => (
+        <RuleRow key={r.id} r={r} c={c} schema={schema} guardsOff={false} alertOn={alerts.find((a) => a.kind === r.alert)?.enabled} />
+      ))}
+    </ul>
+  );
+}
+
+function RuleRow({ r, c, schema, guardsOff, alertOn }: { r: Rule; c: ConfigValues; schema: SettingDef[]; guardsOff: boolean; alertOn?: boolean }) {
   const d = schema.find((s) => s.key === r.key);
   const setTab = useStore((s) => s.setTab);
   const enabled = r.on ? cfg(c, r.on, true) : r.alert ? alertOn !== false : true;
@@ -303,9 +310,7 @@ function RuleRow({ r, c, schema, paper, guardsOff, alertOn }: { r: Rule; c: Conf
       ? "выключено: порог 0"
       : r.alert && !enabled
         ? "тревога выключена"
-        : paper && r.paperNotify
-          ? "в Paper — только сообщение в Telegram"
-          : (r.elsewhere ?? "");
+        : (r.elsewhere ?? "");
   return (
     <li className={`rule${active ? "" : " off"}`}>
       <span className="rule-cat">{r.cat}</span>

@@ -1,10 +1,13 @@
-// Вкладка «Настройки»: основное, AI-провайдеры, подключения (ключи), все параметры.
+// Вкладка «Настройки»: подключения, Telegram, счёт и компьютер, расширенные параметры.
 
 import { useEffect, useState } from "react";
 
 import { type SettingsPane } from "../../lib/where";
 
 import { useStore } from "../../store";
+
+import { OpsCard } from "../bots";
+import { ReportsCard } from "../reports";
 
 import { AlertsCard } from "./alerts";
 import { ComputerCard } from "./computer";
@@ -61,7 +64,7 @@ export function Settings() {
       },
       { root, threshold: [0, 0.25, 0.5, 0.75, 1] },
     );
-    for (const id of ["map", "main", "conn", "all"]) {
+    for (const id of ["map", "conn", "main", "acct", "all"]) {
       const el = document.getElementById(`set-${id}`);
       if (el) io.observe(el);
     }
@@ -69,9 +72,10 @@ export function Settings() {
   }, [simple]);
   const chips: [Pane | "map", string][] = [
     ["map", "Карта"],
-    ["main", "Уведомления и аккаунт"],
-    ["conn", "Ключи и доступ"],
-    ["all", simple ? "Основные параметры" : "Все параметры"],
+    ["conn", "Подключения"],
+    ["main", "Telegram"],
+    ["acct", "Счёт и компьютер"],
+    ["all", simple ? "Основные параметры" : "Расширенные"],
   ];
   return (
     <section className="view enter" aria-label="Настройки">
@@ -83,41 +87,47 @@ export function Settings() {
         ))}
       </nav>
       <ConnMap go={goTo} openKey={setKey} />
-      <div id="set-main" className="set-sec">
-        <SecHead n="01" title="Уведомления и аккаунт" />
-        <Main openKey={setKey} />
-      </div>
       <div id="set-conn" className="set-sec">
-        <SecHead n="02" title="Ключи и доступ" />
+        <SecHead n="01" title="Подключения" />
         <Keys open={key} setOpen={setKey} />
       </div>
+      <div id="set-main" className="set-sec">
+        <SecHead n="02" title="Telegram" />
+        <div className="set-pane view enter">
+          <div className="cols">
+            <div className="col">
+              <AlertsCard />
+            </div>
+            <div className="col">
+              <TgChannelsCard openKey={setKey} />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="set-acct" className="set-sec">
+        <SecHead n="03" title="Счёт и компьютер" />
+        <div className="set-pane view enter">
+          <div className="cols">
+            <div className="col">
+              <AccountCard openKey={setKey} />
+            </div>
+            <div className="col">
+              <ComputerCard />
+              {!simple && (
+                <details className="card dev">
+                  <summary>Для разработчика</summary>
+                  <OpsCard />
+                  <ReportsCard dev />
+                </details>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
       <div id="set-all" className="set-sec">
-        {simple ? (
-          <SecHead n="03" title="Основные параметры" />
-        ) : (
-          <SecHead n="03" title="Все параметры" />
-        )}
+        <SecHead n="04" title={simple ? "Основные параметры" : "Расширенные параметры"} />
         <AllParams go={goTo} basicOnly={simple} />
       </div>
     </section>
-  );
-}
-
-// ══ Основное ═════════════════════════════════════════════════════════════════
-
-function Main({ openKey }: { openKey: (service: string) => void }) {
-  return (
-    <div className="set-pane view enter">
-      <div className="cols">
-        <div className="col">
-          <AlertsCard />
-          <TgChannelsCard openKey={openKey} />
-        </div>
-        <div className="col">
-          <AccountCard openKey={openKey} />
-          <ComputerCard />
-        </div>
-      </div>
-    </div>
   );
 }
