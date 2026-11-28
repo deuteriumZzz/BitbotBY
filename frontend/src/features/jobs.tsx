@@ -11,6 +11,7 @@ import { actions } from "../store/actions";
 import { useStore } from "../store";
 import { Q } from "../components/tooltip";
 import { stratName } from "./bots";
+import { HonestyCard } from "./ai";
 
 interface JobDef {
   id: JobId;
@@ -692,6 +693,7 @@ export function Learn() {
         </div>
         <div className="col">
           <AlphaCard />
+          <HonestyCard />
         </div>
       </div>
     </section>

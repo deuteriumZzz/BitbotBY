@@ -442,8 +442,8 @@ export function Pipeline() {
         )}
         {cur.id === "ai" && (
           <>
-            <SignalsCard />
             <AiPane />
+            <SignalsCard />
           </>
         )}
         {cur.id === "sac" && (
