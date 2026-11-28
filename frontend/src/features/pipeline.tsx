@@ -315,7 +315,7 @@ export function Pipeline() {
           <div className="pipe-mode">
             <span className="label">
               Кто принимает решение{" "}
-              <Q tip="Local — только индикаторы. AI — языковая модель. SAC — обученная нейросеть. Hybrid — SAC и AI должны согласиться. Узлы, которые в этом режиме не участвуют, погаснут." />
+              <Q tip="Local — только индикаторы. AI — языковая модель. SAC — нейросеть. Hybrid — SAC и AI должны согласиться. Неучаствующие блоки гаснут." />
             </span>
             <ModeSeg />
             <p className="pipe-mode-note">{modeNote(mode, fallback)}</p>

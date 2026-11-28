@@ -48,7 +48,7 @@ export function SignalsCard() {
     <article className="card sig">
       <div className="card-h">
         <h2>Сигналы для решения</h2>
-        <Q tip="Новости, X и Telegram идут в промпт AI (режимы AI и Hybrid). 13 сигналов рынка — фильтр уверенности после решения в AI, SAC и Hybrid. Chronos — только Hybrid. В режиме Local решают только стратегии, соцсети читает стратегия «Настроение»." />
+        <Q tip="Новости, X и Telegram читает AI. Сигналы рынка поправляют уверенность после решения. Chronos работает только в Hybrid." />
       </div>
       {mode === "local" && <p className="sig-note">Сейчас режим Local: решают стратегии, промпт AI, фильтр рынка и Chronos не работают. Соцсети читает стратегия «Настроение».</p>}
 
