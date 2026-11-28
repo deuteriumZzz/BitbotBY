@@ -229,12 +229,13 @@ export function Terminal() {
       <HealthStrip />
       {simple && <PathBar />}
       <Hero />
-      <MetricsCard />
-      <Radar />
+      {/* «Простой»: баланс и позиции; метрики, радар, график и фон рынка — в «Профи». */}
+      {!simple && <MetricsCard />}
+      {!simple && <Radar />}
       <Positions />
-      <Chart />
+      {!simple && <Chart />}
       {/* Фон рынка — справочно, поэтому в самом конце. */}
-      <MarketPulse />
+      {!simple && <MarketPulse />}
     </section>
   );
 }

@@ -75,12 +75,14 @@ export function Settings() {
     ["conn", "Подключения"],
     ["main", "Telegram"],
     ["acct", "Счёт и компьютер"],
-    ["all", simple ? "Основные параметры" : "Расширенные"],
+    ["all", "Расширенные"],
   ];
+  // «Простой»: подключения, Telegram и счёт; параметры — в «Профи».
+  const shown = simple ? chips.filter(([id]) => id !== "all") : chips;
   return (
     <section className="view enter" aria-label="Настройки">
       <nav className="set-jump" aria-label="Разделы настроек">
-        {chips.map(([id, label]) => (
+        {shown.map(([id, label]) => (
           <button key={id} type="button" className={`btn${active === id ? " on" : ""}`} aria-current={active === id ? "true" : undefined} onClick={() => goTo(id)}>
             {label}
           </button>
@@ -124,10 +126,12 @@ export function Settings() {
           </div>
         </div>
       </div>
+      {!simple && (
       <div id="set-all" className="set-sec">
-        <SecHead n="04" title={simple ? "Основные параметры" : "Расширенные параметры"} />
-        <AllParams go={goTo} basicOnly={simple} />
+        <SecHead n="04" title="Расширенные параметры" />
+        <AllParams go={goTo} basicOnly={false} />
       </div>
+      )}
     </section>
   );
 }

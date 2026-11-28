@@ -65,6 +65,7 @@ const winRate = (t: JournalTrade[]): number => (t.length ? t.filter((x) => x.pnl
 const net = (t: JournalTrade[]): number => t.reduce((s, x) => s + x.pnl, 0);
 
 export function Journal() {
+  const simple = useStore((s) => s.ui === "simple");
   const journal = useStore((s) => s.journal);
   const load = useStore((s) => s.loadJournal);
   const [period, setPeriod] = useState<Period>(journal?.period ?? "30d");
@@ -115,11 +116,12 @@ export function Journal() {
               <Seg className="sm" value={result} options={RESULTS} onChange={setResult} label="Результат" />
             </div>
           </article>
-          {all && <ByStrategy trades={trades} pick={setStrategy} picked={strategy} />}
-          {all && <ByHour trades={trades} />}
-          <Calendar />
-          <ExecutionCard />
-          <ReportsCard />
+          {/* «Простой»: итог и список сделок; разборы — в «Профи». */}
+          {!simple && all && <ByStrategy trades={trades} pick={setStrategy} picked={strategy} />}
+          {!simple && all && <ByHour trades={trades} />}
+          {!simple && <Calendar />}
+          {!simple && <ExecutionCard />}
+          {!simple && <ReportsCard />}
         </div>
         <div className="col">
           <article className="card jr-trades">
