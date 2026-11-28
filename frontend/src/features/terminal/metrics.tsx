@@ -114,7 +114,7 @@ export function MetricsCard() {
       <div className="tile">
         <div className="t-h">
           <span>Коэф. Шарпа</span>
-          <Q tip="Доходность с поправкой на её разброс. Считаем от 50 закрытых сделок: на меньшем числе цифра случайна." />
+          <Q tip="Доходность с поправкой на её разброс, по дням, включая дни без сделок. Считаем от 50 закрытых сделок: на меньшем числе цифра случайна." />
         </div>
         {m.sharpe === null ? (
           <>
@@ -126,7 +126,7 @@ export function MetricsCard() {
             <div className={`v ${tone(m.sharpe)}`}>
               <Tween value={m.sharpe} fmt={(v) => fmtN(v, 2)} />
             </div>
-            <small>по {m.n} сделкам</small>
+            <small>по {m.sharpe_days ?? m.n} {m.sharpe_days ? "дням" : "сделкам"}</small>
           </>
         )}
       </div>

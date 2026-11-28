@@ -657,3 +657,16 @@ def test_risk_presets_api_is_the_telegram_source(client):
         "DRAWDOWN_SCALE_ENABLED",
         "LEVERAGE_MODE",
     }
+
+
+def test_sharpe_counts_days_without_trades():
+    # Те же сделки, но разнесённые на редкие дни: пустые дни (доходность 0) снижают Sharpe.
+    start = datetime(2026, 9, 1)
+    pnls = [5 if i % 3 else -4 for i in range(60)]
+    dense = [_trade(p, (start + timedelta(days=i % 20)).date().isoformat()) for i, p in enumerate(pnls)]
+    sparse = [_trade(p, (start + timedelta(days=(i % 20) * 5)).date().isoformat()) for i, p in enumerate(pnls)]
+    for ts in (dense, sparse):
+        ts.sort(key=lambda t: t["exit_time"])
+    d, s = data.compute_metrics(dense, 1000), data.compute_metrics(sparse, 1000)
+    assert d["sharpe_days"] == 20 and s["sharpe_days"] == 96
+    assert s["sharpe"] < d["sharpe"]

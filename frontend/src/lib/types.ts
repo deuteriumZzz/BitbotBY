@@ -143,6 +143,8 @@ export interface Metrics {
   rr: number | null;
   max_drawdown_pct: number;
   sharpe: number | null;
+  /** Календарных дней в расчёте Sharpe (с пустыми днями). */
+  sharpe_days?: number;
 }
 
 export interface ExecutionMetrics {

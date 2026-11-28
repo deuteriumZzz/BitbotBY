@@ -19,6 +19,7 @@ export function BotSimple() {
   const ops = useStore((s) => s.opsStatus);
   const score = useScoreboard();
   const mode = cfg<string>(c, "MODE", "ai");
+  const fallback = cfg<boolean>(c, "LOCAL_FALLBACK", false);
   const chain = (ai?.chain ?? []).map((x) => `${ai?.providers.find((p) => p.id === x.provider)?.name ?? x.provider} (${x.model})`);
   const when = cycle ? new Date(cycle.at * 1000).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }) : "";
   return (
@@ -34,7 +35,7 @@ export function BotSimple() {
         <ModeSeg simple />
         {mode === "ai" && (
           <p className="note-soon">
-            {chain.length ? `AI по очереди: ${chain.join(" → ")}. Не ответит никто — решат стратегии.` : "Ключа AI ещё нет — добавьте его в «Профи» → AI-цепочка."}
+            {chain.length ? `AI по очереди: ${chain.join(" → ")}. ${fallback ? "Не ответит никто — решат стратегии." : "Не ответит никто — сделки не будет."}` : "Ключа AI ещё нет — добавьте его в «Профи» → AI-цепочка."}
           </p>
         )}
         {mode === "ai" && score && Object.keys(score.providers).length > 0 && (

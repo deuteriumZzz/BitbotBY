@@ -856,10 +856,10 @@ export function TrackCard() {
         </div>
         <Seg className="full" value={preset(trail, TRAIL)} options={TRAIL} onChange={(v) => void actions.patchConfig({ TRAILING_STOP_ATR_MULT: v })} label="Отступ трейлинг-стопа" />
       </div>
-      <p className="note-soon">Трейлинг можно выключить у отдельной позиции — тумблером в «Терминале». Точные значения — в «Все параметры».</p>
+      <p className="note-soon">Трейлинг можно выключить у отдельной позиции на Обзоре.</p>
       <div className="btn-row">
         <button className="btn" type="button" onClick={() => setTab("terminal")}>
-          Позиции в Терминале →
+          Открыть позиции
         </button>
         <button className="btn" type="button" onClick={() => searchParams("PARTIAL_TP")}>
           Частичный TP в «Все параметры» →

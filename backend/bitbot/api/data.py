@@ -7,7 +7,7 @@ import json
 import logging
 import os
 import sqlite3
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import List, Optional
 
@@ -393,12 +393,19 @@ def compute_metrics(trades: List[dict], start_balance: float) -> dict:
             max_dd = max(max_dd, (peak - equity) / peak)
 
     sharpe = None
+    sharpe_days = 0
     if n >= SHARPE_MIN_TRADES and start_balance > 0:
         daily: dict = {}
         for t in trades:
             day = str(t["exit_time"])[:10]
             daily[day] = daily.get(day, 0.0) + float(t["pnl"])
-        rets = [v / start_balance for v in daily.values()]
+        # Дни без сделок — нулевая доходность; без них Sharpe завышен.
+        first, last = date.fromisoformat(min(daily)), date.fromisoformat(max(daily))
+        sharpe_days = (last - first).days + 1
+        rets = [
+            daily.get((first + timedelta(days=i)).isoformat(), 0.0) / start_balance
+            for i in range(sharpe_days)
+        ]
         if len(rets) > 1:
             mean = sum(rets) / len(rets)
             sd = (sum((r - mean) ** 2 for r in rets) / (len(rets) - 1)) ** 0.5
@@ -416,6 +423,7 @@ def compute_metrics(trades: List[dict], start_balance: float) -> dict:
         "rr": round(avg_win / avg_loss, 3) if avg_win and avg_loss else None,
         "max_drawdown_pct": round(max_dd * 100, 2),
         "sharpe": sharpe,
+        "sharpe_days": sharpe_days,
     }
 
 

@@ -472,6 +472,7 @@ function metrics(period: string): Metrics {
     rr: avgWin !== null && avgLoss ? avgWin / -avgLoss : null,
     max_drawdown_pct: +(dd * 100).toFixed(2),
     sharpe: t.length >= 50 && sd > 0 ? +((mean / sd) * Math.sqrt(365)).toFixed(2) : null,
+    sharpe_days: t.length >= 50 ? Math.ceil((t[t.length - 1].exit - t[0].exit) / 86400000) + 1 : 0,
   };
 }
 

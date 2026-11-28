@@ -270,7 +270,7 @@ function sacRole(mode: string): { used: boolean; text: string } {
     };
   return {
     used: false,
-    text: "Режим сейчас без SAC — обучение пока ни на что не влияет. Включается в «Цепочке»: SAC или Hybrid.",
+    text: "Режим сейчас без SAC — обучение пока ни на что не влияет. Включается выбором режима SAC или Hybrid.",
   };
 }
 

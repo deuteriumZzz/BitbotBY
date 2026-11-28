@@ -29,8 +29,8 @@ export function Palette() {
       run: () => st.setTab(tab),
     });
     const node = (label: string, id: Parameters<typeof st.openNode>[0], keys: string): Cmd => ({
-      label: `Бот → ${label}`,
-      keys: `бот конвейер ${label} ${keys}`,
+      label: `Цепочка → ${label}`,
+      keys: `бот цепочка конвейер ${label} ${keys}`,
       run: () => st.openNode(id),
     });
     return [
