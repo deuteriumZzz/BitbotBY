@@ -278,7 +278,7 @@ const PositionCard = memo(function PositionCard({ p, enter }: { p: Position; ent
   return (
     <div className="pos-swipe">
       <button
-        className={`pos-swipe-act ${closeArmed ? "armed" : ""}`}
+        className={`pos-swipe-act${closeArmed ? " armed" : ""}${revealed || dx || dragging ? " on" : ""}`}
         type="button"
         tabIndex={revealed ? 0 : -1}
         aria-hidden={!revealed}

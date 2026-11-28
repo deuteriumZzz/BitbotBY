@@ -2337,3 +2337,7 @@ button.paper svg{width:12px;height:12px}
 .ch-wrap.live .ch-fc.on:not(.idle) button.cur svg{animation:fc-breathe 3.2s ease-in-out infinite}
 @keyframes fc-breathe{50%{opacity:.55}}
 @media (prefers-reduced-motion:reduce){.ch-wrap.live .ch-fc button.cur svg{animation:none}}
+/* Карточка заполняет ячейку ряда (ряд тянется по самой высокой), а кнопка свайпа видна только во время свайпа */
+.pos-swipe{display:flex}
+.pos-swipe>.pos{flex:1 1 auto;min-width:0}
+.pos-swipe-act:not(.on){visibility:hidden}
