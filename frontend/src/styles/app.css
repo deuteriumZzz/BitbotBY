@@ -1740,3 +1740,11 @@ select.sel{appearance:none;-webkit-appearance:none;padding-right:34px;background
 .term-dock>.seg{align-self:flex-start}
 /* Плашка «что мешает блоку работать» на схеме: нет ключа, модель не обучена. */
 .pipe-node .need{display:inline-flex;align-self:flex-start;margin-top:6px;padding:2px 8px;border-radius:var(--r-pill);font:600 11px/1.4 var(--font-text);color:var(--c-down);background:color-mix(in srgb,var(--c-down) 14%,transparent);border:1px solid color-mix(in srgb,var(--c-down) 40%,transparent)}
+
+/* Стратегии одной строкой: название, метка бэктеста, тумблер; цифры — в подсказке. */
+.strat-find{width:100%;margin:10px 0 6px}
+.strats.compact{display:flex;flex-direction:column;gap:0}
+.strats.compact .strat{display:flex;align-items:center;gap:8px;padding:8px 2px;border-bottom:1px solid var(--c-line)}
+.strats.compact .strat:last-child{border-bottom:0}
+.strats.compact .strat>b{flex:1;min-width:0;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.strats.compact .strat.off>b{color:var(--c-ink3)}

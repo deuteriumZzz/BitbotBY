@@ -1,10 +1,9 @@
 // Карточки вкладки «Бот»: что торговать, стратегии, режим риска, тонкая настройка, открытие сделок.
 // По узлам конвейера их раскладывает features/pipeline.tsx.
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { fmtN, opsSummary, plural, readinessReason, tone } from "../lib/format";
-import { reducedMotion } from "../lib/platform";
+import { fmtN, opsSummary, plural, readinessReason } from "../lib/format";
 import type { ConfigValues, RiskPreset, Strategy } from "../lib/types";
 import { actions } from "../store/actions";
 import { useStore } from "../store";
@@ -584,202 +583,37 @@ const MODE_ROLE: Record<string, { title: string; text: string }> = {
   },
 };
 
+/** Цифры бэктеста и live одной строкой — для подсказки при наведении. */
+const stratTip = (s: Strategy): string => {
+  const bt = s.backtest;
+  const parts = [
+    bt?.trades ? `бэктест: прибыльных ${fmtN(bt.win_rate * 100, 1)}%, сделок ${fmtN(bt.trades, 0)}, Sharpe ${bt.sharpe.toFixed(3)}` : "бэктеста нет",
+    s.live ? `live: ${fmtN(s.live.win_rate * 100, 1)}%, сделок ${s.live.trades}, EV ${s.live.ev.toFixed(2)}` : "",
+    s.markets === "futures" ? "только фьючерсы" : "спот и фьючерсы",
+    s.experimental ? "экспериментальная, без доказанного преимущества" : "",
+  ];
+  return parts.filter(Boolean).join(" · ");
+};
+
+/** Стратегии: список включённых; любую из остальных находит поиск. Цифры — в подсказке строки. */
 export function StrategiesCard() {
   const all0 = useStore((s) => s.strategies);
   const marketSpot = useStore((s) => cfg<string>(s.config, "MARKET_TYPE", "linear") === "spot");
   const mode = useStore((s) => s.bot?.mode ?? "ai");
   const readiness = useStore((s) => s.modeReadiness?.[s.bot?.mode ?? "ai"] ?? null);
   const fallback = useStore((s) => cfg<boolean>(s.config, "LOCAL_FALLBACK", false));
-  const [all, setAll] = useState(false);
-  const [view, setView] = useState<"futures" | "spot" | null>(null);
   const [q, setQ] = useState("");
-  // Закреплённые стратегии идут первыми; хранится только в этом браузере.
-  const [pins, setPins] = useState<string[]>(() => {
-    try {
-      return JSON.parse(localStorage.getItem("bitbot.pins") ?? "[]") as string[];
-    } catch {
-      return [];
-    }
-  });
-  const togglePin = (name: string) =>
-    setPins((cur) => {
-      const next = cur.includes(name) ? cur.filter((x) => x !== name) : [...cur, name];
-      try {
-        localStorage.setItem("bitbot.pins", JSON.stringify(next));
-      } catch {
-        /* без хранилища закрепление живёт до перезагрузки */
-      }
-      return next;
-    });
-  // Строки плавно переезжают при смене рынка, фильтра и поиска (FLIP: было → стало).
-  const listRef = useRef<HTMLUListElement>(null);
-  const prevTop = useRef(new Map<string, number>());
-  useLayoutEffect(() => {
-    const ul = listRef.current;
-    if (!ul) return;
-    const next = new Map<string, number>();
-    for (const li of Array.from(ul.children) as HTMLElement[]) {
-      const key = li.dataset.name ?? "";
-      const top = li.offsetTop - ul.offsetTop;
-      next.set(key, top);
-      const was = prevTop.current.get(key);
-      if (was !== undefined && Math.abs(was - top) > 1 && !reducedMotion() && li.animate) {
-        li.animate([{ transform: `translateY(${was - top}px)` }, { transform: "none" }], { duration: 280, easing: "cubic-bezier(.3,.7,.1,1)" });
-      }
-    }
-    prevTop.current = next;
-  });
-  const [kind, setKind] = useState<"all" | "trending" | "ranging" | "volatile">("all");
-  const [onlyOn, setOnlyOn] = useState(false);
-  // Что показываем: по умолчанию рынок из настроек; переключатель только меняет вид списка.
-  // На споте нет шортов, поэтому стратегии «только фьючерсы» там не работают.
-  const shown: "futures" | "spot" = view ?? (marketSpot ? "spot" : "futures");
-  const spot = shown === "spot";
-  const fits = (s: Strategy, m: "futures" | "spot") => s.markets === "both" || s.markets === m;
-  const counts = { futures: all0.filter((s) => fits(s, "futures")).length, spot: all0.filter((s) => fits(s, "spot")).length };
-  const strategies = all0.filter((s) => fits(s, shown));
-  const hidden = all0.length - strategies.length;
+  // На споте нет шортов: стратегии «только фьючерсы» там не работают и не показываются.
+  const market = marketSpot ? "spot" : "futures";
+  const strategies = all0.filter((s) => s.markets === "both" || s.markets === market);
   const needle = q.trim().toLowerCase();
-  const kindOf = (s: Strategy) => (s.type === "trending" || s.type === "ranging" ? s.type : "volatile");
-  const found = strategies.filter(
-    (s) =>
-      (kind === "all" || kindOf(s) === kind) &&
-      (!onlyOn || s.enabled) &&
-      (!needle || stratName(s.name).toLowerCase().includes(needle) || s.name.includes(needle)),
+  const rows = (needle ? strategies.filter((s) => stratName(s.name).toLowerCase().includes(needle) || s.name.includes(needle)) : strategies.filter((s) => s.enabled)).sort(
+    (a, b) => (b.backtest?.sharpe ?? -9) - (a.backtest?.sharpe ?? -9),
   );
-  const sorted = [...found].sort(
-    (a, b) => Number(pins.includes(b.name)) - Number(pins.includes(a.name)) || (b.backtest?.sharpe ?? -9) - (a.backtest?.sharpe ?? -9),
-  );
-  const filtering = Boolean(needle) || kind !== "all" || onlyOn;
-  const rows = all || filtering ? sorted : sorted.slice(0, 6);
   const on = strategies.filter((s) => s.enabled).length;
   const tested = strategies.filter((s) => s.backtest && s.backtest.trades > 0);
   const edge = tested.filter((s) => s.backtest!.trades >= 100 && s.backtest!.sharpe > 0);
   const role = MODE_ROLE[mode] ?? MODE_ROLE.ai;
-  const body = (
-    <>
-      {readiness && !readiness.ready && (
-        <div className="honest">
-          {Icon.warn}
-          <div>
-            <b>Выбранный режим сейчас не принимает решений:</b> {readinessReason(readiness.reason)}.
-          </div>
-        </div>
-      )}
-      {role.text && <p className="note-soon role">{role.text}</p>}
-      {mode !== "local" && (
-        <div className="row-tgl">
-          <span>
-            Если AI или SAC недоступны — торговать по этим стратегиям{" "}
-            <Q tip="Срабатывает, только если AI или SAC не отвечают. Тогда бот торгует по включённым стратегиям. Выключено: новых сделок нет, открытые позиции бот ведёт дальше." />
-          </span>
-          <Toggle on={fallback} label="Запасной путь при недоступности AI или SAC" onChange={(v) => void actions.patchConfig({ LOCAL_FALLBACK: v })} />
-        </div>
-      )}
-      {tested.length > 0 && !edge.length && (
-        <div className="honest">
-          {Icon.warn}
-          <div>
-            <b>Бэктест: ни одна из {tested.length} стратегий не показала устойчивого преимущества.</b> Пока edge не доказан, держите Paper.
-            Kill-switch следит за каждой стратегией в live.
-          </div>
-        </div>
-      )}
-      <div className="strat-tools">
-        <Seg
-          className="sm"
-          value={shown}
-          options={[
-            ["futures", `Фьючерсы · ${counts.futures}`],
-            ["spot", `Спот · ${counts.spot}`],
-          ]}
-          onChange={setView}
-          label="Для какого рынка показать стратегии"
-        />
-        <input className="inp" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Найти стратегию" aria-label="Найти стратегию" autoComplete="off" />
-      </div>
-      <div className="strat-tools">
-        <Seg
-          className="sm"
-          value={kind}
-          options={[
-            ["all", "Все"],
-            ["trending", "Тренд"],
-            ["ranging", "Возврат"],
-            ["volatile", "Пробой"],
-          ]}
-          onChange={setKind}
-          label="Тип стратегий"
-        />
-        <button className="chip-btn" type="button" aria-pressed={onlyOn} onClick={() => setOnlyOn(!onlyOn)}>
-          Только включённые
-        </button>
-      </div>
-      {view && view !== (marketSpot ? "spot" : "futures") && (
-        <p className="note-soon">Это просмотр: бот сейчас торгует на рынке «{marketSpot ? "Спот" : "Фьючерсы"}». Переключить — выше, в «Рынок».</p>
-      )}
-      <ul className="strats" ref={listRef}>
-        {rows.map((s) => {
-          const bt = s.backtest;
-          const st = !bt || !bt.trades ? ["", "нет данных"] : bt.trades < 100 ? ["", "мало сделок"] : bt.sharpe > 0 ? ["ok", "есть плюс"] : ["warn", "нет edge"];
-          return (
-            <li key={s.name} data-name={s.name} className={`strat${s.enabled ? "" : " off"}`}>
-              <div className="nm">
-                <b title={s.name}>{stratName(s.name)}</b>
-              </div>
-              <div className="row-r">
-                {s.experimental && (
-                  <span className="pill" title="Добавлена из Argent-Systems без доказанного преимущества. Включайте осознанно.">
-                    эксперимент
-                  </span>
-                )}
-                <span className="pill" title={s.markets === "futures" ? "Сигналы только на продажу: открыть можно лишь шорт, на споте их нет" : "Покупки работают и на споте, продажи (шорты) — только на фьючерсах"}>
-                  {s.markets === "futures" ? "только фьючерсы" : "спот и фьючерсы"}
-                </span>
-                <span className={`pill ${st[0]}`}>{st[1]}</span>
-                <button className="star" type="button" aria-pressed={pins.includes(s.name)} aria-label={`Закрепить: ${stratName(s.name)}`} title="Закрепить вверху списка" onClick={() => togglePin(s.name)}>
-                  {Icon.star}
-                </button>
-                <Toggle on={s.enabled} label={`Стратегия «${stratName(s.name)}»`} onChange={(v) => void actions.setStrategy(s.name, v)} />
-              </div>
-              <div className="nums">
-                <span>
-                  бэктест: прибыльных <b>{bt?.trades ? `${fmtN(bt.win_rate * 100, 1)}%` : "—"}</b>
-                </span>
-                <span>
-                  сделок <b>{fmtN(bt?.trades ?? 0, 0)}</b>
-                </span>
-                <span>
-                  Sharpe <b className={bt?.trades ? tone(bt.sharpe) : ""}>{bt?.trades ? bt.sharpe.toFixed(3) : "—"}</b>
-                </span>
-                {s.live && (
-                  <span>
-                    live: <b>{fmtN(s.live.win_rate * 100, 1)}%</b> · {s.live.trades} · EV <b className={tone(s.live.ev)}>{s.live.ev.toFixed(2)}</b>
-                  </span>
-                )}
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-      {hidden > 0 && (
-        <p className="note-soon">
-          Скрыто {hidden}: {plural(hidden, ["стратегия не подходит", "стратегии не подходят", "стратегий не подходят"])} рынку «{spot ? "Спот" : "Фьючерсы"}».
-        </p>
-      )}
-      <div className="btn-row" style={{ marginTop: 8 }}>
-        {found.length > 6 && !filtering && (
-          <button className="btn" type="button" onClick={() => setAll(!all)}>
-            {all ? "Свернуть" : `Показать все ${strategies.length}`}
-          </button>
-        )}
-        <button className="btn" type="button" disabled={strategies.filter((s) => !s.experimental).every((s) => s.enabled)} title="Включить основные стратегии; экспериментальные останутся выключенными" onClick={() => void actions.resetStrategies()}>
-          Включить основные
-        </button>
-      </div>
-    </>
-  );
-  // У стратегий свой узел в конвейере: кто его открыл, хочет видеть список, поэтому не сворачиваем.
   return (
     <article className="card">
       <div className="card-h">
@@ -788,7 +622,54 @@ export function StrategiesCard() {
           включено {on} из {strategies.length}
         </span>
       </div>
-      {body}
+      {readiness && !readiness.ready && (
+        <div className="honest">
+          {Icon.warn}
+          <div>
+            <b>Выбранный режим сейчас не принимает решений:</b> {readinessReason(readiness.reason)}.
+          </div>
+        </div>
+      )}
+      {mode !== "local" && (
+        <div className="row-tgl">
+          <span>
+            Запасной путь <Q tip="Срабатывает, только если AI или SAC не отвечают. Тогда бот торгует по включённым стратегиям. Выключено: новых сделок нет, открытые позиции бот ведёт дальше." />
+          </span>
+          <Toggle on={fallback} label="Запасной путь при недоступности AI или SAC" onChange={(v) => void actions.patchConfig({ LOCAL_FALLBACK: v })} />
+        </div>
+      )}
+      {tested.length > 0 && !edge.length && (
+        <p className="note-soon">Бэктест: ни одна из {tested.length} стратегий не показала устойчивого преимущества. Пока его нет, держите Paper.</p>
+      )}
+      <input
+        className="inp strat-find"
+        type="search"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder={`Найти и включить стратегию (всего ${strategies.length})`}
+        aria-label="Найти стратегию"
+        autoComplete="off"
+      />
+      <ul className="strats compact">
+        {rows.map((s) => {
+          const bt = s.backtest;
+          const st = !bt || !bt.trades ? ["", "нет данных"] : bt.trades < 100 ? ["", "мало сделок"] : bt.sharpe > 0 ? ["ok", "есть плюс"] : ["warn", "нет edge"];
+          return (
+            <li key={s.name} className={`strat${s.enabled ? "" : " off"}`} title={stratTip(s)}>
+              <b>{stratName(s.name)}</b>
+              {s.experimental && <span className="pill">эксп.</span>}
+              <span className={`pill sp ${st[0]}`}>{st[1]}</span>
+              <Toggle on={s.enabled} label={`Стратегия «${stratName(s.name)}»`} onChange={(v) => void actions.setStrategy(s.name, v)} />
+            </li>
+          );
+        })}
+        {!rows.length && <li className="empty">{needle ? "Ничего не нашлось." : "Ни одной включённой стратегии."}</li>}
+      </ul>
+      {strategies.filter((s) => !s.experimental).some((s) => !s.enabled) && (
+        <button className="btn" type="button" style={{ marginTop: 8 }} title="Включить основные стратегии; экспериментальные останутся выключенными" onClick={() => void actions.resetStrategies()}>
+          Включить основные
+        </button>
+      )}
     </article>
   );
 }
