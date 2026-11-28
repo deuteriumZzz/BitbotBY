@@ -64,15 +64,15 @@ export const NODES: readonly { id: BotNode; title: string; icon: JSX.Element }[]
 ];
 
 const MODES = [
-  ["local", "Local"],
+  ["local", "Стратегии"],
   ["ai", "AI"],
-  ["dqn", "SAC"],
-  ["hybrid", "Hybrid"],
+  ["dqn", "Нейросеть"],
+  ["hybrid", "AI + нейросеть"],
 ] as const;
 
 const SIMPLE_MODES = [
-  ["local", "Только стратегии"],
-  ["ai", "Стратегии + AI"],
+  ["local", "Стратегии"],
+  ["ai", "AI"],
 ] as const;
 
 /** «Кто принимает решение» — одно место для MODE; в «Простом» два понятных варианта. */
@@ -205,7 +205,7 @@ function usePipeline(mode: string): { status: Record<BotNode, string>; info: Rec
       fields: [
         ["Основные", `${core.filter((s) => s.enabled).length} из ${core.length}`],
         ["Экспериментальные", `${exp.filter((s) => s.enabled).length} из ${exp.length}`],
-        ["Запасной путь", mode === "local" ? "не нужен в Local" : fallback ? "вкл" : "выкл"],
+        ["Запасной путь", mode === "local" ? "не нужен в режиме «Стратегии»" : fallback ? "вкл" : "выкл"],
         ["С бэктестом", String(tested.length)],
         ["С плюсом в бэктесте", String(edge.length)],
       ],
@@ -218,7 +218,7 @@ function usePipeline(mode: string): { status: Record<BotNode, string>; info: Rec
             ["Основной", ai.chain[0] ? `${name(ai.chain[0].provider)} · ${ai.chain[0].model}` : "нет ключа"],
             ["В цепочке", String(ai.chain.length)],
             ["Последним ответил", ai.last ? name(ai.last) : "—"],
-            ["Прогноз Chronos", `${show("CHRONOS_ENABLED")}${mode === "hybrid" ? "" : " · только Hybrid"}`],
+            ["Прогноз Chronos", `${show("CHRONOS_ENABLED")}${mode === "hybrid" ? "" : " · только в «AI + нейросеть»"}`],
             ["Если все молчат", fallback ? "решают стратегии" : "сделки нет"],
           ],
     },
@@ -228,7 +228,7 @@ function usePipeline(mode: string): { status: Record<BotNode, string>; info: Rec
           ? "Решает сам: обученная нейросеть открывает сделки."
           : mode === "hybrid"
             ? "Сделка открывается, только когда SAC и AI согласны."
-            : "В этом режиме не участвует. Обучить можно заранее — модель пригодится в режимах SAC и Hybrid.",
+            : "В этом режиме не участвует. Обучить можно заранее — модель пригодится в режимах «Нейросеть» и «AI + нейросеть».",
       fields: [
         ["Роль", mode === "dqn" ? "решает сам" : mode === "hybrid" ? "вместе с AI" : "не участвует"],
         ["Профиль", active?.label ?? "—"],
@@ -315,7 +315,7 @@ export function Pipeline() {
           <div className="pipe-mode">
             <span className="label">
               Кто принимает решение{" "}
-              <Q tip="Local — только индикаторы. AI — языковая модель. SAC — нейросеть. Hybrid — SAC и AI должны согласиться. Неучаствующие блоки гаснут." />
+              <Q tip="Стратегии — только индикаторы. AI — языковая модель. Нейросеть — обученная модель SAC. AI + нейросеть — оба должны согласиться. Неучаствующие блоки гаснут." />
             </span>
             <ModeSeg />
             <p className="pipe-mode-note">{modeNote(mode, fallback)}</p>

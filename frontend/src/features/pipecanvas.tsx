@@ -438,7 +438,7 @@ function SignalLane({ mode }: { mode: string }) {
         <div className={`pw-chr${chronos && mode === "hybrid" ? "" : " off"}`}>
           <span>
             <i>Chronos</i>
-            {!chronos ? "выключен" : mode === "hybrid" ? "прогноз цены: +0.05 / −0.15" : "только в Hybrid"}
+            {!chronos ? "выключен" : mode === "hybrid" ? "прогноз цены: +0.05 / −0.15" : "только в «AI + нейросеть»"}
           </span>
           <Toggle on={chronos} label="Прогноз Chronos" onChange={setChronos} />
         </div>

@@ -261,7 +261,7 @@ const ALPHA_JOBS: JobId[] = [
   "ai_isolation",
 ];
 
-/** Нейросеть SAC участвует в решениях только в режимах SAC и Hybrid. */
+/** Нейросеть SAC участвует в решениях только в режимах «Нейросеть» и «AI + нейросеть». */
 function sacRole(mode: string): { used: boolean; text: string } {
   if (mode === "dqn")
     return {
@@ -275,7 +275,7 @@ function sacRole(mode: string): { used: boolean; text: string } {
     };
   return {
     used: false,
-    text: "Режим сейчас без SAC — обучение пока ни на что не влияет. Включается выбором режима SAC или Hybrid.",
+    text: "Режим сейчас без SAC — обучение пока ни на что не влияет. Включается выбором режима «Нейросеть» или «AI + нейросеть».",
   };
 }
 
@@ -614,7 +614,7 @@ function ApprovalRow({ profile, used }: { profile: ProfileInfo; used: boolean })
       ) : confirm ? (
         <div className="confirm-box">
           <span>
-            Нейросеть начнёт голосовать в сделках профиля «{profile.label}» в режимах SAC и Hybrid. Деньги виртуальные
+            Нейросеть начнёт голосовать в сделках профиля «{profile.label}» в режимах «Нейросеть» и «AI + нейросеть». Деньги виртуальные
             (paper); снять допуск — откатом или новым обучением.
           </span>
           <div className="btn-row">

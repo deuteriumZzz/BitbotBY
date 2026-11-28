@@ -130,9 +130,9 @@ const PRESET_META: Record<string, { name: string; d: string; icon: JSX.Element }
 };
 
 const PROFILES = [
-  ["bluechip", "Bluechip"],
-  ["altcoin", "Altcoin"],
-  ["meme", "Meme"],
+  ["bluechip", "Блючипы"],
+  ["altcoin", "Альткоины"],
+  ["meme", "Мемкоины"],
 ] as const;
 export const profileName = (p: string): string => PROFILES.find(([v]) => v === p)?.[1] ?? p;
 const PROFILE_NOTE: Record<string, string> = {
