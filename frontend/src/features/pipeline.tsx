@@ -10,7 +10,6 @@ import { useStore } from "../store";
 import { Seg } from "../components/controls";
 import { Q } from "../components/tooltip";
 import { AiPane, aiLine } from "./ai";
-import { Lane, isStep, useLanes } from "./blocks";
 import { ConfirmCard, RiskCard, StrategiesCard, TrackCard, WhatCard, cfg, levText, presetName, presetOf, profileName } from "./bots";
 import { EmergencyCard } from "./emergency";
 import { RulesCard } from "./rules";
@@ -311,7 +310,6 @@ export function Pipeline() {
   const closeNode = useStore((s) => s.closeNode);
   const closeBtn = useRef<HTMLButtonElement>(null);
   // Полосы под шагами — сводка; включается и выключается всё в панели шага.
-  const lanes = useLanes();
   const toLearn = () => setTab("learn");
   useEffect(() => {
     if (!open) return;
@@ -352,7 +350,7 @@ export function Pipeline() {
           </ul>
         </div>
         <PipeCanvas mode={mode} cycle={cycle} onMode={(m) => void actions.patchConfig({ MODE: m })}>
-          {NODES.map(({ id, title, icon }, i) => {
+          {NODES.map(({ id, title, icon }) => {
             const on = takesPart(mode, id);
             const res = cycle?.nodes[id];
             const [glyph, cls] = mark(res?.ok);
@@ -367,10 +365,7 @@ export function Pipeline() {
                     openNode(id);
                   }}
                 >
-                  <span className="hd">
-                    {icon}
-                    <i>{String(i + 1).padStart(2, "0")}</i>
-                  </span>
+                  <span className="hd">{icon}</span>
                   <b>{title}</b>
                   {on && need[id] ? <span className="need">{need[id]}</span> : <span className="st">{on ? status[id] : "не участвует"}</span>}
                   {on && res && (
@@ -379,11 +374,6 @@ export function Pipeline() {
                     </span>
                   )}
                 </button>
-                  {isStep(id) ? (
-                    <Lane step={id} items={lanes[id]} onOpen={() => openNode(id)} />
-                  ) : (
-                    <div className="lane2 none" aria-hidden="true" />
-                  )}
                 </div>
             );
           })}

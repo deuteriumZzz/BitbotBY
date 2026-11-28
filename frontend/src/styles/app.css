@@ -1748,3 +1748,6 @@ select.sel{appearance:none;-webkit-appearance:none;padding-right:34px;background
 .strats.compact .strat:last-child{border-bottom:0}
 .strats.compact .strat>b{flex:1;min-width:0;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .strats.compact .strat.off>b{color:var(--c-ink3)}
+
+/* Иконка шага крупнее: блок читается с первого взгляда. */
+.pipe-node .hd svg{width:36px;height:36px;padding:8px}
