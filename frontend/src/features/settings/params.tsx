@@ -140,7 +140,7 @@ export function AllParams({ go, basicOnly = false }: { go: (pane: Pane) => void;
       </p>
       {!needle && !basicOnly && elsewhere > 0 && (
         <p className="cfg-legend">
-          Ещё {elsewhere} — в своих разделах «Цепочки»; найти любую можно поиском (⌘K).
+          Ещё {elsewhere} — в блоках вкладки «Стратегия»; найти любую можно поиском (⌘K).
         </p>
       )}
       <div className="cfg">

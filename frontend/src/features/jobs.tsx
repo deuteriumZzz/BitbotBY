@@ -12,6 +12,8 @@ import { useStore } from "../store";
 import { Q } from "../components/tooltip";
 import { stratName } from "./bots";
 import { HonestyCard } from "./ai";
+import { Journal } from "./journal";
+import { MetricsCard } from "./terminal/metrics";
 
 interface JobDef {
   id: JobId;
@@ -408,7 +410,7 @@ export function ModelCard() {
             {!chosen.active && (
               <p className="note-soon">
                 Этот профиль сейчас не торгует: новая модель начнёт работать,
-                когда вы переключитесь на него (раздел «Цепочка»).
+                когда вы переключитесь на него (вкладка «Стратегия»).
               </p>
             )}
           </li>
@@ -678,16 +680,19 @@ export function MetaCard() {
 }
 
 /** Раздел «Обучение»: путь к реальным деньгам, нейросеть и поиск преимущества. */
+/** Вкладка «Аналитика»: метрики, разбор сделок, модели и проверки преимущества. */
 export function Learn() {
   return (
-    <section className="view enter learn" aria-label="Обучение">
+    <section className="view enter learn" aria-label="Аналитика">
+      <MetricsCard />
       <LearnPath />
       <div className="cols">
         <div className="col">
-          <ModelCard />
-          <MetaCard />
+          <Journal part="analysis" />
         </div>
         <div className="col">
+          <ModelCard />
+          <MetaCard />
           <AlphaCard />
           <HonestyCard />
         </div>

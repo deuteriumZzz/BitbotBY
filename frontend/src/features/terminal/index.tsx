@@ -9,6 +9,7 @@ import { positionPnl, useStore } from "../../store";
 import type { AiState } from "../../lib/types";
 import { cfg } from "../bots";
 import { STATUS } from "../chainops";
+import { Journal } from "../journal";
 import { MarketPulse } from "../market";
 import { ReadinessChip } from "../setup";
 
@@ -17,7 +18,6 @@ import { Tween } from "../../components/motion";
 import { Q } from "../../components/tooltip";
 import { Chart } from "./chart";
 import { Equity } from "./equity";
-import { MetricsCard } from "./metrics";
 import { Positions } from "./positions";
 import { Radar } from "./radar";
 
@@ -222,20 +222,33 @@ function TrustedChip() {
 
 const PathBar = lazy(() => import("../jobs").then((m) => ({ default: m.PathBar })));
 
+/** Терминал: шапка состояния, радар · график · баланс, внизу панель «Позиции / Журнал сделок». */
 export function Terminal() {
   const simple = useStore((s) => s.ui === "simple");
+  const [dock, setDock] = useState<"pos" | "log">("pos");
   return (
     <section className="view term enter" aria-label="Терминал">
       <HealthStrip />
       {simple && <PathBar />}
-      <Hero />
-      {/* «Простой»: баланс и позиции; метрики, радар, график и фон рынка — в «Профи». */}
-      {!simple && <MetricsCard />}
       {!simple && <Radar />}
-      <Positions />
       {!simple && <Chart />}
-      {/* Фон рынка — справочно, поэтому в самом конце. */}
-      {!simple && <MarketPulse />}
+      <div className="term-side">
+        <Hero />
+        {!simple && <MarketPulse />}
+      </div>
+      <div className="term-dock">
+        <Seg
+          className="sm"
+          value={dock}
+          options={[
+            ["pos", "Позиции"],
+            ["log", "Журнал сделок"],
+          ]}
+          label="Нижняя панель"
+          onChange={setDock}
+        />
+        {dock === "pos" ? <Positions /> : <Journal />}
+      </div>
     </section>
   );
 }

@@ -372,7 +372,8 @@ export const useStore = create<Store>((set, get) => {
       );
     },
 
-    setTab: (tab) => set({ tab, setup: null, nodeOpen: false }),
+    // Журнал живёт в нижней панели Терминала; старые ссылки на вкладку ведут туда.
+    setTab: (tab) => set({ tab: tab === "journal" ? "terminal" : tab, setup: null, nodeOpen: false }),
     setUi: (ui) => {
       try {
         localStorage.setItem(UI_KEY, ui);

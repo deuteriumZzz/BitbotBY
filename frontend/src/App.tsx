@@ -26,7 +26,6 @@ import { TipLayer, hideTip } from "./components/tooltip";
 const Pipeline = lazy(() => import("./features/pipeline").then((m) => ({ default: m.Pipeline })));
 const Learn = lazy(() => import("./features/jobs").then((m) => ({ default: m.Learn })));
 const BotSimple = lazy(() => import("./features/simple").then((m) => ({ default: m.BotSimple })));
-const Journal = lazy(() => import("./features/journal").then((m) => ({ default: m.Journal })));
 
 export function App() {
   const ready = useStore((s) => s.ready);
@@ -156,7 +155,6 @@ export function App() {
             {tab === "terminal" && <Terminal />}
             {tab === "bots" && (ui === "simple" ? <BotSimple /> : <Pipeline />)}
             {tab === "learn" && <Learn />}
-            {tab === "journal" && <Journal />}
             {tab === "settings" && <Settings />}
           </Suspense>
         )}
@@ -340,17 +338,15 @@ function Banners() {
 // ── Нижняя навигация (на десктопе — боковая) ──────────────────────────────────
 
 const TABS: [Tab, string, JSX.Element][] = [
-  ["terminal", "Обзор", Icon.terminal],
-  ["bots", "Цепочка", Icon.bots],
-  ["learn", "Обучение", Icon.learn],
-  ["journal", "Журнал", Icon.journal],
+  ["terminal", "Терминал", Icon.terminal],
+  ["bots", "Стратегия", Icon.bots],
+  ["learn", "Аналитика", Icon.learn],
   ["settings", "Настройки", Icon.settings],
 ];
-// «Простой»: четыре вкладки простыми словами; «Цепочка» и «Обучение» — в «Профи».
+// «Простой»: три вкладки простыми словами; Стратегия и Аналитика — в «Профи».
 const SIMPLE_TABS: [Tab, string, JSX.Element][] = [
   ["terminal", "Главная", Icon.terminal],
   ["bots", "Бот", Icon.bots],
-  ["journal", "История", Icon.journal],
   ["settings", "Настройки", Icon.settings],
 ];
 const tabsFor = (ui: Ui) => (ui === "simple" ? SIMPLE_TABS : TABS);
@@ -420,7 +416,7 @@ function SignalSheet() {
     if (!sig) return;
     total.current = Math.max(1, sig.expires_at - Date.now() / 1000);
     setNow(Date.now() / 1000);
-    if (useStore.getState().tab !== "terminal") say("Бот нашёл сделку и ждёт подтверждения — откройте «Обзор»");
+    if (useStore.getState().tab !== "terminal") say("Бот нашёл сделку и ждёт подтверждения — откройте «Терминал»");
     const t = setInterval(() => setNow(Date.now() / 1000), 1000);
     return () => clearInterval(t);
   }, [sig?.id]); // eslint-disable-line react-hooks/exhaustive-deps

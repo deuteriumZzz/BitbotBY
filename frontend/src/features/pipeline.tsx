@@ -308,7 +308,7 @@ export function Pipeline() {
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
   return (
-    <section className="view enter" aria-label="Цепочка">
+    <section className="view enter" aria-label="Стратегия">
       <UiSwitchRow />
       <div className="pipe-canvas">
         <div className="pipe-top">

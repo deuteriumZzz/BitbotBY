@@ -867,7 +867,7 @@ export function TrackCard() {
         </div>
         <Seg className="full" value={preset(trail, TRAIL)} options={TRAIL} onChange={(v) => void actions.patchConfig({ TRAILING_STOP_ATR_MULT: v })} label="Отступ трейлинг-стопа" />
       </div>
-      <p className="note-soon">Трейлинг можно выключить у отдельной позиции на Обзоре.</p>
+      <p className="note-soon">Трейлинг можно выключить у отдельной позиции в Терминале.</p>
       <div className="btn-row">
         <button className="btn" type="button" onClick={() => setTab("terminal")}>
           Открыть позиции

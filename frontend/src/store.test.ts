@@ -163,8 +163,9 @@ describe("режим «Простой / Профи»", () => {
     st.openNode("risk");
     // Узел есть только в «Профи»: переход сразу открывает его панель там.
     expect(useStore.getState()).toMatchObject({ ui: "pro", tab: "bots", node: "risk", nodeOpen: true });
+    // Журнал — нижняя панель Терминала: старая вкладка ведёт туда.
     st.setTab("journal");
-    expect(useStore.getState()).toMatchObject({ ui: "pro", tab: "journal", nodeOpen: false });
+    expect(useStore.getState()).toMatchObject({ ui: "pro", tab: "terminal", nodeOpen: false });
     st.setUi("simple");
     st.searchParams("риск");
     expect(useStore.getState()).toMatchObject({ ui: "pro", tab: "settings" });

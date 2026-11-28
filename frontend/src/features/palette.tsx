@@ -29,16 +29,15 @@ export function Palette() {
       run: () => st.setTab(tab),
     });
     const node = (label: string, id: Parameters<typeof st.openNode>[0], keys: string): Cmd => ({
-      label: `Цепочка → ${label}`,
+      label: `Стратегия → ${label}`,
       keys: `бот цепочка конвейер ${label} ${keys}`,
       run: () => st.openNode(id),
     });
     return [
-      go("Обзор", "terminal", "1"),
-      go("Цепочка", "bots", "2"),
-      go("Обучение", "learn", "3"),
-      go("Журнал", "journal", "4"),
-      go("Настройки", "settings", "5"),
+      go("Терминал", "terminal", "1"),
+      go("Стратегия", "bots", "2"),
+      go("Аналитика", "learn", "3"),
+      go("Настройки", "settings", "4"),
       node("Сканер", "scan", "что торговать профиль рынок спот фьючерсы сезон chronos"),
       node("Стратегии", "strat", "запасной путь закрепить"),
       node("AI-цепочка", "ai", "ai провайдеры цепочка ключ"),

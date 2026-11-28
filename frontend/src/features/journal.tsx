@@ -64,8 +64,8 @@ function lasted(t: JournalTrade): string {
 const winRate = (t: JournalTrade[]): number => (t.length ? t.filter((x) => x.pnl > 0).length / t.length : 0);
 const net = (t: JournalTrade[]): number => t.reduce((s, x) => s + x.pnl, 0);
 
-export function Journal() {
-  const simple = useStore((s) => s.ui === "simple");
+/** part: list — итоги, фильтры и сделки (нижняя панель Терминала); analysis — разборы (Аналитика). */
+export function Journal({ part = "list" }: { part?: "list" | "analysis" }) {
   const journal = useStore((s) => s.journal);
   const load = useStore((s) => s.loadJournal);
   const [period, setPeriod] = useState<Period>(journal?.period ?? "30d");
@@ -93,8 +93,26 @@ export function Journal() {
   );
   const names = useMemo(() => [...new Set((all ?? []).map((t) => t.strategy))].sort(), [all]);
 
+  if (part === "analysis") {
+    return (
+      <div className="jr-an">
+        <article className="card jr-sum">
+          <div className="card-h">
+            <h2>Разбор сделок</h2>
+            <Seg className="sm sp" value={period} options={PERIODS} onChange={setPeriod} label="Период" />
+          </div>
+          {all && <Totals trades={trades} capped={all.length >= (journal?.limit ?? Infinity)} />}
+        </article>
+        {all && <ByStrategy trades={trades} pick={setStrategy} picked={strategy} />}
+        {all && <ByHour trades={trades} />}
+        <Calendar />
+        <ExecutionCard />
+        <ReportsCard />
+      </div>
+    );
+  }
   return (
-    <section className="view enter" aria-label="Журнал">
+    <section className="jr-list" aria-label="Журнал сделок">
       <div className="cols jr">
         <div className="col">
           <article className="card jr-sum">
@@ -116,12 +134,6 @@ export function Journal() {
               <Seg className="sm" value={result} options={RESULTS} onChange={setResult} label="Результат" />
             </div>
           </article>
-          {/* «Простой»: итог и список сделок; разборы — в «Профи». */}
-          {!simple && all && <ByStrategy trades={trades} pick={setStrategy} picked={strategy} />}
-          {!simple && all && <ByHour trades={trades} />}
-          {!simple && <Calendar />}
-          {!simple && <ExecutionCard />}
-          {!simple && <ReportsCard />}
         </div>
         <div className="col">
           <article className="card jr-trades">
