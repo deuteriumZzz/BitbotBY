@@ -36,6 +36,6 @@ describe("у каждой настройки один дом", () => {
   });
 
   it("дома ведут в существующие места", () => {
-    for (const h of Object.values(OWN_HOME)) expect(h.pane === undefined || ["main", "conn", "all"].includes(h.pane)).toBe(true);
+    for (const h of Object.values(OWN_HOME)) expect(h.pane === undefined || ["main", "acct", "all"].includes(h.pane)).toBe(true);
   });
 });

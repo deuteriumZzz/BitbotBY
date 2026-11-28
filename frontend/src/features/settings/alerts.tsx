@@ -8,6 +8,7 @@ import { Seg, Toggle } from "../../components/controls";
 import { Q } from "../../components/tooltip";
 import { cfg } from "../bots";
 import { BotRules } from "../rules";
+import { KeyLine } from "./keys";
 
 // Тихие часы выбираются по местному времени, а бот хранит их в UTC (QUIET_HOURS).
 const TZ = Math.round(-new Date().getTimezoneOffset() / 60);
@@ -23,8 +24,6 @@ const QUIET = [
   ["22-9", "22–09"],
 ] as const;
 
-const LEVEL: Record<string, string> = { critical: "приходит всегда", trade: "сделки", info: "сведения" };
-
 export function AlertsCard() {
   const [freq, setFreq] = useState(false);
   const alerts = useStore((s) => s.alerts);
@@ -34,9 +33,10 @@ export function AlertsCard() {
   return (
     <article className="card">
       <div className="card-h">
-        <h2>Уведомления в Telegram</h2>
+        <h2>Бот и уведомления</h2>
         <Q tip="Пауза не даёт одному и тому же уведомлению сыпаться чаще, чем раз в N минут." />
       </div>
+      <KeyLine service="telegram" />
       <div className="field">
         <div className="field-h">
           <span>
@@ -52,7 +52,8 @@ export function AlertsCard() {
           <div className={`alert-row${a.enabled ? "" : " off"}`} key={a.kind}>
             <div>
               <b>{a.label}</b>
-              {a.level && <span className={`lvl ${a.level}`}>{LEVEL[a.level]}</span>}
+              {/* Метка нужна только тревогам: они приходят и в тихие часы. */}
+              {a.level === "critical" && <span className="lvl critical">приходит всегда</span>}
             </div>
             <Toggle on={a.enabled} label={a.label} onChange={(on) => void actions.patchAlert(a.kind, { enabled: on })} />
             {freq && (

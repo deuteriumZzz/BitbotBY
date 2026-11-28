@@ -303,7 +303,6 @@ export function BotRules() {
 
 function RuleRow({ r, c, schema, guardsOff, alertOn }: { r: Rule; c: ConfigValues; schema: SettingDef[]; guardsOff: boolean; alertOn?: boolean }) {
   const d = schema.find((s) => s.key === r.key);
-  const setTab = useStore((s) => s.setTab);
   const enabled = r.on ? cfg(c, r.on, true) : r.alert ? alertOn !== false : true;
   const zero = r.zeroOff && Number(cfg(c, r.key ?? "", 1)) === 0;
   const skipped = guardsOff && r.guardsOff;
@@ -330,11 +329,6 @@ function RuleRow({ r, c, schema, guardsOff, alertOn }: { r: Rule; c: ConfigValue
         <span className="rule-tgl">
           <Toggle on={enabled} label={`Правило: ${r.ifm}`} onChange={(v) => void actions.patchConfig({ [r.on as string]: v })} />
         </span>
-      )}
-      {r.alert && (
-        <button className="btn rule-link" type="button" onClick={() => setTab("settings")}>
-          Уведомления →
-        </button>
       )}
     </li>
   );

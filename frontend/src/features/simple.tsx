@@ -8,12 +8,13 @@ import { ModeSeg, NODES, takesPart } from "./pipeline";
 import { templateLine } from "./rules";
 import { mark } from "./trace";
 import { protectionLines } from "../lib/format";
-import { aiLine, useScoreboard } from "./ai";
+import { KeysCard, useScoreboard } from "./ai";
 import { UiSwitchRow } from "./uimode";
 
 export function BotSimple() {
   const c = useStore((s) => s.config);
   const ai = useStore((s) => s.ai);
+  const secrets = useStore((s) => s.secrets);
   const cycle = useStore((s) => s.lastCycle);
   const setUi = useStore((s) => s.setUi);
   const ops = useStore((s) => s.opsStatus);
@@ -33,11 +34,12 @@ export function BotSimple() {
           <Q tip="Стратегии — индикаторы, без AI: бесплатно и работает сразу. AI — языковая модель проверяет сигнал перед сделкой, нужен ключ." />
         </div>
         <ModeSeg simple />
-        {mode === "ai" && (
+        {mode === "ai" && chain.length > 0 && (
           <p className="note-soon">
-            {chain.length ? `AI: ${aiLine(ai)}. ${fallback ? "Не ответит никто — решат стратегии." : "Не ответит никто — сделки не будет."}` : "Ключа AI ещё нет — добавьте его в Настройках → Подключения."}
+            {fallback ? "Если AI не ответит, решат стратегии." : "Если AI не ответит, сделки не будет."}
           </p>
         )}
+        {mode === "ai" && ai && <KeysCard ai={ai} secrets={secrets ?? []} onSaved={() => undefined} />}
         {mode === "ai" && score && Object.keys(score.providers).length > 0 && (
           <p className="note-soon">
             Честность прогнозов:{" "}

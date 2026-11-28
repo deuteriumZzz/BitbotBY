@@ -69,11 +69,10 @@ export function stopAt(r: BotNode[], nodes: CycleTrace["nodes"]): number {
   return r.reduce((last, n, i) => (nodes[n]?.ok === true ? i : last), 0);
 }
 
-const pct = (v: unknown, d: number) => `${+((Number(v ?? d) || d) * 100).toFixed(2)}%`;
 
 /** onMode — выбор штекером; записывает его дом MODE (pipeline.tsx, «Кто принимает решение»). */
-export function PipeCanvas(props: { mode: string; cycle: CycleTrace | null; onMode: (mode: string) => void; children: ReactNode }) {
-  const { mode, cycle, onMode, children } = props;
+export function PipeCanvas(props: { mode: string; cycle: CycleTrace | null; onMode: (mode: string) => void; onChannels: () => void; children: ReactNode }) {
+  const { mode, cycle, onMode, onChannels, children } = props;
   const view = useRef<HTMLDivElement>(null);
   const world = useRef<HTMLDivElement>(null);
   const [z, setZ] = useState(1);
@@ -236,7 +235,7 @@ export function PipeCanvas(props: { mode: string; cycle: CycleTrace | null; onMo
                 );
               })}
 
-            <SignalLane mode={mode} />
+            <SignalLane mode={mode} onChannels={onChannels} />
 
             {plugTo && (
               <span className="pw-drop" style={{ left: xOf(plugTo) - 6, top: ROW - 6, width: NW + 12 }}>
@@ -267,13 +266,16 @@ export function PipeCanvas(props: { mode: string; cycle: CycleTrace | null; onMo
 /** Каналы Telegram в двух режимах: все — сигнал для решения, доверенные — ещё и сделка по посту. */
 function useChannels() {
   const config = useStore((s) => s.config);
+  const bot = useStore((s) => s.secrets?.find((x) => x.service === "telegram")?.status === "ok");
+  const alerts = useStore((s) => s.alerts);
+  const all = chanList(`${cfg(config, "TELEGRAM_SENTIMENT_CHANNELS", "")},${cfg(config, "TELEGRAM_TRUSTED_CHANNELS", "")}`);
   const signed = useStore((s) => Boolean(s.secrets?.find((x) => x.service === "telethon")?.signed_in));
   const trusted = chanList(cfg(config, "TELEGRAM_TRUSTED_CHANNELS", ""));
   const on = cfg<boolean>(config, "TELEGRAM_TRUSTED_TRADING", false);
-  return { config, signed, trusted, on, trade: on && signed && trusted.length > 0 };
+  return { config, signed, trusted, on, bot, alerts, all, trade: on && signed && trusted.length > 0 };
 }
 
-// «Доверенные каналы» — над SAC, провод от них прямо в «Ордер».
+// Блок «Telegram» — над SAC: бот, уведомления и каналы; провод в «Ордер» — сделки по постам доверенных каналов.
 const GATE_X = xOf("risk") + NW / 2; // порог — по центру над «Риском»; провод фильтра входит в середину
 
 /** Провод сбоку от ряда шагов; key по состоянию — ожил: заново прорисовывается и по нему пускается поток. */
@@ -304,17 +306,15 @@ function SignalWires() {
   );
 }
 
-function SignalLane({ mode }: { mode: string }) {
-  const { config, signed, trusted, on, trade } = useChannels();
+function SignalLane({ mode, onChannels }: { mode: string; onChannels: () => void }) {
+  const { config, signed, trusted, on, bot, alerts, all } = useChannels();
   const post = useStore((s) => s.trusted);
   const paper = useStore((s) => s.bot?.paper ?? true);
-  const setTab = useStore((s) => s.setTab);
   const openNode = useStore((s) => s.openNode);
   const chronos = cfg<boolean>(config, "CHRONOS_ENABLED", false);
   const minConf = cfg<number>(config, paper ? "MIN_SIGNAL_CONFIDENCE_PAPER" : "MIN_SIGNAL_CONFIDENCE", paper ? 0.6 : 0.65);
-  const toChannels = () => (setTab("settings"), scrollWhenReady("tg-channels"));
+  const toChannels = onChannels;
   const fresh = post && Date.now() / 1000 - post.at < 86_400 ? post : null;
-  const slots = cfg<number>(config, "TELEGRAM_TRUSTED_SLOTS", 2);
   return (
     <>
       <button
@@ -327,13 +327,18 @@ function SignalLane({ mode }: { mode: string }) {
         {mode !== "local" && <span>фильтр рынка{chronos && mode === "hybrid" ? " · Chronos" : ""}</span>}
         <span>уверенность ≥ {minConf}</span>
       </button>
-      <div className={`pipe-node pw-tg pw-trust${trade ? "" : " idle"}`} style={{ left: xOf("sac"), top: TOP, width: NW, height: CH }}>
+      <div className={`pipe-node pw-tg pw-trust${bot ? "" : " idle"}`} style={{ left: xOf("sac"), top: TOP, width: NW, height: CH }}>
         <button type="button" className="pw-open" onClick={toChannels}>
-          <b>Доверенные каналы</b>
-          <span className="st">{!signed ? "нужен вход в Telegram" : trusted.length ? `${trusted.length} ${plural(trusted.length, ["канал", "канала", "каналов"])}` : "не выбраны"}</span>
+          <b>Telegram</b>
+          {bot ? (
+            <span className="st">
+              уведомлений {alerts.filter((a) => a.enabled).length} из {alerts.length}
+            </span>
+          ) : (
+            <span className="need">нужен бот</span>
+          )}
           <span className="st">
-            сделка по посту · риск {pct(config.TELEGRAM_TRUSTED_RISK?.value, 0.005)} · стоп {pct(config.TELEGRAM_TRUSTED_SL?.value, 0.03)} · {slots}{" "}
-            {plural(slots, ["слот", "слота", "слотов"])}
+            {!signed ? "каналы: нужен вход" : all.length ? `${all.length} ${plural(all.length, ["канал", "канала", "каналов"])} · доверенных ${trusted.length}` : "каналов нет"}
           </span>
           {fresh && (
             <span className={`res ${fresh.ok ? "ok" : "bad"}`} title={fresh.ok ? undefined : fresh.reason}>

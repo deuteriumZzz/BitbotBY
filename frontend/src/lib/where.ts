@@ -3,7 +3,7 @@
 
 import type { BotNode, Tab } from "./types";
 
-export type SettingsPane = "main" | "conn" | "acct" | "all";
+export type SettingsPane = "main" | "acct" | "all";
 
 export interface Home {
   tab: Tab;
@@ -36,8 +36,8 @@ export const OWN_HOME: Record<string, Home> = {
   PAPER_GUARDS_OFF: RULES,
   LOCAL_FALLBACK: { tab: "bots", node: "strat", where: "Стратегия → Стратегии" },
   TRADING_HOURS: { tab: "bots", node: "scan", where: "Стратегия → Сканер → Часы торговли" },
-  TESTNET: { tab: "settings", pane: "conn", where: "Настройки → Подключения → Bybit" },
-  QUIET_HOURS: { tab: "settings", pane: "main", where: "Настройки → Telegram → Уведомления" },
+  TESTNET: { tab: "settings", pane: "acct", where: "Настройки → Счёт и бот → Bybit" },
+  QUIET_HOURS: { tab: "bots", where: "Стратегия → Telegram → Бот и уведомления" },
   AI_PROVIDER: { tab: "bots", node: "ai", where: "Стратегия → AI" },
   MIN_SIGNAL_CONFIDENCE: RISK_MANUAL,
   MIN_SIGNAL_CONFIDENCE_PAPER: RISK_MANUAL,

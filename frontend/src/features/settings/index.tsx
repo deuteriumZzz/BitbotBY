@@ -7,12 +7,11 @@ import { type SettingsPane } from "../../lib/where";
 
 import { useStore } from "../../store";
 
-import { AlertsCard } from "./alerts";
 import { ComputerCard } from "./computer";
-import { AccountCard, ConnMap } from "./connections";
+import { AccountCard } from "./connections";
 import { Keys } from "./keys";
+import { TelegramPanel } from "./tgpanel";
 import { AllParams } from "./params";
-import { TgChannelsCard } from "./telegram";
 
 export type Pane = SettingsPane;
 
@@ -41,17 +40,29 @@ export function Settings() {
   }, [keyJump]);
   return (
     <section className="view enter set-page" aria-label="Настройки">
-      <ConnMap go={goTo} openKey={setKey} />
       <Keys open={key} setOpen={setKey} only={[]} />
       <div className="cols">
-        <div className="col" id="set-main">
-          <AlertsCard />
-        </div>
-        <div className="col" id="set-acct">
-          <AccountCard openKey={setKey} />
-          <ComputerCard />
-          <TgChannelsCard openKey={setKey} />
-        </div>
+        {/* В «Профи» Telegram — блок на схеме; в «Простом» схемы нет, поэтому здесь. */}
+        {simple ? (
+          <>
+            <div className="col" id="set-acct">
+              <AccountCard openKey={setKey} />
+              <ComputerCard />
+            </div>
+            <div className="col" id="set-main">
+              <TelegramPanel />
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="col" id="set-acct">
+              <AccountCard openKey={setKey} />
+            </div>
+            <div className="col">
+              <ComputerCard />
+            </div>
+          </>
+        )}
       </div>
       {!simple && (
         <div id="set-all" className="set-params">

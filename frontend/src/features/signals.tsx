@@ -10,7 +10,6 @@ import { useStore } from "../store";
 import { Toggle } from "../components/controls";
 import { Q } from "../components/tooltip";
 import { cfg } from "./bots";
-import { scrollWhenReady } from "./terminal";
 import { ParamList } from "./params";
 import { Keys } from "./settings/keys";
 import { chanList } from "./settings/telegram";
@@ -93,9 +92,6 @@ export function SignalsCard() {
 
       <h3 className="sig-h">Пороги стратегии «Настроение»</h3>
       <ParamList keys={["SENTIMENT_BUY_THRESHOLD", "SENTIMENT_SELL_THRESHOLD"]} />
-      <button type="button" className="btn" style={{ marginTop: 8 }} onClick={() => (useStore.setState({ riskManual: true }), useStore.getState().openNode("risk"), scrollWhenReady("risk-conf"))}>
-        Порог уверенности сделки →
-      </button>
     </article>
   );
 }

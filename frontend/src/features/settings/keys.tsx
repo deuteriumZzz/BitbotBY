@@ -56,7 +56,8 @@ export const STEP: Partial<Record<BotNode, string>> = { scan: "Сканер", ai
 
 /** Ключи как связки: сервис → что он питает в боте. Форма ключа открывается панелью справа, список остаётся на виду. */
 /** Эти ключи открываются с карты подключений — в списке их не повторяем. */
-const ON_MAP = new Set(["bybit", "telegram"]);
+// Ключи, у которых свой дом строкой KeyLine: Bybit — «Ордер», Telegram-бот — уведомления, вход в Telegram — каналы.
+const ON_MAP = new Set(["bybit", "telegram", "telethon"]);
 
 /** only — какие группы показать списком (по умолчанию все); панель ключа открывается для любого. */
 export function Keys({ open, setOpen, only }: { open: string | null; setOpen: (service: string | null) => void; only?: string[] }) {
@@ -81,10 +82,6 @@ export function Keys({ open, setOpen, only }: { open: string | null; setOpen: (s
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [isOpen, setOpen]);
-  const toStep = (step: BotNode) => {
-    setOpen(null);
-    useStore.getState().openNode(step);
-  };
   const row = (id: string, c: string, name: string, sub: string, feeds: [string, BotNode?][], act: () => void) => (
     <li key={id}>
       <button type="button" className={`kl-row ${c}`} onClick={act}>
@@ -148,10 +145,10 @@ export function Keys({ open, setOpen, only }: { open: string | null; setOpen: (s
                   <div>
                     {FEEDS[shown.service].map(([what, step]) =>
                       step ? (
-                        <button type="button" className="kl-chip" key={what} onClick={() => toStep(step)}>
+                        <span className="kl-chip" key={what}>
                           <em>{STEP[step]}</em>
-                          {what} →
-                        </button>
+                          {what}
+                        </span>
                       ) : (
                         <span className="kl-chip" key={what}>
                           {what}
@@ -338,5 +335,34 @@ export function KeyCard({ item }: { item: SecretItem }) {
         {msg ? msg[1] : item.message}
       </p>
     </article>
+  );
+}
+
+/** Один ключ строкой там, где он работает (Bybit — в «Ордере», Telegram-бот — в уведомлениях):
+ * статус и кнопка; форма ключа выезжает панелью. */
+export function KeyLine({ service, label }: { service: string; label?: string }) {
+  const item = useStore((s) => s.secrets?.find((x) => x.service === service));
+  const [open, setOpen] = useState<string | null>(null);
+  if (!item) return null;
+  const [c, text] = STATUS[item.status];
+  const last4 = item.fields.find((f) => f.secret && f.last4)?.last4;
+  return (
+    <>
+      <div className="alert-row">
+        <div>
+          <b>
+            <span className={`dot ${c === "ok" ? "ok live" : c}`} /> {label ?? item.name}
+          </b>
+          <small>
+            {text}
+            {last4 ? ` · ••••${last4}` : ""}
+          </small>
+        </div>
+        <button className="btn" type="button" onClick={() => setOpen(service)}>
+          {item.status === "unset" ? "Подключить" : "Заменить"}
+        </button>
+      </div>
+      <Keys open={open} setOpen={setOpen} only={[]} />
+    </>
   );
 }

@@ -46,7 +46,8 @@ function chanState(rt: TgStatus | null, ch: string): [string, string] {
   return ["ok", c.posts ? `читается · ${c.posts} ${plural(c.posts, ["пост", "поста", "постов"])} за ${win} мин${last}` : `читается · за ${win} мин постов нет${last}`];
 }
 
-export function TgChannelsCard({ openKey }: { openKey: (service: string) => void }) {
+/** Вход в Telegram для чтения каналов — строкой над карточкой (KeyLine «telethon»). */
+export function TgChannelsCard() {
   const config = useStore((s) => s.config);
   const paper = useStore((s) => s.bot?.paper ?? true);
   const [add, setAdd] = useState("");
@@ -114,7 +115,7 @@ export function TgChannelsCard({ openKey }: { openKey: (service: string) => void
   return (
     <article className="card tgch" id="tg-channels">
       <div className="card-h">
-        <h2>Каналы Telegram</h2>
+        <h2>Список каналов</h2>
         <Q tip="Обычный канал даёт боту настроение и упоминания монет. Доверенный ещё и открывает сделку по посту. Тумблер «Доверять» переключает роль." />
       </div>
       <div className="tgch-h">
@@ -122,11 +123,6 @@ export function TgChannelsCard({ openKey }: { openKey: (service: string) => void
           Отслеживаем: {all.length} {plural(all.length, ["канал", "канала", "каналов"])}
           {rt?.state === "ok" && ` · читаются ${reading}`}
         </b>
-        {rt && ["off", "no_session", "revoked"].includes(rt.state) && (
-          <button type="button" className="btn" onClick={() => openKey("telethon")}>
-            Вход в Telegram →
-          </button>
-        )}
       </div>
 
       <section className="tgch-g" aria-label="Доверенные каналы: торговля по постам">

@@ -2,7 +2,7 @@
 // под ним — сводка выбранного узла и его карточки (те же, что были во вкладке раньше).
 // Итогов последнего цикла на узлах пока нет: бот не сохраняет шаги решения (этап 2).
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { BotNode, SecretItem, SettingDef } from "../lib/types";
 import { actions } from "../store/actions";
@@ -10,6 +10,8 @@ import { useStore } from "../store";
 import { Seg } from "../components/controls";
 import { Q } from "../components/tooltip";
 import { AiPane, aiLine } from "./ai";
+import { KeyLine } from "./settings/keys";
+import { TelegramPanel } from "./settings/tgpanel";
 import { ConfirmCard, RiskCard, StrategiesCard, TrackCard, WhatCard, cfg, levText, presetName, presetOf, profileName } from "./bots";
 import { EmergencyCard } from "./emergency";
 import { RulesCard } from "./rules";
@@ -311,6 +313,14 @@ export function Pipeline() {
   const closeBtn = useRef<HTMLButtonElement>(null);
   // Полосы под шагами — сводка; включается и выключается всё в панели шага.
   const toLearn = () => setTab("learn");
+  // Каналы Telegram — своя панель справа, как у шагов (ветка над схемой ведёт в «Ордер»).
+  const [chan, setChan] = useState(false);
+  useEffect(() => {
+    if (!chan) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setChan(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [chan]);
   useEffect(() => {
     if (!open) return;
     closeBtn.current?.focus({ preventScroll: true });
@@ -349,7 +359,7 @@ export function Pipeline() {
             </li>
           </ul>
         </div>
-        <PipeCanvas mode={mode} cycle={cycle} onMode={(m) => void actions.patchConfig({ MODE: m })}>
+        <PipeCanvas mode={mode} cycle={cycle} onMode={(m) => void actions.patchConfig({ MODE: m })} onChannels={() => setChan(true)}>
           {NODES.map(({ id, title, icon }) => {
             const on = takesPart(mode, id);
             const res = cycle?.nodes[id];
@@ -382,14 +392,23 @@ export function Pipeline() {
           Шаг — настройки справа · штекер <i className="pw-plug-ico" aria-hidden="true" /> у «Риска» — кто решает · числа на проводах — монеты за цикл · Ctrl + колесо — масштаб
         </p>
       </div>
+      <button type="button" className={`pipe-scrim${chan ? " open" : ""}`} tabIndex={-1} aria-hidden="true" onClick={() => setChan(false)} />
+      <aside className={`pipe-panel${chan ? " open" : ""}`} role="dialog" aria-label="Telegram" aria-hidden={!chan}>
+        <div className="pipe-panel-h">
+          <b>Telegram</b>
+          <button type="button" className="btn pipe-close" aria-label="Закрыть Telegram" onClick={() => setChan(false)}>
+            ✕
+          </button>
+        </div>
+        <div className="pipe-body">
+          {chan && <TelegramPanel />}
+        </div>
+      </aside>
       <button type="button" className={`pipe-scrim${open ? " open" : ""}`} tabIndex={-1} aria-hidden="true" onClick={closeNode} />
       <aside className={`pipe-panel${open ? " open" : ""}`} role="dialog" aria-label={`Шаг «${cur.title}»`} aria-hidden={!open}>
         <div className="pipe-panel-h">
           <span className="pipe-sum-ico">{cur.icon}</span>
           <b>{cur.title}</b>
-          <span className="label">
-            шаг {String(at + 1).padStart(2, "0")} из {String(NODES.length).padStart(2, "0")}
-          </span>
           <button ref={closeBtn} type="button" className="btn pipe-close" aria-label="Закрыть настройки шага" onClick={closeNode}>
             ✕
           </button>
@@ -474,12 +493,12 @@ export function Pipeline() {
         {cur.id === "order" && (
           <div className="cols">
             <div className="col">
+              {need.order?.includes("Bybit") && (
+                <article className="card">
+                  <KeyLine service="bybit" />
+                </article>
+              )}
               <ConfirmCard />
-              <div className="btn-row">
-                <button className="btn" type="button" onClick={() => setTab("settings")}>
-                  Подключения: биржа, Telegram, ключи →
-                </button>
-              </div>
             </div>
           </div>
         )}

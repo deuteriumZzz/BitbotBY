@@ -212,7 +212,7 @@ function TrustedChip() {
       <button
         type="button"
         title={`${t.ok ? `Вход через ${t.latency_s} с после поста` : `Без сделки: ${t.reason}`} · ${when}. Стратегии, AI и фильтры скана в этих сделках не участвуют.`}
-        onClick={() => (openSettings("settings"), scrollWhenReady("tg-channels"))}
+        onClick={() => openSettings("bots")}
       >
         @{t.channel} · {what} · {t.ok ? `вход ${t.latency_s} с` : "пропущен"}
       </button>
