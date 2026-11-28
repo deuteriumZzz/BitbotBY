@@ -6,7 +6,7 @@ import type { BotNode, TraceStep } from "../lib/types";
 export const NODE_TITLE: Record<BotNode, string> = {
   scan: "Сканер",
   strat: "Стратегии",
-  ai: "AI-цепочка",
+  ai: "AI",
   sac: "SAC",
   risk: "Риск",
   order: "Ордер",

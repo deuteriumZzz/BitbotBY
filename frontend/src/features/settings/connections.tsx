@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 
+import { aiLine } from "../ai";
 import { api } from "../../lib/api";
 
 import { fmtN, plural } from "../../lib/format";
@@ -43,7 +44,6 @@ export function ConnMap({ go, openKey }: { go: (pane: Pane | "map") => void; ope
       .then((v) => setLocal(v.local))
       .catch(() => setLocal(false));
   }, []);
-  const lastAi = ai?.providers.find((p) => p.id === ai.last);
   const by = (id: string) => secrets?.find((s) => s.service === id);
   const link = (item?: SecretItem): Link => {
     const c = item ? STATUS[item.status][0] : "";
@@ -63,8 +63,8 @@ export function ConnMap({ go, openKey }: { go: (pane: Pane | "map") => void; ope
     { id: "bybit", label: "Bybit", sub: sub(by("bybit")), st: link(by("bybit")), act: toKey("bybit") },
     {
       id: "ai",
-      label: "AI-провайдеры",
-      sub: ai?.chain.length ? `в цепочке ${ai.chain.length}${lastAi ? ` · отвечает ${lastAi.name}` : ""}` : "цепочка пуста",
+      label: "AI",
+      sub: aiLine(ai),
       st: ai?.chain.length ? "ok" : "bad",
       act: () => useStore.getState().openNode("ai"),
     },

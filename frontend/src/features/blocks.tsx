@@ -9,7 +9,8 @@ import { STATUS } from "./chainops";
 import { RULES } from "./rules";
 
 export type Step = "strat" | "ai" | "risk" | "track";
-const STEPS: readonly Step[] = ["strat", "ai", "risk", "track"];
+// У AI плашек нет: два ключа видны строкой на самом блоке.
+const STEPS: readonly Step[] = ["strat", "risk", "track"];
 export const isStep = (id: string): id is Step => (STEPS as readonly string[]).includes(id);
 
 export interface Item {

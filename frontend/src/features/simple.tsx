@@ -8,7 +8,7 @@ import { ModeSeg, NODES, takesPart } from "./pipeline";
 import { templateLine } from "./rules";
 import { mark } from "./trace";
 import { protectionLines } from "../lib/format";
-import { useScoreboard } from "./ai";
+import { aiLine, useScoreboard } from "./ai";
 import { UiSwitchRow } from "./uimode";
 
 export function BotSimple() {
@@ -20,7 +20,7 @@ export function BotSimple() {
   const score = useScoreboard();
   const mode = cfg<string>(c, "MODE", "ai");
   const fallback = cfg<boolean>(c, "LOCAL_FALLBACK", false);
-  const chain = (ai?.chain ?? []).map((x) => `${ai?.providers.find((p) => p.id === x.provider)?.name ?? x.provider} (${x.model})`);
+  const chain = ai?.chain ?? [];
   const when = cycle ? new Date(cycle.at * 1000).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }) : "";
   return (
     <section className="view enter simple" aria-label="Бот">
@@ -35,7 +35,7 @@ export function BotSimple() {
         <ModeSeg simple />
         {mode === "ai" && (
           <p className="note-soon">
-            {chain.length ? `AI по очереди: ${chain.join(" → ")}. ${fallback ? "Не ответит никто — решат стратегии." : "Не ответит никто — сделки не будет."}` : "Ключа AI ещё нет — добавьте его в «Профи» → AI-цепочка."}
+            {chain.length ? `AI: ${aiLine(ai)}. ${fallback ? "Не ответит никто — решат стратегии." : "Не ответит никто — сделки не будет."}` : "Ключа AI ещё нет — добавьте его в Настройках → Подключения."}
           </p>
         )}
         {mode === "ai" && score && Object.keys(score.providers).length > 0 && (
@@ -90,7 +90,7 @@ export function BotSimple() {
         </ol>
       </article>
       <p className="note-soon simple-more">
-        Нужны пороги, плечо, AI-цепочка или обучение?{" "}
+        Нужны пороги, плечо или обучение?{" "}
         <button className="btn" type="button" onClick={() => setUi("pro")}>
           Открыть «Профи»
         </button>{" "}

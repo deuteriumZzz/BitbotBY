@@ -15,6 +15,12 @@ import { Skel } from "../components/motion";
 import { Q } from "../components/tooltip";
 import { Avatar, STATUS, hhmm } from "./chainops";
 
+/** Одна строка про ключи AI: «Groq · запасной Gemini» или «нет ключа». */
+export const aiLine = (ai: AiState | null): string => {
+  const names = (ai?.chain ?? []).map((c) => ai?.providers.find((p) => p.id === c.provider)?.name ?? c.provider);
+  return names.length ? names[0] + (names[1] ? ` · запасной ${names[1]}` : "") : "нет ключа";
+};
+
 export function AiPane() {
   const ai = useStore((s) => s.ai);
   const secrets = useStore((s) => s.secrets);
@@ -55,7 +61,7 @@ export function AiPane() {
 
 /** Ключи AI: основной и запасной. Провайдера бот узнаёт по ключу, модель и порядок
  * (сначала бесплатные) выбирает сам — bitbot.config.ai_providers.chain. */
-function KeysCard(props: { ai: AiState; secrets: SecretItem[]; onSaved: () => void }) {
+export function KeysCard(props: { ai: AiState; secrets: SecretItem[]; onSaved: () => void }) {
   const { ai } = props;
   const order = ai.chain.map((c) => c.provider);
   const withKey = order.map((id) => ai.providers.find((p) => p.id === id)!).filter(Boolean);

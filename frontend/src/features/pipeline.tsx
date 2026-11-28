@@ -9,7 +9,7 @@ import { actions } from "../store/actions";
 import { useStore } from "../store";
 import { Seg } from "../components/controls";
 import { Q } from "../components/tooltip";
-import { AiPane } from "./ai";
+import { AiPane, aiLine } from "./ai";
 import { Lane, isStep, useLanes } from "./blocks";
 import { ConfirmCard, RiskCard, StrategiesCard, TrackCard, WhatCard, cfg, levText, presetName, presetOf, profileName } from "./bots";
 import { EmergencyCard } from "./emergency";
@@ -40,7 +40,7 @@ export const NODES: readonly { id: BotNode; title: string; icon: JSX.Element }[]
   { id: "strat", title: "Стратегии", icon: svg(<path d="M5 20V11M12 20V5M19 20v-6M3 20h18" />) },
   {
     id: "ai",
-    title: "AI-цепочка",
+    title: "AI",
     icon: svg(
       <>
         <rect x="6" y="6" width="12" height="12" rx="1" />
@@ -174,7 +174,7 @@ function usePipeline(mode: string): { status: Record<BotNode, string>; info: Rec
             ? `запасной путь · ${strategies.filter((s) => s.enabled).length}`
             : "не участвуют"
           : `подсказка для AI · ${strategies.filter((s) => s.enabled).length}`,
-    ai: !ai ? "цепочка" : `${ai.chain.length} в цепочке`,
+    ai: aiLine(ai),
     sac: mode === "dqn" ? "решает сам" : "вместе с AI",
     // Главные цифры риска прямо на холсте: пресет, риск на сделку, позиций сразу, плечо.
     risk: `${presetName(presetOf(c, presets))} · ${show("RISK_PER_TRADE")} · ${cfg(c, "MAX_POSITIONS", 3)} поз. · плечо ${levText(c, spot)}${guardsOff ? " · без защит" : ""}`,

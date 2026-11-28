@@ -14,12 +14,12 @@ export interface Home {
   where: string;
 }
 
-const RISK: Home = { tab: "bots", node: "risk", where: "Цепочка → Риск → Как рискуем" };
-const RISK_MANUAL: Home = { tab: "bots", node: "risk", where: "Цепочка → Риск → Как рискуем → Настроить вручную" };
-const RULES: Home = { tab: "bots", node: "risk", where: "Цепочка → Риск → Правила защиты" };
-const CONFIRM: Home = { tab: "bots", node: "order", where: "Цепочка → Ордер → Открытие сделок" };
-const WHAT: Home = { tab: "bots", node: "scan", where: "Цепочка → Сканер → Что торговать" };
-const SIGNALS: Home = { tab: "bots", node: "ai", where: "Цепочка → AI-цепочка → Сигналы для решения" };
+const RISK: Home = { tab: "bots", node: "risk", where: "Стратегия → Риск → Как рискуем" };
+const RISK_MANUAL: Home = { tab: "bots", node: "risk", where: "Стратегия → Риск → Как рискуем → Настроить вручную" };
+const RULES: Home = { tab: "bots", node: "risk", where: "Стратегия → Риск → Правила защиты" };
+const CONFIRM: Home = { tab: "bots", node: "order", where: "Стратегия → Ордер → Открытие сделок" };
+const WHAT: Home = { tab: "bots", node: "scan", where: "Стратегия → Сканер → Что торговать" };
+const SIGNALS: Home = { tab: "bots", node: "ai", where: "Стратегия → AI → Сигналы для решения" };
 
 export const OWN_HOME: Record<string, Home> = {
   RISK_PER_TRADE: RISK,
@@ -29,16 +29,16 @@ export const OWN_HOME: Record<string, Home> = {
   AUTO_EXECUTE: CONFIRM,
   TELEGRAM_CONFIRM_TIMEOUT: CONFIRM,
   CONFIRM_ON_TIMEOUT: CONFIRM,
-  MODE: { tab: "bots", where: "Цепочка → Кто принимает решение" },
+  MODE: { tab: "bots", where: "Стратегия → Кто принимает решение" },
   CHRONOS_ENABLED: SIGNALS,
   MARKET_TYPE: WHAT,
   SEASON_SWITCH_MODE: WHAT,
   PAPER_GUARDS_OFF: RULES,
-  LOCAL_FALLBACK: { tab: "bots", node: "strat", where: "Цепочка → Стратегии" },
-  TRADING_HOURS: { tab: "bots", node: "scan", where: "Цепочка → Сканер → Часы торговли" },
+  LOCAL_FALLBACK: { tab: "bots", node: "strat", where: "Стратегия → Стратегии" },
+  TRADING_HOURS: { tab: "bots", node: "scan", where: "Стратегия → Сканер → Часы торговли" },
   TESTNET: { tab: "settings", pane: "conn", where: "Настройки → Подключения → Bybit" },
   QUIET_HOURS: { tab: "settings", pane: "main", where: "Настройки → Telegram → Уведомления" },
-  AI_PROVIDER: { tab: "bots", node: "ai", where: "Цепочка → AI-цепочка" },
+  AI_PROVIDER: { tab: "bots", node: "ai", where: "Стратегия → AI" },
   MIN_SIGNAL_CONFIDENCE: RISK_MANUAL,
   MIN_SIGNAL_CONFIDENCE_PAPER: RISK_MANUAL,
   SENTIMENT_BUY_THRESHOLD: SIGNALS,

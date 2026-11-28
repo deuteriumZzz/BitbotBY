@@ -52,7 +52,7 @@ export const FEEDS: Record<string, [string, BotNode?][]> = {
   server: [["переход в Live", "order"], ["дашборд и вебхуки"]],
 };
 
-export const STEP: Partial<Record<BotNode, string>> = { scan: "Сканер", ai: "AI-цепочка", risk: "Риск", order: "Ордер" };
+export const STEP: Partial<Record<BotNode, string>> = { scan: "Сканер", ai: "AI", risk: "Риск", order: "Ордер" };
 
 /** Ключи как связки: сервис → что он питает в боте. Форма ключа открывается панелью справа, список остаётся на виду. */
 /** Эти ключи открываются с карты подключений — в списке их не повторяем. */

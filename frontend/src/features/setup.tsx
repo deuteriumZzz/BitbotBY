@@ -9,7 +9,7 @@ import { actions } from "../store/actions";
 import { useStore } from "../store";
 import { Icon } from "../components/icon";
 import { Skel } from "../components/motion";
-import { AddCard } from "./ai";
+import { KeysCard } from "./ai";
 import { RiskCard, presetName, presetOf } from "./bots";
 import { KeyCard } from "./settings/keys";
 
@@ -249,7 +249,6 @@ function StepBody({ step }: { step: SetupStep }) {
         );
       if (!ai) return <Skel label="Загружаю список провайдеров" />;
       // Бесплатные провайдеры, к которым ещё нет ключа (ключ вводится прямо здесь).
-      const free = ai.providers.filter((p) => p.free_tier && !p.usable && info?.keys_in_app);
       return (
         <>
           <p className="setup-p">
@@ -259,11 +258,7 @@ function StepBody({ step }: { step: SetupStep }) {
           <button className="btn" type="button" onClick={() => void actions.patchConfig({ MODE: "local" })}>
             Работать без AI: только локальные стратегии
           </button>
-          <div className="addp">
-            {free.map((p) => (
-              <AddCard key={p.id} ai={ai} p={p} secret={secrets?.find((s) => s.service === p.id)} onSaved={() => undefined} />
-            ))}
-          </div>
+          {info?.keys_in_app && <KeysCard ai={ai} secrets={secrets ?? []} onSaved={() => undefined} />}
         </>
       );
     }
