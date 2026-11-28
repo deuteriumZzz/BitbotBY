@@ -1,0 +1,40 @@
+# Пульт BitbotBY для компьютера: .dmg (macOS) и .exe/.msi (Windows) через Tauri.
+# Запускается вручную или по тегу v*. Сборки без подписи: при первом запуске
+# macOS и Windows предупредят о неизвестном разработчике.
+name: desktop
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install frontend
+        run: npm ci
+        working-directory: frontend
+      - name: Install desktop
+        run: npm ci
+        working-directory: frontend/desktop
+      - name: Build
+        run: npm run build
+        working-directory: frontend/desktop
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bitbotby-${{ matrix.os }}
+          path: |
+            frontend/desktop/src-tauri/target/release/bundle/dmg/*.dmg
+            frontend/desktop/src-tauri/target/release/bundle/nsis/*.exe
+            frontend/desktop/src-tauri/target/release/bundle/msi/*.msi
+          if-no-files-found: error
