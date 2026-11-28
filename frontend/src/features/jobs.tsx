@@ -546,7 +546,6 @@ function LearnPath() {
   return (
     <article className="card learn-hero">
       <div className="learn-hero-t">
-        <span className="label">Лаборатория</span>
         <h2>Путь к реальным деньгам</h2>
         <p>Модель и четыре проверки. Всё идёт в фоне, бот торгует на бумаге.</p>
       </div>

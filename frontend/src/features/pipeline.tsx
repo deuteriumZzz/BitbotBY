@@ -393,11 +393,8 @@ export function Pipeline() {
         </div>
       <div className="pipe-body" key={cur.id}>
         <article className="card pipe-sum">
-          <div className="card-h">
-            <span className="pipe-sum-ico">{cur.icon}</span>
-            <h2>{cur.title}</h2>
-            <span className="pill sp">{part ? `шаг ${String(at + 1).padStart(2, "0")} из ${String(NODES.length).padStart(2, "0")}` : "не участвует в этом режиме"}</span>
-          </div>
+          {/* Значок, название и номер шага уже в шапке панели. */}
+          {!part && <span className="pill">не участвует в этом режиме</span>}
           <p className="pipe-desc">{info[cur.id].desc}</p>
           <p className={`pipe-res-line ${curCls}`}>
             <span className="label">Последний цикл{when ? ` · ${when}` : ""}</span>

@@ -24,11 +24,10 @@ const goTo = (pane: Pane | "map") => {
   document.getElementById(`set-${pane}`)?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
 };
 
-/** Заголовок раздела страницы настроек: номер, название, одна фраза о том, что внутри. */
-function SecHead({ n, title }: { n: string; title: string }) {
+/** Заголовок раздела страницы настроек. */
+function SecHead({ title }: { title: string }) {
   return (
     <div className="set-h">
-      <span className="set-n">{n}</span>
       <h2>{title}</h2>
     </div>
   );
@@ -90,11 +89,11 @@ export function Settings() {
       </nav>
       <ConnMap go={goTo} openKey={setKey} />
       <div id="set-conn" className="set-sec">
-        <SecHead n="01" title="Подключения" />
+        <SecHead title="Подключения" />
         <Keys open={key} setOpen={setKey} />
       </div>
       <div id="set-main" className="set-sec">
-        <SecHead n="02" title="Telegram" />
+        <SecHead title="Telegram" />
         <div className="set-pane view enter">
           <div className="cols">
             <div className="col">
@@ -107,7 +106,7 @@ export function Settings() {
         </div>
       </div>
       <div id="set-acct" className="set-sec">
-        <SecHead n="03" title="Счёт и компьютер" />
+        <SecHead title="Счёт и компьютер" />
         <div className="set-pane view enter">
           <div className="cols">
             <div className="col">
@@ -128,7 +127,7 @@ export function Settings() {
       </div>
       {!simple && (
       <div id="set-all" className="set-sec">
-        <SecHead n="04" title="Расширенные параметры" />
+        <SecHead title="Расширенные параметры" />
         <AllParams go={goTo} basicOnly={false} />
       </div>
       )}
