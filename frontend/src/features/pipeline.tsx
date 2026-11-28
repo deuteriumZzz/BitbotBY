@@ -6,89 +6,94 @@ import { useEffect, useRef, useState } from "react";
 
 import type { BotNode, SecretItem, SettingDef } from "../lib/types";
 import { actions } from "../store/actions";
-import { useStore } from "../store";
-import { Seg } from "../components/controls";
+import { positionPnl, useStore } from "../store";
+import { ArrowsClockwise, ArrowsDownUp, Receipt, Clock, HandTap, Lifebuoy, Lightning, LockSimple, ShieldSlash, Target, CurrencyBtc, Fire, Key, Rocket, Brain, ChartBar, Coins, FlagCheckered, Handshake, MagnifyingGlass, ShieldCheck, Sparkle, WarningCircle } from "@phosphor-icons/react";
+import { aiLogo } from "../components/brand";
+import { plural, usd } from "../lib/format";
+import { inHours } from "../lib/idle";
+
+import { Tiles } from "../components/irow";
 import { Q } from "../components/tooltip";
 import { AiPane, aiLine } from "./ai";
 import { KeyLine } from "./settings/keys";
 import { TelegramPanel } from "./settings/tgpanel";
-import { ConfirmCard, RiskCard, StrategiesCard, TrackCard, WhatCard, cfg, levText, presetName, presetOf, profileName } from "./bots";
+import { PRESET_META, applyPreset, ConfirmCard, RiskCard, StrategiesCard, TrackCard, WhatCard, cfg, levText, presetName, presetOf, profileName } from "./bots";
 import { EmergencyCard } from "./emergency";
 import { RulesCard } from "./rules";
 import { UiSwitchRow } from "./uimode";
 import { HoursCard, SymbolsCard } from "./settings/trading";
-import { NW, PipeCanvas } from "./pipecanvas";
+import { PipeCanvas } from "./pipecanvas";
 import { SignalsCard } from "./signals";
 import { mark } from "./trace";
-
-const svg = (body: JSX.Element) => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    {body}
-  </svg>
-);
+import { cycleKind } from "./terminal/radar";
 
 export const NODES: readonly { id: BotNode; title: string; icon: JSX.Element }[] = [
-  {
-    id: "scan",
-    title: "Сканер",
-    icon: svg(
-      <>
-        <circle cx="11" cy="11" r="7" />
-        <path d="m20 20-4-4" />
-      </>,
-    ),
-  },
-  { id: "strat", title: "Стратегии", icon: svg(<path d="M5 20V11M12 20V5M19 20v-6M3 20h18" />) },
-  {
-    id: "ai",
-    title: "AI",
-    icon: svg(
-      <>
-        <rect x="6" y="6" width="12" height="12" rx="1" />
-        <path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4" />
-      </>,
-    ),
-  },
-  {
-    id: "sac",
-    title: "SAC",
-    icon: svg(
-      <>
-        <circle cx="12" cy="13" r="8" />
-        <path d="M12 13l4-3M12 3v2" />
-      </>,
-    ),
-  },
-  { id: "risk", title: "Риск", icon: svg(<path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z" />) },
-  { id: "order", title: "Ордер", icon: svg(<path d="M4 8h14l-4-4M20 16H6l4 4" />) },
-  { id: "track", title: "Сопровождение", icon: svg(<path d="M5 21V4h11l-2 4 2 4H5" />) },
+  { id: "scan", title: "Сканер", icon: <MagnifyingGlass /> },
+  { id: "strat", title: "Стратегии", icon: <ChartBar /> },
+  { id: "ai", title: "AI", icon: <Sparkle /> },
+  { id: "sac", title: "SAC", icon: <Brain /> },
+  { id: "risk", title: "Риск", icon: <ShieldCheck /> },
+  { id: "order", title: "Ордер", icon: <Receipt /> },
+  { id: "track", title: "Выход", icon: <FlagCheckered /> },
 ];
 
 const MODES = [
-  ["local", "Стратегии"],
-  ["ai", "AI"],
-  ["dqn", "Нейросеть"],
-  ["hybrid", "AI + нейросеть"],
+  ["local", "Стратегии", <ChartBar />],
+  ["ai", "AI", <Sparkle />],
+  ["dqn", "Нейросеть", <Brain />],
+  ["hybrid", "AI + нейросеть", <Handshake />],
 ] as const;
 
-const SIMPLE_MODES = [
-  ["local", "Стратегии"],
-  ["ai", "AI"],
-] as const;
+/** Чего не хватает режиму, чтобы он заработал; "" — всё готово. Видно на плитке ещё до переключения. */
+function useModeIssues(): Record<string, string> {
+  const ai = useStore((s) => s.ai);
+  const ready = useStore((s) => s.modeReadiness);
+  const model = useStore((s) => s.profiles.find((p) => p.active)?.model_exists);
+  const noKey = Boolean(ai && !ai.chain.length);
+  // Все ключи цепочки в ошибке (не принят, нет денег, ломает ответ…) — AI фактически не работает.
+  const keyed = (ai?.chain ?? []).map((c) => ai?.providers.find((p) => p.id === c.provider)?.status ?? "unknown");
+  const aiDown = ready?.ai?.reason === "ai_unavailable" || (keyed.length > 0 && keyed.every((s) => !["ok", "unknown", "rate_limit"].includes(s)));
+  const sac = model === false ? "модель не обучена" : ready?.dqn?.reason === "sac_not_approved" ? "модель не допущена" : "";
+  const aiIssue = noKey ? "нужен ключ AI" : aiDown ? "AI не отвечает" : "";
+  return { local: "", ai: aiIssue, dqn: sac, hybrid: aiIssue || sac };
+}
 
 /** «Кто принимает решение» — одно место для MODE; в «Простом» два понятных варианта. */
-export function ModeSeg({ simple = false }: { simple?: boolean }) {
+export function ModeSeg({ simple = false, onBlocked }: { simple?: boolean; onBlocked?: (mode: string) => void }) {
   const mode = useStore((s) => cfg<string>(s.config, "MODE", "ai"));
+  const setTab = useStore((s) => s.setTab);
+  const issues = useModeIssues();
+  // Без обученной модели сервер не включит «Нейросеть» — не шлём запрос, а показываем, что сделать.
+  const [blocked, setBlocked] = useState<{ v: string; n: number } | null>(null);
+  const sacIssue = issues.dqn;
+  const pick = (v: string) => {
+    if ((v === "dqn" || v === "hybrid") && sacIssue) {
+      setBlocked({ v, n: Date.now() });
+      onBlocked?.(v);
+      return;
+    }
+    setBlocked(null);
+    void actions.patchConfig({ MODE: v });
+  };
   const own = simple && mode !== "local" && mode !== "ai";
+  const opts = (simple ? MODES.slice(0, 2) : MODES).map(([v, name, icon]) => [v, name, icon, issues[v] || undefined] as const);
   return (
     <>
-      <Seg
-        className={simple ? "full" : undefined}
-        value={own ? null : mode}
-        options={simple ? SIMPLE_MODES : MODES}
-        onChange={(v) => void actions.patchConfig({ MODE: v })}
-        label="Кто принимает решение"
-      />
+      <div className="mode-tiles issues">
+        <Tiles value={own ? null : mode} options={opts} onChange={pick} label="Кто принимает решение" shake={blocked} />
+      </div>
+      {blocked && (
+        <div className="pipe-fix" key={blocked.n} role="alert">
+          <WarningCircle weight="fill" />
+          <span>
+            «{MODES.find(([m]) => m === blocked.v)?.[1]}» не включится: {sacIssue}.
+          </span>
+          <button type="button" className="pipe-fix-go" onClick={() => setTab("learn")}>
+            <Brain />
+            Обучить модель →
+          </button>
+        </div>
+      )}
       {own && <p className="note-soon">Сейчас своё, из «Профи»: {MODES.find(([m]) => m === mode)?.[1] ?? mode}. Выберите вариант выше, чтобы сменить.</p>}
     </>
   );
@@ -126,13 +131,59 @@ export function keyState(it?: SecretItem): string {
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 const day = (iso: string) => new Date(iso).toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
 
+const PROFILE_ICON: Record<string, JSX.Element> = { bluechip: <CurrencyBtc />, altcoin: <Rocket />, meme: <Fire /> };
+
+/** «15m» → «15 мин», «1h» → «1 ч», «1d» → «1 д». */
+export const tfText = (tf: string): string => {
+  const m = /^(\d+)([mhdw])$/.exec(tf);
+  return m ? `${m[1]} ${({ m: "мин", h: "ч", d: "д", w: "нед" } as Record<string, string>)[m[2]]}` : tf;
+};
+
+/** Свеча — своего значка в библиотеке нет: две свечи с фитилями. */
+const Candle = () => (
+  <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" aria-hidden="true">
+    <path d="M5 1.5v2.5M5 11v3.5M11 3v3M11 12v2.5" />
+    <rect x="3" y="4" width="4" height="7" rx="1" fill="currentColor" fillOpacity=".25" />
+    <rect x="9" y="6" width="4" height="6" rx="1" />
+  </svg>
+);
+
+const HOURS_NAME: Record<string, string> = { "1-10": "Азия", "8-20": "Европа", "14-22": "США", "22-6": "Ночь" };
+
+/** Карточка шага: живая цифра с единицей, подпись с настройками, значок режима в углу. */
+interface Metric {
+  v: string;
+  u?: string;
+  sub: string;
+  /** Часы торговли на карточке Сканера: подпись и торгует ли сейчас. */
+  hrs?: { text: string; on: boolean };
+  /** Частичная фиксация прибыли — значком на карточке «Выход». */
+  ptp?: boolean;
+  /** Запасной путь — значком на карточке «Стратегии» (в режиме «Стратегии» не нужен). */
+  fb?: boolean;
+  /** «монет» значком стопки монет — в паре со свечой на карточке Сканера. */
+  coins?: string;
+  /** Таймфрейм свечи на карточке Сканера: «15 мин», «1 ч». */
+  tf?: string;
+  /** Профиль монет в работе — значком на карточке Сканера; auto — бот меняет его сам по сезону. */
+  prof?: string;
+  auto?: boolean;
+  tone?: "up" | "down";
+  badge?: string;
+}
+
 interface Info {
   desc: string;
   fields: [string, string][];
 }
 
 /** Строка состояния под узлом и сводка полей для каждого узла — только из того, что бот уже отдаёт. */
-function usePipeline(mode: string): { status: Record<BotNode, string>; info: Record<BotNode, Info>; need: Partial<Record<BotNode, string>> } {
+function usePipeline(mode: string): {
+  status: Record<BotNode, string>;
+  info: Record<BotNode, Info>;
+  need: Partial<Record<BotNode, string>>;
+  metric: Record<BotNode, Metric>;
+} {
   const c = useStore((s) => s.config);
   const presets = useStore((s) => s.riskPresets);
   const schema = useStore((s) => s.schema);
@@ -165,17 +216,12 @@ function usePipeline(mode: string): { status: Record<BotNode, string>; info: Rec
   const active = profiles.find((p) => p.active);
   const guardsOff = paper && cfg<boolean>(c, "PAPER_GUARDS_OFF", false);
   // Что мешает блоку работать — плашка прямо на схеме, клик открывает его панель.
+  const issue = useModeIssues();
   const need: Partial<Record<BotNode, string>> = {
-    ai: takesPart(mode, "ai") && ai && !ai.chain.length ? "нужен ключ AI" : undefined,
-    sac: takesPart(mode, "sac") && active && !active.model_exists ? "модель не обучена" : undefined,
-    order:
-      !bybit || bybit.status === "unset"
-        ? "нужен ключ Bybit"
-        : bybit.status === "bad"
-          ? "ключ Bybit не работает"
-          : !auto && !paper && tg?.status !== "ok"
-            ? "нужен Telegram для подтверждений"
-            : undefined,
+    ai: takesPart(mode, "ai") ? issue.ai || undefined : undefined,
+    sac: takesPart(mode, "sac") ? issue.dqn || undefined : undefined,
+    // Ключ Bybit показывает блок «Биржа»; здесь — только то, что мешает самому ордеру в Live.
+    order: !paper && (!bybit || bybit.status === "unset" || bybit.status === "bad") ? "Live: нужен рабочий ключ Bybit" : !auto && !paper && tg?.status !== "ok" ? "нужен Telegram для подтверждений" : undefined,
   };
   const status: Record<BotNode, string> = {
     scan: `${bot?.profile ? profileName(bot.profile) : "профиль —"} · ${spot ? "спот" : "фьючерсы"}`,
@@ -281,7 +327,48 @@ function usePipeline(mode: string): { status: Record<BotNode, string>; info: Rec
       ],
     },
   };
-  return { status, info, need };
+  // Главная цифра — что блок делает сейчас; настройки — в подписи, подробности — в панели шага.
+  const fun = useStore((s) => s.lastCycle?.funnel);
+  const slots = useStore((s) => s.slots);
+  const pnl = useStore((s) => Object.values(s.positions).reduce((a, p) => a + positionPnl(p).pnl, 0));
+  const on = strategies.filter((s) => s.enabled).length;
+  const nScan = fun?.scanned ?? Number(cfg(c, "SCAN_TOP_N", 20));
+  const metric: Record<BotNode, Metric> = {
+    scan: {
+      v: String(nScan),
+      sub: "",
+      coins: plural(nScan, ["монета", "монеты", "монет"]),
+      tf: tfText(cfg<string>(c, "TIMEFRAME", "15m")),
+      prof: bot?.profile ?? undefined,
+      auto: cfg<string>(c, "SEASON_SWITCH_MODE", "alert") === "auto",
+      hrs: { text: hours ? (HOURS_NAME[hours] ?? `${hours} UTC`) : "24/7", on: !hours || inHours(hours, new Date().getUTCHours()) },
+    },
+    strat: {
+      v: String(on),
+      u: "включено",
+      fb: mode === "local" ? undefined : fallback,
+      sub: mode === "local" ? "решают сделку" : mode === "dqn" ? (fallback ? "запасной путь" : "не участвуют") : fallback ? "подсказка · запасной путь" : "подсказка для AI",
+    },
+    ai: { v: "", sub: "" },
+    sac: { v: "", sub: "" },
+    risk: {
+      v: `${slots.used}/${slots.max}`,
+      u: "слотов",
+      sub: `${show("RISK_PER_TRADE")} · ${levText(c, spot)}`,
+    },
+    order: {
+      v: String(fun?.opened ?? 0),
+      u: "за цикл",
+      sub: auto ? "открывает сам" : "с подтверждением",
+    },
+    track: {
+      v: open ? usd(pnl) : "—",
+      sub: `${open} ${plural(open, ["позиция", "позиции", "позиций"])}`,
+      tone: !open || Math.abs(pnl) < 0.005 ? undefined : pnl > 0 ? "up" : "down",
+      ptp: partial,
+    },
+  };
+  return { status, info, need, metric };
 }
 
 /** Кто решает и какая роль у стратегий — одной фразой под переключателем (как в backend/bitbot/workers/bot.py). */
@@ -292,16 +379,103 @@ const modeNote = (mode: string, fallback: boolean): string =>
       ? `Решает нейросеть SAC.${fallback ? " Без модели — стратегии." : ""}`
       : `Решает ${mode === "hybrid" ? "пара SAC и AI — нужно согласие обоих" : "AI"}, стратегии — подсказка.${fallback ? " Без AI — стратегии." : ""}`;
 
+/** Часы цикла: когда был последний и сколько до следующего; полоска заполняется к следующему циклу. */
+function CycleClock({ at }: { at?: number }) {
+  const every = useStore((s) => cfg<number>(s.config, "TRADING_INTERVAL", 900));
+  const kind = useStore(cycleKind);
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 5000);
+    return () => clearInterval(t);
+  }, []);
+  if (!at) return <p className="cyc-clock">Жду первого цикла…</p>;
+  const left = Math.max(0, at + every - now / 1000);
+  const p = Math.min(100, ((every - left) / every) * 100);
+  const live = kind === "scan" || kind === "monitor";
+  return (
+    <div className={`cyc-clock${live ? " live" : ""}`} aria-label="Цикл бота">
+      <span className={`dot ${live ? "ok live" : "warn"}`} />
+      <span>
+        цикл <b>{new Date(at * 1000).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</b>
+        {live ? (left > 30 ? ` · следующий через ${Math.ceil(left / 60)} мин` : " · следующий вот-вот") : " · бот не ищет сделки"}
+      </span>
+      <i style={{ width: `${live ? p : 0}%` }} />
+    </div>
+  );
+}
+
+/** Рынок — над схемой рядом с «кто решает»: от него зависят стратегии, плечо и ордера. */
+function MarketSeg({ onSwitch }: { onSwitch: (spot: boolean) => void }) {
+  const market = useStore((s) => cfg<string>(s.config, "MARKET_TYPE", "linear"));
+  return (
+    <div className="mode-tiles">
+      <Tiles
+        value={market}
+        options={[
+          ["linear", "Фьючерсы", <ArrowsDownUp />, "лонг и шорт"],
+          ["spot", "Спот", <Coins />, "только покупка"],
+        ]}
+        label="Рынок"
+        onChange={(v) => {
+          void actions.patchConfig({ MARKET_TYPE: v });
+          onSwitch(v === "spot");
+        }}
+      />
+    </div>
+  );
+}
+
 export function Pipeline() {
   const node = useStore((s) => s.node);
   const openNode = useStore((s) => s.openNode);
   const setTab = useStore((s) => s.setTab);
-  const mode = useStore((s) => cfg<string>(s.config, "MODE", "ai"));
-  const fallback = useStore((s) => cfg<boolean>(s.config, "LOCAL_FALLBACK", false));
-  const { status, info, need } = usePipeline(mode);
+  const config = useStore((s) => s.config);
+  const ai = useStore((s) => s.ai);
+  const strategies = useStore((s) => s.strategies);
+  const openN = useStore((s) => Object.keys(s.positions).length);
+  const presets = useStore((s) => s.riskPresets);
+  const schema = useStore((s) => s.schema);
+  const riskNow = presetOf(config, presets);
+  const autoNow = cfg<boolean>(config, "AUTO_EXECUTE", false);
+  const paperNow = useStore((s) => s.bot?.paper ?? true);
+  const guardsOff = cfg<boolean>(config, "PAPER_GUARDS_OFF", false);
+  const mode = cfg<string>(config, "MODE", "ai");
+  const fallback = cfg<boolean>(config, "LOCAL_FALLBACK", false);
+  const { info, need, metric } = usePipeline(mode);
   const at = NODES.findIndex((n) => n.id === node);
   const cur = NODES[at] ?? NODES[0];
   const part = takesPart(mode, cur.id);
+  // Блоки, которым чего-то не хватает в выбранном режиме: подсвечиваются при переключении и ведут в свою панель.
+  const issues = NODES.filter((n) => takesPart(mode, n.id) && need[n.id]);
+  // Что сломано — для проводов: к сломанному узлу ток не идёт. Биржа без ключа в Paper работает на публичных ценах — «с оговоркой».
+  const bybitOk = useStore((s) => s.secrets?.find((x) => x.service === "bybit")?.status === "ok");
+  const paperNow0 = useStore((s) => s.bot?.paper ?? true);
+  const trouble: Partial<Record<string, "bad" | "warn">> = {
+    exchange: bybitOk ? undefined : paperNow0 ? "warn" : "bad",
+    decide: need.ai || need.sac ? "bad" : undefined,
+  };
+  for (const n of issues) if (n.id !== "ai" && n.id !== "sac") trouble[n.id] = "bad";
+  // Нажали режим, который не включается: дорожка «Нейросеть» вспыхивает, даже если сейчас не участвует.
+  const [flash, setFlash] = useState(0);
+  // Режим сменился — подсказка про невключённый режим больше не нужна.
+  useEffect(() => setFlash(0), [mode]);
+  const sacNeed = useModeIssues().dqn;
+  // Сменили рынок: блоки, которые от него зависят, коротко подсвечиваются и говорят, что поменялось.
+  const [chg, setChg] = useState<{ k: number; chips: Partial<Record<BotNode, string>> } | null>(null);
+  const switchMarket = (spot: boolean) => {
+    const fut = strategies.filter((s) => s.enabled && s.markets === "futures").length;
+    const k = Date.now();
+    setChg({
+      k,
+      chips: {
+        strat: fut ? `${spot ? "−" : "+"}${fut} ${plural(fut, ["стратегия", "стратегии", "стратегий"])}` : "те же стратегии",
+        risk: spot ? "плечо 1×" : `плечо ${levText(config, false)}`,
+        order: spot ? "без шортов" : "лонг и шорт",
+        track: openN ? `${openN} ${plural(openN, ["позицию", "позиции", "позиций"])} доведёт` : undefined,
+      },
+    });
+    setTimeout(() => setChg((x) => (x?.k === k ? null : x)), 5000);
+  };
   // Итог последнего цикла (src/decision_trace.py); null — бот ещё не прошёл цикл после обновления.
   const cycle = useStore((s) => s.lastCycle);
   const when = cycle ? new Date(cycle.at * 1000).toLocaleTimeString("ru-RU") : "";
@@ -311,10 +485,16 @@ export function Pipeline() {
   const open = useStore((s) => s.nodeOpen);
   const closeNode = useStore((s) => s.closeNode);
   const closeBtn = useRef<HTMLButtonElement>(null);
-  // Полосы под шагами — сводка; включается и выключается всё в панели шага.
   const toLearn = () => setTab("learn");
-  // Каналы Telegram — своя панель справа, как у шагов (ветка над схемой ведёт в «Ордер»).
+  // Каналы Telegram — своя панель справа, как у шагов.
   const [chan, setChan] = useState(false);
+  const [data, setData] = useState(false);
+  useEffect(() => {
+    if (!data) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setData(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [data]);
   useEffect(() => {
     if (!chan) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setChan(false);
@@ -328,6 +508,206 @@ export function Pipeline() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
+
+  // Блок шага: иконка, название, точка статуса; главная цифра; итог цикла плашкой. Подробности — в панели.
+  const box = (id: BotNode) => {
+    const n = NODES.find((x) => x.id === id)!;
+    const on = !(mode === "dqn" && id === "strat" && !fallback);
+    const problem = on ? need[id] : undefined;
+    const res = on ? cycle?.nodes[id] : undefined;
+    const [glyph, cls] = mark(res?.ok);
+    const mt = metric[id];
+    const chip = chg?.chips[id];
+    return (
+      <div
+        // Новый ключ при смене режима или рынка — анимация проигрывается заново.
+        key={`${id}${problem ? mode : ""}${chip ? chg!.k : ""}`}
+        data-node={id}
+        className={`ch-node${node === id ? " sel" : ""}${on ? "" : " idle"}${problem ? " alarm" : ""}${chip ? " changed" : ""}`}
+      >
+      <button type="button" className="ch-node-open" aria-pressed={node === id} aria-haspopup="dialog" aria-label={`${n.title}: настройки`} onClick={() => openNode(id)}>
+        <span className="ch-h">
+          <span className="ch-ico">
+            {/* У «Ордера» — логотип биржи: сразу видно, куда уходят сделки. */}
+            {n.icon}
+            <i className={`dot ${problem ? "bad" : on ? "ok" : ""}`} />
+          </span>
+          <b>{n.title}</b>
+        </span>
+        {problem ? (
+          <span className="need">
+            {problem.includes("ключ") && <Key weight="bold" />}
+            {problem}
+          </span>
+        ) : (
+          <>
+            <span className={`ch-v${mt.tone ? ` ${mt.tone}` : ""}`}>
+              <b>{mt.v}</b>
+              {mt.u && <small>{mt.u}</small>}
+              {mt.coins && (
+                <i className="ch-coins" title={`${mt.v} ${mt.coins} — столько бот сканирует каждый цикл`}>
+                  <Coins />
+                </i>
+              )}
+              {/* Профиль и часы торговли — значками справа; что именно — в подсказке. */}
+              {mt.ptp !== undefined && (
+                <span className="ch-icons">
+                  <i
+                    className={`ch-mini ptp${mt.ptp ? " on" : ""}`}
+                    title={mt.ptp ? "Частичная фиксация включена: часть позиции закрывается по пути к тейк-профиту, стоп — в безубыток" : "Частичная фиксация выключена"}
+                  >
+                    <Target />
+                  </i>
+                </span>
+              )}
+              {mt.fb !== undefined && (
+                <span className="ch-icons">
+                  <i
+                    className={`ch-mini ptp${mt.fb ? " on" : ""}`}
+                    title={mt.fb ? "Запасной путь включён: если AI или нейросеть молчат, бот торгует по стратегиям" : "Запасной путь выключен: если AI или нейросеть молчат, новых сделок нет"}
+                  >
+                    <Lifebuoy />
+                  </i>
+                </span>
+              )}
+              {(mt.prof || mt.hrs) && (
+                <span className="ch-icons">
+                  {mt.prof && (
+                    <i
+                      className={`ch-mini p-${mt.prof}`}
+                      title={`Профиль: ${profileName(mt.prof)}${mt.auto ? " — бот сам меняет его по сезону" : ""}`}
+                    >
+                      {PROFILE_ICON[mt.prof] ?? <ChartBar />}
+                      {mt.auto && <ArrowsClockwise className="ch-auto" />}
+                    </i>
+                  )}
+                  {mt.hrs && (
+                    <i className={`ch-mini hrs${mt.hrs.on ? "" : " off"}`} title={`Часы торговли: ${mt.hrs.text}${mt.hrs.on ? " — сейчас торгует" : " — сейчас пауза, новых сделок нет"}`}>
+                      <Clock />
+                    </i>
+                  )}
+                </span>
+              )}
+            </span>
+            <span className="ch-u">
+              {mt.badge && <em className={`ch-badge ${mt.badge}`}>{mt.badge}</em>}
+              {mt.sub}
+              {mt.tf && (
+                <em className="ch-tf" title="Таймфрейм: длина одной свечи, по которой бот считает сигналы">
+                  <Candle />
+                  {mt.tf}
+                </em>
+              )}
+            </span>
+          </>
+        )}
+        {chip ? (
+          <span className="ch-chg">{chip}</span>
+        ) : (
+          res && (
+            // Коротко — первая часть итога; целиком — в подсказке и в панели шага.
+            <span className={`ch-r ${cls}`} title={res.text}>
+              {glyph} {res.text.split(" · ")[0]}
+            </span>
+          )
+        )}
+      </button>
+      {/* Ордер: как открывать сделку — сам или с подтверждением; клик переключает сразу. */}
+      {id === "order" && on && (
+        <span className="ch-quick" role="group" aria-label="Как открывать сделки">
+          <button type="button" className="ch-q q-auto" aria-pressed={autoNow} title="Автоматически: бот нашёл сигнал и сразу открыл сделку" onClick={() => !autoNow && void actions.patchConfig({ AUTO_EXECUTE: true })}>
+            <Lightning />
+          </button>
+          <button type="button" className="ch-q q-confirm" aria-pressed={!autoNow} title="С подтверждением: каждая сделка приходит вам в Telegram и сюда" onClick={() => autoNow && void actions.patchConfig({ AUTO_EXECUTE: false })}>
+            <HandTap />
+          </button>
+        </span>
+      )}
+      {/* Риск: три пресета значками — выбранный горит своим цветом, клик переключает сразу. */}
+      {id === "risk" && on && (
+        <span className="ch-quick" role="group" aria-label="Профиль риска">
+          {Object.entries(PRESET_META).map(([k, m]) => (
+            <button
+              key={k}
+              type="button"
+              className={`ch-q q-${k}`}
+              aria-pressed={k === riskNow}
+              title={`${m.name}: ${m.d}`}
+              onClick={() => k !== riskNow && applyPreset(k, presets, schema)}
+            >
+              {m.icon}
+            </button>
+          ))}
+          {/* Paper без защит — для быстрого сбора опыта; в Live бот всегда с защитами (проверяет сервер). */}
+          <button
+            type="button"
+            className="ch-q q-guards"
+            aria-pressed={paperNow && guardsOff}
+            disabled={!paperNow}
+            title={
+              !paperNow
+                ? "В Live защиты всегда включены — этот режим только для Paper"
+                : guardsOff
+                  ? "Paper без защит: бот входит чаще, чтобы быстрее набрать опыт. При переходе на Live защиты включатся сами. Нажмите, чтобы вернуть защиты."
+                  : "Снять защиты в Paper: бот будет входить чаще, чтобы быстрее набрать опыт для обучения. В Live не действует."
+            }
+            onClick={() => void actions.patchConfig({ PAPER_GUARDS_OFF: !guardsOff })}
+          >
+            {paperNow ? <ShieldSlash /> : <LockSimple />}
+          </button>
+        </span>
+      )}
+      </div>
+    );
+  };
+
+  // Дорожка в рамке «Решение»: AI (с логотипом провайдера) или Нейросеть SAC.
+  const lane = (id: "ai" | "sac") => {
+    const n = NODES.find((x) => x.id === id)!;
+    const on = takesPart(mode, id);
+    const problem = on ? need[id] : id === "sac" && flash ? sacNeed : undefined;
+    const res = on ? cycle?.nodes[id] : undefined;
+    const [glyph, cls] = mark(res?.ok);
+    // Логотип того, кто ответил последним; если его нет — основного в цепочке. Вся очередь — в подсказке.
+    const last = id === "ai" && ai?.last && aiLogo(ai.last, 20) ? ai.last : "";
+    const prov = id === "ai" ? last || ai?.chain[0]?.provider || "" : "";
+    const logo = prov ? aiLogo(prov, 20) : null;
+    const queue = id === "ai" ? (ai?.chain ?? []).map((c) => ai?.providers.find((p) => p.id === c.provider)?.name ?? c.provider).join(" → ") : "";
+    const sub = problem ?? (!on ? "не участвует" : id === "ai" ? aiLine(ai) : mode === "dqn" ? "решает сама" : "вместе с AI");
+    return (
+      <button
+        key={`${id}${problem ? `${mode}${id === "sac" ? flash : ""}` : ""}`}
+        type="button"
+        className={`ch-lane${on ? " on" : ""}${problem ? " alarm" : ""}${node === id ? " sel" : ""}`}
+        title={queue ? `Очередь провайдеров: ${queue}` : undefined}
+        aria-pressed={node === id}
+        aria-haspopup="dialog"
+        onClick={() => openNode(id)}
+      >
+        <span className="ch-ico">{logo ?? n.icon}</span>
+        <span className="ch-lt">
+          <b>
+            {id === "ai" ? "AI" : "Нейросеть"}
+            {/* «Думает»: три точки, пока дорожка участвует и бот работает; в момент решения — быстрее и ярче. */}
+            {on && !problem && (
+              <i className="ch-think" aria-hidden="true">
+                <i />
+                <i />
+                <i />
+              </i>
+            )}
+          </b>
+          <small>{sub}</small>
+        </span>
+        {res && (
+          <span className={`ch-mk ${cls}`} title={res.text}>
+            {glyph}
+          </span>
+        )}
+      </button>
+    );
+  };
+
   return (
     <section className="view enter" aria-label="Стратегия">
       <UiSwitchRow />
@@ -336,62 +716,45 @@ export function Pipeline() {
           <div className="pipe-mode">
             <span className="label">
               Кто принимает решение{" "}
-              <Q tip="Стратегии — только индикаторы. AI — языковая модель. Нейросеть — обученная модель SAC. AI + нейросеть — оба должны согласиться. Неучаствующие блоки гаснут." />
+              <Q tip="Стратегии — только индикаторы. AI — языковая модель. Нейросеть — обученная модель SAC. AI + нейросеть — оба должны согласиться. Клик по блоку — его настройки справа. Числа на проводах — сколько монет прошло в последнем цикле; ромб перед «Риском» — порог уверенности." />
             </span>
-            <ModeSeg />
-            <p className="pipe-mode-note">{modeNote(mode, fallback)}</p>
+            <ModeSeg onBlocked={() => setFlash(Date.now())} />
           </div>
-          <ul className="pipe-legend" aria-label="Обозначения">
-            <li>
-              <i className="on" />
-              выбран
-            </li>
-            <li>
-              <i />
-              участвует
-            </li>
-            <li>
-              <i className="idle" />
-              не участвует в этом режиме
-            </li>
-            <li className="pipe-legend-res">
-              итог цикла{when ? ` ${when}` : ""}: <b className="ok">▲</b>&nbsp;пройдено · <b>–</b>&nbsp;пропущено · <b className="bad">▼</b>&nbsp;остановил
-            </li>
-          </ul>
+          <div className="pipe-mode">
+            <span className="label">
+              Рынок <Q tip="Спот — только покупки, без плеча. Фьючерсы — лонг и шорт с плечом. Меняется сразу; открытые позиции бот доводит до конца на их рынке." />
+            </span>
+            <MarketSeg onSwitch={switchMarket} />
+          </div>
+          <div className="pipe-sub">
+            <p className="pipe-mode-note">{modeNote(mode, fallback)}</p>
+            <CycleClock at={cycle?.at} />
+          </div>
         </div>
-        <PipeCanvas mode={mode} cycle={cycle} onMode={(m) => void actions.patchConfig({ MODE: m })} onChannels={() => setChan(true)}>
-          {NODES.map(({ id, title, icon }) => {
-            const on = takesPart(mode, id);
-            const res = cycle?.nodes[id];
-            const [glyph, cls] = mark(res?.ok);
-            return (
-                <div key={id} className="pipe-col" style={{ width: NW }}>
-                <button
-                  type="button"
-                  className={`pipe-node${node === id ? " on" : ""}${on ? "" : " idle"}`}
-                  aria-pressed={node === id}
-                  aria-haspopup="dialog"
-                  onClick={() => {
-                    openNode(id);
-                  }}
-                >
-                  <span className="hd">{icon}</span>
-                  <b>{title}</b>
-                  {on && need[id] ? <span className="need">{need[id]}</span> : <span className="st">{on ? status[id] : "не участвует"}</span>}
-                  {on && res && (
-                    <span className={`res ${cls}`}>
-                      <i aria-hidden="true">{glyph}</i> {res.text}
-                    </span>
-                  )}
-                </button>
-                </div>
-            );
-          })}
-        </PipeCanvas>
-        <p className="pipe-hint">
-          Шаг — настройки справа · штекер <i className="pw-plug-ico" aria-hidden="true" /> у «Риска» — кто решает · числа на проводах — монеты за цикл · Ctrl + колесо — масштаб
-        </p>
+        {issues.length > 0 && !flash && (
+          <div className="pipe-fix" key={mode} role="status">
+            <WarningCircle weight="fill" />
+            <span>Чтобы режим заработал:</span>
+            {issues.map((n) => (
+              <button key={n.id} type="button" className="pipe-fix-go" onClick={() => openNode(n.id)}>
+                {n.icon}
+                {need[n.id]!.startsWith(n.title) ? need[n.id] : `${n.title}: ${need[n.id]}`} →
+              </button>
+            ))}
+          </div>
+        )}
+        <PipeCanvas mode={mode} cycle={cycle} onChannels={() => setChan(true)} onData={() => setData(true)} trouble={trouble} node={box} lane={lane} />
       </div>
+      <button type="button" className={`pipe-scrim${data ? " open" : ""}`} tabIndex={-1} aria-hidden="true" onClick={() => setData(false)} />
+      <aside className={`pipe-panel${data ? " open" : ""}`} role="dialog" aria-label="Данные" aria-hidden={!data}>
+        <div className="pipe-panel-h">
+          <b>Данные: новости, соцсети, ончейн</b>
+          <button type="button" className="btn pipe-close" aria-label="Закрыть данные" onClick={() => setData(false)}>
+            ✕
+          </button>
+        </div>
+        <div className="pipe-body">{data && <SignalsCard />}</div>
+      </aside>
       <button type="button" className={`pipe-scrim${chan ? " open" : ""}`} tabIndex={-1} aria-hidden="true" onClick={() => setChan(false)} />
       <aside className={`pipe-panel${chan ? " open" : ""}`} role="dialog" aria-label="Telegram" aria-hidden={!chan}>
         <div className="pipe-panel-h">
@@ -409,37 +772,34 @@ export function Pipeline() {
         <div className="pipe-panel-h">
           <span className="pipe-sum-ico">{cur.icon}</span>
           <b>{cur.title}</b>
+          <Q tip={info[cur.id].desc} />
+          {!part && <span className="pill">не участвует</span>}
           <button ref={closeBtn} type="button" className="btn pipe-close" aria-label="Закрыть настройки шага" onClick={closeNode}>
             ✕
           </button>
         </div>
       <div className="pipe-body" key={cur.id}>
-        <article className="card pipe-sum">
-          {/* Значок, название и номер шага уже в шапке панели. */}
-          {!part && <span className="pill">не участвует в этом режиме</span>}
-          <p className="pipe-desc">{info[cur.id].desc}</p>
+        {/* Что шаг сделал в последнем цикле — одной строкой; описание шага — в «?» у названия. */}
+        {curRes && (
           <p className={`pipe-res-line ${curCls}`}>
-            <span className="label">Последний цикл{when ? ` · ${when}` : ""}</span>
-            {curRes ? (
-              <span>
-                <i aria-hidden="true">{curGlyph}</i> {curRes.text}
-              </span>
-            ) : (
-              <span>итогов пока нет — бот ещё не прошёл цикл после обновления</span>
-            )}
+            <i aria-hidden="true">{curGlyph}</i>
+            <span>{curRes.text}</span>
+            <time>{when}</time>
           </p>
-          {/* Сводка повторяет настройки ниже; остаётся только у SAC, где настроек в панели нет. */}
-          {cur.id === "sac" && info[cur.id].fields.length > 0 && (
+        )}
+        {/* У SAC настроек в панели нет — показываем его состояние. */}
+        {cur.id === "sac" && (
+          <article className="card">
             <dl className="pipe-fields">
-              {info[cur.id].fields.map(([k, v]) => (
+              {info.sac.fields.map(([k, v]) => (
                 <div key={k}>
                   <dt>{k}</dt>
                   <dd>{v}</dd>
                 </div>
               ))}
             </dl>
-          )}
-        </article>
+          </article>
+        )}
         {cur.id === "scan" && (
           <div className="cols">
             <div className="col">
@@ -461,7 +821,6 @@ export function Pipeline() {
         {cur.id === "ai" && (
           <>
             <AiPane />
-            <SignalsCard />
           </>
         )}
         {cur.id === "sac" && (

@@ -405,7 +405,10 @@ def test_symbols_normalised_and_conflicts_rejected(keyed):
             "forced": ["LINK/USDT", "SOL/USDT"],
             "excluded": ["HYPE/USDT"],
         }
-        assert keyed.get("/api/symbols", headers=H).json()["excluded"] == ["HYPE/USDT"]
+        got = keyed.get("/api/symbols", headers=H).json()
+        assert got["excluded"] == ["HYPE/USDT"]
+        # Стейблкоины исключены всегда — список отдаётся, чтобы приложение их показало.
+        assert "USDC" in got["builtin"] and "DAI" in got["builtin"]
         bad = keyed.put(
             "/api/symbols", json={"forced": ["SOL"], "excluded": ["SOL"]}, headers=H
         )

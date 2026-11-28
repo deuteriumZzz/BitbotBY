@@ -61,11 +61,10 @@ export function SignalsCard() {
       <h3 className="sig-h">Chronos — прогноз цены</h3>
       <div className="alert-row">
         <div>
-          <b>Сравнивать сделку с прогнозом Chronos</b>
-          <small>
-            Совпал — уверенность +0.05, против — −0.15. Работает только в режиме «AI + нейросеть»
-            {chronos && mode !== "hybrid" ? " — сейчас другой режим, прогноз не используется" : ""}.
-          </small>
+          <b>
+            Сравнивать сделку с прогнозом <Q tip="Прогноз совпал — уверенность +0.05, против — −0.15. Работает только в режиме «AI + нейросеть»." />
+          </b>
+          {chronos && mode !== "hybrid" && <small>в этом режиме не используется</small>}
         </div>
         <Toggle on={chronos} label="Прогноз Chronos" onChange={setChronos} />
       </div>

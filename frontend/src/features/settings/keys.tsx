@@ -1,11 +1,14 @@
 // Настройки → Подключения: ключи сервисов (биржа, AI, данные) и проверка каждого.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { CalendarDots, CaretRight, Cube, Fire, Key, Newspaper } from "@phosphor-icons/react";
 
 import type { BotNode, SecretItem } from "../../lib/types";
 import { actions } from "../../store/actions";
 import { useStore } from "../../store";
 import { Toggle, useArm } from "../../components/controls";
+import { IRow } from "../../components/irow";
+import { brandLogo } from "../../components/brand";
 import { Icon } from "../../components/icon";
 import { Q } from "../../components/tooltip";
 import { cfg } from "../bots";
@@ -82,25 +85,19 @@ export function Keys({ open, setOpen, only }: { open: string | null; setOpen: (s
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [isOpen, setOpen]);
-  const row = (id: string, c: string, name: string, sub: string, feeds: [string, BotNode?][], act: () => void) => (
+  // Строка источника: иконка, название, состояние; что он питает в боте — внутри, по клику.
+  const row = (id: string, c: string, name: string, sub: string, act: () => void) => (
     <li key={id}>
-      <button type="button" className={`kl-row ${c}`} onClick={act}>
-        <span className="kl-src">
-          <span className={`dot ${c === "ok" ? "ok live" : c}`} />
+      <button type="button" className={`kl-row irow ${c === "ok" ? "ok" : c}`} onClick={act}>
+        <span className="irow-ico" aria-hidden="true">
+          {keyIcon(id)}
+        </span>
+        <span className="irow-t">
           <b>{name}</b>
           <small>{sub}</small>
         </span>
-        <span className="kl-wire" aria-hidden="true" />
-        <span className="kl-to">
-          {feeds.map(([what, step]) => (
-            <span className="kl-chip" key={what}>
-              {step && <em>{STEP[step]}</em>}
-              {what}
-            </span>
-          ))}
-        </span>
-        <span className="kl-go" aria-hidden="true">
-          ›
+        <span className="irow-c kl-go" aria-hidden="true">
+          <CaretRight />
         </span>
       </button>
     </li>
@@ -109,7 +106,7 @@ export function Keys({ open, setOpen, only }: { open: string | null; setOpen: (s
     const [c, t] = STATUS[s.status];
     const last4 = s.fields.find((f) => f.secret && f.last4)?.last4;
     const way = s.service === "twitter" ? xWay(s) : "";
-    return row(s.service, c, s.name, `${t}${way ? ` · ${way}` : ""}${last4 ? ` · ••••${last4}` : ""}`, FEEDS[s.service] ?? [], () => setOpen(s.service));
+    return row(s.service, c, s.name, `${t}${way ? ` · ${way}` : ""}${last4 ? ` · ••••${last4}` : ""}`, () => setOpen(s.service));
   };
   return (
     <div className={only?.length === 0 ? "" : "set-pane view enter"}>
@@ -216,8 +213,14 @@ export function KeyCard({ item }: { item: SecretItem }) {
   const save = async () => {
     const filled = Object.fromEntries(Object.entries(values).filter(([, v]) => v.trim()).map(([k, v]) => [k, v.trim()]));
     const modelChanged = Boolean(item.model && model.trim() && model.trim() !== (item.model.value ?? ""));
-    if (!Object.keys(filled).length && !modelChanged)
-      return setMsg([has ? "" : "bad", has ? "Ничего не изменилось. Чтобы заменить ключ, вставьте новый." : "Вставьте ключ, затем нажмите «Проверить и сохранить»."]);
+    if (!Object.keys(filled).length && !modelChanged) {
+      if (!has) return setMsg(["bad", "Вставьте ключ, затем нажмите «Проверить и сохранить»."]);
+      // Полей не меняли — проверяем то, что уже сохранено.
+      setBusy(true);
+      setMsg(null);
+      await actions.checkSecret(item.service);
+      return setBusy(false);
+    }
     for (const f of item.fields) {
       const e = filled[f.env] ? checkField(f.env, f.label, f.secret, filled[f.env]) : "";
       if (e) return setMsg(["bad", e]);
@@ -332,7 +335,7 @@ export function KeyCard({ item }: { item: SecretItem }) {
         )}
       </div>
       <p className={`kc-msg ${msg ? msg[0] : c}`} aria-live="polite">
-        {msg ? msg[1] : item.message}
+        {msg ? msg[1] : item.message?.includes(".env") ? "Сохранён, ещё не проверен — нажмите «Проверить и сохранить»." : item.message}
       </p>
     </article>
   );
@@ -340,28 +343,47 @@ export function KeyCard({ item }: { item: SecretItem }) {
 
 /** Один ключ строкой там, где он работает (Bybit — в «Ордере», Telegram-бот — в уведомлениях):
  * статус и кнопка; форма ключа выезжает панелью. */
+const ICON: Record<string, ReactNode> = {
+  news: <Newspaper />,
+  glassnode: <Cube />,
+  finnhub: <CalendarDots />,
+  pumpportal: <Fire />,
+};
+export const keyIcon = (id: string): ReactNode => brandLogo(id) ?? ICON[id] ?? <Key />;
+
 export function KeyLine({ service, label }: { service: string; label?: string }) {
   const item = useStore((s) => s.secrets?.find((x) => x.service === service));
   const [open, setOpen] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   if (!item) return null;
   const [c, text] = STATUS[item.status];
   const last4 = item.fields.find((f) => f.secret && f.last4)?.last4;
+  // Ключ сохранён, но не проверен (давний перенос или сеть не ответила) — проверяем одной кнопкой.
+  const unsure = item.status === "warn" || item.status === "unchecked";
+  // Старые ключи помечены «Перенесено из .env»: файла .env больше нет, пишем по сути.
+  const msg = item.message?.includes(".env") ? "сохранён, ещё не проверен" : item.message;
+  const check = async () => {
+    setBusy(true);
+    await actions.checkSecret(service);
+    setBusy(false);
+  };
   return (
     <>
-      <div className="alert-row">
-        <div>
-          <b>
-            <span className={`dot ${c === "ok" ? "ok live" : c}`} /> {label ?? item.name}
-          </b>
-          <small>
-            {text}
-            {last4 ? ` · ••••${last4}` : ""}
-          </small>
-        </div>
+      <IRow
+        icon={keyIcon(service)}
+        title={label ?? item.name}
+        sub={`${unsure && msg ? msg : text}${last4 ? ` · ••••${last4}` : ""}`}
+        tone={c === "ok" ? "ok" : c === "bad" ? "bad" : c === "warn" ? "warn" : undefined}
+      >
+        {unsure && (
+          <button className="btn primary" type="button" disabled={busy} onClick={() => void check()}>
+            {busy ? "Проверяю…" : "Проверить"}
+          </button>
+        )}
         <button className="btn" type="button" onClick={() => setOpen(service)}>
           {item.status === "unset" ? "Подключить" : "Заменить"}
         </button>
-      </div>
+      </IRow>
       <Keys open={open} setOpen={setOpen} only={[]} />
     </>
   );

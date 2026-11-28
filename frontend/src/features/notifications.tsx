@@ -1,5 +1,5 @@
 // Центр уведомлений: колокольчик с числом новых событий и окно со списком.
-// Данные — лента «Что делает бот» из стора; ничего нового с сервера не запрашивается.
+// Только важное из ленты «Что делает бот» (сделки и защиты); вся лента — в Терминале.
 
 import { useEffect, useRef } from "react";
 
@@ -61,14 +61,14 @@ export function NotifSheet() {
           </button>
         </div>
         <ul className="notif-list">
-          {feed.map((f) => (
+          {feed.filter((f) => LOUD.has(f.kind)).map((f) => (
             <li key={f.id} className={`ev ev-${f.kind}`}>
               <time>{hhmm(new Date(f.at))}</time>
               <span className="dot" />
               <p>{f.text}</p>
             </li>
           ))}
-          {!feed.length && <li className="note-soon">Пока тихо: события появятся, когда бот начнёт работать.</li>}
+          {!feed.some((f) => LOUD.has(f.kind)) && <li className="note-soon">Пока тихо: здесь сделки и срабатывания защит.</li>}
         </ul>
       </aside>
     </div>

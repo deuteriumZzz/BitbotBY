@@ -68,6 +68,7 @@ export const Icon = {
     20,
   ),
   journal: svg(<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />, 20),
+  stats: svg(<path d="M3 3v18h18M7 15l4-4 3 3 6-7" />, 20),
   search: svg(
     <>
       <circle cx="11" cy="11" r="7" />

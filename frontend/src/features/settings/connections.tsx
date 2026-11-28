@@ -1,6 +1,7 @@
 // Настройки → Подключения: карта подключений и карточка аккаунта биржи.
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { ArrowClockwise, CurrencyDollar, Flask, SignOut } from "@phosphor-icons/react";
 
 
 import { fmtN, plural } from "../../lib/format";
@@ -10,10 +11,12 @@ import { actions } from "../../store/actions";
 import { useStore } from "../../store";
 import { useArm } from "../../components/controls";
 import { cfg } from "../bots";
-import { KeyLine } from "./keys";
+import { IRow } from "../../components/irow";
+import { KeyLine, Keys } from "./keys";
 
 
-export function AccountCard({ openKey }: { openKey: (service: string) => void }) {
+/** Paper ↔ Live с защитой (ключ Bybit, PIN, подтверждение сервера). Живёт в шапке у значка PAPER/LIVE. */
+export function AccountSwitch({ openKey }: { openKey: (service: string) => void }) {
   const paper = useStore((s) => s.bot?.paper ?? true);
   const secrets = useStore((s) => s.secrets);
   const risk = useStore((s) => cfg(s.config, "RISK_PER_TRADE", 0.02));
@@ -21,8 +24,6 @@ export function AccountCard({ openKey }: { openKey: (service: string) => void })
   const balance = useStore((s) => s.balance);
   const [box, setBox] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [restartArmed, armRestart] = useArm();
-  const [logoutArmed, armLogout] = useArm();
   const bybitOk = !secrets || secrets.find((s) => s.service === "bybit")?.status === "ok";
   const pinSet = !secrets || Boolean(secrets.find((s) => s.service === "server")?.fields.find((f) => f.env === "TRADING_MODE_PIN")?.set);
 
@@ -40,34 +41,28 @@ export function AccountCard({ openKey }: { openKey: (service: string) => void })
   };
 
   return (
-    <article className="card">
-      <div className="card-h">
-        <h2>Счёт и бот</h2>
-      </div>
-      <KeyLine service="bybit" />
-      <div className="row-tgl">
-        <span>
-          <span className={`paper${paper ? "" : " live"}`}>{paper ? "PAPER" : "LIVE"}</span> {paper ? "Виртуальные сделки" : "Реальные деньги на Bybit"}
-        </span>
-        <span className={`pill ${paper ? "ok" : "bad"}`}>
-          <span className={`dot ${paper ? "ok" : "bad"}`} />
-          активно
-        </span>
-      </div>
-      <p className="muted" style={{ fontSize: 12, margin: "10px 0" }}>
-        {paper
-          ? "Деньги не тратятся. Переход на реальные деньги защищён PIN и подтверждением на сервере."
-          : "Бот торгует реальными деньгами. Вернуться в Paper можно в любой момент: открытые позиции на бирже останутся, бот продолжит их сопровождать."}
-      </p>
-      {paper ? (
-        <button className="btn danger" type="button" onClick={() => setBox(!box)}>
-          Перейти на Live…
-        </button>
-      ) : (
-        <button className="btn" type="button" disabled={busy} onClick={() => void toPaper()}>
-          Вернуться в Paper
-        </button>
-      )}
+    <>
+      <IRow
+        icon={paper ? <Flask /> : <CurrencyDollar />}
+        tone={paper ? "ok" : "bad"}
+        title={paper ? "Paper — виртуальные сделки" : "Live — реальные деньги"}
+        tip={
+          paper
+            ? "Деньги не тратятся. Переход на реальные деньги защищён PIN и подтверждением на сервере."
+            : "Бот торгует реальными деньгами. Вернуться в Paper можно в любой момент: открытые позиции на бирже останутся, бот продолжит их сопровождать."
+        }
+        sub={paper ? "деньги не тратятся" : "бот торгует реальными деньгами"}
+      >
+        {paper ? (
+          <button className="btn danger" type="button" onClick={() => setBox(!box)}>
+            На Live…
+          </button>
+        ) : (
+          <button className="btn" type="button" disabled={busy} onClick={() => void toPaper()}>
+            В Paper
+          </button>
+        )}
+      </IRow>
       {paper && box && (
         <div className="confirm-box">
           {!bybitOk ? (
@@ -119,17 +114,69 @@ export function AccountCard({ openKey }: { openKey: (service: string) => void })
           )}
         </div>
       )}
-      <div className="btn-row" style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--line-soft)" }}>
-        <button className={`btn${restartArmed ? " armed" : ""}`} type="button" onClick={() => armRestart() && void actions.restart()}>
-          {restartArmed ? "Точно перезапустить?" : "Перезапустить бота"}
-        </button>
-        {/* В MiniApp вход — через Telegram, выходить некуда; без сессии (вход не настроен) — тоже. */}
-        {platform.kind !== "miniapp" && platform.getToken() && (
-          <button className={`btn${logoutArmed ? " armed" : ""}`} type="button" onClick={() => armLogout() && void useStore.getState().logout()}>
-            {logoutArmed ? "Точно выйти?" : "Выйти на этом устройстве"}
-          </button>
-        )}
+    </>
+  );
+}
+
+export function AccountCard() {
+  const [restartArmed, armRestart] = useArm();
+  const [logoutArmed, armLogout] = useArm();
+  return (
+    <article className="card">
+      <div className="card-h">
+        <h2>Счёт и бот</h2>
       </div>
+      <KeyLine service="bybit" />
+      <IRow icon={<ArrowClockwise />} title="Перезапуск бота" sub="нужен после смены ключей">
+        <button className={`btn${restartArmed ? " armed" : ""}`} type="button" onClick={() => armRestart() && void actions.restart()}>
+          {restartArmed ? "Точно?" : "Перезапустить"}
+        </button>
+      </IRow>
+      {/* В MiniApp вход — через Telegram, выходить некуда; без сессии (вход не настроен) — тоже. */}
+      {platform.kind !== "miniapp" && platform.getToken() && (
+        <IRow icon={<SignOut />} title="Это устройство">
+          <button className={`btn${logoutArmed ? " armed" : ""}`} type="button" onClick={() => armLogout() && void useStore.getState().logout()}>
+            {logoutArmed ? "Точно выйти?" : "Выйти"}
+          </button>
+        </IRow>
+      )}
     </article>
+  );
+}
+
+/** Значок PAPER/LIVE в шапке — он же переключатель счёта: по клику окошко с переходом (защита та же). */
+export function AccountBadge() {
+  const paper = useStore((s) => s.bot?.paper ?? true);
+  const [open, setOpen] = useState(false);
+  const [key, setKey] = useState<string | null>(null);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && !key && setOpen(false);
+    const onDown = (e: PointerEvent) => !key && box.current && !box.current.contains(e.target as Node) && setOpen(false);
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("pointerdown", onDown);
+    return () => (window.removeEventListener("keydown", onKey), window.removeEventListener("pointerdown", onDown));
+  }, [open, key]);
+  return (
+    <div className="acct" ref={box}>
+      <button
+        type="button"
+        className={`paper${paper ? "" : " live"}`}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        title={paper ? "Бумажная торговля: сделки виртуальные. Нажмите, чтобы перейти на Live" : "Реальная торговля на Bybit. Нажмите, чтобы вернуться в Paper"}
+        onClick={() => setOpen(!open)}
+      >
+        {paper ? <Flask weight="bold" /> : <CurrencyDollar weight="bold" />}
+        {paper ? "PAPER" : "LIVE"}
+      </button>
+      {open && (
+        <div className="acct-pop" role="dialog" aria-label="Счёт: Paper или Live">
+          <AccountSwitch openKey={setKey} />
+        </div>
+      )}
+      <Keys open={key} setOpen={setKey} only={[]} />
+    </div>
   );
 }

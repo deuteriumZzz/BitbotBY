@@ -39,10 +39,11 @@ import type {
 } from "../lib/types";
 
 import { Data, Radar, emptyRadar, reduceRadar } from "./radar";
+import { cycleLine } from "../lib/cycle";
 import { EP } from "../api/endpoints";
 import { REFRESH_DEBOUNCE_MS } from "../constants";
 
-export type FeedKind = "open" | "win" | "loss" | "skip" | "guard" | "edit";
+export type FeedKind = "open" | "win" | "loss" | "skip" | "guard" | "edit" | "cycle";
 
 export interface FeedItem {
   id: number;
@@ -381,7 +382,7 @@ export const useStore = create<Store>((set, get) => {
         /* нет хранилища — режим живёт до перезагрузки */
       }
       // «Обучения» в «Простом» нет — с него уходим на «Главную».
-      set(ui === "simple" && get().tab === "learn" ? { ui, tab: "terminal" } : { ui });
+      set(ui === "simple" && (get().tab === "learn" || get().tab === "stats") ? { ui, tab: "terminal" } : { ui });
     },
     needPro: () => {
       if (get().ui !== "simple") return;
@@ -547,9 +548,12 @@ export const useStore = create<Store>((set, get) => {
           feed(t.ok ? "open" : "skip", t.ok ? `Канал @${t.channel}: ${what} — вход через ${t.latency_s} с` : `Канал @${t.channel}: ${what} пропущен — ${t.reason}`);
           break;
         }
-        case "trace.cycle":
-          set({ lastCycle: d as unknown as CycleTrace });
+        case "trace.cycle": {
+          const c = d as unknown as CycleTrace;
+          set({ lastCycle: c });
+          feed("cycle", cycleLine(c));
           break;
+        }
         case "cycle": {
           // Пауза могла прийти из другого окна — цикл бота знает о ней раньше снимка.
           const bot = get().bot;

@@ -34,6 +34,7 @@ from starlette.requests import HTTPConnection
 from bitbot.adapters.sentiment import telegram_login
 from bitbot.api import auth, data
 from bitbot.config import ai_providers, keys, registry
+from bitbot.config.settings import STABLECOIN_BASES
 from bitbot.config import secrets as secrets_store
 from bitbot.config.runtime import RISK_PRESETS, RuntimeConfig
 from bitbot.config.settings import Config
@@ -738,13 +739,16 @@ async def reset_strategies(request: Request) -> JSONResponse:
 
 @router.get("/api/symbols")
 async def get_symbols() -> JSONResponse:
+    # builtin — стейблкоины: бот их не сканирует никогда, менять нельзя; показываем, чтобы было видно.
+    builtin = sorted(STABLECOIN_BASES)
     rc = _runtime_config(data.get_redis())
     if rc is None:
-        return JSONResponse({"forced": [], "excluded": []})
+        return JSONResponse({"forced": [], "excluded": [], "builtin": builtin})
     return JSONResponse(
         {
             "forced": sorted(rc.get_forced_symbols()),
             "excluded": sorted(rc.get_excluded_symbols()),
+            "builtin": builtin,
         }
     )
 
@@ -1207,6 +1211,31 @@ async def put_secret(service_id: str, request: Request) -> JSONResponse:
     )
     # Бот читает ключи при старте — новый ключ заработает после перезапуска.
     return JSONResponse({**_secret_item(service.id), "restart_required": True})
+
+
+@router.post("/api/secrets/{service_id}/check")
+async def check_secret(service_id: str, request: Request) -> JSONResponse:
+    """Проверяет уже сохранённый ключ, не вводя его заново (например, перенесённый из .env)."""
+    denied = _secrets_unavailable(request)
+    if denied is not None:
+        return denied
+    service = secrets_store.BY_ID.get(service_id)
+    if service is None:
+        return _err(404, "unknown_service", "Нет такого сервиса.")
+    stored = secrets_store.load_values()
+    values = {f.env: stored[f.env] for f in service.fields if f.env in stored}
+    if not values:
+        return _err(400, "not_set", "Ключ не сохранён.")
+    testnet = registry.load_overrides(data.get_redis()).get(
+        "TESTNET", os.getenv("TESTNET", "").lower() == "true"
+    )
+    status, message = await secrets_store.validate(service, values, testnet=bool(testnet))
+    # Итог проверки сохраняем как есть, включая «не работает»: так его видно в приложении.
+    secrets_store.save(service, {}, None, status, message, _source(request))
+    bot_bus.emit(
+        data.get_redis(), "secret.changed", {"service": service.id, "status": status}
+    )
+    return JSONResponse(_secret_item(service.id))
 
 
 _X_MAX = 200

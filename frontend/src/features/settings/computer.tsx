@@ -5,7 +5,10 @@ import { useEffect, useState } from "react";
 import { api } from "../../lib/api";
 
 import { useStore } from "../../store";
+import { Coffee, DeviceMobile, Power } from "@phosphor-icons/react";
+
 import { Toggle } from "../../components/controls";
+import { IRow } from "../../components/irow";
 import { Q } from "../../components/tooltip";
 import { EP } from "../../api/endpoints";
 
@@ -21,9 +24,9 @@ interface Launcher {
 }
 
 const MACHINE = [
-  ["autostart", "Запуск при входе в систему", "autostart"],
-  ["keep_awake", "Не давать компьютеру уснуть", "awake"],
-  ["phone", "Доступ с телефона (Telegram)", "phone"],
+  ["autostart", "Запуск при входе в систему", "autostart", <Power />],
+  ["keep_awake", "Не давать компьютеру уснуть", "awake", <Coffee />],
+  ["phone", "Доступ с телефона (Telegram)", "phone", <DeviceMobile />],
 ] as const;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -81,16 +84,17 @@ export function ComputerCard() {
         <p className="note-soon">Помощник на компьютере не отвечает — переключать можно командой в Терминале. Он запускается вместе с ботом ярлыком BitbotBY.</p>
       )}
       <div className="list-tgl">
-        {MACHINE.map(([k, label, cmd]) => {
+        {MACHINE.map(([k, label, cmd, icon]) => {
           const on = st[k];
           const can = st.helper && on !== null && (k !== "phone" || on);
           const next = `./bitbot ${cmd} ${on ? "off" : "on"}`;
           return (
-            <div className="alert-row" key={k}>
-              <div>
-                <b>{label}</b>
-                {busy === k ? <small>меняю…</small> : on === null ? <small>неизвестно</small> : k === "phone" && !on && st.helper ? <small>включается только на компьютере</small> : null}
-              </div>
+            <IRow
+              key={k}
+              icon={icon}
+              title={label}
+              sub={busy === k ? "меняю…" : on === null ? "неизвестно" : k === "phone" && !on && st.helper ? "включается только на компьютере" : undefined}
+            >
               {can ? (
                 <Toggle on={Boolean(on)} label={label} disabled={busy !== ""} onChange={(v) => void toggle(k, v)} />
               ) : (
@@ -98,7 +102,7 @@ export function ComputerCard() {
                   {copied === next ? "Скопировано ✓" : next}
                 </button>
               )}
-            </div>
+            </IRow>
           );
         })}
       </div>

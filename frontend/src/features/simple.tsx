@@ -26,7 +26,7 @@ export function BotSimple() {
   return (
     <section className="view enter simple" aria-label="Бот">
       <UiSwitchRow />
-      <WhatCard simple />
+      <WhatCard />
       <RiskCard simple />
       <article className="card">
         <div className="card-h">

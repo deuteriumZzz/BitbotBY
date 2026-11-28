@@ -131,6 +131,16 @@ def test_local_fallback_is_named_honestly():
     }
 
 
+def test_context_signal_is_not_called_fallback():
+    t = DecisionTrace(mode=lambda: "ai")
+    t.on_event("radar.stage", {"stage": "scan", "symbols": ["CFG/USDT"]})
+    t.on_event(
+        "radar.stage",
+        {"stage": "signal", "symbol": "CFG/USDT", "side": "long", "strategy": "context_signal", "reasoning": "контекст рынка"},
+    )
+    assert t.summary()["nodes"]["strat"]["text"] == "контекст рынка: CFG ▲"
+
+
 def test_paused_and_broken_events_never_raise():
     def no_runtime_config() -> str:
         raise RuntimeError("runtime config is not ready")

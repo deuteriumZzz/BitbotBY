@@ -4,7 +4,11 @@ import { useState } from "react";
 
 import { actions } from "../../store/actions";
 import { useStore } from "../../store";
+import type { ReactNode } from "react";
+import { BellSimpleSlash, CalendarX, ChartLineDown, Lightning, MoonStars, Plug, SignIn, SignOut, Sparkle } from "@phosphor-icons/react";
+
 import { Seg, Toggle } from "../../components/controls";
+import { IRow } from "../../components/irow";
 import { Q } from "../../components/tooltip";
 import { cfg } from "../bots";
 import { BotRules } from "../rules";
@@ -16,6 +20,16 @@ const TZ = Math.round(-new Date().getTimezoneOffset() / 60);
 const shiftHour = (h: number, by: number) => (((h + by) % 24) + 24) % 24;
 
 const shiftRange = (r: string, by: number) => (r ? r.split("-").map((h) => shiftHour(Number(h), by)).join("-") : "");
+
+const ALERT_ICON: Record<string, ReactNode> = {
+  atr_spike: <Lightning />,
+  drawdown: <ChartLineDown />,
+  daily_limit: <CalendarX />,
+  bot_stalled: <Plug />,
+  new_signal: <Sparkle />,
+  position_open: <SignIn />,
+  position_close: <SignOut />,
+};
 
 const QUIET = [
   ["", "Без тишины"],
@@ -40,7 +54,7 @@ export function AlertsCard() {
       <div className="field">
         <div className="field-h">
           <span>
-            Тихие часы, по вашему времени{" "}
+            <MoonStars /> Тихие часы, по вашему времени{" "}
             <Q tip="В эти часы приходят только тревоги с пометкой «приходит всегда». Сообщения о сделках и сигналах придут утром." />
           </span>
           {quietUtc && <span className="pill sp">{preset === null ? `свои: ${quietLocal.replace("-", "–")}` : `UTC ${quietUtc.replace("-", "–")}`}</span>}
@@ -49,13 +63,11 @@ export function AlertsCard() {
       </div>
       <div className="list-tgl">
         {alerts.map((a) => (
-          <div className={`alert-row${a.enabled ? "" : " off"}`} key={a.kind}>
-            <div>
-              <b>{a.label}</b>
-              {/* Метка нужна только тревогам: они приходят и в тихие часы. */}
-              {a.level === "critical" && <span className="lvl critical">приходит всегда</span>}
-            </div>
-            <Toggle on={a.enabled} label={a.label} onChange={(on) => void actions.patchAlert(a.kind, { enabled: on })} />
+          <div key={a.kind}>
+            {/* «Приходит всегда» нужна только тревогам: они пробивают тихие часы. */}
+            <IRow icon={ALERT_ICON[a.kind] ?? <BellSimpleSlash />} title={a.label} sub={a.level === "critical" ? "приходит всегда" : undefined} tone={a.level === "critical" ? "warn" : undefined} off={!a.enabled}>
+              <Toggle on={a.enabled} label={a.label} onChange={(on) => void actions.patchAlert(a.kind, { enabled: on })} />
+            </IRow>
             {freq && (
             <label className="cool">
               <span>Не чаще раза в</span>

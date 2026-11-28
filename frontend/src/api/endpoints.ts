@@ -70,6 +70,7 @@ export const EP = {
   // ключи и подключения
   secrets: "/api/secrets",
   secret: (service: string) => `/api/secrets/${service}`,
+  secretCheck: (service: string) => `/api/secrets/${service}/check`,
   telegramChat: "/api/secrets/telegram/chat",
   telethonStatus: "/api/secrets/telethon/status",
   telethon: (path: string) => `/api/secrets/telethon/${path}`,

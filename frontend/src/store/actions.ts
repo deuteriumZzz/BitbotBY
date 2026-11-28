@@ -93,6 +93,9 @@ export const actions = {
       () => api("PUT", EP.secret(service), { fields, ...(model ? { model } : {}) }).then(() => st().loadSecrets()),
       "Ключ сохранён. Заработает после перезапуска бота.",
     ),
+  /** Проверить уже сохранённый ключ — без повторного ввода. Итог (работает / не работает) виден в статусе. */
+  checkSecret: (service: string) =>
+    st().act(() => api("POST", EP.secretCheck(service)).then(() => st().loadSecrets())),
   addXAccount: (body: { login: string; password: string; email: string; email_password: string }) =>
     st().act(() => api("POST", EP.twitterAccounts, body).then(() => st().loadSecrets()), "Аккаунт добавлен. Заработает после перезапуска бота."),
   removeXAccount: (login: string) =>

@@ -46,7 +46,7 @@ export function Settings() {
         {simple ? (
           <>
             <div className="col" id="set-acct">
-              <AccountCard openKey={setKey} />
+              <AccountCard />
               <ComputerCard />
             </div>
             <div className="col" id="set-main">
@@ -56,7 +56,7 @@ export function Settings() {
         ) : (
           <>
             <div className="col" id="set-acct">
-              <AccountCard openKey={setKey} />
+              <AccountCard />
             </div>
             <div className="col">
               <ComputerCard />

@@ -1,6 +1,7 @@
 // Фоновые задачи бота: бэктест, обучение и тюнинг SAC,
 // откат модели, отчёты. Бот продолжает торговать, пока задача идёт.
 
+import { ArrowCounterClockwise, Brain, ChartBar, ClockCounterClockwise, CurrencyBtc, Fire, GitDiff, MagnifyingGlass, Rocket, Sigma, Sparkle, TreeStructure } from "@phosphor-icons/react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { base, fmtN, pct, plural } from "../lib/format";
@@ -152,6 +153,9 @@ function JobRow({ def: main, alt, profile }: { def: JobDef; alt?: JobDef; profil
   return (
     <li className={`job${job?.running ? " run" : d ? (d.ok ? " ok" : " bad") : ""}`}>
       <div className="job-h">
+        <span className="job-ico" aria-hidden="true">
+          {STEP_ICON[main.id]}
+        </span>
         <b>{main.title}</b>
         <Q tip={alt ? `${main.what} С подбором параметров: ${alt.what}` : main.what} />
       </div>
@@ -289,6 +293,19 @@ const when = (iso: string | null): string =>
     : "";
 
 /** Выбор профиля: у каждого своя модель, таймфрейм и число монет, обучаем ту, что выбрана. */
+/** Значки задач и шагов пути: одинаковые в строке задачи и в «Пути к реальным деньгам». */
+const STEP_ICON: Record<string, JSX.Element> = {
+  model: <Brain />,
+  train: <Brain />,
+  tune: <Brain />,
+  backtest: <ClockCounterClockwise />,
+  alpha_report: <Sigma />,
+  live_divergence: <GitDiff />,
+  ai_isolation: <Sparkle />,
+};
+
+const PROFILE_ICON: Record<string, JSX.Element> = { bluechip: <CurrencyBtc />, altcoin: <Rocket />, meme: <Fire /> };
+
 function ProfilePicker({
   profiles,
   value,
@@ -357,6 +374,9 @@ function ProfilePicker({
           className={`prof ${p.id === value ? "on" : ""}`}
           onClick={() => onChange(p.id)}
         >
+          <span className="prof-ico" aria-hidden="true">
+            {PROFILE_ICON[p.id] ?? <ChartBar />}
+          </span>
           <b>{p.label}</b>
           <span>
             {p.timeframe} · {p.train_top_n} монет
@@ -390,7 +410,10 @@ export function ModelCard() {
   return (
     <article className="card learn-model">
       <div className="card-h">
-        <h2>Нейросеть SAC</h2>
+        <h2>
+          <Brain className="h-ico" />
+          Нейросеть SAC
+        </h2>
         <span className={`pill sp ${role.used ? "ok" : ""}`}>
           {role.used ? "участвует в решениях" : "сейчас не используется"}
         </span>
@@ -420,7 +443,10 @@ export function ModelCard() {
         <JobRow def={JOBS.find((j) => j.id === "train")!} alt={JOBS.find((j) => j.id === "tune")!} profile={chosen} />
         <li className="job">
           <div className="job-h">
-            <b>Откат модели SAC</b>
+            <span className="job-ico" aria-hidden="true">
+            <ArrowCounterClockwise />
+          </span>
+          <b>Откат модели SAC</b>
             <Q tip="Возвращает модель, которая была до последнего обучения. Бот подхватит её в следующем цикле." />
           </div>
           {!canRollback ? (
@@ -477,7 +503,10 @@ function AlphaCard() {
   return (
     <article className="card learn-alpha">
       <div className="card-h">
-        <h2>Поиск преимущества (альфы)</h2>
+        <h2>
+          <MagnifyingGlass className="h-ico" />
+          Поиск преимущества (альфы)
+        </h2>
         <Q tip="Альфа — заработок сверх случайности. Проверки показывают, есть ли у стратегий и AI настоящее преимущество или пока везение." />
       </div>
       <ul className="jobs">
@@ -549,6 +578,16 @@ function LearnPath() {
       <div className="learn-hero-t">
         <h2>Путь к реальным деньгам</h2>
         <p>Модель и четыре проверки. Всё идёт в фоне, бот торгует на бумаге.</p>
+        <ol className="path-steps">
+          {steps.map((s) => (
+            <li key={s.id} className={s.st}>
+              <span className="ps-ico" aria-hidden="true">
+                {STEP_ICON[s.id]}
+              </span>
+              <span>{s.label}</span>
+            </li>
+          ))}
+        </ol>
       </div>
       <div className="learn-meter" style={{ "--p": Math.round((done / steps.length) * 100) } as React.CSSProperties} role="img" aria-label={`Выполнено ${done} из ${steps.length}`}>
         <b className="num">
@@ -653,7 +692,10 @@ export function MetaCard() {
   return (
     <article className="card learn-meta">
       <div className="card-h">
-        <h2>Мета-модель</h2>
+        <h2>
+          <TreeStructure className="h-ico" />
+          Мета-модель
+        </h2>
         <Q tip="Оценивает по ответам стратегий, AI и нейросети, закроется ли сделка в плюс. Учится на сделках бота. Включаете её только вы." />
       </div>
       {!m ? (
@@ -681,24 +723,33 @@ export function MetaCard() {
 
 /** Раздел «Обучение»: путь к реальным деньгам, нейросеть и поиск преимущества. */
 /** Вкладка «Аналитика»: метрики, разбор сделок, модели и проверки преимущества. */
+/** «Обучение» — движок бота: путь к реальным деньгам, SAC, мета-модель, проверки преимущества. */
 export function Learn() {
   return (
-    <section className="view enter learn" aria-label="Аналитика">
-      <MetricsCard />
+    <section className="view enter learn" aria-label="Обучение">
       <LearnPath />
       <div className="cols">
         <div className="col">
-          <Journal part="analysis" />
-        </div>
-        <div className="col">
           <ModelCard />
           <MetaCard />
+        </div>
+        <div className="col">
           <AlphaCard />
           <HonestyCard />
           <OpsCard />
           <ReportsCard dev />
         </div>
       </div>
+    </section>
+  );
+}
+
+/** «Аналитика» — только результаты: метрики счёта и разбор сделок. */
+export function Stats() {
+  return (
+    <section className="view enter learn" aria-label="Аналитика">
+      <MetricsCard />
+      <Journal part="analysis" />
     </section>
   );
 }

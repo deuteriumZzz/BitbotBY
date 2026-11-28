@@ -1721,12 +1721,15 @@ select.sel{appearance:none;-webkit-appearance:none;padding-right:34px;background
 .term-dock>.positions{margin:0}
 .jr-list>.cols{margin:0}
 .jr-an{display:flex;flex-direction:column;gap:12px}
+@media (min-width:1100px){.jr-an{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}.jr-an>.jr-sum{grid-column:1/-1}}
 @container dev (min-width:900px){
   /* Первый экран: радар и баланс рядом, график под ними на всю ширину, ниже позиции и журнал. */
+  /* Справа одной колонкой: баланс, «Что делает бот», фон рынка; слева радар и график. */
+  .term:has(>.radar){grid-template-rows:auto auto minmax(0,1fr)}
   .term>.radar{grid-column:1/9;order:1}
-  .term>.term-side{grid-column:9/13;order:1}
+  .term>.term-side{grid-column:9/13;grid-row:span 2;order:1}
   .term>.chart{grid-column:1/9;order:2}
-  .term>.pulse{grid-column:9/13;order:2}
+  .term.simple>.term-side{grid-column:1/-1;grid-row:auto;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}
   .term>.term-dock{order:3}
   .term-dock>.positions .pos-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px;max-height:none;overflow:visible}
 }
@@ -1734,10 +1737,24 @@ select.sel{appearance:none;-webkit-appearance:none;padding-right:34px;background
   /* Телефон: баланс, позиции, потом радар и график, фон рынка в конце. */
   .term>.term-side{display:contents}
   .term-side>.hero{order:0}
-  .term>.term-dock{order:1}
-  .term>.pulse{order:5}
+  .term-side>.feed{order:1}
+  .term>.term-dock{order:2}
+  .term-side>.pulse{order:5}
 }
 .term-dock>.seg{align-self:flex-start}
+/* «Что делает бот»: сейчас · воронка цикла · лента */
+.feed .feed-at{margin-left:auto;font:11px var(--f-num);color:var(--ink-3)}
+.feed-now{display:flex;align-items:center;gap:8px;margin:2px 0 10px;font-size:14px}
+.feed-now b{color:var(--ink);font-weight:600}
+.feed-now span:last-child{color:var(--ink-3);font-size:12.5px}
+.funnel{list-style:none;margin:0 0 8px;padding:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}
+.funnel li{position:relative;display:flex;flex-direction:column;gap:2px;padding:7px 8px;border-radius:var(--r);background:var(--panel-2);font-size:11px;color:var(--ink-3)}
+.funnel li b{font:600 16px/1 var(--f-num);color:var(--ink-2)}
+.funnel li.hit b{color:var(--brand-ink)}
+.funnel li+li::before{content:"";position:absolute;left:-4px;top:50%;width:4px;height:1px;background:var(--line)}
+.feed ul{max-height:260px}
+.feed-empty{padding:10px 0;color:var(--ink-3);font-size:13px}
+.ev-cycle .dot{background:var(--ink-3)}
 /* Плашка «что мешает блоку работать» на схеме: нет ключа, модель не обучена. */
 .pipe-node .need{display:inline-flex;align-self:flex-start;margin-top:6px;padding:2px 8px;border-radius:var(--r-pill);font:600 11px/1.4 var(--font-text);color:var(--c-down);background:color-mix(in srgb,var(--c-down) 14%,transparent);border:1px solid color-mix(in srgb,var(--c-down) 40%,transparent)}
 
@@ -1751,3 +1768,560 @@ select.sel{appearance:none;-webkit-appearance:none;padding-right:34px;background
 
 /* Иконка шага крупнее: блок читается с первого взгляда. */
 .pipe-node .hd svg{width:36px;height:36px;padding:8px}
+
+/* Панель шага: карточки во всю ширину (правило align-items:start от сетки страницы здесь не нужно). */
+.pipe-panel .cols{align-items:stretch}
+.pipe-panel-h .pill{font-size:11px}
+.pipe-panel .pipe-res-line{margin:0;align-items:center;flex-wrap:nowrap}
+.pipe-panel .pipe-res-line span{flex:1;min-width:0}
+.pipe-panel .pipe-res-line time{font:11px var(--f-num);color:var(--c-ink3)}
+
+/* Часы цикла над схемой */
+.cyc-clock{position:relative;display:flex;align-items:center;gap:8px;margin:0;padding:7px 12px 9px;border:1px solid var(--c-line);border-radius:var(--r-ctl);background:var(--c-bg);font-size:12.5px;color:var(--c-ink2);overflow:hidden}
+.cyc-clock b{color:var(--c-ink);font:600 12.5px var(--f-num)}
+.cyc-clock>i{position:absolute;left:0;bottom:0;height:2px;background:var(--c-accent);transition:width 5s linear}
+
+/* Строка с иконкой: значок · название · управление. Одна на все панели. */
+.irow{display:grid;grid-template-columns:34px minmax(0,1fr) auto;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--c-line)}
+.irow:last-child{border-bottom:0}
+.irow-ico{display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:var(--c-s2,var(--panel-2));color:var(--c-ink2);border:1px solid var(--c-line)}
+.irow.ok .irow-ico{color:var(--c-up,var(--up))}
+.irow.warn .irow-ico{color:var(--warn)}
+.irow.bad .irow-ico{color:var(--c-down,var(--down))}
+.irow-t{display:flex;flex-direction:column;gap:2px;min-width:0}
+.irow-t b{display:flex;align-items:center;gap:4px;font:500 13.5px/1.3 var(--font-text);color:var(--c-ink)}
+.irow-t small{font-size:12px;line-height:1.35;color:var(--c-ink3)}
+.irow-c{display:flex;align-items:center;gap:8px;justify-content:flex-end}
+.irow.off .irow-t,.irow.off .irow-ico{opacity:.5}
+.irow-c .numf{max-width:120px;min-height:32px}
+.irow-c .numf input{height:30px}
+
+/* Плитки выбора: иконка сверху, название, подпись */
+.tiles{display:grid;gap:6px}
+.tile{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;padding:12px 6px 10px;border:1px solid var(--c-line);border-radius:12px;background:var(--c-bg);text-align:center;transition:border-color var(--dur-fast,.15s),background var(--dur-fast,.15s),color var(--dur-fast,.15s)}
+.tile:hover{border-color:var(--c-line2)}
+.tile:focus-visible{outline:2px solid var(--c-accent);outline-offset:2px}
+.tile[aria-pressed="true"]{border-color:var(--c-accent);background:color-mix(in oklab,var(--c-accent) 8%,var(--c-bg))}
+.tile-ico{display:grid;place-items:center;color:var(--c-ink3)}
+.tile-ico svg{width:22px;height:22px}
+.tile[aria-pressed="true"] .tile-ico{color:var(--c-accent)}
+.tile b{font:500 12.5px/1.2 var(--font-text);color:var(--c-ink);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tile small{font-size:11px;line-height:1.25;color:var(--c-ink3)}
+.field>.tiles{margin-top:6px}
+
+/* Режимы плитками; на плитке — чего не хватает режиму (красная подпись) */
+.mode-tiles .tiles{max-width:640px}
+.mode-tiles .tile small{color:var(--c-down,var(--down));font-weight:500}
+/* Что сделать, чтобы режим заработал: полоса над схемой, кнопки ведут в панель блока */
+.pipe-fix{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 10px;padding:8px 12px;border:1px solid color-mix(in srgb,var(--c-down) 45%,transparent);border-radius:12px;background:color-mix(in srgb,var(--c-down) 10%,var(--c-bg));color:var(--c-ink);font-size:13px;animation:fix-in .5s var(--ease-mech) both}
+.pipe-fix>svg{color:var(--c-down);flex:none}
+.pipe-fix-go{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:color-mix(in srgb,var(--c-down) 18%,transparent);font-weight:600;font-size:12.5px}
+.pipe-fix-go:hover{background:color-mix(in srgb,var(--c-down) 28%,transparent)}
+.pipe-fix-go:focus-visible{outline:2px solid var(--c-down);outline-offset:2px}
+.pipe-fix-go svg{width:15px;height:15px}
+@keyframes fix-in{from{opacity:0;transform:translateY(-6px)}}
+/* Блок с проблемой: при переключении режима вздрагивает и светится красным, потом остаётся красная рамка */
+.pipe-node.alarm{border-color:color-mix(in srgb,var(--c-down) 70%,transparent);animation:node-alarm .9s var(--ease-mech) 2 both,node-shake .42s .1s both}
+.pipe-node.alarm .hd{color:var(--c-down)}
+@keyframes node-alarm{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--c-down) 60%,transparent)}70%{box-shadow:0 0 0 12px transparent}100%{box-shadow:0 0 0 0 transparent}}
+@keyframes node-shake{20%{transform:translateX(-4px)}40%{transform:translateX(4px)}60%{transform:translateX(-2px)}80%{transform:translateX(2px)}}
+@media (prefers-reduced-motion:reduce){.pipe-node.alarm,.pipe-fix{animation:none}}
+.kl-row.irow{grid-template-columns:34px minmax(0,1fr) auto;gap:12px;padding:10px 12px;border-bottom:1px solid var(--c-line)}
+.klist ul{display:flex;flex-direction:column;gap:6px}
+
+.pipe-sum-ico svg{width:20px;height:20px}
+
+.brand-svg{display:grid;place-items:center;width:22px;height:22px}
+.brand-svg svg{width:22px;height:22px}
+/* Плитки режима: крупная иконка, подпись под ней */
+
+/* Профили обучения: в ряд, с иконкой */
+.prof-pick{width:100%;grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+.prof-ico{display:flex;color:var(--c-ink3);margin-bottom:4px}
+.prof-ico svg{width:22px;height:22px}
+.prof.on .prof-ico{color:var(--c-accent)}
+
+/* Значок в заголовке карточки */
+.card-h h2 .h-ico{width:20px;height:20px;margin-right:8px;vertical-align:-4px;color:var(--c-accent)}
+/* Строка задачи: значок в заголовке; в «Поиске альфы» он же стоит на линии шагов вместо номера */
+.job-h>.job-ico{display:grid;place-items:center;flex:none;width:30px;height:30px;border-radius:9px;background:var(--c-s3);color:var(--c-ink2)}
+.learn-alpha .job::before{content:none}
+.learn-alpha .job-h>.job-ico{position:absolute;left:0;top:12px;z-index:1;width:36px;height:36px;border-radius:50%;border:1px solid var(--c-line2)}
+.learn-alpha .job.ok .job-ico{background:var(--g-accent);border-color:transparent;color:var(--c-bg)}
+.learn-alpha .job.bad .job-ico{border-color:var(--c-down);color:var(--c-down)}
+.learn-alpha .job.run .job-ico{border-color:var(--c-run);color:var(--c-run);animation:lp-pulse 1.6s var(--ease-out) infinite}
+/* Путь к реальным деньгам: значки шагов со статусом */
+.path-steps{list-style:none;display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 0;padding:0}
+.path-steps li{display:flex;align-items:center;gap:8px;padding:6px 12px 6px 6px;border-radius:999px;border:1px solid var(--c-line);background:var(--c-bg);font-size:12.5px;color:var(--c-ink2)}
+.ps-ico{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--c-s3);color:var(--c-ink3)}
+.ps-ico svg{width:15px;height:15px}
+.path-steps li.ok{border-color:color-mix(in oklab,var(--c-accent) 45%,transparent);color:var(--c-ink)}
+.path-steps li.ok .ps-ico{background:var(--g-accent);color:var(--c-bg)}
+.path-steps li.run .ps-ico{color:var(--c-run);animation:lp-pulse 1.6s var(--ease-out) infinite}
+.path-steps li.bad .ps-ico{color:var(--c-down)}
+@media (prefers-reduced-motion:reduce){.path-steps li.run .ps-ico,.learn-alpha .job.run .job-ico{animation:none}}
+
+/* Режим нельзя включить: плитка трясётся и вспыхивает красным */
+.tile.no{border-color:var(--c-down);animation:node-shake .42s both,tile-no 1s var(--ease-mech) both}
+.tile.no .tile-ico{color:var(--c-down)}
+@keyframes tile-no{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--c-down) 60%,transparent);background:color-mix(in srgb,var(--c-down) 18%,var(--c-bg))}100%{box-shadow:0 0 0 12px transparent}}
+.pipe-node.idle.alarm{opacity:1}
+.mode-tiles+.pipe-fix{margin-top:10px}
+@media (prefers-reduced-motion:reduce){.tile.no{animation:none}}
+
+/* Верх схемы: режимы компактными пилюлями, часы цикла справа */
+.pipe-top{align-items:flex-start}
+.pipe-mode .label{width:100%}
+.mode-tiles .tiles{display:flex;flex-wrap:wrap;gap:6px}
+.mode-tiles .tile{width:128px;padding:9px 8px 8px;gap:3px;border-radius:12px}
+.mode-tiles .tile-ico svg{width:22px;height:22px}
+.mode-tiles .tile b{font-size:12.5px}
+.mode-tiles .tile small{font-size:10.5px}
+.pipe-mode-note{font-size:12.5px;color:var(--c-ink3)}
+.mode-tiles+.pipe-fix{flex-basis:100%;margin:0}
+/* Блоки схемы одной высоты; масштаб — поверх полотна справа сверху */
+.pw-row{align-items:stretch}
+.pw-wrap{position:relative}
+.pw-wrap>.cg-tools{position:absolute;top:8px;right:8px;z-index:3;margin:0}
+/* Блок Telegram: значок в строке названия, тумблер внутри блока */
+.pw-tg-t{display:flex;align-items:center;gap:6px}
+.pw-tg-t svg{width:18px;height:18px;flex:none}
+.pipe-top>.pipe-mode{flex:0 0 auto;max-width:none}
+.pipe-top>.cyc-clock{margin-left:auto}
+.pw-row .pipe-node .res{margin-top:auto}
+
+.brand-svg.ai svg{width:100%;height:100%}
+.pav.logo{background:var(--c-s3);border-color:var(--c-line2);display:grid;place-items:center}
+
+/* ══ Схема v2: блоки одного вида, рамка «Решение», тонкие провода ══ */
+.ch-wrap{position:relative;overflow-x:auto;padding:6px 2px 6px;scrollbar-width:thin;scrollbar-color:var(--c-line2) transparent}
+.ch{display:grid;grid-template-columns:minmax(128px,1fr) 44px minmax(128px,1fr) 44px minmax(196px,1.4fr) 56px minmax(128px,1fr) 44px minmax(128px,1fr) 44px minmax(128px,1fr);row-gap:26px;min-width:1040px;align-items:stretch}
+.ch>*:not(.ch-tg){grid-row:2}
+/* Блок шага */
+.ch-node{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;gap:3px;min-width:0;min-height:128px;padding:12px 12px 10px;border:1px solid var(--c-line);border-radius:14px;background:var(--c-s1);transition:border-color .2s,opacity .25s,background .2s}
+.ch-node:hover{border-color:var(--c-line2)}
+.ch-node:focus-visible,.ch-lane:focus-visible,.ch-tg-open:focus-visible{outline:2px solid var(--c-accent);outline-offset:2px}
+.ch-node.sel,.ch-lane.sel{border-color:var(--c-accent);background:color-mix(in oklab,var(--c-accent) 6%,var(--c-s1))}
+.ch-node.idle{opacity:.42}
+.ch-h{display:flex;align-items:center;gap:8px;min-width:0;margin-bottom:6px}
+.ch-h b{font:600 13.5px/1.2 var(--font-text);color:var(--c-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ch-h .dot{margin-left:auto;flex:none}
+.ch-ico{display:grid;place-items:center;flex:none;width:28px;height:28px;border-radius:8px;background:var(--c-s3);color:var(--c-ink2)}
+.ch-ico svg{width:16px;height:16px}
+.ch-node.sel .ch-ico{color:var(--c-accent)}
+.ch-m{font:600 22px/1.1 var(--f-num);letter-spacing:-.01em;color:var(--c-ink)}
+.ch-u{font-size:11.5px;line-height:1.35;color:var(--c-ink3);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.ch-r,.ch-chg{margin-top:auto;align-self:stretch;margin-top:auto;padding:3px 7px;border-radius:7px;font-size:11px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:var(--c-s3);color:var(--c-ink2)}
+.ch-node>.ch-r,.ch-node>.ch-chg,.ch-node>.need{margin-top:auto}
+.ch-r.ok{background:color-mix(in oklab,var(--c-up,var(--up)) 14%,transparent);color:var(--c-up,var(--up))}
+.ch-r.bad{background:color-mix(in oklab,var(--c-down,var(--down)) 14%,transparent);color:var(--c-down,var(--down))}
+.ch-chg{background:color-mix(in oklab,var(--c-accent) 18%,transparent);color:var(--c-accent);font-weight:600;animation:fix-in .4s var(--ease-mech) both}
+.ch-node .need{align-self:flex-start}
+.ch-node.alarm,.ch-lane.alarm{border-color:color-mix(in srgb,var(--c-down) 70%,transparent);animation:node-alarm .9s var(--ease-mech) 2 both,node-shake .42s .1s both}
+.ch-node.alarm .ch-ico,.ch-lane.alarm .ch-ico{color:var(--c-down)}
+.ch-node.changed{border-color:var(--c-accent);animation:node-chg 1.1s var(--ease-mech) 2 both}
+@keyframes node-chg{0%{box-shadow:0 0 0 0 color-mix(in oklab,var(--c-accent) 55%,transparent)}70%{box-shadow:0 0 0 12px transparent}100%{box-shadow:none}}
+/* Провод */
+.ch-w{position:relative;align-self:center;height:40px}
+.ch-line{position:absolute;left:-1px;right:-1px;top:50%;height:1.5px;background:var(--c-line2)}
+.ch-w.hint .ch-line{background:repeating-linear-gradient(90deg,var(--c-line2) 0 4px,transparent 4px 8px)}
+.ch-w.dim{opacity:.35}
+.ch-run{position:absolute;left:0;right:0;top:calc(50% - 1px);height:3px;border-radius:2px;background:var(--c-accent);transform-origin:left;transform:scaleX(0);animation:ch-run .45s var(--ease-out) forwards,ch-fade .6s 1.6s forwards}
+@keyframes ch-run{to{transform:scaleX(1)}}
+@keyframes ch-fade{to{opacity:0}}
+.ch-n{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);min-width:20px;padding:1px 5px;border-radius:6px;border:1px solid var(--c-line2);background:var(--c-bg);font:600 11px/1.4 var(--f-num);text-align:center;color:var(--c-ink2)}
+.ch-n.zero{color:var(--c-ink3)}
+.ch-w:has(.ch-gate) .ch-n{transform:translate(-50%,-175%)}
+/* Шлюз фильтра рынка перед «Риском» */
+.ch-gate{all:unset;cursor:pointer;position:absolute;left:50%;top:50%;transform:translate(-50%,-6px);display:flex;flex-direction:column;align-items:center;gap:5px}
+.ch-gate i{width:11px;height:11px;transform:rotate(45deg);border:1.5px solid var(--c-ink3);background:var(--c-bg);border-radius:2px}
+.ch-gate span{font:500 10.5px var(--f-num);color:var(--c-ink3);white-space:nowrap}
+.ch-gate:hover i{border-color:var(--c-accent)}
+.ch-gate:hover span{color:var(--c-ink)}
+/* Рамка «Решение» с дорожками */
+.ch-dec{position:relative;display:flex;flex-direction:column;justify-content:center;gap:8px;padding:22px 10px 10px;border:1px dashed var(--c-line2);border-radius:16px}
+.ch-dec-h{position:absolute;top:-8px;left:12px;padding:0 6px;background:var(--c-bg);font-size:11px;color:var(--c-ink3)}
+.ch-lane{all:unset;box-sizing:border-box;cursor:pointer;display:flex;align-items:center;gap:10px;min-width:0;padding:9px 10px;border:1px solid var(--c-line);border-radius:12px;background:var(--c-s1);opacity:.5;transition:opacity .25s,border-color .2s}
+.ch-lane.on{opacity:1;border-color:color-mix(in oklab,var(--c-accent) 55%,transparent)}
+.ch-lane.alarm{opacity:1}
+.ch-lt{display:flex;flex-direction:column;min-width:0}
+.ch-lt b{font:600 13px/1.25 var(--font-text);color:var(--c-ink)}
+.ch-lt small{font-size:11.5px;color:var(--c-ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ch-lane.alarm small{color:var(--c-down)}
+.ch-mk{margin-left:auto;font:600 12px var(--f-num)}
+.ch-mk.ok{color:var(--c-up,var(--up))}.ch-mk.bad{color:var(--c-down,var(--down))}
+/* Telegram — источник над «Ордером» */
+.ch-tg{grid-row:1;grid-column:9;position:relative;display:flex;flex-direction:column;gap:6px;padding:10px 12px;border:1px solid var(--c-line);border-radius:14px;background:var(--c-s1)}
+.ch-tg::after{content:"";position:absolute;left:50%;top:100%;height:26px;border-left:1.5px dashed var(--c-line2)}
+.ch-tg.live::after{border-left-color:var(--c-accent)}
+.ch-tg-open{all:unset;cursor:pointer;display:flex;flex-direction:column;gap:3px;min-width:0}
+.ch-tg-open .ch-h{margin-bottom:2px}
+.ch-tg-open .ch-h svg{width:18px;height:18px;flex:none}
+.ch-tg-sw{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--c-ink2)}
+@media (prefers-reduced-motion:reduce){.ch-run,.ch-chg,.ch-node.changed,.ch-node.alarm,.ch-lane.alarm{animation:none}}
+
+/* Схема v2 — правки по скриншоту */
+.mode-tiles .tile small{color:var(--c-ink3)}
+.mode-tiles.issues .tile small{color:var(--c-down)}
+.pipe-sub{flex-basis:100%;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px}
+.pipe-sub .pipe-mode-note{flex-basis:auto;margin:0}
+.ch{grid-template-columns:minmax(132px,1fr) 34px minmax(132px,1fr) 34px minmax(190px,1.35fr) 50px minmax(132px,1fr) 34px minmax(132px,1fr) 34px minmax(140px,1fr)}
+.ch-ico{position:relative}
+.ch-ico>.dot{position:absolute;right:-3px;top:-3px;width:8px;height:8px;border:2px solid var(--c-s1);margin:0}
+.ch-h b{white-space:normal;overflow:visible;line-height:1.15;overflow-wrap:anywhere}
+.ch-r,.ch-chg{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.ch-tg{grid-column:5;align-self:end}
+.ch-tg::after{content:none}
+.ch-tg-sw{white-space:nowrap}
+.ch-tg-open .ch-ico{background:transparent;width:22px;height:22px}
+.ch-tg-open .ch-ico svg{width:20px;height:20px}
+.ch-h b{overflow-wrap:normal}
+
+/* PAPER/LIVE в шапке — кнопка с окошком перехода */
+.acct{position:relative;display:flex}
+button.paper{cursor:pointer;font:inherit}
+button.paper:hover{filter:brightness(1.2)}
+.acct-pop{position:absolute;top:calc(100% + 8px);right:0;z-index:60;width:min(380px,92vw);padding:8px 14px 12px;border:1px solid var(--c-line2);border-radius:14px;background:var(--c-s1);box-shadow:0 18px 50px -20px var(--c-shadow,#000);animation:fix-in .25s var(--ease-mech) both}
+.acct-pop .confirm-box{margin-top:10px}
+.acct{order:4} .topbar .acct .paper{order:0}
+
+/* Telegram: два провода поверх сетки — «усиливает сигнал» в Решение и «в обход» в Ордер */
+.ch{position:relative;row-gap:44px}
+.ch-ov{position:absolute;left:0;top:0;pointer-events:none;overflow:visible}
+.ch-ow{fill:none;stroke:var(--c-line2);stroke-width:1.5;stroke-dasharray:4 5}
+.ch-ow.on{stroke:#2AABEE;stroke-dasharray:6 10;animation:ch-flow 1s linear infinite}
+@keyframes ch-flow{to{stroke-dashoffset:-16}}
+.ch-ol{position:absolute;transform:translate(10px,-50%);padding:2px 8px;border-radius:999px;border:1px solid var(--c-line);background:var(--c-bg);font-size:11px;white-space:nowrap;color:var(--c-ink3);z-index:2}
+.ch-ol.on{color:#2AABEE;border-color:color-mix(in srgb,#2AABEE 45%,transparent)}
+.ch-ol.sw{transform:translate(-50%,-50%);display:flex;align-items:center;gap:8px;padding:4px 10px 4px 5px}
+.ch-tg-kv{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11.5px;color:var(--c-ink3)}
+.ch-tg-kv b{font:600 14px var(--f-num);color:var(--c-ink)}
+.ch-tg .ch-r{margin-top:6px}
+/* Дорожка AI: логотип отвечающего и запасные */
+.ch-lane .ch-ico{background:var(--c-s3)}
+.ch-bk{display:flex;gap:3px;margin-left:auto;opacity:.75}
+.ch-bk+.ch-mk{margin-left:6px}
+.ch-lane.alarm .brand-svg{filter:grayscale(1);opacity:.7}
+@media (prefers-reduced-motion:reduce){.ch-ow.on{animation:none}}
+.ch>.ch-ov,.ch>.ch-ol{grid-area:auto}
+.ch-node[data-node="order"] .ch-ico .brand-svg,.ch-node[data-node="order"] .ch-ico .brand-svg svg{width:24px;height:24px}
+
+/* Карточки шагов: живая цифра с единицей в одну строку, значок режима в углу, итог одной строкой */
+.ch-node{min-height:136px;gap:2px}
+.ch-h{margin-bottom:8px}
+.ch-badge{margin-left:auto;flex:none;padding:2px 6px;border-radius:6px;font:600 9.5px/1.3 var(--font-text);font-style:normal;letter-spacing:.04em;text-transform:uppercase;color:var(--c-ink3);border:1px solid var(--c-line2)}
+.ch-badge.paper{color:var(--cyan,#5ac8fa);border-color:color-mix(in oklab,var(--cyan,#5ac8fa) 40%,transparent)}
+.ch-badge.live{color:var(--c-down);border-color:color-mix(in srgb,var(--c-down) 45%,transparent)}
+.ch-v{display:flex;align-items:baseline;gap:6px;min-width:0}
+.ch-v b{font:600 22px/1.1 var(--f-num);letter-spacing:-.01em;color:var(--c-ink)}
+.ch-v small{font-size:12px;color:var(--c-ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ch-v.up b{color:var(--c-up,var(--up))}
+.ch-v.down b{color:var(--c-down,var(--down))}
+.ch-u{-webkit-line-clamp:1;white-space:nowrap;text-overflow:ellipsis;display:block}
+.ch-r,.ch-chg{display:block;-webkit-line-clamp:unset;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
+.ch-u .ch-badge{margin:0 6px 0 0;vertical-align:1px;display:inline-block}
+/* Узкие экраны: колонки и провода уже, схема влезает без прокрутки от ~1200px */
+.ch{grid-template-columns:minmax(112px,1fr) 28px minmax(112px,1fr) 28px minmax(170px,1.3fr) 44px minmax(112px,1fr) 28px minmax(112px,1fr) 28px minmax(112px,1fr);min-width:900px}
+.ch-node{padding:12px 10px 10px}
+.ch-v b{font-size:21px}
+.ch-v small{font-size:11.5px}
+.ch-u{font-size:11.5px}
+
+/* Верхний ряд: «Данные» и Telegram подсказывают решению */
+.ch-row-h{grid-row:1;grid-column:1/4;align-self:start;font-size:11px;color:var(--c-ink3);margin-top:-2px}
+.ch>.ch-row-h{grid-row:1}
+.ch-data{all:unset;box-sizing:border-box;cursor:pointer;grid-row:1;grid-column:1/4;align-self:end;display:flex;flex-direction:column;gap:6px;padding:10px 12px;border:1px solid var(--c-line);border-radius:14px;background:var(--c-s1);transition:border-color .2s}
+.ch>.ch-data{grid-row:1}
+.ch-data:hover{border-color:var(--c-line2)}
+.ch-data:focus-visible{outline:2px solid var(--c-accent);outline-offset:2px}
+.ch-data .ch-h{margin-bottom:0}
+.ch-logos{display:flex;flex-wrap:wrap;gap:6px}
+.ch-logo{display:grid;place-items:center;width:30px;height:30px;border-radius:9px;background:var(--c-s3);color:var(--c-ink2);border:1px solid transparent}
+.ch-logo svg,.ch-logo .brand-svg{width:17px;height:17px}
+.ch-logo.unset{opacity:.35;filter:grayscale(1)}
+.ch-logo.warn,.ch-logo.unchecked{border-color:color-mix(in srgb,var(--warn) 55%,transparent)}
+.ch-logo.bad{border-color:color-mix(in srgb,var(--c-down) 60%,transparent)}
+.ch-logo.ok{border-color:color-mix(in oklab,var(--c-up,var(--up)) 45%,transparent)}
+.ch-ow.data.on{stroke:var(--c-accent)}
+.ch-ol.data.on{color:var(--c-accent);border-color:color-mix(in oklab,var(--c-accent) 45%,transparent)}
+
+/* Стратегии плитками: значок, название; включённые — акцентом, клик переключает */
+.st-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(122px,1fr));gap:6px;margin-top:10px}
+.st-tile{all:unset;box-sizing:border-box;cursor:pointer;position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-width:0;min-height:76px;padding:9px 10px;border:1px solid var(--c-line);border-radius:12px;background:var(--c-bg);color:var(--c-ink3);transition:border-color .15s,background .15s,color .15s}
+.st-tile:hover{border-color:var(--c-line2)}
+.st-tile:focus-visible{outline:2px solid var(--c-accent);outline-offset:2px}
+.st-tile.on{border-color:color-mix(in oklab,var(--c-accent) 55%,transparent);background:color-mix(in oklab,var(--c-accent) 7%,var(--c-bg));color:var(--c-ink)}
+.st-ico{display:grid;place-items:center;width:26px;height:26px;border-radius:8px;background:var(--c-s3);color:var(--c-ink3)}
+.st-ico svg{width:15px;height:15px}
+.st-tile.on .st-ico{color:var(--c-accent)}
+.st-tile b{font:500 12px/1.25 var(--font-text);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.st-exp{position:absolute;top:8px;right:8px;font:600 9px var(--font-text);font-style:normal;color:var(--c-ink3);text-transform:uppercase}
+.st-bt{position:absolute;bottom:9px;right:9px;width:7px;height:7px;border-radius:50%}
+.st-bt.ok{background:var(--c-up,var(--up))}
+.st-bt.warn{background:var(--warn)}
+.st-more{margin-top:8px}
+.st-grid .empty{grid-column:1/-1}
+
+/* «Данные»: заголовок открывает панель, каждый логотип — ключ своего источника */
+.ch-data{cursor:default}
+.ch-data-open{all:unset;cursor:pointer;align-self:flex-start;border-radius:8px}
+.ch-data-open:focus-visible{outline:2px solid var(--c-accent);outline-offset:2px}
+button.ch-logo{all:unset;box-sizing:border-box;cursor:pointer;display:grid;place-items:center;width:30px;height:30px;border-radius:9px;background:var(--c-s3);color:var(--c-ink2);border:1px solid transparent;transition:transform .15s,border-color .15s,opacity .15s}
+button.ch-logo:hover{transform:translateY(-1px);opacity:1;filter:none;border-color:var(--c-line2)}
+button.ch-logo:focus-visible{outline:2px solid var(--c-accent);outline-offset:2px}
+button.ch-logo.unset{opacity:.4;filter:grayscale(1)}
+button.ch-logo.warn,button.ch-logo.unchecked{border-color:color-mix(in srgb,var(--warn) 55%,transparent)}
+button.ch-logo.bad{border-color:color-mix(in srgb,var(--c-down) 60%,transparent)}
+button.ch-logo.ok{border-color:color-mix(in oklab,var(--c-up,var(--up)) 45%,transparent)}
+/* Часы торговли на карточке Сканера */
+.ch-hrs{display:inline-flex;align-items:center;gap:4px;align-self:flex-start;margin-top:4px;padding:1px 7px 1px 5px;border-radius:6px;border:1px solid var(--c-line2);font-size:11px;color:var(--c-ink2)}
+.ch-hrs svg{width:12px;height:12px}
+.ch-hrs.off{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 50%,transparent)}
+/* Компактнее: значок слева от названия, низкие плитки */
+.st-grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:5px}
+.st-tile{flex-direction:row;align-items:center;gap:8px;min-height:44px;padding:7px 9px}
+.st-tile b{font-size:12px}
+.st-exp{position:static;margin-left:auto;flex:none}
+.st-bt{bottom:auto;top:6px;right:6px;width:6px;height:6px}
+.ch-node .need,.ch-lane .need{display:inline-flex;align-items:center;gap:5px}
+.ch-node .need svg{width:12px;height:12px;flex:none}
+/* Профиль и часы на карточке Сканера */
+.ch-chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.ch-chips .ch-hrs{margin-top:0}
+.ch-prof{display:inline-flex;align-items:center;gap:4px;padding:1px 7px 1px 5px;border-radius:6px;font-size:11px;font-weight:600;border:1px solid var(--c-line2);color:var(--c-ink)}
+.ch-prof svg{width:12px;height:12px}
+.ch-prof.p-bluechip{color:#F7931A;border-color:color-mix(in srgb,#F7931A 45%,transparent)}
+.ch-prof.p-altcoin{color:#8B7CF6;border-color:color-mix(in srgb,#8B7CF6 45%,transparent)}
+.ch-prof.p-meme{color:#FF6B3D;border-color:color-mix(in srgb,#FF6B3D 45%,transparent)}
+.ch-prof .ch-auto{opacity:.8;margin-left:1px}
+.ch-hrs,.ch-prof{white-space:nowrap}
+.ch-row-h{margin-top:-14px}
+/* Профиль и часы — значки справа в строке с цифрой */
+.ch-icons{margin-left:auto;display:flex;gap:3px;align-self:center}
+.ch-mini{position:relative;display:grid;place-items:center;width:20px;height:20px;border-radius:6px;font-style:normal;border:1px solid var(--c-line2);color:var(--c-ink2)}
+.ch-mini svg{width:12px;height:12px}
+.ch-mini.p-bluechip{color:#F7931A;border-color:color-mix(in srgb,#F7931A 45%,transparent)}
+.ch-mini.p-altcoin{color:#8B7CF6;border-color:color-mix(in srgb,#8B7CF6 45%,transparent)}
+.ch-mini.p-meme{color:#FF6B3D;border-color:color-mix(in srgb,#FF6B3D 45%,transparent)}
+.ch-mini.hrs{color:var(--c-up,var(--up));border-color:color-mix(in oklab,var(--c-up,var(--up)) 40%,transparent)}
+.ch-mini.hrs.off{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 50%,transparent)}
+.ch-mini .ch-auto{position:absolute;right:-5px;bottom:-5px;width:10px;height:10px;padding:1px;border-radius:50%;background:var(--c-s1)}
+.ch-row-h{margin-top:0}
+.ch-wrap{padding-top:14px}
+.ch-tf{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:0 5px;border-radius:5px;border:1px solid var(--c-line2);font-style:normal;font-size:10.5px;color:var(--c-ink2);vertical-align:1px}
+.ch-tf svg{width:12px;height:12px}
+.ch-u .ch-tf:first-child{margin-left:0}
+.ch-coins{display:grid;place-items:center;color:#F2B544;font-style:normal}
+.ch-coins svg{width:16px;height:16px}
+
+/* Карточка — рамка; открывает панель кнопка внутри, рядом могут быть свои быстрые кнопки */
+.ch-node-open{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;gap:2px;flex:1;min-width:0;border-radius:10px}
+.ch-node-open:focus-visible{outline:2px solid var(--c-accent);outline-offset:4px}
+/* Риск: три пресета значками */
+.ch-quick{display:flex;gap:4px;margin-top:8px}
+.ch-q{all:unset;box-sizing:border-box;cursor:pointer;display:grid;place-items:center;flex:1;height:26px;border-radius:8px;border:1px solid var(--c-line);color:var(--c-ink3);transition:border-color .15s,color .15s,background .15s}
+.ch-q svg{width:14px;height:14px}
+.ch-q:hover{border-color:var(--c-line2);color:var(--c-ink2)}
+.ch-q:focus-visible{outline:2px solid var(--c-accent);outline-offset:2px}
+.ch-q.q-conservative[aria-pressed="true"]{color:var(--c-up,var(--up));border-color:color-mix(in oklab,var(--c-up,var(--up)) 55%,transparent);background:color-mix(in oklab,var(--c-up,var(--up)) 12%,transparent)}
+.ch-q.q-moderate[aria-pressed="true"]{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 55%,transparent);background:color-mix(in srgb,var(--warn) 12%,transparent)}
+.ch-q.q-aggressive[aria-pressed="true"]{color:var(--c-down);border-color:color-mix(in srgb,var(--c-down) 55%,transparent);background:color-mix(in srgb,var(--c-down) 12%,transparent)}
+.ch-q.q-auto[aria-pressed="true"],.ch-q.q-confirm[aria-pressed="true"]{color:var(--c-accent);border-color:color-mix(in oklab,var(--c-accent) 55%,transparent);background:color-mix(in oklab,var(--c-accent) 12%,transparent)}
+.ch-q.q-flag{gap:6px;display:flex;align-items:center;justify-content:center;font-size:11px;padding:0 8px}
+.ch-q.q-flag span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ch-q.q-flag[aria-pressed="true"]{color:var(--c-accent);border-color:color-mix(in oklab,var(--c-accent) 55%,transparent);background:color-mix(in oklab,var(--c-accent) 12%,transparent)}
+.ch-mini.ptp{color:var(--c-ink3)}
+.ch-mini.ptp.on{color:var(--c-accent);border-color:color-mix(in oklab,var(--c-accent) 50%,transparent)}
+.ch-q.q-guards{flex:0 0 30px}
+.ch-q.q-guards[aria-pressed="true"]{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 60%,transparent);background:color-mix(in srgb,var(--warn) 14%,transparent)}
+.ch-q:disabled{cursor:not-allowed;opacity:.5}
+/* Монеты списков — со значком монеты */
+.sym{display:inline-flex;align-items:center;gap:5px}
+.sym .sym-coin{width:16px;height:16px;font-size:7px}
+.sym.ro{opacity:.75}
+.field-h svg{width:14px;height:14px;vertical-align:-2px;margin-right:4px}
+
+/* Биржа — первая, над Сканером */
+.ch-ex{grid-row:1;grid-column:1;align-self:end;display:flex;flex-direction:column;padding:10px 12px;border:1px solid var(--c-line);border-radius:14px;background:var(--c-s1)}
+.ch>.ch-ex{grid-row:1}
+.ch-ex-open{all:unset;cursor:pointer;display:flex;flex-direction:column;gap:4px;min-width:0}
+.ch-ex-open:focus-visible{outline:2px solid var(--c-accent);outline-offset:4px;border-radius:8px}
+.ch-ex .ch-h{margin-bottom:2px}
+.ch-ex .ch-h .ch-badge{margin-left:auto}
+.ch-ex .ch-ico .brand-svg,.ch-ex .ch-ico .brand-svg svg{width:24px;height:24px}
+.ch-ex .ch-u.warn{color:var(--warn)}
+.ch-data{grid-column:3/4}
+.ch-ow.ex{stroke:var(--c-line2)}
+.ch-ow.ex.on{stroke:#F7A600;stroke-dasharray:6 10;animation:ch-flow 1s linear infinite}
+/* Живая схема: ток по проводам и дыхание точек, пока бот работает */
+.ch-wrap.live .ch-line{background:linear-gradient(90deg,transparent 0 35%,color-mix(in oklab,var(--c-accent) 85%,transparent) 50%,transparent 65% 100%) 0 0/220% 100% no-repeat,var(--c-line2);animation:ch-current 2.4s linear infinite}
+.ch-wrap.live .ch-w:nth-of-type(2n) .ch-line{animation-delay:-.8s}
+.ch-wrap.live .ch-w.hint .ch-line{background:repeating-linear-gradient(90deg,var(--c-line2) 0 4px,transparent 4px 8px);animation:none}
+.ch-wrap.live .ch-w.dim .ch-line{animation:none}
+@keyframes ch-current{from{background-position:120% 0,0 0}to{background-position:-120% 0,0 0}}
+.ch-wrap.live .ch-node:not(.idle) .ch-ico>.dot.ok,.ch-wrap.live .ch-tg .dot.ok,.ch-wrap.live .ch-ex .dot.ok,.ch-wrap.live .ch-data .dot.ok{animation:dot-breathe 2.4s ease-in-out infinite}
+@keyframes dot-breathe{0%,100%{box-shadow:0 0 0 0 color-mix(in oklab,var(--c-up,var(--up)) 55%,transparent)}50%{box-shadow:0 0 0 5px transparent}}
+.ch-wrap.live .ch-lane.on:not(.alarm){animation:lane-glow 3s ease-in-out infinite}
+@keyframes lane-glow{0%,100%{box-shadow:0 0 0 0 transparent}50%{box-shadow:0 0 18px -6px color-mix(in oklab,var(--c-accent) 70%,transparent)}}
+@media (prefers-reduced-motion:reduce){.ch-wrap.live .ch-line,.ch-wrap.live .dot,.ch-wrap.live .ch-lane{animation:none!important}.ch-ow.ex.on{animation:none}}
+
+/* Биржа — первая колонка цепочки; «Данные» снова широкие над Сканером и Стратегиями */
+.ch{grid-template-columns:minmax(104px,.85fr) 24px minmax(112px,1fr) 28px minmax(112px,1fr) 28px minmax(170px,1.3fr) 44px minmax(112px,1fr) 28px minmax(112px,1fr) 28px minmax(112px,1fr);min-width:1000px}
+.ch>.ch-ex{grid-row:2;grid-column:auto;align-self:stretch}
+.ch-ex{display:flex;flex-direction:column;padding:12px 10px 10px;border:1px solid var(--c-line);border-radius:14px;background:var(--c-s1)}
+.ch-ex-open{flex:1}
+.ch-ex-name{font:600 18px/1.1 var(--font-text)!important;letter-spacing:0!important}
+.ch-ex-key{margin-top:auto;display:inline-flex;align-items:center;gap:5px;align-self:flex-start;padding:3px 7px;border-radius:7px;font-size:11px;font-weight:600;background:color-mix(in oklab,var(--c-up,var(--up)) 14%,transparent);color:var(--c-up,var(--up))}
+.ch-ex-key svg{width:12px;height:12px}
+.ch-ex-key.warn{background:color-mix(in srgb,var(--warn) 14%,transparent);color:var(--warn)}
+.ch-ex-key.bad{background:color-mix(in srgb,var(--c-down) 14%,transparent);color:var(--c-down)}
+.ch-ex.bad{border-color:color-mix(in srgb,var(--c-down) 55%,transparent)}
+.ch-ex.warn{border-color:color-mix(in srgb,var(--warn) 45%,transparent)}
+.ch-data{grid-column:3/6}
+.ch-tg{grid-column:7}
+.ch-w.ex .ch-line{background:color-mix(in srgb,#F7A600 55%,var(--c-line2))}
+/* Биржа по центру: заголовок, крупный логотип, режим, состояние ключа */
+.ch-ex-open{align-items:center;text-align:center;gap:8px}
+.ch-ex-t{font:600 13.5px/1.2 var(--font-text);color:var(--c-ink)}
+.ch-ex-logo{position:relative;display:grid;place-items:center;width:52px;height:52px;border-radius:14px;background:var(--c-s3)}
+.ch-ex-logo .brand-svg,.ch-ex-logo .brand-svg svg{width:44px;height:44px}
+.ch-ex-logo>.dot{position:absolute;right:-3px;top:-3px;width:9px;height:9px;border:2px solid var(--c-s1);margin:0}
+.ch-ex-open .ch-ex-key{align-self:center}
+.ch-wrap.live .ch-ex .dot.ok{animation:dot-breathe 2.4s ease-in-out infinite}
+/* Влезает от ~1200px: уже колонки и провода */
+.ch{grid-template-columns:minmax(92px,.8fr) 20px minmax(100px,1fr) 22px minmax(100px,1fr) 22px minmax(150px,1.25fr) 40px minmax(100px,1fr) 22px minmax(100px,1fr) 22px minmax(100px,1fr);min-width:940px}
+.ch-ex-open .ch-badge{order:2}
+.ch-ex-open .ch-ex-key{order:3;margin-top:auto;text-align:center}
+.ch-ex-open{display:flex}
+/* Ключи AI: модель провайдера выпадающим списком */
+.ai-main{display:flex;flex-direction:column;gap:4px;min-width:0}
+.ai-model{max-width:100%;height:30px;font-size:12px;padding:0 28px 0 8px}
+.quick-row .brand-svg{flex:none}
+/* P&L не переносится по знаку */
+.ch-v b{white-space:nowrap}
+/* PAPER/LIVE — ярлык в правом верхнем углу карточки Биржи, за рамкой */
+.ch-ex{position:relative}
+.ch-ex-open .ch-badge{position:absolute;top:-9px;right:-8px;margin:0;padding:3px 8px;border-radius:7px;background:var(--c-bg);box-shadow:0 0 0 3px var(--c-bg);font-size:10px;z-index:2}
+/* Значки режимов: колба — Paper, доллар — Live */
+.ch-ex-open .ch-badge{display:inline-flex;align-items:center;gap:4px}
+.ch-badge svg{width:11px;height:11px}
+button.paper{display:inline-flex;align-items:center;gap:5px}
+button.paper svg{width:12px;height:12px}
+/* Цифра и значки в одну строку; длинный P&L чуть мельче */
+.ch-v{flex-wrap:nowrap}
+.ch-icons{flex:none}
+.ch-v b{min-width:0}
+[data-node="track"] .ch-v b{font-size:18px}
+.ch-ex-open .ch-mode{width:26px;height:26px;padding:0;border-radius:50%;justify-content:center}
+.ch-ex-open .ch-mode svg{width:13px;height:13px}
+.st-view{margin:10px 0 8px}
+.hon-name{display:inline-flex;align-items:center;gap:8px}
+.hon-name .pav{width:26px;height:26px}
+/* Таймфрейм — в правом верхнем углу карточки Сканера */
+.ch-node{position:relative}
+[data-node="scan"] .ch-tf{position:absolute;top:12px;right:10px;margin:0}
+[data-node="scan"] .ch-h{padding-right:52px}
+[data-node="scan"] .ch-u:empty,[data-node="scan"] .ch-u:has(> .ch-tf:only-child){min-height:0}
+
+/* ══ Живая схема (motion): эффекты по настоящим событиям бота, см. useMotion в pipecanvas.tsx ══ */
+/* Ток вместо постоянного градиента — частицы-монеты; линия спокойная */
+.ch-wrap.live .ch-line{animation:none;background:var(--c-line2)}
+.ch-p{position:absolute;top:calc(50% - 2px);left:0;width:4px;height:4px;border-radius:50%;background:var(--c-accent);box-shadow:0 0 6px color-mix(in oklab,var(--c-accent) 80%,transparent);animation:ch-particle 1.8s linear infinite;pointer-events:none}
+@keyframes ch-particle{0%{left:0;opacity:0}12%{opacity:1}88%{opacity:1}100%{left:calc(100% - 4px);opacity:0}}
+.ch-w.hint .ch-p{opacity:.5;background:var(--c-ink3);box-shadow:none}
+/* 1. Где бот сейчас: блок светится, по верхней кромке бежит блик */
+.ch-node::after,.ch-dec::after{content:"";position:absolute;inset:-1px;border-radius:inherit;pointer-events:none;opacity:0;transition:opacity .4s}
+.ch-wrap[data-busy="scan"] [data-node="scan"],.ch-wrap[data-busy="strat"] [data-node="strat"],.ch-wrap[data-busy="risk"] [data-node="risk"],.ch-wrap[data-busy="order"] [data-node="order"],.ch-wrap[data-busy="decide"] [data-node="decide"]{border-color:var(--c-accent);box-shadow:0 0 0 1px color-mix(in oklab,var(--c-accent) 40%,transparent),0 0 22px -8px var(--c-accent)}
+.ch-wrap[data-busy="scan"] [data-node="scan"]::after,.ch-wrap[data-busy="strat"] [data-node="strat"]::after,.ch-wrap[data-busy="risk"] [data-node="risk"]::after,.ch-wrap[data-busy="order"] [data-node="order"]::after,.ch-wrap[data-busy="decide"] [data-node="decide"]::after{opacity:1;background:linear-gradient(90deg,transparent 0 30%,color-mix(in oklab,var(--c-accent) 22%,transparent) 50%,transparent 70%) 0 0/250% 100% no-repeat;animation:busy-sweep 1.6s linear infinite}
+@keyframes busy-sweep{from{background-position:150% 0}to{background-position:-150% 0}}
+/* Скан: по иконке Сканера крутится луч радара */
+[data-node="scan"] .ch-ico{overflow:visible}
+.ch-wrap[data-busy="scan"] [data-node="scan"] .ch-ico{background:conic-gradient(from 0deg,color-mix(in oklab,var(--c-accent) 55%,transparent),transparent 30%,transparent);animation:radar-spin 1.2s linear infinite}
+.ch-wrap[data-busy="scan"] [data-node="scan"] .ch-ico svg{animation:radar-spin 1.2s linear infinite reverse}
+@keyframes radar-spin{to{transform:rotate(360deg)}}
+/* AI думает: дорожка переливается, пока ждём ответ */
+.ch-wrap[data-think="1"] .ch-lane.on{background:linear-gradient(100deg,var(--c-s1) 20%,color-mix(in oklab,var(--c-accent) 16%,var(--c-s1)) 50%,var(--c-s1) 80%) 0 0/300% 100%;animation:ai-think 1.3s linear infinite}
+@keyframes ai-think{from{background-position:100% 0}to{background-position:-100% 0}}
+/* Отсеяли монету — блок коротко вздрагивает красным */
+.ch-wrap[data-rej="scan"] [data-node="scan"],.ch-wrap[data-rej="strat"] [data-node="strat"],.ch-wrap[data-rej="risk"] [data-node="risk"],.ch-wrap[data-rej="decide"] [data-node="decide"]{animation:rej-flash .9s var(--ease-mech)}
+@keyframes rej-flash{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--c-down) 55%,transparent)}100%{box-shadow:0 0 0 10px transparent}}
+/* 3. Кольцо до следующего цикла вокруг иконки Сканера; перед циклом — пульс */
+[data-node="scan"] .ch-ico::before{content:"";position:absolute;inset:-4px;border-radius:11px;padding:2px;background:conic-gradient(var(--c-accent) calc(var(--cyc,0) * 1%),color-mix(in oklab,var(--c-line2) 60%,transparent) 0);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;opacity:.85}
+.ch-wrap[data-soon="1"] [data-node="scan"] .ch-ico::before{animation:soon 1s ease-in-out infinite}
+@keyframes soon{50%{opacity:.35}}
+/* 4. Сделка открыта: волна от Ордера и «+1»; закрыта — Выход вспыхивает цветом; P&L мигает при изменении */
+.ch-wrap[data-burst="order"] [data-node="order"]{animation:burst 1.6s var(--ease-mech)}
+@keyframes burst{0%{box-shadow:0 0 0 0 color-mix(in oklab,var(--c-accent) 70%,transparent)}60%{box-shadow:0 0 0 18px transparent}100%{box-shadow:none}}
+.ch-wrap[data-burst="order"] [data-node="order"]::before{content:"+1 сделка";position:absolute;right:10px;top:8px;font:600 11px var(--font-text);color:var(--c-accent);animation:plus-up 1.6s var(--ease-mech) forwards;pointer-events:none}
+@keyframes plus-up{0%{opacity:0;transform:translateY(6px)}20%{opacity:1}100%{opacity:0;transform:translateY(-18px)}}
+.ch-wrap[data-close="win"] [data-node="track"]{animation:close-win 1.6s var(--ease-mech)}
+.ch-wrap[data-close="loss"] [data-node="track"]{animation:close-loss 1.6s var(--ease-mech)}
+@keyframes close-win{0%{box-shadow:0 0 0 0 color-mix(in oklab,var(--c-up,var(--up)) 70%,transparent);border-color:var(--c-up,var(--up))}100%{box-shadow:0 0 0 18px transparent}}
+@keyframes close-loss{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--c-down) 60%,transparent);border-color:var(--c-down)}100%{box-shadow:0 0 0 12px transparent}}
+.ch-wrap[data-pnl="up"] [data-node="track"] .ch-v b{animation:pnl-up .8s ease-out}
+.ch-wrap[data-pnl="down"] [data-node="track"] .ch-v b{animation:pnl-down .8s ease-out}
+@keyframes pnl-up{0%{text-shadow:0 0 12px var(--c-up,var(--up))}100%{text-shadow:none}}
+@keyframes pnl-down{0%{text-shadow:0 0 12px var(--c-down)}100%{text-shadow:none}}
+/* 5. Источники: пост канала — импульс по проводу (доверенный — ещё и «в обход»); новый цикл — импульс от «Данных» */
+.ch-wrap[data-tg] .ch-ow:not(.data):not(.byp),.ch-wrap[data-tg="trade"] .ch-ow.byp{animation:wire-pulse 1.6s ease-out}
+.ch-wrap[data-dat="1"] .ch-ow.data{animation:wire-pulse 1.6s ease-out}
+@keyframes wire-pulse{0%{stroke:#2AABEE;stroke-width:3;stroke-dasharray:none;filter:drop-shadow(0 0 4px #2AABEE)}100%{stroke-width:1.5}}
+.ch-wrap[data-tg] .ch-tg,.ch-wrap[data-dat="1"] .ch-data{animation:src-glow 1.6s ease-out}
+@keyframes src-glow{0%{box-shadow:0 0 0 0 color-mix(in srgb,#2AABEE 55%,transparent)}100%{box-shadow:0 0 0 12px transparent}}
+/* 6. Темп по состоянию: пауза — сереет и замедляется, нет связи — замирает, защита — Риск пульсирует жёлтым */
+.ch-wrap.k-paused .ch,.ch-wrap.k-off .ch{filter:saturate(.35)}
+.ch-wrap.k-paused .ch *{animation-duration:4s!important}
+.ch-wrap.k-off .ch *{animation-play-state:paused!important}
+.ch-wrap.k-off .ch-line{background:repeating-linear-gradient(90deg,var(--c-line2) 0 4px,transparent 4px 8px)}
+.ch-wrap[data-guard="1"] [data-node="risk"]{border-color:color-mix(in srgb,var(--warn) 60%,transparent);animation:guard-pulse 2s ease-in-out infinite}
+@keyframes guard-pulse{50%{box-shadow:0 0 0 6px color-mix(in srgb,var(--warn) 18%,transparent)}}
+@media (prefers-reduced-motion:reduce){.ch-wrap *,.ch-wrap *::before,.ch-wrap *::after{animation:none!important;transition:none!important}.ch-p{display:none}}
+/* «15 мин» — ярлык на верхней кромке Сканера (как значок режима у Биржи), не налезает на заголовок */
+[data-node="scan"] .ch-tf{top:-10px;right:10px;background:var(--c-bg);box-shadow:0 0 0 3px var(--c-bg)}
+[data-node="scan"] .ch-h{padding-right:0}
+/* Узко (телефон): режимы 2×2, рынок 2 в ряд — ничего не вылезает за рамку схемы */
+.pipe-top>.pipe-mode{max-width:100%;min-width:0}
+@media (max-width:760px){
+  .mode-tiles .tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .mode-tiles .tile{width:auto}
+  .pipe-top>.pipe-mode{flex:1 1 100%}
+}
+.irow-c .numf{max-width:156px}
+.irow-c .numf input{min-width:3.4em}
+/* Без блика: где бот сейчас — только спокойная цветная рамка (пульсации и так хватает) */
+.ch-node::after,.ch-dec::after{display:none}
+.ch-wrap[data-busy="scan"] [data-node="scan"],.ch-wrap[data-busy="strat"] [data-node="strat"],.ch-wrap[data-busy="risk"] [data-node="risk"],.ch-wrap[data-busy="order"] [data-node="order"],.ch-wrap[data-busy="decide"] [data-node="decide"]{box-shadow:none;border-color:color-mix(in oklab,var(--c-accent) 70%,transparent)}
+/* Фоновый поток: реже и тусклее, чем поток монет в цикле со сканом */
+.ch-w.calm .ch-p{opacity:.55;animation-duration:3.2s;box-shadow:none;width:3px;height:3px;top:calc(50% - 1.5px)}
+.ch-w.ex .ch-p{background:#F7A600}
+
+/* AI и Нейросеть «думают»: дыхание иконки и три точки; в момент решения — быстрее и акцентом */
+.ch-lt b{display:inline-flex;align-items:center;gap:6px}
+.ch-think{display:none;align-items:center;gap:2px;font-style:normal}
+.ch-think i{width:3px;height:3px;border-radius:50%;background:var(--c-ink3);animation:think-dot 1.6s ease-in-out infinite}
+.ch-think i:nth-child(2){animation-delay:.2s}
+.ch-think i:nth-child(3){animation-delay:.4s}
+@keyframes think-dot{0%,60%,100%{opacity:.25;transform:translateY(0)}30%{opacity:1;transform:translateY(-2px)}}
+.ch-wrap.live .ch-lane.on:not(.alarm) .ch-think{display:inline-flex}
+.ch-wrap.live .ch-lane.on:not(.alarm) .ch-ico{animation:think-breathe 3.2s ease-in-out infinite}
+@keyframes think-breathe{0%,100%{box-shadow:0 0 0 0 transparent}50%{box-shadow:0 0 14px -2px color-mix(in oklab,var(--c-accent) 55%,transparent)}}
+.ch-wrap[data-think="1"] .ch-lane.on:not(.alarm) .ch-think i{background:var(--c-accent);animation-duration:.8s}
+.ch-wrap[data-think="1"] .ch-lane.on:not(.alarm) .ch-ico{animation-duration:1.2s}
+@media (prefers-reduced-motion:reduce){.ch-think{display:none!important}}
+/* «Решение» — ярлык на верхней кромке рамки, в стиле «15 мин» */
+.ch-dec-h{top:-11px;left:50%;transform:translateX(-50%);display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border:1px solid var(--c-line2);border-radius:7px;background:var(--c-bg);box-shadow:0 0 0 3px var(--c-bg);font:600 11px/1.4 var(--font-text);color:var(--c-ink2);white-space:nowrap}
+.ch-dec-h svg{width:12px;height:12px;color:var(--c-accent)}
+
+/* Провода сообщают о концах: сломано — красный пунктир без тока, с оговоркой — жёлтый с медленным током */
+.ch-w.bad .ch-line{background:repeating-linear-gradient(90deg,color-mix(in srgb,var(--c-down) 75%,transparent) 0 4px,transparent 4px 8px)!important}
+.ch-w.warn .ch-line{background:color-mix(in srgb,var(--warn) 55%,var(--c-line2))!important}
+.ch-w.warn .ch-p{background:var(--warn);box-shadow:none;animation-duration:4s}
+.ch-w.bad .ch-n{border-color:color-mix(in srgb,var(--c-down) 55%,transparent);color:var(--c-down)}
+/* Telegram: аккаунт в строке заголовка, до входа — призыв войти внутри карточки */
+.ch-avatar{margin-left:auto;flex:none;display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,#37AEE2,#1E96C8);color:#fff;font:700 11px/1 var(--font-text);box-shadow:0 0 0 2px var(--c-s1),0 0 0 3px color-mix(in srgb,#2AABEE 50%,transparent)}
+.ch-tg-login{display:inline-flex;align-items:center;justify-content:center;gap:6px;align-self:stretch;padding:7px 10px;border-radius:8px;color:#2AABEE;font-weight:600;font-size:12.5px;border:1px solid color-mix(in srgb,#2AABEE 50%,transparent);background:color-mix(in srgb,#2AABEE 10%,transparent)}
+.ch-tg-login svg{width:14px;height:14px}
+.ch-tg-open:hover .ch-tg-login{background:color-mix(in srgb,#2AABEE 20%,transparent)}
+.ch-wrap.live .ch-tg-login{animation:act-nudge 2.6s ease-in-out infinite}
+@keyframes act-nudge{0%,100%{box-shadow:0 0 0 0 transparent}50%{box-shadow:0 0 0 4px color-mix(in srgb,#2AABEE 18%,transparent)}}
+@media (prefers-reduced-motion:reduce){.ch-wrap.live .ch-tg-login{animation:none}}

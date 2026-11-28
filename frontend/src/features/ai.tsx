@@ -1,6 +1,8 @@
 // Раздел «AI»: два ключа (основной и запасной) и табло честности прогнозов (живёт в «Обучении»).
 // Провайдера бот узнаёт по ключу, порядок и модель выбирает сам (bitbot.config.ai_providers.chain).
 
+import { aiLogo } from "../components/brand";
+import { Key, Scales } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 
 import { ApiError, api } from "../lib/api";
@@ -69,7 +71,10 @@ export function KeysCard(props: { ai: AiState; secrets: SecretItem[]; onSaved: (
   return (
     <article className="card">
       <div className="card-h">
-        <h2>Ключи AI</h2>
+        <h2>
+          <Key className="h-ico" />
+          Ключи AI
+        </h2>
         <Q tip="Ключ Groq, Gemini, DeepSeek, OpenAI или Claude. Бот сам узнает провайдера, проверит ключ и выберет модель. Второй ключ срабатывает при лимите или сбое." />
       </div>
       {withKey.length > 0 && (
@@ -82,7 +87,23 @@ export function KeysCard(props: { ai: AiState; secrets: SecretItem[]; onSaved: (
                 <Avatar id={p.id} name={p.name} />
                 <div className="ai-main">
                   <b>{p.name}</b> <small className="muted">{i === 0 ? "основной" : "запасной"}</small>
-                  <br />
+                  {/* Модель — из списка этого провайдера; по умолчанию бот берёт рекомендуемую. */}
+                  {p.models.length > 0 && (
+                    <select
+                      className="sel ai-model"
+                      value={p.model}
+                      aria-label={`Модель ${p.name}`}
+                      onChange={(e) => void actions.putAiChain({ models: { [p.id]: e.target.value } }, `Модель ${p.name}: ${e.target.value}`)}
+                    >
+                      {p.models.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.id}
+                          {m.recommended ? " · рекомендуем" : ""}
+                          {m.free ? " · бесплатно" : ""}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                   <small className="muted">
                     сегодня {p.calls_today} {plural(p.calls_today, ["запрос", "запроса", "запросов"])}
                     {p.tokens_today > 0 && ` · ${fmtN(p.tokens_today, 0)} токенов`}
@@ -145,7 +166,10 @@ export function HonestyCard() {
   return (
     <article className="card">
       <div className="card-h">
-        <h2>Честность прогнозов</h2>
+        <h2>
+          <Scales className="h-ico" />
+          Честность прогнозов
+        </h2>
         <Q tip="Каждый прогноз AI через 16 свечей сверяется с ценой. Если после 200 проверок провайдер не точнее монетки, он больше не открывает сделки." />
       </div>
       {!s || !rows.length ? (
@@ -155,7 +179,10 @@ export function HonestyCard() {
           {rows.map(([id, kinds]) => (
             <li key={id}>
               <span>
-                <b>{name(id)}</b>
+                <b className="hon-name">
+                  <Avatar id={id} name={name(id)} />
+                  {name(id)}
+                </b>
                 <br />
                 <small>{kinds.forecast ? scoreLine(kinds.forecast, s.min_n) : "прогнозов нет"}</small>
                 {kinds.trade && (
@@ -233,16 +260,19 @@ function KeyInput(props: { ai: AiState; secrets: SecretItem[]; label: string; on
   return (
     <div className={`quick${over ? " over" : ""}`} onDragOver={(e) => (e.preventDefault(), setOver(true))} onDragLeave={() => setOver(false)} onDrop={(e) => void take(e)}>
       <div className="quick-row">
-        <svg className="lock" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-          <rect x="5" y="11" width="14" height="9" rx="2" />
-          <path className="shackle" d="M8 11V8a4 4 0 0 1 8 0v3" />
-        </svg>
+        {/* Узнали провайдера по ключу — показываем его логотип; иначе замок. */}
+        {(candidates.length === 1 && aiLogo(candidates[0], 22)) || (
+          <svg className="lock" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+            <rect x="5" y="11" width="14" height="9" rx="2" />
+            <path className="shackle" d="M8 11V8a4 4 0 0 1 8 0v3" />
+          </svg>
+        )}
         <input
           className="inp"
           type="password"
           autoComplete="off"
           spellCheck={false}
-          placeholder={`${props.label}: вставьте или перетащите`}
+          placeholder={`${props.label}: вставьте — провайдер определится сам`}
           aria-label={props.label}
           value={val}
           onChange={(e) => setVal(e.target.value)}

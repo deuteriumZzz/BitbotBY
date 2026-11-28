@@ -1,13 +1,15 @@
 // Правила защиты «если → то» — те же защиты, что в коде бота, с порогами из настроек.
 // Своих правил нет: бот выполняет только эти, поэтому и показываем только их.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Bell, CalendarX, ChartLineDown, Hourglass, Lightning, Newspaper, Scales, ShieldWarning, Stack, TrendDown } from "@phosphor-icons/react";
 
 import type { ConfigValues, SettingDef } from "../lib/types";
 import { actions } from "../store/actions";
 import { useStore } from "../store";
 import { Seg, Toggle } from "../components/controls";
 import { Q } from "../components/tooltip";
+import { IRow } from "../components/irow";
 import { cfg } from "./bots";
 import { shown } from "./params";
 import { NumField, fmtVal } from "./settings/params";
@@ -21,6 +23,9 @@ export interface Rule {
   on?: string;
   alert?: string;
   ifm: string;
+  icon: ReactNode;
+  /** Что сделает бот — коротко, для строки; полное условие и действие — в «?». */
+  short: string;
   /** Короткая подпись для пилюли на «Цепочке», где полное условие обрезается. */
   chip?: string;
   cmp: string;
@@ -40,6 +45,8 @@ export interface Rule {
 export const RULES: Rule[] = [
   {
     id: "daily",
+    icon: <CalendarX />,
+    short: "стоп входов до 00:00 UTC",
     cat: "Капитал",
     key: "DAILY_LOSS_LIMIT",
     ifm: "Убыток за сутки (UTC)",
@@ -51,6 +58,8 @@ export const RULES: Rule[] = [
   },
   {
     id: "streak",
+    icon: <TrendDown />,
+    short: "бот остановится",
     cat: "Капитал",
     key: "CIRCUIT_BREAKER_LOSSES",
     ifm: "Убыточных сделок подряд",
@@ -62,6 +71,8 @@ export const RULES: Rule[] = [
   },
   {
     id: "dd",
+    icon: <ChartLineDown />,
+    short: "закрыть убыточные, пауза",
     cat: "Капитал",
     key: "MAX_DRAWDOWN_PERCENT",
     ifm: "Просадка от пика баланса",
@@ -74,6 +85,8 @@ export const RULES: Rule[] = [
   },
   {
     id: "ddscale",
+    icon: <Scales />,
+    short: "меньше ставка",
     cat: "Капитал",
     key: "DRAWDOWN_SCALE_THRESHOLD",
     on: "DRAWDOWN_SCALE_ENABLED",
@@ -84,6 +97,8 @@ export const RULES: Rule[] = [
   },
   {
     id: "sl",
+    icon: <ShieldWarning />,
+    short: "закрыть по стопу",
     cat: "Позиция",
     key: "STOP_LOSS_PERCENT",
     ifm: "Цена ушла против позиции",
@@ -93,6 +108,8 @@ export const RULES: Rule[] = [
   },
   {
     id: "slots",
+    icon: <Stack />,
+    short: "новые не открывать",
     cat: "Позиция",
     key: "MAX_POSITIONS",
     elsewhere: "меняется в «Как рискуем»",
@@ -102,6 +119,8 @@ export const RULES: Rule[] = [
   },
   {
     id: "exposure",
+    icon: <Stack />,
+    short: "новые не открывать",
     cat: "Позиция",
     key: "MAX_PORTFOLIO_EXPOSURE",
     ifm: "Нагрузка портфеля",
@@ -112,6 +131,8 @@ export const RULES: Rule[] = [
   },
   {
     id: "cooldown",
+    icon: <Hourglass />,
+    short: "в монету не входить",
     cat: "Позиция",
     key: "SYMBOL_COOLDOWN_HOURS",
     ifm: "С прошлой сделки по монете прошло",
@@ -123,6 +144,8 @@ export const RULES: Rule[] = [
   },
   {
     id: "atr",
+    icon: <Lightning />,
+    short: "закрыть всё, пропустить цикл",
     cat: "Рынок",
     key: "ATR_SPIKE_MULT",
     ifm: "Волатильность выше обычной",
@@ -133,6 +156,8 @@ export const RULES: Rule[] = [
   },
   {
     id: "macro",
+    icon: <Newspaper />,
+    short: "не входить",
     cat: "Рынок",
     on: "MACRO_BLACKOUT_ENABLED",
     ifm: "До или после FOMC, CPI, NFP",
@@ -144,6 +169,8 @@ export const RULES: Rule[] = [
   },
   {
     id: "silent",
+    icon: <Bell />,
+    short: "тревога в Telegram",
     cat: "Бот",
     key: "SILENT_DEATH_HOURS",
     ifm: "Бот не открывал сделок",
@@ -153,6 +180,8 @@ export const RULES: Rule[] = [
   },
   {
     id: "stalled",
+    icon: <Bell />,
+    short: "тревога в Telegram",
     cat: "Бот",
     alert: "bot_stalled",
     ifm: "Бот не отвечает или цикл не начинался",
@@ -253,8 +282,7 @@ export function RulesCard() {
       {guardsOff && (
         <div className="guards-off">
           <p>
-            <b>Paper без защит.</b> Бот входит чаще и держит больше позиций подряд, в том числе во время обвалов, — чтобы быстрее набрать опыт для
-            обучения. Результаты Paper перестают показывать, как бот справился бы с защитами. В Live этот тумблер не действует.
+            <b>Paper без защит:</b> бот входит чаще, чтобы быстрее набрать опыт для обучения. В Live не действует.
           </p>
           <details>
             <summary>Что именно отключается</summary>
@@ -274,11 +302,11 @@ export function RulesCard() {
         </div>
       )}
       {paper && !guardsOff && <p className="note-soon">В Paper правила капитала только присылают сообщение в Telegram.</p>}
-      <ul className="rules">
+      <div className="irows">
         {RULES.filter((r) => r.cat !== "Бот").map((r) => (
           <RuleRow key={r.id} r={r} c={c} schema={schema} guardsOff={guardsOff} alertOn={alerts.find((a) => a.kind === r.alert)?.enabled} />
         ))}
-      </ul>
+      </div>
     </article>
   );
 }
@@ -291,13 +319,9 @@ export function BotRules() {
   const d = schema.find((x) => x.key === "SILENT_DEATH_HOURS");
   if (!d) return null;
   return (
-    <div className="alert-row">
-      <div>
-        <b>Нет сделок дольше</b>
-        <small>тревога в Telegram</small>
-      </div>
+    <IRow icon={<Hourglass />} title="Нет сделок дольше" sub="тревога в Telegram">
       <Threshold d={d} value={c[d.key]?.value} />
-    </div>
+    </IRow>
   );
 }
 
@@ -307,30 +331,18 @@ function RuleRow({ r, c, schema, guardsOff, alertOn }: { r: Rule; c: ConfigValue
   const zero = r.zeroOff && Number(cfg(c, r.key ?? "", 1)) === 0;
   const skipped = guardsOff && r.guardsOff;
   const active = enabled && !zero && !skipped;
-  const note = skipped
-    ? "не проверяется: Paper без защит"
-    : zero
-      ? "выключено: порог 0"
-      : r.alert && !enabled
-        ? "тревога выключена"
-        : (r.elsewhere ?? "");
+  const sub = skipped ? "не проверяется: Paper без защит" : zero ? "выключено: порог 0" : r.short;
   return (
-    <li className={`rule${active ? "" : " off"}`}>
-      <span className="rule-cat">{r.cat}</span>
-      <div className="rule-if">
-        <b>Если</b> {r.ifm} <span className="rule-cmp">{r.cmp}</span>{" "}
-        {d && !r.elsewhere ? <Threshold d={d} value={c[d.key]?.value} /> : <span className="rule-val ro">{d ? fmtVal(d, c[d.key]?.value ?? d.default) : r.fixed}</span>}
-      </div>
-      <div className="rule-then">
-        <b>то</b> {r.then(c)}
-      </div>
-      {note && <p className="rule-note">{note}</p>}
-      {r.on && (
-        <span className="rule-tgl">
-          <Toggle on={enabled} label={`Правило: ${r.ifm}`} onChange={(v) => void actions.patchConfig({ [r.on as string]: v })} />
-        </span>
-      )}
-    </li>
+    <IRow
+      icon={r.icon}
+      title={r.chip ?? r.ifm}
+      sub={sub}
+      tip={`Если ${r.ifm.toLowerCase()} ${r.cmp} порога — ${r.then(c)}.${r.elsewhere ? ` Порог ${r.elsewhere}.` : ""}`}
+      off={!active}
+    >
+      {d && !r.elsewhere ? <Threshold d={d} value={c[d.key]?.value} /> : <span className="rule-val ro">{d ? fmtVal(d, c[d.key]?.value ?? d.default) : r.fixed}</span>}
+      {r.on && <Toggle on={enabled} label={`Правило: ${r.ifm}`} onChange={(v) => void actions.patchConfig({ [r.on as string]: v })} />}
+    </IRow>
   );
 }
 

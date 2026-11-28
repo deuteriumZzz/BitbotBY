@@ -10,7 +10,7 @@ export const NODE_TITLE: Record<BotNode, string> = {
   sac: "SAC",
   risk: "Риск",
   order: "Ордер",
-  track: "Сопровождение",
+  track: "Выход",
 };
 
 /** ▲ — узел пропустил дальше, ▼ — остановил, – — пропущен или не участвует. */

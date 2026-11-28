@@ -15,6 +15,9 @@ export interface Radar {
   rejected: Record<string, { reason: string; at: number; lane: number }>;
   opened: string[];
   note: string;
+  /** Последний этап цикла и когда он пришёл — схема подсвечивает блок, где бот сейчас. */
+  stage?: string;
+  stageAt?: number;
 }
 
 export const emptyRadar = (cycle = 0): Radar => ({
@@ -31,7 +34,12 @@ export const emptyRadar = (cycle = 0): Radar => ({
 const n = (list: unknown): number => (Array.isArray(list) ? list.length : 0);
 
 /** Конвейер радара: scan → prescore → signal → guards → rejected | open. */
-export function reduceRadar(r: Radar, d: Data): Radar {
+export function reduceRadar(r0: Radar, d: Data): Radar {
+  const r = reduceStage(r0, d);
+  return d.stage ? { ...r, stage: d.stage, stageAt: Date.now() } : r;
+}
+
+function reduceStage(r: Radar, d: Data): Radar {
   const sym: string = d.symbol;
   switch (d.stage) {
     case "scan":

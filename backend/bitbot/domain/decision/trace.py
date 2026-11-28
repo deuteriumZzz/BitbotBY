@@ -233,12 +233,17 @@ class DecisionTrace:
         elif self._guard and not self._signals and not cand:
             skipped = f"пропущено: {self._guard}"
 
-        local = by_src.get("local", []) + by_src.get("context", [])
+        loc = by_src.get("local", [])
+        ctx = by_src.get("context", [])
         if skipped:
             n["strat"] = _step("strat", None, skipped)
-        elif local:
-            label = "сигналы" if m == "local" else "запасной путь"
-            n["strat"] = _step("strat", True, f"{label}: {_coins(local, sides)}")
+        elif m == "local" and (loc or ctx):
+            n["strat"] = _step("strat", True, f"сигналы: {_coins(loc + ctx, sides)}")
+        elif loc or ctx:
+            # Запасной путь — только сигналы стратегий; сигнал контекста рынка идёт в любом режиме.
+            parts = [f"запасной путь: {_coins(loc, sides)}"] if loc else []
+            parts += [f"контекст рынка: {_coins(ctx, sides)}"] if ctx else []
+            n["strat"] = _step("strat", True, " · ".join(parts))
         elif m == "local":
             n["strat"] = _step("strat", None, "сигналов нет")
         elif takes_part(m, "ai"):

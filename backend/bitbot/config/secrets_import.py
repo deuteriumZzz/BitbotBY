@@ -54,7 +54,7 @@ def import_values(
                 ok,
                 None,
                 "warn",
-                "Перенесено из .env, ещё не проверено.",
+                "Сохранён, ещё не проверен.",
                 "env",
             )
             done[service.id] = sorted(ok)

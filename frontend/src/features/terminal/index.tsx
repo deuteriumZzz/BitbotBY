@@ -18,6 +18,7 @@ import { Tween } from "../../components/motion";
 import { Q } from "../../components/tooltip";
 import { Chart } from "./chart";
 import { Equity } from "./equity";
+import { Feed } from "./feed";
 import { Positions } from "./positions";
 import { Radar } from "./radar";
 
@@ -227,15 +228,16 @@ export function Terminal() {
   const simple = useStore((s) => s.ui === "simple");
   const [dock, setDock] = useState<"pos" | "log">("pos");
   return (
-    <section className="view term enter" aria-label="Терминал">
+    <section className={`view term enter${simple ? " simple" : ""}`} aria-label="Терминал">
       <HealthStrip />
       {simple && <PathBar />}
       {!simple && <Radar />}
       <div className="term-side">
         <Hero />
+        <Feed />
+        {!simple && <MarketPulse />}
       </div>
       {!simple && <Chart />}
-      {!simple && <MarketPulse />}
       <div className="term-dock">
         <Seg
           className="sm"

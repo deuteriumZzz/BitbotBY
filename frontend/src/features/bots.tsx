@@ -4,10 +4,14 @@
 import { useEffect, useRef, useState } from "react";
 
 import { fmtN, opsSummary, plural, readinessReason } from "../lib/format";
-import type { ConfigValues, RiskPreset, Strategy } from "../lib/types";
+import type { ConfigValues, RiskPreset, SettingDef, Strategy } from "../lib/types";
 import { actions } from "../store/actions";
 import { useStore } from "../store";
+import { ArrowsClockwise, ShieldCheck, CheckCircle, Crosshair, CurrencyBtc, Fire, HandTap, Lightning, Rocket, SkipForward, Target } from "@phosphor-icons/react";
+
 import { Seg, Toggle } from "../components/controls";
+import { IRow, Tiles } from "../components/irow";
+import { strategyIcon } from "./strategyIcon";
 import { Icon } from "../components/icon";
 import { Q } from "../components/tooltip";
 import { ParamList } from "./params";
@@ -108,7 +112,7 @@ const ico = (d: string) => (
 /** Пресет риска ставит и пороги защит: один выбор вместо двух. */
 const PRESET_TPL = { conservative: "strict", moderate: "base", aggressive: "loose" } as const;
 
-const PRESET_META: Record<string, { name: string; d: string; icon: JSX.Element }> = {
+export const PRESET_META: Record<string, { name: string; d: string; icon: JSX.Element }> = {
   conservative: {
     name: "Консервативный",
     d: "Редкие сделки, маленький риск, строгая защита",
@@ -134,11 +138,6 @@ const PROFILES = [
   ["meme", "Мемкоины"],
 ] as const;
 export const profileName = (p: string): string => PROFILES.find(([v]) => v === p)?.[1] ?? p;
-const PROFILE_NOTE: Record<string, string> = {
-  bluechip: "Крупнейшие монеты: BTC, ETH, SOL и др. Спокойнее, меньше сделок.",
-  altcoin: "Ликвидные альткоины. Больше движений и сигналов.",
-  meme: "Мем-монеты и сигналы из Twitter и памп-каналов Telegram. Самый рискованный.",
-};
 
 // ── Как рискуем: пресеты + ручная настройка ───────────────────────────────────
 
@@ -158,6 +157,12 @@ export function presetOf(c: ConfigValues, presets: Record<string, RiskPreset>): 
       p.LEVERAGE_MODE === now.LEVERAGE_MODE,
   )?.[0];
 }
+
+/** Выбрать пресет риска: его значения и набор порогов защиты (одно место — карточка «Как рискуем» и схема). */
+export const applyPreset = (k: string, presets: Record<string, RiskPreset>, schema: SettingDef[]) => {
+  const p = presets[k];
+  if (p) void actions.patchConfig({ ...p, ...(k in PRESET_TPL ? templateValues(PRESET_TPL[k as keyof typeof PRESET_TPL], schema) : {}) });
+};
 
 export const presetName = (k: string | undefined): string => (k ? (PRESET_META[k]?.name ?? k) : "свои настройки");
 
@@ -197,7 +202,10 @@ export function OpsCard() {
     return (
       <article className="card">
         <div className="card-h">
-          <h2>Защита и наблюдение</h2>
+          <h2>
+            <ShieldCheck className="h-ico" />
+            Защита и наблюдение
+          </h2>
         </div>
         <p className="note-soon">Бот ещё не прислал статус — появится после первого цикла.</p>
       </article>
@@ -207,7 +215,10 @@ export function OpsCard() {
   return (
     <article className="card">
       <div className="card-h">
-        <h2>Защита и наблюдение</h2>
+        <h2>
+            <ShieldCheck className="h-ico" />
+            Защита и наблюдение
+          </h2>
         <span className="pill">{ops.mode === "paper" ? "Paper" : "Live"}</span>
       </div>
       {v.emergency > 0 && (
@@ -267,7 +278,7 @@ export function RiskCard({ simple = false }: { simple?: boolean }) {
         {Object.entries(PRESET_META).map(([k, m]) => {
           const p = presets[k];
           return (
-            <button key={k} className="preset" type="button" aria-pressed={k === active} disabled={!p} onClick={() => p && k !== active && void actions.patchConfig({ ...p, ...(k in PRESET_TPL ? templateValues(PRESET_TPL[k as keyof typeof PRESET_TPL], schema) : {}) })}>
+            <button key={k} className="preset" type="button" aria-pressed={k === active} disabled={!p} onClick={() => p && k !== active && applyPreset(k, presets, schema)}>
               <span className="pi">{m.icon}</span>
               <b>{m.name}</b>
               <span className="pd">{m.d}</span>
@@ -450,27 +461,21 @@ export function ConfirmCard() {
                 <span className="u">с</span>
               </span>
             </div>
-            <p>
-              От {DECISION_MIN} до {DECISION_MAX} секунд. Дольше ждать нельзя — цена уходит, и сигнал устаревает.
-            </p>
+
           </div>
           <div className="field">
             <div className="field-h">
               <span>Если не ответил</span>
             </div>
-            <Seg
-              className="full"
+            <Tiles
               value={onTimeout}
               options={[
-                ["execute", "Открыть сделку"],
-                ["skip", "Пропустить"],
+                ["execute", "Открыть сделку", <CheckCircle />],
+                ["skip", "Пропустить", <SkipForward />],
               ]}
               label="Если не ответил вовремя"
               onChange={(v) => void actions.patchConfig({ CONFIRM_ON_TIMEOUT: v })}
             />
-            <p>
-              Не ответили за {timeout} с — {onTimeout === "execute" ? "бот откроет сделку сам." : "сделка будет пропущена."}
-            </p>
           </div>
     </>
   );
@@ -485,12 +490,11 @@ export function ConfirmCard() {
             Как открывать <Q tip="Автоматически — бот нашёл сигнал и сразу открыл сделку. С подтверждением — каждая сделка приходит вам в Telegram и сюда." />
           </span>
         </div>
-        <Seg
-          className="full"
+        <Tiles
           value={auto ? "auto" : "confirm"}
           options={[
-            ["auto", "Автоматически"],
-            ["confirm", "С подтверждением"],
+            ["auto", "Автоматически", <Lightning />, "сразу по сигналу"],
+            ["confirm", "С подтверждением", <HandTap />, "спросит в Telegram"],
           ]}
           label="Как открывать сделки"
           onChange={(v) => void actions.patchConfig({ AUTO_EXECUTE: v === "auto" })}
@@ -515,8 +519,8 @@ export function ConfirmCard() {
 
 // ── Что торговать ─────────────────────────────────────────────────────────────
 
-/** simple — режим «Простой»: только профиль и авто-сезон. */
-export function WhatCard({ simple = false }: { simple?: boolean }) {
+/** Профиль монет и авто-сезон; рынок (спот/фьючерсы) — над схемой, рядом с «кто решает». */
+export function WhatCard() {
   const c = useStore((s) => s.config);
   const profile = useStore((s) => s.bot?.profile ?? null);
   const seasonAuto = cfg<string>(c, "SEASON_SWITCH_MODE", "alert") === "auto";
@@ -530,36 +534,20 @@ export function WhatCard({ simple = false }: { simple?: boolean }) {
           <span>Профиль рынка</span>
           {seasonAuto && <span className="pill">авто по сезону</span>}
         </div>
-        <Seg className="full" value={profile} options={PROFILES} onChange={(v) => void actions.setProfile(v)} label="Профиль рынка" />
-        {profile && <p>{PROFILE_NOTE[profile]}</p>}
-      </div>
-      <div className="field">
-        <div className="row-tgl">
-          <span>
-            Менять профиль по сезону{" "}
-            <Q tip="Бот следит за сезоном рынка. Включено — переключает профиль сам. Выключено — присылает предложение в Telegram." />
-          </span>
-          <Toggle brand on={seasonAuto} label="Авто-сезон" onChange={(on) => void actions.patchConfig({ SEASON_SWITCH_MODE: on ? "auto" : "alert" })} />
-        </div>
-      </div>
-      {!simple && (
-        <>
-      <div className="field">
-        <div className="field-h">
-          <span>Рынок</span>
-        </div>
-        <Seg
-          className="full"
-          value={cfg<string>(c, "MARKET_TYPE", "linear")}
+        <Tiles
+          value={profile}
           options={[
-            ["linear", "Фьючерсы"],
-            ["spot", "Спот"],
+            ["bluechip", "Блючипы", <CurrencyBtc />, "BTC, ETH, SOL"],
+            ["altcoin", "Альткоины", <Rocket />, "больше сигналов"],
+            ["meme", "Мемкоины", <Fire />, "самый риск"],
           ]}
-          onChange={(v) => void actions.patchConfig({ MARKET_TYPE: v })}
+          onChange={(v) => void actions.setProfile(v)}
+          label="Профиль рынка"
         />
       </div>
-        </>
-      )}
+      <IRow icon={<ArrowsClockwise />} title="Менять профиль по сезону" tip="Бот следит за сезоном рынка. Включено — переключает профиль сам. Выключено — присылает предложение в Telegram." sub={seasonAuto ? "сам" : "спросит в Telegram"}>
+        <Toggle brand on={seasonAuto} label="Авто-сезон" onChange={(on) => void actions.patchConfig({ SEASON_SWITCH_MODE: on ? "auto" : "alert" })} />
+      </IRow>
     </article>
   );
 }
@@ -603,12 +591,14 @@ export function StrategiesCard() {
   const readiness = useStore((s) => s.modeReadiness?.[s.bot?.mode ?? "ai"] ?? null);
   const fallback = useStore((s) => cfg<boolean>(s.config, "LOCAL_FALLBACK", false));
   const [q, setQ] = useState("");
+  const [showAll, setShowAll] = useState(false);
   // На споте нет шортов: стратегии «только фьючерсы» там не работают и не показываются.
   const market = marketSpot ? "spot" : "futures";
   const strategies = all0.filter((s) => s.markets === "both" || s.markets === market);
   const needle = q.trim().toLowerCase();
-  const rows = (needle ? strategies.filter((s) => stratName(s.name).toLowerCase().includes(needle) || s.name.includes(needle)) : strategies.filter((s) => s.enabled)).sort(
-    (a, b) => (b.backtest?.sharpe ?? -9) - (a.backtest?.sharpe ?? -9),
+  // По умолчанию — только включённые; «Все» или поиск показывают остальные (включённые — первыми).
+  const rows = (needle ? strategies.filter((s) => stratName(s.name).toLowerCase().includes(needle) || s.name.includes(needle)) : showAll ? strategies : strategies.filter((s) => s.enabled)).sort(
+    (a, b) => Number(b.enabled) - Number(a.enabled) || (b.backtest?.sharpe ?? -9) - (a.backtest?.sharpe ?? -9),
   );
   const on = strategies.filter((s) => s.enabled).length;
   const tested = strategies.filter((s) => s.backtest && s.backtest.trades > 0);
@@ -638,9 +628,21 @@ export function StrategiesCard() {
           <Toggle on={fallback} label="Запасной путь при недоступности AI или SAC" onChange={(v) => void actions.patchConfig({ LOCAL_FALLBACK: v })} />
         </div>
       )}
+      {!tested.length && <p className="note-soon">Бэктест ещё не запускали: оценки стратегий появятся после него (вкладка «Обучение»).</p>}
       {tested.length > 0 && !edge.length && (
         <p className="note-soon">Бэктест: ни одна из {tested.length} стратегий не показала устойчивого преимущества. Пока его нет, держите Paper.</p>
       )}
+      {/* Какие показывать — наверху, чтобы длинный список «Все» сворачивался одним нажатием. */}
+      <Seg
+        className="full st-view"
+        value={showAll ? "all" : "on"}
+        options={[
+          ["on", `Включённые ${on}`],
+          ["all", `Все ${strategies.length}`],
+        ]}
+        label="Какие стратегии показать"
+        onChange={(v) => setShowAll(v === "all")}
+      />
       <input
         className="inp strat-find"
         type="search"
@@ -650,21 +652,31 @@ export function StrategiesCard() {
         aria-label="Найти стратегию"
         autoComplete="off"
       />
-      <ul className="strats compact">
+      {/* Плитки: значок типа стратегии и название; клик включает и выключает. Цифры бэктеста — в подсказке. */}
+      <div className="st-grid" role="group" aria-label="Стратегии">
         {rows.map((s) => {
           const bt = s.backtest;
-          const st = !bt || !bt.trades ? ["", "нет данных"] : bt.trades < 100 ? ["", "мало сделок"] : bt.sharpe > 0 ? ["ok", "есть плюс"] : ["warn", "нет edge"];
+          const st = !bt || !bt.trades ? "" : bt.trades < 100 ? "" : bt.sharpe > 0 ? "ok" : "warn";
           return (
-            <li key={s.name} className={`strat${s.enabled ? "" : " off"}`} title={stratTip(s)}>
+            <button
+              key={s.name}
+              type="button"
+              className={`st-tile${s.enabled ? " on" : ""}`}
+              aria-pressed={s.enabled}
+              title={`${stratName(s.name)} — ${s.enabled ? "включена, нажмите, чтобы выключить" : "выключена, нажмите, чтобы включить"}. ${stratTip(s)}`}
+              onClick={() => void actions.setStrategy(s.name, !s.enabled)}
+            >
+              <span className="st-ico" aria-hidden="true">
+                {strategyIcon(s.name)}
+              </span>
               <b>{stratName(s.name)}</b>
-              {s.experimental && <span className="pill">эксп.</span>}
-              <span className={`pill sp ${st[0]}`}>{st[1]}</span>
-              <Toggle on={s.enabled} label={`Стратегия «${stratName(s.name)}»`} onChange={(v) => void actions.setStrategy(s.name, v)} />
-            </li>
+              {s.experimental && <i className="st-exp">эксп.</i>}
+              {st && <i className={`st-bt ${st}`} aria-hidden="true" />}
+            </button>
           );
         })}
-        {!rows.length && <li className="empty">{needle ? "Ничего не нашлось." : "Ни одной включённой стратегии."}</li>}
-      </ul>
+        {!rows.length && <p className="empty">{needle ? "Ничего не нашлось." : "Ни одной включённой стратегии."}</p>}
+      </div>
       {strategies.filter((s) => !s.experimental).some((s) => !s.enabled) && (
         <button className="btn" type="button" style={{ marginTop: 8 }} title="Включить основные стратегии; экспериментальные останутся выключенными" onClick={() => void actions.resetStrategies()}>
           Включить основные
@@ -712,13 +724,14 @@ export function TrackCard() {
         <h2>Выход из сделки</h2>
         {restart && <span className="tag rst sp">после перезапуска</span>}
       </div>
-      <div className="row-tgl">
-        <span>
-          Частичная фиксация прибыли{" "}
-          <Q tip="Когда цена проходит заданную часть пути до тейк-профита, бот закрывает часть позиции и переносит стоп-лосс на цену входа." />
-        </span>
+      <IRow
+        icon={<Target />}
+        title="Частичная фиксация прибыли"
+        tip="Когда цена проходит заданную часть пути до тейк-профита, бот закрывает часть позиции и переносит стоп-лосс на цену входа (безубыток). Остаток идёт к тейк-профиту; если цена развернётся — закроется около цены входа."
+        sub={on ? `на ${pctOf(at)} пути закрыть ${pctOf(part)}, стоп в безубыток` : "выключена"}
+      >
         <Toggle on={on} label="Частичная фиксация прибыли" onChange={(v) => void actions.patchConfig({ PARTIAL_TP_ENABLED: v })} />
-      </div>
+      </IRow>
       {on && (
         <>
           <div className="field">
@@ -733,10 +746,6 @@ export function TrackCard() {
             </div>
             <Seg className="full" value={preset(part, TP_PART)} options={TP_PART} onChange={(v) => void actions.patchConfig({ PARTIAL_TP_FRACTION: v })} label="Какую часть закрыть" />
           </div>
-          <p className="note-soon">
-            Цена прошла {pctOf(at)} пути до тейк-профита — бот закрывает {pctOf(part)} позиции и переносит стоп-лосс на цену входа (безубыток). Остаток идёт к
-            тейк-профиту, а если цена развернётся — закроется около цены входа.
-          </p>
         </>
       )}
       <div className="field">
@@ -748,12 +757,11 @@ export function TrackCard() {
         </div>
         <Seg className="full" value={preset(trail, TRAIL)} options={TRAIL} onChange={(v) => void actions.patchConfig({ TRAILING_STOP_ATR_MULT: v })} label="Отступ трейлинг-стопа" />
       </div>
-      <p className="note-soon">Трейлинг можно выключить у отдельной позиции в Терминале.</p>
-      <div className="btn-row">
+      <IRow icon={<Crosshair />} title="Трейлинг у отдельной позиции" sub="выключается в карточке позиции">
         <button className="btn" type="button" onClick={() => setTab("terminal")}>
-          Открыть позиции
+          Позиции
         </button>
-      </div>
+      </IRow>
     </article>
   );
 }

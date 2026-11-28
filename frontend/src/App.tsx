@@ -1,5 +1,6 @@
 // Оболочка приложения: верхняя панель, баннеры защиты, вкладки, предложение сделки, вход.
 
+import { AccountBadge } from "./features/settings/connections";
 import { Coin } from "./components/coin";
 import { Suspense, lazy, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 
@@ -25,6 +26,7 @@ import { TipLayer, hideTip } from "./components/tooltip";
 // «Цепочка», «Обучение» и «Журнал» грузятся при первом открытии — первый экран легче.
 const Pipeline = lazy(() => import("./features/pipeline").then((m) => ({ default: m.Pipeline })));
 const Learn = lazy(() => import("./features/jobs").then((m) => ({ default: m.Learn })));
+const Stats = lazy(() => import("./features/jobs").then((m) => ({ default: m.Stats })));
 const BotSimple = lazy(() => import("./features/simple").then((m) => ({ default: m.BotSimple })));
 
 export function App() {
@@ -155,6 +157,7 @@ export function App() {
             {tab === "terminal" && <Terminal />}
             {tab === "bots" && (ui === "simple" ? <BotSimple /> : <Pipeline />)}
             {tab === "learn" && <Learn />}
+            {tab === "stats" && <Stats />}
             {tab === "settings" && <Settings />}
           </Suspense>
         )}
@@ -186,7 +189,6 @@ function TopBar({ onPanic }: { onPanic: () => void }) {
   const bot = useStore((s) => s.bot);
   const alive = useStore((s) => s.alive);
   const [busy, setBusy] = useState(false);
-  const paper = bot?.paper ?? true;
   const paused = bot?.paused ?? false;
 
   const toggle = async (on: boolean) => {
@@ -204,9 +206,7 @@ function TopBar({ onPanic }: { onPanic: () => void }) {
       <button type="button" className="top-find" aria-label="Найти раздел, настройку или действие" onClick={() => useStore.getState().openPalette(true)}>
         {Icon.search}
       </button>
-      <span className={`paper${paper ? "" : " live"}`} title={paper ? "Бумажная торговля: сделки виртуальные" : "Реальная торговля на Bybit"}>
-        {paper ? "PAPER" : "LIVE"}
-      </span>
+      <AccountBadge />
       {isMock && <span className="demo">демо</span>}
       <UiSwitch />
       <NotifButton />
@@ -340,10 +340,11 @@ function Banners() {
 const TABS: [Tab, string, JSX.Element][] = [
   ["terminal", "Терминал", Icon.terminal],
   ["bots", "Стратегия", Icon.bots],
-  ["learn", "Аналитика", Icon.learn],
+  ["learn", "Обучение", Icon.learn],
+  ["stats", "Аналитика", Icon.stats],
   ["settings", "Настройки", Icon.settings],
 ];
-// «Простой»: три вкладки простыми словами; Стратегия и Аналитика — в «Профи».
+// «Простой»: три вкладки простыми словами; Стратегия, Обучение и Аналитика — в «Профи».
 const SIMPLE_TABS: [Tab, string, JSX.Element][] = [
   ["terminal", "Главная", Icon.terminal],
   ["bots", "Бот", Icon.bots],

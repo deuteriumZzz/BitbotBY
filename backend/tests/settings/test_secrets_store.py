@@ -144,6 +144,22 @@ def test_put_valid_key_saved_without_echo(keyed):
     assert body["status"] == "ok" and body["restart_required"] is True
 
 
+def test_check_validates_stored_key_without_reentry(keyed):
+    ss.save(ss.BY_ID["groq"], {"GROQ_API_KEY": GROQ_KEY}, None, "warn", "из .env", "env")
+    check = AsyncMock(return_value=("ok", "Ключ работает."))
+    with (
+        patch.object(ss, "validate", check),
+        patch.object(data, "get_redis", return_value=FakeRedis()),
+    ):
+        resp = keyed.post("/api/secrets/groq/check", headers=H)
+        missing = keyed.post("/api/secrets/deepseek/check", headers=H)
+    assert resp.status_code == 200 and resp.json()["status"] == "ok"
+    assert check.await_args.args[1] == {"GROQ_API_KEY": GROQ_KEY}
+    assert GROQ_KEY not in resp.text
+    assert ss.load_values()["GROQ_API_KEY"] == GROQ_KEY
+    assert missing.status_code == 400
+
+
 def test_secrets_need_auth(keyed):
     with (
         patch.object(data, "get_redis", return_value=None),

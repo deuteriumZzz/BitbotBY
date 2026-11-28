@@ -168,6 +168,8 @@ export function Radar() {
     const id = s.ai?.last || s.bot?.ai;
     return id ? (s.ai?.providers.find((p) => p.id === id)?.name ?? id) : "";
   });
+  // Пока идёт пауза между циклами, монет на радаре нет — числа берём из итога последнего цикла.
+  const funnel = useStore((s) => s.lastCycle?.funnel);
   const host = useRef<HTMLDivElement>(null);
   const [, setNow] = useState(0);
 
@@ -218,12 +220,10 @@ export function Radar() {
   useFlip(host);
   const nSlots = Math.max(Math.min(slots.max, 6), open.length);
   const [pillText, pillDot] = CYCLE_PILL[kind];
+  const nScan = radar.scan.length || funnel?.scanned || 0;
   const heads: [string, string][] = [
-    [
-      "Скан",
-      `${radar.scan.length} ${plural(radar.scan.length, ["монета", "монеты", "монет"])}`,
-    ],
-    ["Отбор", `${radar.prescore.length} в топе`],
+    ["Скан", `${nScan} ${plural(nScan, ["монета", "монеты", "монет"])}`],
+    ["Отбор", `${radar.prescore.length || funnel?.candidates || 0} в топе`],
     [
       "Сигнал",
       mode === "local"

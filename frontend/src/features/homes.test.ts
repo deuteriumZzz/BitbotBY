@@ -11,7 +11,9 @@ const SOURCES = import.meta.glob("./*.tsx", { query: "?raw", import: "default", 
 
 // Ярлыки «Кто решает»: мастер первого запуска и «Включить AI» после ввода ключа.
 // Часы торговли: «Торговать с … до …» в «Журнале» применяет окно, найденное по сделкам.
-const SHORTCUTS: Record<string, string[]> = { MODE: ["./ai.tsx", "./setup.tsx"], TRADING_HOURS: ["./journal.tsx"] };
+// Значки на карточках схемы — ярлыки к тем же настройкам: «Как открывать сделки» (Ордер),
+// «Paper без защит» (Риск).
+const SHORTCUTS: Record<string, string[]> = { MODE: ["./ai.tsx", "./setup.tsx"], TRADING_HOURS: ["./journal.tsx"], AUTO_EXECUTE: ["./pipeline.tsx"], PAPER_GUARDS_OFF: ["./pipeline.tsx"] };
 
 function writers(key: string): string[] {
   const files = new Set<string>();

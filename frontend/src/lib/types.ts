@@ -2,7 +2,7 @@
 
 export type Side = "long" | "short";
 export type Period = "24h" | "7d" | "30d" | "all";
-export type Tab = "terminal" | "bots" | "learn" | "journal" | "settings";
+export type Tab = "terminal" | "bots" | "learn" | "stats" | "journal" | "settings";
 /** Узел конвейера решений во вкладке «Бот». */
 export type BotNode = "scan" | "strat" | "ai" | "sac" | "risk" | "order" | "track";
 
@@ -263,6 +263,8 @@ export interface Alert {
 export interface Symbols {
   forced: string[];
   excluded: string[];
+  /** Стейблкоины — исключены всегда, встроено в бота. */
+  builtin?: string[];
 }
 
 export interface SecretField {

@@ -120,7 +120,7 @@ export function setApiBase(url: string): void {
 let memoryToken: string | null = null;
 
 /** Токен запуска из ссылки лаунчера `#local=…`; другие фрагменты игнорируются. */
-const TABS: readonly Tab[] = ["terminal", "bots", "learn", "journal", "settings"];
+const TABS: readonly Tab[] = ["terminal", "bots", "learn", "stats", "journal", "settings"];
 
 /** Вкладка из адреса `?tab=…` — так открывает приложение кнопка в Telegram-уведомлении. */
 export function tabFromUrl(search: string): Tab | null {

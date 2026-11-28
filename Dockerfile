@@ -25,10 +25,13 @@ RUN pip install --no-cache-dir --timeout 300 \
     "torch>=2.0.0" --index-url https://download.pytorch.org/whl/cpu
 RUN python -c "import tomllib; print('\\n'.join(tomllib.load(open('backend/pyproject.toml','rb'))['project']['dependencies']))" > /tmp/deps.txt \
     && pip install --no-cache-dir --timeout 300 -r /tmp/deps.txt
+# Сборочные инструменты пакета — отдельным маленьким слоем (тяжёлый слой выше остаётся в кэше).
+RUN pip install --no-cache-dir --timeout 300 "setuptools>=68" wheel
 
 # Код: пакет bitbot ставится без зависимостей (они уже в слое выше)
 COPY . .
-RUN pip install --no-cache-dir --no-deps ./backend
+# --no-build-isolation: сборочные инструменты уже в слое выше — правка интерфейса не требует сети до PyPI.
+RUN pip install --no-cache-dir --no-deps --no-build-isolation ./backend
 COPY --from=frontend /frontend/dist ./frontend/dist
 
 # Create data directory
