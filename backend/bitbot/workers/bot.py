@@ -154,17 +154,9 @@ class TradingBot:
         # сделок по доверенным каналам: они идут мимо цикла, а цикл в это время спит.
         self._entries_blocked = ""
         self.ai = AIAnalyzer(runtime_config=self._runtime_config)
-        # Прогнозист для Chronos-поправки: по умолчанию chronos_analyzer; FORECASTER=timesfm —
-        # изолированный воркер TimesFM (src/forecast). Работает, если включён переключатель Chronos.
-        self._forecaster: Any = None
-        if Config.FORECASTER == "timesfm":
-            from bitbot.ai.forecast.timesfm_client import (
-                TimesFMForecaster,
-            )  # noqa: PLC0415
-
-            self._forecaster = TimesFMForecaster()
+        # Прогнозист (Chronos или TimesFM) выбирается в настройках на ходу — см. SignalCombiner.
         self.combiner = SignalCombiner(
-            self.ai, rc=self._runtime_config, forecaster=self._forecaster
+            self.ai, rc=self._runtime_config
         )
         if getattr(self.combiner.sac, "needs_candles", False):
             # v2 подаёт модели текущую позицию (а не 0, как v1)
@@ -2206,8 +2198,7 @@ class TradingBot:
         for _t in (self._ws_task, self._backup_task, getattr(self, "_rag_task", None)):
             if _t:
                 _t.cancel()
-        if self._forecaster is not None and hasattr(self._forecaster, "close"):
-            self._forecaster.close()  # воркер TimesFM — отдельный процесс
+        self.combiner.close()  # воркер TimesFM — отдельный процесс
         if self._monitor_task:
             self._monitor_task.cancel()
             try:

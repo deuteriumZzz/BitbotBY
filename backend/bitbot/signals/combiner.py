@@ -102,6 +102,7 @@ class SignalCombiner:
             # v2 учится на свечах: берём их из market_data текущего цикла
             self.sac.candles_provider = lambda s: (self._market_data or {}).get(s)
         self._forecaster = forecaster
+        self._timesfm: Any = None  # воркер TimesFM — создаётся при первом выборе
         # Входы последнего combine() — для воспроизведения решения:
         # ответ AI, сигналы SAC, направления Chronos и настройки. Только запись.
         self.last_inputs: Dict[str, Any] = {}
@@ -112,6 +113,31 @@ class SignalCombiner:
             "SignalCombiner mode=%s",
             self._rc.get_mode() if self._rc else Config.MODE,
         )
+
+    def forecaster_name(self) -> str:
+        if self._forecaster is not None:
+            return str(getattr(self._forecaster, "name", "custom"))
+        return self._rc.get_forecaster() if self._rc is not None else "chronos"
+
+    def _pick_forecaster(self) -> Any:
+        """Подмена (replay/тесты) → она; иначе выбранный в настройках chronos | timesfm."""
+        if self._forecaster is not None:
+            return self._forecaster
+        if self.forecaster_name() == "timesfm":
+            if self._timesfm is None:
+                from bitbot.ai.forecast.timesfm_client import (  # noqa: PLC0415
+                    TimesFMForecaster,
+                )
+
+                self._timesfm = TimesFMForecaster()
+            return self._timesfm
+        return chronos_analyzer
+
+    def close(self) -> None:
+        """Останавливает воркер TimesFM (отдельный процесс), если он запускался."""
+        if self._timesfm is not None:
+            self._timesfm.close()
+            self._timesfm = None
 
     async def combine(
         self,
@@ -495,7 +521,7 @@ class SignalCombiner:
                         )
                         # Синхронный инференс модели — в потоке, чтобы не
                         # блокировать event loop на каждый символ.
-                        forecaster = self._forecaster or chronos_analyzer
+                        forecaster = self._pick_forecaster()
                         chronos_dir = await asyncio.to_thread(
                             forecaster.predict_direction,
                             df["close"].tolist(),
@@ -530,6 +556,8 @@ class SignalCombiner:
                 rec = dict(ai)
                 rec["confidence"] = combined
                 rec["chronos_signal"] = chronos_dir
+                if use_chronos:
+                    rec["forecaster"] = self.forecaster_name()
                 rec["conf_trail"] = [
                     ["ai", round(float(a_conf), 3)],
                     ["sac", round(float(d_conf), 3)],

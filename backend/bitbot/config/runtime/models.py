@@ -240,6 +240,21 @@ class ModelSettings(RiskSettings):
         self._set(keys.CHRONOS_FILTER, "1" if enabled else "0")
         logger.info("Chronos filter %s", "ON" if enabled else "OFF")
 
+    FORECASTERS = ("chronos", "timesfm")
+
+    def get_forecaster(self) -> str:
+        """Чей прогноз даёт поправку: chronos | timesfm. Без выбора — FORECASTER из окружения."""
+        val = self._get(keys.FORECASTER)
+        if val in self.FORECASTERS:
+            return str(val)
+        return Config.FORECASTER if Config.FORECASTER in self.FORECASTERS else "chronos"
+
+    def set_forecaster(self, name: str) -> None:
+        if name not in self.FORECASTERS:
+            raise ValueError(f"неизвестный прогнозист: {name}")
+        self._set(keys.FORECASTER, name)
+        logger.info("Forecaster → %s", name)
+
     # ── Train progress ────────────────────────────────────────────────────────
     def set_train_progress(self, data: dict) -> None:
         import json as _json

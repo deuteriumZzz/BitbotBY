@@ -48,6 +48,21 @@ def takes_part(mode: str, node: str) -> bool:
     return True
 
 
+
+_FC_NAME = {"chronos": "Chronos", "timesfm": "TimesFM"}
+
+
+def _forecast_note(sig: dict[str, Any], side: str) -> str:
+    """«прогноз Chronos: согласен (+0.05)» — как прогнозист поправил уверенность сделки."""
+    name = _FC_NAME.get(str(sig.get("forecaster") or ""))
+    d = sig.get("chronos_signal")
+    if not name or d in (None, "off"):
+        return ""
+    if d == "neutral":
+        return f"прогноз {name}: без направления"
+    agree = (d == "up") == (side == "long")
+    return f"прогноз {name}: {'согласен (+0.05)' if agree else 'против (−0.15)'}"
+
 def _step(node: str, ok: Optional[bool], text: str) -> Step:
     return {"node": node, "ok": ok, "text": text[:200]}
 
@@ -373,6 +388,10 @@ class DecisionTrace:
             steps.append(_step("sac", True, str(sig.get("reasoning") or "сигнал SAC")))
         else:
             steps.append(_step("sac", None, "сигнала не дал"))
+        fc = _forecast_note(sig, side)
+        if fc:
+            last = steps[-1]
+            steps[-1] = _step(last["node"], last["ok"], f"{last['text']} · {fc}")
 
         steps.append(_step("risk", True, "проверки пройдены"))
         entry = pos.get("entry")

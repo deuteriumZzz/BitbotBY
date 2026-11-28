@@ -4,7 +4,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
-import { CurrencyDollar, Database, Flask, Gavel, Key, SignIn, TelegramLogo } from "@phosphor-icons/react";
+import { CurrencyDollar, Database, Flask, Gavel, Key, Prohibit, SignIn, TelegramLogo } from "@phosphor-icons/react";
 
 import { plural } from "../lib/format";
 import { reducedMotion } from "../lib/platform";
@@ -16,6 +16,9 @@ import { cfg } from "./bots";
 import { chanList } from "./settings/telegram";
 import { Keys, keyIcon } from "./settings/keys";
 import { brandLogo } from "../components/brand";
+import { Icon } from "../components/icon";
+import { Tiles } from "../components/irow";
+import { Q } from "../components/tooltip";
 import { cycleKind } from "./terminal/radar";
 import { MARKET } from "./signals";
 import { scrollWhenReady } from "./terminal";
@@ -68,6 +71,7 @@ export function PipeCanvas(props: {
   const paper = useStore((s) => s.bot?.paper ?? true);
   const openNode = useStore((s) => s.openNode);
   const chronos = useStore((s) => cfg<boolean>(s.config, "CHRONOS_ENABLED", false));
+  const fcName = useStore((s) => FC_NAME[cfg<string>(s.config, "FORECASTER", "chronos")] ?? "Chronos");
   const minConf = useStore((s) => cfg<number>(s.config, paper ? "MIN_SIGNAL_CONFIDENCE_PAPER" : "MIN_SIGNAL_CONFIDENCE", paper ? 0.6 : 0.65));
   const f = cycle?.state === "scan" ? cycle.funnel : undefined;
   const mo = useMotion(mode, cycle);
@@ -215,6 +219,7 @@ export function PipeCanvas(props: {
           </span>
           {lane("ai")}
           {lane("sac")}
+          <ForecastChip mode={mode} />
         </div>
         {wire(
           2,
@@ -222,7 +227,7 @@ export function PipeCanvas(props: {
             type="button"
             className="ch-gate"
             onClick={() => (useStore.setState({ riskManual: true }), openNode("risk"), scrollWhenReady("risk-conf"))}
-            title={`Фильтр рынка${chronos && mode === "hybrid" ? " и Chronos" : ""}: дальше в «Риск», только если уверенность сделки ≥ ${minConf}. Нажмите — откроется порог.`}
+            title={`Фильтр рынка${chronos && mode === "hybrid" ? ` и прогноз ${fcName}` : ""}: дальше в «Риск», только если уверенность сделки ≥ ${minConf}. Нажмите — откроется порог.`}
             aria-label={`Порог уверенности ${minConf}`}
           >
             <i aria-hidden="true" />
@@ -314,6 +319,61 @@ function TelegramSource({ onOpen, ch }: { onOpen: () => void; ch: ReturnType<typ
         )}
       </button>
     </div>
+  );
+}
+
+const FC_NAME: Record<string, string> = { chronos: "Chronos", timesfm: "TimesFM" };
+
+type Fc = "off" | "chronos" | "timesfm";
+const FC_OPTS: readonly (readonly [Fc, string, ReactNode, string])[] = [
+  ["off", "Без прогноза", <Prohibit key="o" weight="bold" />, "сделку не сверяем"],
+  ["chronos", "Chronos", Icon.chronos, "Amazon"],
+  ["timesfm", "TimesFM", Icon.timesfm, "Google"],
+];
+
+/** Прогноз цены: выключен, Chronos или TimesFM. Меняется только здесь — значок на «Решении» и карточка в панелях AI и SAC. */
+function useForecast() {
+  const on = useStore((s) => cfg<boolean>(s.config, "CHRONOS_ENABLED", false));
+  const who = useStore((s) => cfg<string>(s.config, "FORECASTER", "chronos"));
+  const cur: Fc = on ? (who === "timesfm" ? "timesfm" : "chronos") : "off";
+  const pick = (v: Fc) => void actions.patchConfig(v === "off" ? { CHRONOS_ENABLED: false } : { CHRONOS_ENABLED: true, FORECASTER: v });
+  return { cur, pick };
+}
+
+const FC_TIP = "Прогноз цены сверяет сделку: совпал — уверенность +0.05, против — −0.15.";
+
+function ForecastChip({ mode }: { mode: string }) {
+  const { cur, pick } = useForecast();
+  const idle = mode !== "hybrid";
+  return (
+    <span
+      className={`ch-fc${cur !== "off" ? " on" : ""}${idle ? " idle" : ""}`}
+      role="radiogroup"
+      aria-label="Прогноз цены"
+      title={`${FC_TIP}${idle ? " Работает только в режиме «AI + нейросеть»." : ""}`}
+    >
+      {FC_OPTS.map(([v, name, icon, by]) => (
+        <button key={v} type="button" role="radio" aria-checked={cur === v} className={cur === v ? "cur" : ""} title={v === "off" ? name : `${name} (${by}) — прогноз цены по свечам`} onClick={() => pick(v)}>
+          {icon}
+        </button>
+      ))}
+    </span>
+  );
+}
+
+/** Та же настройка в выезжающих панелях AI и SAC. */
+export function ForecastCard() {
+  const { cur, pick } = useForecast();
+  const mode = useStore((s) => s.bot?.mode ?? "ai");
+  return (
+    <article className="card">
+      <div className="card-h">
+        <h2>Прогноз цены</h2>
+        <Q tip={`${FC_TIP} Обе модели прогнозируют по свечам; выбор меняется сразу.`} />
+      </div>
+      <Tiles value={cur} options={FC_OPTS} label="Прогноз цены" onChange={pick} />
+      {mode !== "hybrid" && cur !== "off" && <p className="note-soon">Работает только в режиме «AI + нейросеть» — в этом режиме не используется.</p>}
+    </article>
   );
 }
 

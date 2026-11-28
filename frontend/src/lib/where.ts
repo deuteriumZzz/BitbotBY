@@ -19,6 +19,7 @@ const RISK_MANUAL: Home = { tab: "bots", node: "risk", where: "Стратеги�
 const RULES: Home = { tab: "bots", node: "risk", where: "Стратегия → Риск → Правила защиты" };
 const CONFIRM: Home = { tab: "bots", node: "order", where: "Стратегия → Ордер → Открытие сделок" };
 const WHAT: Home = { tab: "bots", node: "scan", where: "Стратегия → Сканер → Что торговать" };
+const FORECAST: Home = { tab: "bots", node: "ai", where: "Стратегия → Решение → значок прогноза" };
 const SIGNALS: Home = { tab: "bots", node: "ai", where: "Стратегия → AI → Сигналы для решения" };
 
 export const OWN_HOME: Record<string, Home> = {
@@ -30,7 +31,8 @@ export const OWN_HOME: Record<string, Home> = {
   TELEGRAM_CONFIRM_TIMEOUT: CONFIRM,
   CONFIRM_ON_TIMEOUT: CONFIRM,
   MODE: { tab: "bots", where: "Стратегия → Кто принимает решение" },
-  CHRONOS_ENABLED: SIGNALS,
+  CHRONOS_ENABLED: FORECAST,
+  FORECASTER: FORECAST,
   MARKET_TYPE: WHAT,
   SEASON_SWITCH_MODE: WHAT,
   PAPER_GUARDS_OFF: RULES,

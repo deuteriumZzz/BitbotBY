@@ -72,6 +72,16 @@ SETTINGS: Tuple[Setting, ...] = (
         hot_get=lambda rc: rc.get_chronos_enabled(),
     ),
     Setting(
+        "FORECASTER",
+        _G_AI,
+        "Чей прогноз",
+        "choice",
+        "chronos",
+        options=(("chronos", "Chronos (Amazon)"), ("timesfm", "TimesFM (Google)")),
+        hint="Обе модели прогнозируют цену по свечам; поправка одна и та же. Меняется сразу.",
+        **_rc("set_forecaster", "get_forecaster"),
+    ),
+    Setting(
         "AI_DAILY_BUDGET",
         _G_AI,
         "AI-запросов в сутки",

@@ -22,7 +22,7 @@ import { EmergencyCard } from "./emergency";
 import { RulesCard } from "./rules";
 import { UiSwitchRow } from "./uimode";
 import { HoursCard, SymbolsCard } from "./settings/trading";
-import { PipeCanvas } from "./pipecanvas";
+import { ForecastCard, PipeCanvas } from "./pipecanvas";
 import { SignalsCard } from "./signals";
 import { mark } from "./trace";
 import { cycleKind } from "./terminal/radar";
@@ -278,7 +278,6 @@ function usePipeline(mode: string): {
             ["Основной", ai.chain[0] ? `${name(ai.chain[0].provider)} · ${ai.chain[0].model}` : "нет ключа"],
             ["В цепочке", String(ai.chain.length)],
             ["Последним ответил", ai.last ? name(ai.last) : "—"],
-            ["Прогноз Chronos", `${show("CHRONOS_ENABLED")}${mode === "hybrid" ? "" : " · только в «AI + нейросеть»"}`],
             ["Если все молчат", fallback ? "решают стратегии" : "сделки нет"],
           ],
     },
@@ -821,6 +820,7 @@ export function Pipeline() {
         {cur.id === "ai" && (
           <>
             <AiPane />
+            <ForecastCard />
           </>
         )}
         {cur.id === "sac" && (
@@ -835,6 +835,7 @@ export function Pipeline() {
                   Обучение и допуск модели
                 </button>
               </div>
+              <ForecastCard />
             </div>
           </div>
         )}

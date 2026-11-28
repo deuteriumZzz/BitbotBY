@@ -995,6 +995,22 @@
    "basic": true
   },
   {
+   "key": "FORECASTER",
+   "group": "AI и решения",
+   "label": "Чей прогноз",
+   "type": "choice",
+   "default": "chronos",
+   "min": null,
+   "max": null,
+   "step": null,
+   "unit": "",
+   "options": [{"value": "chronos", "label": "Chronos (Amazon)"}, {"value": "timesfm", "label": "TimesFM (Google)"}],
+   "hint": "Обе модели прогнозируют цену по свечам; поправка одна и та же. Меняется сразу.",
+   "readonly": false,
+   "hot": true,
+   "basic": true
+  },
+  {
    "key": "AI_DAILY_BUDGET",
    "group": "AI и решения",
    "label": "AI-запросов в сутки",

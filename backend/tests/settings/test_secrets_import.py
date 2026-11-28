@@ -40,7 +40,7 @@ def test_import_saves_encrypted_and_never_returns_values(store, capsys):
     assert ss.load_values()["GROQ_API_KEY"] == GROQ
     assert GROQ not in store.read_text()  # на диске только шифртекст
     meta = json.loads(store.read_text())["meta"]["groq"]
-    assert meta["status"] == "warn" and "не проверено" in meta["message"]
+    assert meta["status"] == "warn" and "не проверен" in meta["message"]
 
 
 def test_existing_values_are_not_overwritten_unless_asked(store):

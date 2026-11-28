@@ -84,6 +84,7 @@ BASIC = frozenset(
         "MODE",
         "AI_PROVIDER",
         "CHRONOS_ENABLED",
+        "FORECASTER",
         "SEASON_SWITCH_MODE",
         "LIVE_ALPHA_KILL_ENABLED",
     }

@@ -5,9 +5,7 @@
 import { useState } from "react";
 
 import type { SecretItem } from "../lib/types";
-import { actions } from "../store/actions";
 import { useStore } from "../store";
-import { Toggle } from "../components/controls";
 import { Q } from "../components/tooltip";
 import { cfg } from "./bots";
 import { ParamList } from "./params";
@@ -33,8 +31,6 @@ export const MARKET: { name: string; rule: string; key?: string }[] = [
 /** Подключения сигналов, которые добавляются ключом, — в порядке важности для решения. */
 export const SIGNAL_KEYS = ["news", "twitter", "telethon", "reddit", "glassnode", "finnhub"];
 
-/** Единственное место, где меняется CHRONOS_ENABLED (тумблер в карточке и на узле холста). */
-export const setChronos = (on: boolean) => void actions.patchConfig({ CHRONOS_ENABLED: on });
 
 export function SignalsCard() {
   const [key, setKey] = useState<string | null>(null);
@@ -42,7 +38,6 @@ export function SignalsCard() {
   const secrets = useStore((s) => s.secrets);
   const fg = useStore((s) => s.market?.fear_greed ?? null);
   const mode = cfg<string>(config, "MODE", "ai");
-  const chronos = cfg<boolean>(config, "CHRONOS_ENABLED", false);
   const chans = chanList(`${cfg(config, "TELEGRAM_SENTIMENT_CHANNELS", "")},${cfg(config, "TELEGRAM_TRUSTED_CHANNELS", "")}`).length;
   const keyed = SIGNAL_KEYS.map((id) => secrets?.find((s) => s.service === id)).filter((s): s is SecretItem => Boolean(s));
   const free = MARKET.filter((m) => !m.key);
@@ -51,23 +46,12 @@ export function SignalsCard() {
     <article className="card sig">
       <div className="card-h">
         <h2>Сигналы для решения</h2>
-        <Q tip="Новости, X и Telegram читает AI. Сигналы рынка поправляют уверенность после решения. Chronos работает только в режиме «AI + нейросеть»." />
+        <Q tip="Новости, X и Telegram читает AI. Сигналы рынка поправляют уверенность после решения. Прогноз цены (Chronos или TimesFM) — значок на блоке «Решение»." />
       </div>
       {mode === "local" && <p className="sig-note">Сейчас режим «Стратегии»: решают стратегии, промпт AI, фильтр рынка и Chronos не работают. Соцсети читает стратегия «Настроение».</p>}
 
       <h3 className="sig-h">Источники с ключом · {on} из {keyed.length}</h3>
       <Keys open={key} setOpen={setKey} only={["Данные и соцсети"]} />
-
-      <h3 className="sig-h">Chronos — прогноз цены</h3>
-      <div className="alert-row">
-        <div>
-          <b>
-            Сравнивать сделку с прогнозом <Q tip="Прогноз совпал — уверенность +0.05, против — −0.15. Работает только в режиме «AI + нейросеть»." />
-          </b>
-          {chronos && mode !== "hybrid" && <small>в этом режиме не используется</small>}
-        </div>
-        <Toggle on={chronos} label="Прогноз Chronos" onChange={setChronos} />
-      </div>
 
       <h3 className="sig-h">
         Работают сами, без ключей <Q tip="Бесплатные источники (alternative.me, Bybit, Deribit). После решения каждый сдвигает уверенность на ±0.05…0.15, крайние значения сами дают сигнал." />

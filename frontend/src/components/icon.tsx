@@ -11,6 +11,21 @@ export const svg = (d: ReactNode, size = 18) => (
 );
 
 export const Icon = {
+  // Прогнозисты цены. Chronos — песочные часы (время) с отсчётом вперёд; TimesFM — ряд и пунктир прогноза.
+  chronos: svg(
+    <>
+      <path d="M6 3h12M6 21h12" />
+      <path d="M7 3c0 4.5 5 5.5 5 9s-5 4.5-5 9M17 3c0 4.5-5 5.5-5 9s5 4.5 5 9" />
+      <path d="M9.5 18.5h5" />
+    </>,
+  ),
+  timesfm: svg(
+    <>
+      <path d="M2.5 16.5 6 12l3.5 2.5L13 9" />
+      <path d="M13 9l3 2 5.5-6" strokeDasharray="2 2.6" />
+      <circle cx="13" cy="9" r="1.6" fill="currentColor" stroke="none" />
+    </>,
+  ),
   // Иконки управления списками: одна обводка 1.8, скруглённые концы, как у остальных.
   grip: (
     <svg width="14" height="18" viewBox="0 0 14 18" aria-hidden="true">

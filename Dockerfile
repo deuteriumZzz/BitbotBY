@@ -25,6 +25,16 @@ RUN pip install --no-cache-dir --timeout 300 \
     "torch>=2.0.0" --index-url https://download.pytorch.org/whl/cpu
 RUN python -c "import tomllib; print('\\n'.join(tomllib.load(open('backend/pyproject.toml','rb'))['project']['dependencies']))" > /tmp/deps.txt \
     && pip install --no-cache-dir --timeout 300 -r /tmp/deps.txt
+# TimesFM (Google) — второй прогнозист, в своём окружении: ему нужна своя версия numpy (<2).
+# Бот запускает его отдельным процессом (.venv-timesfm/bin/python). Torch — снова CPU-сборка.
+RUN python -m venv .venv-timesfm \
+    && .venv-timesfm/bin/pip install --no-cache-dir --timeout 300 \
+       "torch>=2.0.0" --index-url https://download.pytorch.org/whl/cpu \
+    && .venv-timesfm/bin/pip install --no-cache-dir --timeout 300 "timesfm[torch]" "numpy<2"
+# Веса Chronos и TimesFM скачиваются при первом прогнозе в models/hf — папка смонтирована
+# с компьютера, поэтому после пересборки образа их не нужно качать заново.
+ENV HF_HOME=/app/models/hf
+
 # Сборочные инструменты пакета — отдельным маленьким слоем (тяжёлый слой выше остаётся в кэше).
 RUN pip install --no-cache-dir --timeout 300 "setuptools>=68" wheel
 

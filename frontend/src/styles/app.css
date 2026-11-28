@@ -2325,3 +2325,15 @@ button.paper svg{width:12px;height:12px}
 .ch-wrap.live .ch-tg-login{animation:act-nudge 2.6s ease-in-out infinite}
 @keyframes act-nudge{0%,100%{box-shadow:0 0 0 0 transparent}50%{box-shadow:0 0 0 4px color-mix(in srgb,#2AABEE 18%,transparent)}}
 @media (prefers-reduced-motion:reduce){.ch-wrap.live .ch-tg-login{animation:none}}
+/* Прогноз цены на нижней кромке «Решения»: выключен · Chronos · TimesFM */
+.ch-fc{position:absolute;bottom:-13px;left:50%;transform:translateX(-50%);display:inline-flex;gap:2px;padding:2px;border:1px solid var(--c-line2);border-radius:8px;background:var(--c-bg);box-shadow:0 0 0 3px var(--c-bg);z-index:2}
+.ch-fc button{appearance:none;border:0;padding:0;background:none;font:inherit;display:grid;place-items:center;width:24px;height:20px;border-radius:6px;color:var(--c-ink3);cursor:pointer}
+.ch-fc button svg{width:14px;height:14px}
+.ch-fc button:hover{color:var(--c-ink);background:var(--c-s2)}
+.ch-fc button:focus-visible{outline:2px solid var(--c-accent);outline-offset:1px}
+.ch-fc button.cur{color:var(--c-ink);background:var(--c-s2)}
+.ch-fc.on button.cur{color:var(--c-accent);background:color-mix(in srgb,var(--c-accent) 14%,transparent)}
+.ch-fc.idle.on button.cur{color:var(--warn);background:color-mix(in srgb,var(--warn) 12%,transparent)}
+.ch-wrap.live .ch-fc.on:not(.idle) button.cur svg{animation:fc-breathe 3.2s ease-in-out infinite}
+@keyframes fc-breathe{50%{opacity:.55}}
+@media (prefers-reduced-motion:reduce){.ch-wrap.live .ch-fc button.cur svg{animation:none}}

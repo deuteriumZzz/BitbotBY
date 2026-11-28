@@ -170,3 +170,12 @@ async def test_trace_column_saved_and_read_back(tmp_path):
     assert _steps(row[0]) == json.loads(row[0])
     assert _steps(row[0])[0]["text"] == "Gemini: LONG"
     assert _steps("") == [] and _steps("{сломано") == [] and _steps('{"a": 1}') == []
+
+
+def test_forecast_note_says_who_and_how():
+    from bitbot.domain.decision.trace import _forecast_note
+
+    assert _forecast_note({"forecaster": "timesfm", "chronos_signal": "up"}, "long") == "прогноз TimesFM: согласен (+0.05)"
+    assert _forecast_note({"forecaster": "chronos", "chronos_signal": "up"}, "short") == "прогноз Chronos: против (−0.15)"
+    assert _forecast_note({"forecaster": "chronos", "chronos_signal": "off"}, "long") == ""
+    assert _forecast_note({"chronos_signal": "up"}, "long") == ""

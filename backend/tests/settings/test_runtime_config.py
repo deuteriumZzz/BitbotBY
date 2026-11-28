@@ -369,6 +369,15 @@ class TestRuntimeConfigChronos:
         rc.set_chronos_enabled(True)
         redis_mock.redis_client.set.assert_called_once()
 
+    def test_forecaster_defaults_to_chronos_and_switches(self, rc_bundle):
+        rc, redis_mock, _ = rc_bundle
+        redis_mock.redis_client.get.return_value = None
+        assert rc.get_forecaster() == "chronos"
+        redis_mock.redis_client.get.return_value = b"timesfm"
+        assert rc.get_forecaster() == "timesfm"
+        with pytest.raises(ValueError):
+            rc.set_forecaster("prophet")
+
 
 class TestRuntimeConfigMarketProfile:
     def test_get_market_profile_empty_default(self, rc_bundle):
